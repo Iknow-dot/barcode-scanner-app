@@ -2,8 +2,9 @@ from app import db
 from sqlalchemy.dialects.postgresql import UUID
 import uuid
 from werkzeug.security import generate_password_hash, check_password_hash
+from flask_login import UserMixin
 
-class User(db.Model):
+class User(db.Model, UserMixin):
     __tablename__ = 'users'
     
     id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -24,6 +25,12 @@ class User(db.Model):
     def check_password(self, password):
         return check_password_hash(self.password_hash, password)
 
+    def is_admin(self):
+        return self.role.role_name == 'admin'
+
+    def is_system_admin(self):
+        return self.role.role_name == 'system_admin'
+
 class Organization(db.Model):
     __tablename__ = 'organizations'
     
@@ -32,8 +39,8 @@ class Organization(db.Model):
     identification_code = db.Column(db.String(50), unique=True, nullable=False)
     web_service_url = db.Column(db.String(255), nullable=False)
     
-    users = db.relationship('User', back_populates='organization')
-    warehouses = db.relationship('Warehouse', back_populates='organization')
+    users = db.relationship('User', back_populates='organization', cascade="all, delete-orphan")
+    warehouses = db.relationship('Warehouse', back_populates='organization', cascade="all, delete-orphan")
 
 class Warehouse(db.Model):
     __tablename__ = 'warehouses'
@@ -44,12 +51,12 @@ class Warehouse(db.Model):
     location = db.Column(db.String(255), nullable=True)
     
     organization = db.relationship('Organization', back_populates='warehouses')
-    users = db.relationship('User', back_populates='warehouse')
+    users = db.relationship('User', back_populates='warehouse', cascade="all, delete-orphan")
 
 class UserRole(db.Model):
     __tablename__ = 'user_roles'
 
-    id = db.Column(db.UUID(as_uuid=True), primary_key=True)
+    id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     role_name = db.Column(db.String(100), unique=True, nullable=False)
 
     users = db.relationship('User', back_populates='role')
