@@ -32,7 +32,7 @@ def upgrade():
         batch_op.drop_column('web_service_address')
 
     with op.batch_alter_table('users', schema=None) as batch_op:
-        batch_op.add_column(sa.Column('password_hash', sa.String(length=128), nullable=False))
+        batch_op.add_column(sa.Column('password_hash', sa.String(length=255), nullable=False))  # Updated length
         batch_op.alter_column('username',
                existing_type=sa.VARCHAR(length=255),
                type_=sa.String(length=100),

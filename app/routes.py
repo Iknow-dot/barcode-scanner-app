@@ -12,6 +12,9 @@ bp = Blueprint('routes', __name__)
 def home():
     return jsonify({"message": "Welcome to the Barcode Scanner App!"})
 
+
+# -------------------- Organization Routes -------------------- #
+
 # Route to get all organizations
 @bp.route('/organizations', methods=['GET'])
 @login_required
@@ -21,7 +24,7 @@ def get_organizations():
         "id": str(org.id),
         "name": org.name,
         "identification_code": org.identification_code,
-        "web_service_address": org.web_service_url
+        "web_service_url": org.web_service_url
     } for org in organizations])
 
 # Route to get a specific organization by ID
@@ -35,7 +38,7 @@ def get_organization(org_id):
         "id": str(organization.id),
         "name": organization.name,
         "identification_code": organization.identification_code,
-        "web_service_address": organization.web_service_url
+        "web_service_url": organization.web_service_url
     })
 
 # Route to create a new organization
@@ -46,6 +49,11 @@ def create_organization():
     if not data.get('name') or not data.get('identification_code') or not data.get('web_service_url'):
         abort(400, description="Missing required fields")
 
+    # Ensure unique identification_code
+    existing_organization = Organization.query.filter_by(identification_code=data['identification_code']).first()
+    if existing_organization:
+        abort(400, description="An organization with this identification code already exists")
+
     organization = Organization(
         id=uuid.uuid4(),
         name=data['name'],
@@ -54,6 +62,7 @@ def create_organization():
     )
     db.session.add(organization)
     db.session.commit()
+    
     return jsonify({"message": "Organization created successfully", "id": str(organization.id)}), 201
 
 # Route to update an existing organization
@@ -63,8 +72,14 @@ def update_organization(org_id):
     organization = Organization.query.get(org_id)
     if organization is None:
         abort(404, description="Organization not found")
-    
+
     data = request.get_json()
+    if data.get('identification_code') and organization.identification_code != data['identification_code']:
+        existing_organization = Organization.query.filter_by(identification_code=data['identification_code']).first()
+        if existing_organization:
+            abort(400, description="An organization with this identification code already exists")
+
+    # Update fields
     organization.name = data.get('name', organization.name)
     organization.identification_code = data.get('identification_code', organization.identification_code)
     organization.web_service_url = data.get('web_service_url', organization.web_service_url)
@@ -82,7 +97,10 @@ def delete_organization(org_id):
     
     db.session.delete(organization)
     db.session.commit()
-    return jsonify({"message": "Organization deleted successfully"}), 204
+    return '', 204
+
+
+# -------------------- Warehouse Routes -------------------- #
 
 # Route to get all warehouses
 @bp.route('/warehouses', methods=['GET'])
@@ -155,6 +173,9 @@ def delete_warehouse(wh_id):
     db.session.commit()
     return jsonify({"message": "Warehouse deleted successfully"}), 204
 
+
+# -------------------- User Routes -------------------- #
+
 # Route to get all users (Admin only)
 @bp.route('/users', methods=['GET'])
 @login_required
@@ -186,8 +207,8 @@ def get_user(user_id):
         "id": str(user.id),
         "username": user.username,
         "role_id": str(user.role_id),
-        "organization_id": str(user.organization_id),
-        "warehouse_id": str(user.warehouse_id),
+        "organization_id": user.organization_id,
+        "warehouse_id": user.warehouse_id,
         "ip_address": user.ip_address
     })
 
@@ -250,81 +271,15 @@ def delete_user(user_id):
     db.session.commit()
     return jsonify({"message": "User deleted successfully"}), 204
 
-# Route to get all user roles (Admin only)
+
+# -------------------- Role Routes -------------------- #
+
+# Route to get all user roles
 @bp.route('/roles', methods=['GET'])
 @login_required
 def get_roles():
-    if not current_user.is_admin():
-        return jsonify({"error": "Unauthorized access"}), 403
-    
     roles = UserRole.query.all()
     return jsonify([{
         "id": str(role.id),
         "role_name": role.role_name
     } for role in roles])
-
-# Route to get a specific user role by ID (Admin only)
-@bp.route('/roles/<uuid:role_id>', methods=['GET'])
-@login_required
-def get_role(role_id):
-    if not current_user.is_admin():
-        return jsonify({"error": "Unauthorized access"}), 403
-    
-    role = UserRole.query.get(role_id)
-    if role is None:
-        abort(404, description="Role not found")
-    return jsonify({
-        "id": str(role.id),
-        "role_name": role.role_name
-    })
-
-# Route to create a new user role (Admin only)
-@bp.route('/roles', methods=['POST'])
-@login_required
-def create_role():
-    if not current_user.is_admin():
-        return jsonify({"error": "Unauthorized access"}), 403
-    
-    data = request.get_json()
-    if not data.get('role_name'):
-        abort(400, description="Missing required fields")
-    
-    role = UserRole(
-        id=uuid.uuid4(),
-        role_name=data['role_name']
-    )
-    db.session.add(role)
-    db.session.commit()
-    return jsonify({"message": "Role created successfully", "id": str(role.id)}), 201
-
-# Route to update an existing user role (Admin only)
-@bp.route('/roles/<uuid:role_id>', methods=['PUT'])
-@login_required
-def update_role(role_id):
-    if not current_user.is_admin():
-        return jsonify({"error": "Unauthorized access"}), 403
-    
-    role = UserRole.query.get(role_id)
-    if role is None:
-        abort(404, description="Role not found")
-    
-    data = request.get_json()
-    role.role_name = data.get('role_name', role.role_name)
-    
-    db.session.commit()
-    return jsonify({"message": "Role updated successfully"})
-
-# Route to delete a user role (Admin only)
-@bp.route('/roles/<uuid:role_id>', methods=['DELETE'])
-@login_required
-def delete_role(role_id):
-    if not current_user.is_admin():
-        return jsonify({"error": "Unauthorized access"}), 403
-    
-    role = UserRole.query.get(role_id)
-    if role is None:
-        abort(404, description="Role not found")
-    
-    db.session.delete(role)
-    db.session.commit()
-    return jsonify({"message": "Role deleted successfully"}), 204
