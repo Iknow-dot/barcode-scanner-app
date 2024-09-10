@@ -2,6 +2,7 @@ from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 from flask_login import LoginManager
+from flask_jwt_extended import JWTManager
 from dotenv import load_dotenv
 import os
 
@@ -13,6 +14,7 @@ db = SQLAlchemy()
 migrate = Migrate()
 login_manager = LoginManager()
 login_manager.login_view = 'auth.login'
+jwt = JWTManager()  # Initialize JWT Manager
 
 def create_app():
     # Create the Flask app instance
@@ -23,6 +25,7 @@ def create_app():
     db.init_app(app)
     migrate.init_app(app, db)
     login_manager.init_app(app)
+    jwt.init_app(app)  # Initialize JWT Manager with the app
 
     # Register blueprints
     from .routes import bp as routes_bp

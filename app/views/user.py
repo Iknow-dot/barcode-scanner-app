@@ -1,11 +1,14 @@
 from flask import Blueprint, request, jsonify
+from flask_jwt_extended import jwt_required, get_jwt_identity
 from app import db
 from app.models import User, UserRole
 
 bp = Blueprint('user', __name__, url_prefix='/users')
 
 @bp.route('', methods=['POST'])
+@jwt_required()  # Add JWT authentication to this route
 def create_user():
+    current_user = get_jwt_identity()  # Get the identity of the current user
     data = request.json
     username = data.get('username')
     password = data.get('password')
@@ -32,7 +35,9 @@ def create_user():
     return jsonify({'message': 'User created'}), 201
 
 @bp.route('<uuid:user_id>', methods=['GET'])
+@jwt_required()  # Add JWT authentication to this route
 def get_user(user_id):
+    current_user = get_jwt_identity()  # Get the identity of the current user
     user = User.query.get_or_404(user_id)
     return jsonify({
         'id': str(user.id),
@@ -44,7 +49,9 @@ def get_user(user_id):
     })
 
 @bp.route('<uuid:user_id>', methods=['PUT'])
+@jwt_required()  # Add JWT authentication to this route
 def update_user(user_id):
+    current_user = get_jwt_identity()  # Get the identity of the current user
     user = User.query.get_or_404(user_id)
     data = request.json
     user.username = data.get('username', user.username)
@@ -60,7 +67,9 @@ def update_user(user_id):
     return jsonify({'message': 'User updated'})
 
 @bp.route('<uuid:user_id>', methods=['DELETE'])
+@jwt_required()  # Add JWT authentication to this route
 def delete_user(user_id):
+    current_user = get_jwt_identity()  # Get the identity of the current user
     user = User.query.get_or_404(user_id)
     db.session.delete(user)
     db.session.commit()

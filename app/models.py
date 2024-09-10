@@ -3,6 +3,9 @@ from sqlalchemy.dialects.postgresql import UUID
 import uuid
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_login import UserMixin
+import jwt
+from datetime import datetime, timedelta, timezone
+from flask import current_app
 
 class User(db.Model, UserMixin):
     __tablename__ = 'users'
@@ -30,6 +33,31 @@ class User(db.Model, UserMixin):
 
     def is_system_admin(self):
         return self.role.role_name == 'system_admin'
+
+    def generate_jwt_token(self):
+        """
+        Generates a JWT token that expires in 1 hour.
+        """
+        payload = {
+            'user_id': str(self.id),  # Ensure the ID is stringified for JSON encoding
+            'exp': datetime.now(timezone.utc) + timedelta(hours=1),  # Token expiration time
+            'iat': datetime.now(timezone.utc)  # Issued at time
+        }
+        token = jwt.encode(payload, current_app.config['JWT_SECRET_KEY'], algorithm='HS256')
+        return token
+
+    @staticmethod
+    def verify_jwt_token(token):
+        """
+        Verifies the JWT token and returns the user ID if valid.
+        """
+        try:
+            payload = jwt.decode(token, current_app.config['JWT_SECRET_KEY'], algorithms=['HS256'])
+            return payload.get('user_id')  # Get user_id from payload
+        except jwt.ExpiredSignatureError:
+            return None  # Token has expired
+        except jwt.InvalidTokenError:
+            return None  # Token is invalid
 
 class Organization(db.Model):
     __tablename__ = 'organizations'
