@@ -33,15 +33,20 @@ class User(db.Model, UserMixin):
 
     def is_system_admin(self):
         return self.role.role_name == 'system_admin'
-
+    
+    def has_role(self, role_name):
+        return self.role.role_name == role_name
+    
     def generate_jwt_token(self):
         """
-        Generates a JWT token that expires in 1 hour.
+        Generates a JWT token using the configured expiration time.
         """
+        expires_in = current_app.config.get('JWT_ACCESS_TOKEN_EXPIRES', 60)  # Default to 60 minutes
+        exp = datetime.now(timezone.utc) + timedelta(minutes=expires_in)
         payload = {
-            'user_id': str(self.id),  # Ensure the ID is stringified for JSON encoding
-            'exp': datetime.now(timezone.utc) + timedelta(hours=1),  # Token expiration time
-            'iat': datetime.now(timezone.utc)  # Issued at time
+            'user_id': str(self.id),
+            'exp': exp,
+            'iat': datetime.now(timezone.utc)
         }
         token = jwt.encode(payload, current_app.config['JWT_SECRET_KEY'], algorithm='HS256')
         return token
@@ -69,6 +74,14 @@ class Organization(db.Model):
     
     users = db.relationship('User', back_populates='organization', cascade="all, delete-orphan")
     warehouses = db.relationship('Warehouse', back_populates='organization', cascade="all, delete-orphan")
+    
+    def to_dict(self):
+        return {
+            'id': str(self.id),  # Convert UUID to string for JSON serialization
+            'name': self.name,
+            'identification_code': self.identification_code,
+            'web_service_url': self.web_service_url
+        }
 
 class Warehouse(db.Model):
     __tablename__ = 'warehouses'

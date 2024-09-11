@@ -5,6 +5,8 @@ from app import db, login_manager
 from app.models import User, UserRole
 import jwt
 from datetime import datetime, timedelta, timezone
+import re  # For password validation
+from ipaddress import ip_address, AddressValueError  # For IP validation
 
 bp = Blueprint('auth', __name__)
 
@@ -28,21 +30,51 @@ def generate_jwt(user):
     
     return token
 
+# Password validation function
+def is_password_strong(password):
+    if len(password) < 8:
+        return False
+    if not re.search(r"[A-Za-z]", password):  # At least one letter
+        return False
+    if not re.search(r"\d", password):  # At least one number
+        return False
+    if not re.search(r"[!@#$%^&*(),.?\":{}|<>]", password):  # At least one special character
+        return False
+    return True
+
+# IP address validation
+def is_valid_ip(ip):
+    try:
+        ip_address(ip)
+        return True
+    except AddressValueError:
+        return False
+
 @bp.route('/register', methods=['POST'])
 def register():
     data = request.get_json()
     username = data.get('username')
     password = data.get('password')
     ip_address = data.get('ip_address')
-    role_name = data.get('role_name')  # Assuming role_name is passed to specify the role
+    role_name = data.get('role_name')
 
+    # Check required fields
     if not username or not password or not ip_address or not role_name:
         return jsonify({"error": "Username, password, IP address, and role are required"}), 400
 
+    # Validate password strength
+    if not is_password_strong(password):
+        return jsonify({"error": "Password must be at least 8 characters long, contain letters, numbers, and special characters"}), 400
+
+    # Validate IP address
+    if not is_valid_ip(ip_address):
+        return jsonify({"error": "Invalid IP address format"}), 400
+
+    # Check if user already exists
     if User.query.filter_by(username=username).first():
         return jsonify({"error": "User already exists"}), 400
 
-    # Fetch or create the role based on role_name
+    # Fetch role or return an error if it does not exist
     role = UserRole.query.filter_by(role_name=role_name).first()
     if not role:
         return jsonify({"error": "Invalid role specified"}), 400
@@ -61,13 +93,14 @@ def login():
     username = data.get('username')
     password = data.get('password')
 
+    # Validate input
     if not username or not password:
         return jsonify({"error": "Username and password are required"}), 400
 
     user = User.query.filter_by(username=username).first()
 
     if user and check_password_hash(user.password_hash, password):
-        login_user(user)  # Login user for Flask-Login session handling (optional)
+        login_user(user)  # Flask-Login session handling (optional)
         
         # Generate JWT token
         access_token = generate_jwt(user)
@@ -77,12 +110,13 @@ def login():
             "access_token": access_token
         }), 200
 
+    # Track invalid login attempt
     return jsonify({"error": "Invalid username or password"}), 401
 
 @bp.route('/logout', methods=['POST'])
 def logout():
     if current_user.is_authenticated:
-        logout_user()  # Logs out the Flask-Login session (optional)
+        logout_user()  # Flask-Login session handling (optional)
         return jsonify({"message": "Logout successful"}), 200
     return jsonify({"error": "User is not logged in"}), 400
 
@@ -97,10 +131,11 @@ def refresh_token():
     
     try:
         payload = jwt.decode(token, current_app.config['JWT_SECRET_KEY'], algorithms=['HS256'])
-        user = User.query.get(payload['sub'])  # 'sub' is used as the subject claim
+        user = User.query.get(payload['sub'])  # 'sub' is the user id
+        
         if not user:
             return jsonify({"error": "Invalid token, user not found"}), 401
-        
+
         # Generate a new token
         new_token = generate_jwt(user)
         

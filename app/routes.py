@@ -1,5 +1,5 @@
 from flask import Blueprint, jsonify, request, abort
-from flask_login import login_required, current_user
+from flask_jwt_extended import jwt_required, get_jwt_identity
 from .models import Organization, Warehouse, User, UserRole
 from . import db
 import uuid
@@ -15,9 +15,8 @@ def home():
 
 # -------------------- Organization Routes -------------------- #
 
-# Route to get all organizations
 @bp.route('/organizations', methods=['GET'])
-@login_required
+@jwt_required()
 def get_organizations():
     organizations = Organization.query.all()
     return jsonify([{
@@ -27,9 +26,8 @@ def get_organizations():
         "web_service_url": org.web_service_url
     } for org in organizations])
 
-# Route to get a specific organization by ID
 @bp.route('/organizations/<uuid:org_id>', methods=['GET'])
-@login_required
+@jwt_required()
 def get_organization(org_id):
     organization = Organization.query.get(org_id)
     if organization is None:
@@ -41,15 +39,13 @@ def get_organization(org_id):
         "web_service_url": organization.web_service_url
     })
 
-# Route to create a new organization
 @bp.route('/organizations', methods=['POST'])
-@login_required
+@jwt_required()
 def create_organization():
     data = request.get_json()
     if not data.get('name') or not data.get('identification_code') or not data.get('web_service_url'):
         abort(400, description="Missing required fields")
 
-    # Ensure unique identification_code
     existing_organization = Organization.query.filter_by(identification_code=data['identification_code']).first()
     if existing_organization:
         abort(400, description="An organization with this identification code already exists")
@@ -65,9 +61,8 @@ def create_organization():
     
     return jsonify({"message": "Organization created successfully", "id": str(organization.id)}), 201
 
-# Route to update an existing organization
 @bp.route('/organizations/<uuid:org_id>', methods=['PUT'])
-@login_required
+@jwt_required()
 def update_organization(org_id):
     organization = Organization.query.get(org_id)
     if organization is None:
@@ -79,7 +74,6 @@ def update_organization(org_id):
         if existing_organization:
             abort(400, description="An organization with this identification code already exists")
 
-    # Update fields
     organization.name = data.get('name', organization.name)
     organization.identification_code = data.get('identification_code', organization.identification_code)
     organization.web_service_url = data.get('web_service_url', organization.web_service_url)
@@ -87,9 +81,8 @@ def update_organization(org_id):
     db.session.commit()
     return jsonify({"message": "Organization updated successfully"})
 
-# Route to delete an organization
 @bp.route('/organizations/<uuid:org_id>', methods=['DELETE'])
-@login_required
+@jwt_required()
 def delete_organization(org_id):
     organization = Organization.query.get(org_id)
     if organization is None:
@@ -102,9 +95,8 @@ def delete_organization(org_id):
 
 # -------------------- Warehouse Routes -------------------- #
 
-# Route to get all warehouses
 @bp.route('/warehouses', methods=['GET'])
-@login_required
+@jwt_required()
 def get_warehouses():
     warehouses = Warehouse.query.all()
     return jsonify([{
@@ -114,9 +106,8 @@ def get_warehouses():
         "location": wh.location
     } for wh in warehouses])
 
-# Route to get a specific warehouse by ID
 @bp.route('/warehouses/<uuid:wh_id>', methods=['GET'])
-@login_required
+@jwt_required()
 def get_warehouse(wh_id):
     warehouse = Warehouse.query.get(wh_id)
     if warehouse is None:
@@ -128,9 +119,8 @@ def get_warehouse(wh_id):
         "location": warehouse.location
     })
 
-# Route to create a new warehouse
 @bp.route('/warehouses', methods=['POST'])
-@login_required
+@jwt_required()
 def create_warehouse():
     data = request.get_json()
     if not data.get('organization_id') or not data.get('name') or not data.get('location'):
@@ -146,9 +136,8 @@ def create_warehouse():
     db.session.commit()
     return jsonify({"message": "Warehouse created successfully", "id": str(warehouse.id)}), 201
 
-# Route to update an existing warehouse
 @bp.route('/warehouses/<uuid:wh_id>', methods=['PUT'])
-@login_required
+@jwt_required()
 def update_warehouse(wh_id):
     warehouse = Warehouse.query.get(wh_id)
     if warehouse is None:
@@ -161,9 +150,8 @@ def update_warehouse(wh_id):
     db.session.commit()
     return jsonify({"message": "Warehouse updated successfully"})
 
-# Route to delete a warehouse
 @bp.route('/warehouses/<uuid:wh_id>', methods=['DELETE'])
-@login_required
+@jwt_required()
 def delete_warehouse(wh_id):
     warehouse = Warehouse.query.get(wh_id)
     if warehouse is None:
@@ -176,11 +164,11 @@ def delete_warehouse(wh_id):
 
 # -------------------- User Routes -------------------- #
 
-# Route to get all users (Admin only)
 @bp.route('/users', methods=['GET'])
-@login_required
+@jwt_required()
 def get_users():
-    if not current_user.is_admin():
+    current_user = get_jwt_identity()
+    if current_user['role_name'] != 'admin':
         return jsonify({"error": "Unauthorized access"}), 403
     
     users = User.query.all()
@@ -193,11 +181,11 @@ def get_users():
         "ip_address": user.ip_address
     } for user in users])
 
-# Route to get a specific user by ID (Admin only)
 @bp.route('/users/<uuid:user_id>', methods=['GET'])
-@login_required
+@jwt_required()
 def get_user(user_id):
-    if not current_user.is_admin():
+    current_user = get_jwt_identity()
+    if current_user['role_name'] != 'admin':
         return jsonify({"error": "Unauthorized access"}), 403
     
     user = User.query.get(user_id)
@@ -212,11 +200,11 @@ def get_user(user_id):
         "ip_address": user.ip_address
     })
 
-# Route to create a new user (Admin only)
 @bp.route('/users', methods=['POST'])
-@login_required
+@jwt_required()
 def create_user():
-    if not current_user.is_admin():
+    current_user = get_jwt_identity()
+    if current_user['role_name'] != 'admin':
         return jsonify({"error": "Unauthorized access"}), 403
     
     data = request.get_json()
@@ -235,11 +223,11 @@ def create_user():
     db.session.commit()
     return jsonify({"message": "User created successfully", "id": str(user.id)}), 201
 
-# Route to update an existing user (Admin only)
 @bp.route('/users/<uuid:user_id>', methods=['PUT'])
-@login_required
+@jwt_required()
 def update_user(user_id):
-    if not current_user.is_admin():
+    current_user = get_jwt_identity()
+    if current_user['role_name'] != 'admin':
         return jsonify({"error": "Unauthorized access"}), 403
     
     user = User.query.get(user_id)
@@ -256,11 +244,11 @@ def update_user(user_id):
     db.session.commit()
     return jsonify({"message": "User updated successfully"})
 
-# Route to delete a user (Admin only)
 @bp.route('/users/<uuid:user_id>', methods=['DELETE'])
-@login_required
+@jwt_required()
 def delete_user(user_id):
-    if not current_user.is_admin():
+    current_user = get_jwt_identity()
+    if current_user['role_name'] != 'admin':
         return jsonify({"error": "Unauthorized access"}), 403
     
     user = User.query.get(user_id)
@@ -270,16 +258,3 @@ def delete_user(user_id):
     db.session.delete(user)
     db.session.commit()
     return jsonify({"message": "User deleted successfully"}), 204
-
-
-# -------------------- Role Routes -------------------- #
-
-# Route to get all user roles
-@bp.route('/roles', methods=['GET'])
-@login_required
-def get_roles():
-    roles = UserRole.query.all()
-    return jsonify([{
-        "id": str(role.id),
-        "role_name": role.role_name
-    } for role in roles])
