@@ -12,7 +12,6 @@ bp = Blueprint('routes', __name__)
 def home():
     return jsonify({"message": "Welcome to the Barcode Scanner App!"})
 
-
 # -------------------- Organization Routes -------------------- #
 
 @bp.route('/organizations', methods=['GET'])
@@ -92,7 +91,6 @@ def delete_organization(org_id):
     db.session.commit()
     return '', 204
 
-
 # -------------------- Warehouse Routes -------------------- #
 
 @bp.route('/warehouses', methods=['GET'])
@@ -161,14 +159,17 @@ def delete_warehouse(wh_id):
     db.session.commit()
     return jsonify({"message": "Warehouse deleted successfully"}), 204
 
-
 # -------------------- User Routes -------------------- #
 
 @bp.route('/users', methods=['GET'])
 @jwt_required()
 def get_users():
-    current_user = get_jwt_identity()
-    if current_user['role_name'] != 'admin':
+    current_user_id = get_jwt_identity()
+    current_user = User.query.get(current_user_id)
+    
+    # Ensure User has role_id and join with UserRole to fetch role name
+    user_role = UserRole.query.get(current_user.role_id)
+    if user_role.role_name != 'admin':
         return jsonify({"error": "Unauthorized access"}), 403
     
     users = User.query.all()
@@ -184,8 +185,9 @@ def get_users():
 @bp.route('/users/<uuid:user_id>', methods=['GET'])
 @jwt_required()
 def get_user(user_id):
-    current_user = get_jwt_identity()
-    if current_user['role_name'] != 'admin':
+    current_user_id = get_jwt_identity()
+    current_user = User.query.get(current_user_id)
+    if current_user.role_name != 'admin' and current_user_id != str(user_id):
         return jsonify({"error": "Unauthorized access"}), 403
     
     user = User.query.get(user_id)
@@ -203,8 +205,9 @@ def get_user(user_id):
 @bp.route('/users', methods=['POST'])
 @jwt_required()
 def create_user():
-    current_user = get_jwt_identity()
-    if current_user['role_name'] != 'admin':
+    current_user_id = get_jwt_identity()
+    current_user = User.query.get(current_user_id)
+    if current_user.role_name != 'admin':
         return jsonify({"error": "Unauthorized access"}), 403
     
     data = request.get_json()
@@ -226,8 +229,9 @@ def create_user():
 @bp.route('/users/<uuid:user_id>', methods=['PUT'])
 @jwt_required()
 def update_user(user_id):
-    current_user = get_jwt_identity()
-    if current_user['role_name'] != 'admin':
+    current_user_id = get_jwt_identity()
+    current_user = User.query.get(current_user_id)
+    if current_user.role_name != 'admin' and current_user_id != str(user_id):
         return jsonify({"error": "Unauthorized access"}), 403
     
     user = User.query.get(user_id)
@@ -247,8 +251,9 @@ def update_user(user_id):
 @bp.route('/users/<uuid:user_id>', methods=['DELETE'])
 @jwt_required()
 def delete_user(user_id):
-    current_user = get_jwt_identity()
-    if current_user['role_name'] != 'admin':
+    current_user_id = get_jwt_identity()
+    current_user = User.query.get(current_user_id)
+    if current_user.role_name != 'admin' and current_user_id != str(user_id):
         return jsonify({"error": "Unauthorized access"}), 403
     
     user = User.query.get(user_id)
