@@ -21,6 +21,7 @@ class User(db.Model, UserMixin):
     role = db.relationship('UserRole', back_populates='users')
     organization = db.relationship('Organization', back_populates='users')
     warehouse = db.relationship('Warehouse', back_populates='users')
+    allowed_ips = db.relationship('AllowedIP', backref='user', cascade="all, delete-orphan")
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
@@ -64,6 +65,12 @@ class User(db.Model, UserMixin):
         except jwt.InvalidTokenError:
             return None  # Token is invalid
 
+    def is_ip_allowed(self, ip_address):
+        """
+        Checks if the given IP address is allowed for this user.
+        """
+        return any(ip.ip_address == ip_address for ip in self.allowed_ips)
+
 class Organization(db.Model):
     __tablename__ = 'organizations'
     
@@ -94,6 +101,14 @@ class Warehouse(db.Model):
     organization = db.relationship('Organization', back_populates='warehouses')
     users = db.relationship('User', back_populates='warehouse', cascade="all, delete-orphan")
 
+    def to_dict(self):
+        return {
+            'id': str(self.id),
+            'organization_id': str(self.organization_id),
+            'name': self.name,
+            'location': self.location
+        }
+
 class UserRole(db.Model):
     __tablename__ = 'user_roles'
 
@@ -101,3 +116,25 @@ class UserRole(db.Model):
     role_name = db.Column(db.String(100), unique=True, nullable=False)
 
     users = db.relationship('User', back_populates='role')
+
+    def to_dict(self):
+        return {
+            'id': str(self.id),
+            'role_name': self.role_name
+        }
+
+class AllowedIP(db.Model):
+    __tablename__ = 'allowed_ips'
+
+    id = db.Column(db.Integer, primary_key=True)
+    ip_address = db.Column(db.String(45), nullable=False)  # supports both IPv4 and IPv6 addresses
+    user_id = db.Column(UUID(as_uuid=True), db.ForeignKey('users.id'), nullable=False)
+
+    def __repr__(self):
+        return f"<AllowedIP {self.ip_address}>"
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'ip_address': self.ip_address
+        }
