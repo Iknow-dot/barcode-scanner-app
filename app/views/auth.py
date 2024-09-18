@@ -95,20 +95,30 @@ def login():
 
     # Validate input
     if not username or not password:
+        current_app.logger.error("Login failed: Username and password are required")
         return jsonify({"error": "Username and password are required"}), 400
 
-    user = User.query.filter_by(username=username).first()
+    try:
+        user = User.query.filter_by(username=username).first()
 
-    if user and check_password_hash(user.password_hash, password):
-        login_user(user)  # Flask-Login session handling (optional)
-        
-        # Generate JWT token
-        access_token = generate_jwt(user)
-        
-        return jsonify({
-            "message": "Login successful",
-            "access_token": access_token
-        }), 200
+        # Check if user exists and password is correct
+        if user and check_password_hash(user.password_hash, password):
+            login_user(user)  # Optional Flask-Login session handling (can be removed if not needed)
+            
+            # Generate JWT token
+            access_token = generate_jwt(user)
+
+            current_app.logger.info(f"User {user.username} logged in successfully.")
+            return jsonify({
+                "message": "Login successful",
+                "access_token": access_token
+            }), 200
+        else:
+            current_app.logger.error(f"Login failed: Invalid credentials for username: {username}")
+            return jsonify({"error": "Invalid credentials"}), 401
+    except Exception as e:
+        current_app.logger.error(f"Unexpected error during login: {e}")
+        return jsonify({"error": "An error occurred during login. Please try again."}), 500
 
     # Track invalid login attempt
     return jsonify({"error": "Invalid username or password"}), 401

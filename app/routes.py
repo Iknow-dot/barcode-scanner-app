@@ -1,6 +1,5 @@
-from flask import Blueprint, jsonify, request, abort
+from flask import Blueprint, jsonify, request, abort, current_app
 from flask_jwt_extended import jwt_required, get_jwt_identity, create_access_token
-from werkzeug.security import generate_password_hash, check_password_hash
 from sqlalchemy.exc import IntegrityError
 from .models import Organization, Warehouse, User, UserRole, AllowedIP
 from . import db
@@ -20,9 +19,18 @@ def home():
 
 @bp.route('/organizations', methods=['GET'])
 @jwt_required()
-@role_required('admin')
+@role_required('admin', 'system_admin')
 def get_organizations():
-    organizations = Organization.query.all()
+    identity = get_jwt_identity()
+    user_id = identity.get('user_id') if isinstance(identity, dict) else identity
+    current_user = User.query.get(uuid.UUID(user_id))
+
+    # System Admin sees all organizations, Admin sees only their organization
+    if current_user.is_system_admin():
+        organizations = Organization.query.all()
+    else:
+        organizations = Organization.query.filter_by(id=current_user.organization_id).all()
+
     return jsonify([{
         "id": str(org.id),
         "name": org.name,
@@ -32,9 +40,17 @@ def get_organizations():
 
 @bp.route('/organizations/<uuid:org_id>', methods=['GET'])
 @jwt_required()
-@role_required('admin')
+@role_required('admin', 'system_admin')
 @organization_exists
 def get_organization(organization):
+    identity = get_jwt_identity()
+    user_id = identity.get('user_id') if isinstance(identity, dict) else identity
+    current_user = User.query.get(uuid.UUID(user_id))
+
+    # Admins can only access their own organization's data
+    if current_user.is_admin() and organization.id != current_user.organization_id:
+        abort(403, description="Unauthorized to access this organization")
+
     return jsonify({
         "id": str(organization.id),
         "name": organization.name,
@@ -44,7 +60,7 @@ def get_organization(organization):
 
 @bp.route('/organizations', methods=['POST'])
 @jwt_required()
-@role_required('admin')
+@role_required('system_admin')
 def create_organization():
     data = request.get_json()
     if not data.get('name') or not data.get('identification_code') or not data.get('web_service_url'):
@@ -67,7 +83,7 @@ def create_organization():
 
 @bp.route('/organizations/<uuid:org_id>', methods=['PUT'])
 @jwt_required()
-@role_required('admin')
+@role_required('system_admin')
 @organization_exists
 def update_organization(organization):
     data = request.get_json()
@@ -85,7 +101,7 @@ def update_organization(organization):
 
 @bp.route('/organizations/<uuid:org_id>', methods=['DELETE'])
 @jwt_required()
-@role_required('admin')
+@role_required('system_admin')
 @organization_exists
 def delete_organization(organization):
     db.session.delete(organization)
@@ -96,9 +112,18 @@ def delete_organization(organization):
 
 @bp.route('/warehouses', methods=['GET'])
 @jwt_required()
-@role_required('admin')
+@role_required('admin', 'system_admin')
 def get_warehouses():
-    warehouses = Warehouse.query.all()
+    identity = get_jwt_identity()
+    user_id = identity.get('user_id') if isinstance(identity, dict) else identity
+    current_user = User.query.get(uuid.UUID(user_id))
+
+    # System Admin sees all warehouses, Admin sees only their organization's warehouses
+    if current_user.is_system_admin():
+        warehouses = Warehouse.query.all()
+    else:
+        warehouses = Warehouse.query.filter_by(organization_id=current_user.organization_id).all()
+
     return jsonify([{
         "id": str(wh.id),
         "name": wh.name,
@@ -108,9 +133,21 @@ def get_warehouses():
 
 @bp.route('/warehouses/<uuid:id>', methods=['GET'])
 @jwt_required()
-@role_required('admin')
+@role_required('admin', 'system_admin')
 def get_warehouse(id):
-    warehouse = Warehouse.query.get_or_404(id)
+    identity = get_jwt_identity()
+    user_id = identity.get('user_id') if isinstance(identity, dict) else identity
+    current_user = User.query.get(uuid.UUID(user_id))
+
+    # System Admin can access any warehouse, Admin can only access their own organization's warehouses
+    if current_user.is_system_admin():
+        warehouse = Warehouse.query.get(id)
+    else:
+        warehouse = Warehouse.query.filter_by(id=id, organization_id=current_user.organization_id).first()
+
+    if not warehouse:
+        abort(403, description="Unauthorized to access this warehouse")
+
     return jsonify({
         "id": str(warehouse.id),
         "name": warehouse.name,
@@ -122,206 +159,148 @@ def get_warehouse(id):
 @jwt_required()
 @role_required('admin')
 def create_warehouse():
-    data = request.get_json() or {}
-    name = data.get('name')
-    organization_id = data.get('organization_id')
-
-    if not name or not organization_id:
-        return jsonify({'error': 'Missing name or organization_id'}), 400
-
-    organization = Organization.query.get(uuid.UUID(organization_id))
-    if not organization:
-        return jsonify({'error': 'Invalid organization ID'}), 400
-
-    warehouse = Warehouse(name=name, organization_id=organization.id, location=data.get('location'))
-    db.session.add(warehouse)
     try:
-        db.session.commit()
-        return jsonify({
-            "id": str(warehouse.id),
-            "name": warehouse.name,
-            "organization_id": str(warehouse.organization_id),
-            "location": warehouse.location
-        }), 201
-    except IntegrityError:
-        db.session.rollback()
-        return jsonify({'error': 'Error creating warehouse. Please try again.'}), 500
+        identity = get_jwt_identity()  # Get the JWT identity
+        
+        # If identity is a dict, extract 'user_id'; otherwise, treat it as user_id directly
+        if isinstance(identity, dict):
+            user_id = identity['user_id']
+        else:
+            user_id = identity
 
-@bp.route('/warehouses/<uuid:id>', methods=['PUT'])
-@jwt_required()
-@role_required('admin')
-def update_warehouse(id):
-    data = request.get_json() or {}
-    warehouse = Warehouse.query.get_or_404(id)
+        current_user = User.query.get(uuid.UUID(user_id))
+        data = request.get_json() or {}
+        name = data.get('name')
 
-    if 'name' in data:
-        warehouse.name = data['name']
-    if 'organization_id' in data:
-        organization = Organization.query.get(uuid.UUID(data['organization_id']))
-        if not organization:
-            return jsonify({'error': 'Invalid organization ID'}), 400
-        warehouse.organization_id = organization.id
-    if 'location' in data:
-        warehouse.location = data['location']
+        if not name:
+            return jsonify({'error': 'Missing warehouse name'}), 400
 
-    try:
-        db.session.commit()
-        return jsonify({
-            "id": str(warehouse.id),
-            "name": warehouse.name,
-            "organization_id": str(warehouse.organization_id),
-            "location": warehouse.location
-        })
-    except IntegrityError:
-        db.session.rollback()
-        return jsonify({'error': 'Error updating warehouse. Please try again.'}), 500
+        # Ensure the warehouse belongs to the current user's organization
+        warehouse = Warehouse(name=name, organization_id=current_user.organization_id, location=data.get('location'))
+        db.session.add(warehouse)
 
-@bp.route('/warehouses/<uuid:id>', methods=['DELETE'])
-@jwt_required()
-@role_required('admin')
-def delete_warehouse(id):
-    warehouse = Warehouse.query.get_or_404(id)
-    db.session.delete(warehouse)
-    db.session.commit()
-    return jsonify({'message': 'Warehouse deleted'})
+        try:
+            db.session.commit()
+            return jsonify({
+                "id": str(warehouse.id),
+                "name": warehouse.name,
+                "organization_id": str(warehouse.organization_id),
+                "location": warehouse.location
+            }), 201
+        except IntegrityError:
+            db.session.rollback()
+            return jsonify({'error': 'Error creating warehouse. Please try again.'}), 500
+
+    except Exception as e:
+        current_app.logger.error(f"Error creating warehouse: {e}")
+        return jsonify({'error': 'An error occurred while creating the warehouse'}), 500
 
 # -------------------- User Routes -------------------- #
 
 @bp.route('/users', methods=['GET'])
 @jwt_required()
-@role_required('admin')
+@role_required('admin', 'system_admin')
 def get_users():
-    users = User.query.all()
+    identity = get_jwt_identity()
+    user_id = identity.get('user_id') if isinstance(identity, dict) else identity
+    current_user = User.query.get(uuid.UUID(user_id))
+
+    # System Admin sees all users, Admin sees only their organization's users
+    if current_user.is_system_admin():
+        users = User.query.all()
+    else:
+        users = User.query.filter_by(organization_id=current_user.organization_id).all()
+
     return jsonify([{
         "id": str(user.id),
         "username": user.username,
         "role_id": str(user.role_id),
         "organization_id": str(user.organization_id),
-        "warehouse_id": str(user.warehouse_id),
+        "warehouse_id": str(user.warehouse_id) if user.warehouse_id else None,
         "ip_address": user.ip_address
     } for user in users])
 
 @bp.route('/users/<uuid:user_id>', methods=['GET'])
 @jwt_required()
-@role_required('admin')
+@role_required('admin', 'system_admin')
 def get_user(user_id):
+    identity = get_jwt_identity()
+    user_id = identity.get('user_id') if isinstance(identity, dict) else identity
+    current_user = User.query.get(uuid.UUID(user_id))
     user = User.query.get(user_id)
-    if user is None:
+
+    if not user:
         abort(404, description="User not found")
+
+    # System Admin can access any user, Admin can only access their organization's users
+    if current_user.is_admin() and current_user.organization_id != user.organization_id:
+        abort(403, description="Unauthorized to access this user")
+
     return jsonify({
         "id": str(user.id),
         "username": user.username,
         "role_id": str(user.role_id),
-        "organization_id": user.organization_id,
-        "warehouse_id": user.warehouse_id,
+        "organization_id": str(user.organization_id),
+        "warehouse_id": str(user.warehouse_id) if user.warehouse_id else None,
         "ip_address": user.ip_address
     })
 
 @bp.route('/users', methods=['POST'])
 @jwt_required()
-@role_required('admin')
+@role_required('admin', 'system_admin')
 def create_user():
-    data = request.get_json()
-    if not data.get('username') or not data.get('role_id') or not data.get('ip_address'):
-        abort(400, description="Missing required fields")
+    try:
+        identity = get_jwt_identity()
+        user_id = identity.get('user_id') if isinstance(identity, dict) else identity
+        current_user = User.query.get(uuid.UUID(user_id))
 
-    existing_user = User.query.filter_by(username=data['username']).first()
-    if existing_user:
-        abort(400, description="Username already exists")
+        data = request.get_json()
+        current_app.logger.info(f"Received user data: {data}")
 
-    user = User(
-        id=uuid.uuid4(),
-        username=data['username'],
-        role_id=uuid.UUID(data['role_id']),
-        organization_id=uuid.UUID(data.get('organization_id')),
-        warehouse_id=uuid.UUID(data.get('warehouse_id')) if data.get('warehouse_id') else None,
-        ip_address=data['ip_address']
-    )
-    user.set_password(data['password'])  # Use set_password method
+        if not data.get('username') or not data.get('password') or not data.get('role_name') or not data.get('organization_id') or not data.get('ip_address'):
+            abort(400, description="Missing required fields")
 
-    db.session.add(user)
-    db.session.commit()
-    return jsonify({"message": "User created successfully", "id": str(user.id)}), 201
+        role = UserRole.query.filter_by(role_name=data['role_name']).first()
+        if not role:
+            abort(400, description="Invalid role name provided")
 
-@bp.route('/users/<uuid:user_id>', methods=['PUT'])
-@jwt_required()
-@role_required('admin')
-def update_user(user_id):
-    user = User.query.get(user_id)
-    if user is None:
-        abort(404, description="User not found")
+        existing_user = User.query.filter_by(username=data['username']).first()
+        if existing_user:
+            abort(400, description="Username already exists")
 
-    data = request.get_json()
-    if 'username' in data:
-        user.username = data['username']
-    if 'role_id' in data:
-        user.role_id = uuid.UUID(data['role_id'])
-    if 'organization_id' in data:
-        user.organization_id = uuid.UUID(data['organization_id'])
-    if 'warehouse_id' in data:
-        user.warehouse_id = uuid.UUID(data['warehouse_id'])
-    if 'ip_address' in data:
-        user.ip_address = data['ip_address']
-    if 'password' in data:
+        try:
+            organization_id = uuid.UUID(data['organization_id'])
+            warehouse_id = uuid.UUID(data.get('warehouse_id')) if data.get('warehouse_id') else None
+        except ValueError:
+            abort(400, description="Invalid UUID format for organization or warehouse ID")
+
+        user = User(
+            id=uuid.uuid4(),
+            username=data['username'],
+            role_id=role.id,
+            organization_id=organization_id,
+            warehouse_id=warehouse_id,
+            ip_address=data['ip_address']
+        )
         user.set_password(data['password'])
 
-    db.session.commit()
-    return jsonify({"message": "User updated successfully"})
+        db.session.add(user)
+        db.session.commit()
 
-@bp.route('/users/<uuid:user_id>', methods=['DELETE'])
-@jwt_required()
-@role_required('admin')
-def delete_user(user_id):
-    user = User.query.get(user_id)
-    if user is None:
-        abort(404, description="User not found")
+        return jsonify({"message": "User created successfully", "id": str(user.id)}), 201
 
-    db.session.delete(user)
-    db.session.commit()
-    return jsonify({"message": "User deleted successfully"})
-
-# -------------------- Authentication Routes -------------------- #
-
-@bp.route('/register', methods=['POST'])
-def register():
-    data = request.get_json()
-    if not data.get('username') or not data.get('password') or not data.get('role_id'):
-        abort(400, description="Missing required fields")
-
-    user = User(
-        id=uuid.uuid4(),
-        username=data['username'],
-        role_id=uuid.UUID(data['role_id']),
-        ip_address=data.get('ip_address')
-    )
-    user.set_password(data['password'])
-
-    db.session.add(user)
-    db.session.commit()
-    return jsonify({"message": "User registered successfully", "id": str(user.id)}), 201
-
-@bp.route('/login', methods=['POST'])
-def login():
-    data = request.get_json()
-    username = data.get('username')
-    password = data.get('password')
-
-    user = User.query.filter_by(username=username).first()
-    if not user or not user.check_password(password):
-        return jsonify({'error': 'Invalid credentials'}), 401
-
-    access_token = create_access_token(identity={"user_id": str(user.id), "role_id": str(user.role_id)})
-    return jsonify(access_token=access_token)
-
-@bp.route('/logout', methods=['POST'])
-@jwt_required()
-def logout():
-    return jsonify({"message": "Logged out successfully"}), 200
+    except IntegrityError as e:
+        db.session.rollback()
+        abort(400, description="Database error, check if organization, warehouse, or user exists.")
+    except Exception as e:
+        db.session.rollback()
+        abort(500, description="An unexpected error occurred while creating the user.")
 
 # -------------------- Barcode Scanning Route -------------------- #
 
 @bp.route('/scan', methods=['POST'])
 @jwt_required()
+@role_required('user')
 @ip_whitelisted
 def scan_barcode():
     data = request.get_json()
