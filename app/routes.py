@@ -160,23 +160,23 @@ def get_warehouse(id):
 @role_required('admin')
 def create_warehouse():
     try:
-        identity = get_jwt_identity()  # Get the JWT identity
-        
-        # If identity is a dict, extract 'user_id'; otherwise, treat it as user_id directly
-        if isinstance(identity, dict):
-            user_id = identity['user_id']
-        else:
-            user_id = identity
-
+        identity = get_jwt_identity()
+        user_id = identity.get('user_id') if isinstance(identity, dict) else identity
         current_user = User.query.get(uuid.UUID(user_id))
+
         data = request.get_json() or {}
         name = data.get('name')
 
         if not name:
             return jsonify({'error': 'Missing warehouse name'}), 400
 
-        # Ensure the warehouse belongs to the current user's organization
-        warehouse = Warehouse(name=name, organization_id=current_user.organization_id, location=data.get('location'))
+        warehouse = Warehouse(
+            id=uuid.uuid4(),
+            name=name,
+            organization_id=current_user.organization_id,
+            location=data.get('location')
+        )
+
         db.session.add(warehouse)
 
         try:
@@ -194,6 +194,55 @@ def create_warehouse():
     except Exception as e:
         current_app.logger.error(f"Error creating warehouse: {e}")
         return jsonify({'error': 'An error occurred while creating the warehouse'}), 500
+
+@bp.route('/warehouses/<uuid:id>', methods=['PUT'])
+@jwt_required()
+@role_required('admin', 'system_admin')
+def update_warehouse(id):
+    try:
+        identity = get_jwt_identity()
+        user_id = identity.get('user_id') if isinstance(identity, dict) else identity
+        current_user = User.query.get(uuid.UUID(user_id))
+
+        warehouse = Warehouse.query.get(id)
+        if not warehouse:
+            return jsonify({'error': 'Warehouse not found'}), 404
+
+        if current_user.is_admin() and current_user.organization_id != warehouse.organization_id:
+            return jsonify({'error': 'Unauthorized to update this warehouse'}), 403
+
+        data = request.get_json() or {}
+        warehouse.name = data.get('name', warehouse.name)
+        warehouse.location = data.get('location', warehouse.location)
+
+        db.session.commit()
+        return jsonify({"message": "Warehouse updated successfully"})
+    except Exception as e:
+        current_app.logger.error(f"Error updating warehouse: {e}")
+        return jsonify({'error': 'An error occurred while updating the warehouse'}), 500
+
+@bp.route('/warehouses/<uuid:id>', methods=['DELETE'])
+@jwt_required()
+@role_required('admin', 'system_admin')
+def delete_warehouse(id):
+    try:
+        identity = get_jwt_identity()
+        user_id = identity.get('user_id') if isinstance(identity, dict) else identity
+        current_user = User.query.get(uuid.UUID(user_id))
+
+        warehouse = Warehouse.query.get(id)
+        if not warehouse:
+            return jsonify({'error': 'Warehouse not found'}), 404
+
+        if current_user.is_admin() and current_user.organization_id != warehouse.organization_id:
+            return jsonify({'error': 'Unauthorized to delete this warehouse'}), 403
+
+        db.session.delete(warehouse)
+        db.session.commit()
+        return '', 204
+    except Exception as e:
+        current_app.logger.error(f"Error deleting warehouse: {e}")
+        return jsonify({'error': 'An error occurred while deleting the warehouse'}), 500
 
 # -------------------- User Routes -------------------- #
 
@@ -295,6 +344,55 @@ def create_user():
     except Exception as e:
         db.session.rollback()
         abort(500, description="An unexpected error occurred while creating the user.")
+
+@bp.route('/users/<uuid:user_id>', methods=['PUT'])
+@jwt_required()
+@role_required('admin', 'system_admin')
+def update_user(user_id):
+    try:
+        identity = get_jwt_identity()
+        user_id = identity.get('user_id') if isinstance(identity, dict) else identity
+        current_user = User.query.get(uuid.UUID(user_id))
+
+        user = User.query.get(user_id)
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+
+        if current_user.is_admin() and current_user.organization_id != user.organization_id:
+            return jsonify({'error': 'Unauthorized to update this user'}), 403
+
+        data = request.get_json() or {}
+        user.username = data.get('username', user.username)
+        user.ip_address = data.get('ip_address', user.ip_address)
+
+        db.session.commit()
+        return jsonify({"message": "User updated successfully"})
+    except Exception as e:
+        current_app.logger.error(f"Error updating user: {e}")
+        return jsonify({'error': 'An error occurred while updating the user'}), 500
+
+@bp.route('/users/<uuid:user_id>', methods=['DELETE'])
+@jwt_required()
+@role_required('admin', 'system_admin')
+def delete_user(user_id):
+    try:
+        identity = get_jwt_identity()
+        user_id = identity.get('user_id') if isinstance(identity, dict) else identity
+        current_user = User.query.get(uuid.UUID(user_id))
+
+        user = User.query.get(user_id)
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+
+        if current_user.is_admin() and current_user.organization_id != user.organization_id:
+            return jsonify({'error': 'Unauthorized to delete this user'}), 403
+
+        db.session.delete(user)
+        db.session.commit()
+        return '', 204
+    except Exception as e:
+        current_app.logger.error(f"Error deleting user: {e}")
+        return jsonify({'error': 'An error occurred while deleting the user'}), 500
 
 # -------------------- Barcode Scanning Route -------------------- #
 
