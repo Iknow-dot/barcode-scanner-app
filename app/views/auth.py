@@ -15,15 +15,17 @@ bp = Blueprint('auth', __name__)
 def load_user(user_id):
     return User.query.get(user_id)
 
+# Utility function to generate JWT token
 def generate_jwt(user):
     expires_in = current_app.config['JWT_ACCESS_TOKEN_EXPIRES']
-    exp = datetime.now(timezone.utc) + timedelta(minutes=int(expires_in))
+    exp = datetime.now(timezone.utc) + expires_in  # Correctly add timedelta to current time
     token = jwt.encode({
         'sub': str(user.id),
         'exp': exp
     }, current_app.config['JWT_SECRET_KEY'], algorithm='HS256')
     return token
 
+# Password validation function
 def is_password_strong(password):
     if len(password) < 8:
         return False
@@ -35,6 +37,7 @@ def is_password_strong(password):
         return False
     return True
 
+# IP address validation function
 def is_valid_ip(ip):
     try:
         ip_address(ip)
@@ -50,22 +53,28 @@ def register():
     ip_address = data.get('ip_address')
     role_name = data.get('role_name')
 
+    # Check required fields
     if not username or not password or not ip_address or not role_name:
         return jsonify({"error": "Username, password, IP address, and role are required"}), 400
 
+    # Validate password strength
     if not is_password_strong(password):
         return jsonify({"error": "Password must be at least 8 characters long, contain letters, numbers, and special characters"}), 400
 
+    # Validate IP address format
     if not is_valid_ip(ip_address):
         return jsonify({"error": "Invalid IP address format"}), 400
 
+    # Check if user already exists
     if User.query.filter_by(username=username).first():
         return jsonify({"error": "User already exists"}), 400
 
+    # Fetch role or return an error if it does not exist
     role = UserRole.query.filter_by(role_name=role_name).first()
     if not role:
         return jsonify({"error": "Invalid role specified"}), 400
 
+    # Create a new user
     hashed_password = generate_password_hash(password, method='pbkdf2:sha256')
     new_user = User(username=username, password_hash=hashed_password, ip_address=ip_address, role_id=role.id)
 
@@ -80,6 +89,7 @@ def login():
     username = data.get('username')
     password = data.get('password')
 
+    # Validate input
     if not username or not password:
         current_app.logger.error("Login failed: Username and password are required")
         return jsonify({"error": "Username and password are required"}), 400
@@ -87,11 +97,20 @@ def login():
     try:
         user = User.query.filter_by(username=username).first()
 
+        # Check if user exists and password is correct
         if user and check_password_hash(user.password_hash, password):
-            login_user(user)
+            login_user(user)  # Optional Flask-Login session handling
+            
+            # Generate JWT token
             access_token = generate_jwt(user)
-            return jsonify({"message": "Login successful", "access_token": access_token}), 200
+
+            current_app.logger.info(f"User {user.username} logged in successfully.")
+            return jsonify({
+                "message": "Login successful",
+                "access_token": access_token
+            }), 200
         else:
+            current_app.logger.error(f"Login failed: Invalid credentials for username: {username}")
             return jsonify({"error": "Invalid credentials"}), 401
     except Exception as e:
         current_app.logger.error(f"Unexpected error during login: {e}")
@@ -100,28 +119,36 @@ def login():
 @bp.route('/logout', methods=['POST'])
 def logout():
     if current_user.is_authenticated:
-        logout_user()
+        logout_user()  # Flask-Login session handling
         return jsonify({"message": "Logout successful"}), 200
     return jsonify({"error": "User is not logged in"}), 400
 
 @bp.route('/token/refresh', methods=['POST'])
 def refresh_token():
     auth_header = request.headers.get('Authorization')
+    
     if not auth_header:
         return jsonify({"error": "Authorization header missing"}), 401
 
     token = auth_header.split(" ")[1] if " " in auth_header else auth_header
-
+    
     try:
         payload = jwt.decode(token, current_app.config['JWT_SECRET_KEY'], algorithms=['HS256'])
-        user = User.query.get(payload['sub'])
+        user = User.query.get(payload['sub'])  # 'sub' is the user id
+        
         if not user:
             return jsonify({"error": "Invalid token, user not found"}), 401
 
+        # Generate a new token
         new_token = generate_jwt(user)
-        return jsonify({"access_token": new_token}), 200
+        
+        return jsonify({
+            "access_token": new_token
+        }), 200
+    
     except jwt.ExpiredSignatureError:
         return jsonify({"error": "Token expired, please log in again"}), 401
+    
     except jwt.InvalidTokenError:
         return jsonify({"error": "Invalid token"}), 401
 
@@ -141,6 +168,7 @@ def token_required(f):
         try:
             data = jwt.decode(token, current_app.config['JWT_SECRET_KEY'], algorithms=['HS256'])
             current_user = User.query.get(data['user_id'])
+
             if not current_user:
                 return jsonify({'message': 'User not found!'}), 404
 
@@ -150,7 +178,7 @@ def token_required(f):
             return jsonify({'message': 'Invalid token!'}), 401
 
         return f(current_user, *args, **kwargs)
-
+    
     return decorated
 
 # Role required decorator
@@ -161,6 +189,5 @@ def role_required(*roles):
             if current_user.role.role_name not in roles:
                 return jsonify({'message': 'You do not have access to this resource!'}), 403
             return f(current_user, *args, **kwargs)
-
         return decorated
     return wrapper
