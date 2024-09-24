@@ -1,31 +1,37 @@
 import React, { useState } from 'react';
-import axios from 'axios';
-import './Login.css'; // Assuming you're using the CSS file as described before
+import { useNavigate } from 'react-router-dom'; // Import useNavigate from react-router-dom
+import api from '../../api';  // Assuming you're using api.js for API requests
+import './Login.css'; 
 
 const Login = () => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
+  const navigate = useNavigate();  // Replace useHistory with useNavigate
 
   const handleSubmit = async (event) => {
     event.preventDefault();
     setErrorMessage('');  // Clear any previous errors
 
     try {
-      const response = await axios.post('http://localhost:5000/auth/login', {
+      const response = await api.post('/auth/login', {
         username,
         password
       });
       
-      const token = response.data.token;  // Assume backend returns a JWT token
+      const token = response.data.access_token;  // Get JWT token from response
       
-      // Save token to localStorage (or use another method to store it securely)
+      // Save the token to localStorage
       localStorage.setItem('token', token);
       
-      // Redirect to the dashboard (adjust routing if needed)
-      window.location.href = '/dashboard';
+      // Redirect to the dashboard after successful login
+      navigate('/dashboard');  // Replace history.push with navigate
     } catch (error) {
-      setErrorMessage('Invalid username or password');
+      if (error.response && error.response.status === 401) {
+        setErrorMessage('Invalid username or password');
+      } else {
+        setErrorMessage('An error occurred. Please try again later.');
+      }
     }
   };
 
