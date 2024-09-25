@@ -11,16 +11,16 @@ export const AuthProvider = ({ children }) => {
     return token ? { token } : null;
   });
 
-  // A function to handle user logout
+  // Function to handle user logout
   const logout = () => {
-    localStorage.removeItem('token');
-    setAuthData(null);
+    localStorage.removeItem('token');  // Clear the JWT token from localStorage
+    setAuthData(null);  // Clear the auth data in context
   };
 
-  // A function to handle user login and token storage
+  // Function to handle user login and token storage
   const login = (token) => {
-    localStorage.setItem('token', token);
-    setAuthData({ token });
+    localStorage.setItem('token', token);  // Store the JWT token in localStorage
+    setAuthData({ token });  // Set the auth data in context
   };
 
   return (

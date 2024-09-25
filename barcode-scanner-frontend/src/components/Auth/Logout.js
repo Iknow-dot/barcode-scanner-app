@@ -1,30 +1,28 @@
 import React, { useContext, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';  // Replace useHistory with useNavigate
+import { useNavigate } from 'react-router-dom';
 import AuthContext from './AuthContext';
 import api from '../../api';  // Import the api.js instance to handle requests
 
 const Logout = () => {
-  const { setAuthData } = useContext(AuthContext);
+  const { setAuthData, logout } = useContext(AuthContext);  // Use the logout function from AuthContext
   const navigate = useNavigate();  // Replace useHistory with useNavigate
 
   useEffect(() => {
-    const logout = async () => {
+    const performLogout = async () => {
       try {
-        // Optionally make a logout request to the backend to invalidate the token
+        // Make a logout request to the backend (optional, since JWT is stateless)
         await api.post('/auth/logout');
       } catch (error) {
         console.error('Error during logout:', error);
       } finally {
-        // Clear authentication data from context and localStorage
-        setAuthData(null);
-        localStorage.removeItem('token');
-        // Redirect to the login page
-        navigate('/login');  // Replace history.push with navigate
+        // Clear authentication data and navigate to the login page
+        logout();  // Use the logout function to clear local storage and auth context
+        navigate('/login');  // Redirect to the login page
       }
     };
 
-    logout();
-  }, [setAuthData, navigate]);
+    performLogout();
+  }, [logout, navigate]);
 
   return (
     <div className="logout-container">

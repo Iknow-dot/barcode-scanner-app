@@ -118,10 +118,11 @@ def login():
 
 @bp.route('/logout', methods=['POST'])
 def logout():
+    # Since we are using JWT, logout is essentially handled on the client side by removing the token.
+    # If Flask-Login is still managing user sessions, we can log out the user from Flask-Login.
     if current_user.is_authenticated:
-        logout_user()  # Flask-Login session handling
-        return jsonify({"message": "Logout successful"}), 200
-    return jsonify({"error": "User is not logged in"}), 400
+        logout_user()  # Optional if using Flask-Login for session management
+    return jsonify({"message": "Logout successful. Please clear your JWT token on the client side."}), 200
 
 @bp.route('/token/refresh', methods=['POST'])
 def refresh_token():
