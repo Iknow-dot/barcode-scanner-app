@@ -4,79 +4,101 @@ import './SystemAdminDashboard.css';
 const SystemAdminDashboard = () => {
   const [organization, setOrganization] = useState('');
   const [user, setUser] = useState('');
-  const [warehouse, setWarehouse] = useState('');
+  const [activeTab, setActiveTab] = useState('Organizations');
+  const [isModalOpen, setModalOpen] = useState(null);
+  const [darkMode, setDarkMode] = useState(localStorage.getItem("darkMode") === 'true');
 
   const handleOrganizationSubmit = (e) => {
     e.preventDefault();
-    // Logic to submit organization data to backend
     console.log("Organization Submitted: ", organization);
   };
 
   const handleUserSubmit = (e) => {
     e.preventDefault();
-    // Logic to submit user data to backend
     console.log("User Submitted: ", user);
   };
 
-  const handleWarehouseSubmit = (e) => {
-    e.preventDefault();
-    // Logic to submit warehouse data to backend
-    console.log("Warehouse Submitted: ", warehouse);
+  const toggleDarkMode = () => {
+    const isDarkMode = !darkMode;
+    setDarkMode(isDarkMode);
+    localStorage.setItem("darkMode", isDarkMode);
+    if (isDarkMode) {
+      document.body.classList.add("dark-mode");
+    } else {
+      document.body.classList.remove("dark-mode");
+    }
+  };
+
+  const openTab = (event, tabName) => {
+    setActiveTab(tabName);
+  };
+
+  const openModal = (modalId) => {
+    setModalOpen(modalId);
+  };
+
+  const closeModal = () => {
+    setModalOpen(null);
   };
 
   return (
     <div className="container">
-      <h2>System Admin Dashboard</h2>
+      <img src="http://iknow.ge/wp-content/uploads/2022/10/sliderlogo.png" alt="Logo" width="150" />
 
-      <div className="form-section">
-        <h3>Add Organization</h3>
-        <form onSubmit={handleOrganizationSubmit}>
-          <div className="form-group">
-            <label htmlFor="organization">Organization</label>
-            <input
-              type="text"
-              id="organization"
-              value={organization}
-              onChange={(e) => setOrganization(e.target.value)}
-              required
-            />
-          </div>
-          <button type="submit">Add Organization</button>
-        </form>
-      </div>
+      <div className="dashboard-container">
+        {/* Dark Mode Toggle */}
+        <div className="header">
+          <h2>Dark Mode</h2>
+          <label className="switch">
+            <input type="checkbox" checked={darkMode} onChange={toggleDarkMode} />
+            <span className="slider round"></span>
+          </label>
+        </div>
 
-      <div className="form-section">
-        <h3>Add User</h3>
-        <form onSubmit={handleUserSubmit}>
-          <div className="form-group">
-            <label htmlFor="user">User</label>
-            <input
-              type="text"
-              id="user"
-              value={user}
-              onChange={(e) => setUser(e.target.value)}
-              required
-            />
-          </div>
-          <button type="submit">Add User</button>
-        </form>
-      </div>
+        <div className="tabs">
+          <button className={`tab-link ${activeTab === 'Organizations' ? 'active' : ''}`} onClick={(e) => openTab(e, 'Organizations')}>ორგანიზაციები</button>
+          <button className={`tab-link ${activeTab === 'Administrators' ? 'active' : ''}`} onClick={(e) => openTab(e, 'Administrators')}>მომხმარებლები</button>
+        </div>
 
-      <div className="form-section">
-        <h3>Add Warehouse</h3>
-        <form onSubmit={handleWarehouseSubmit}>
-          <div className="form-group">
-            <label htmlFor="warehouse">Warehouse</label>
-            <input
-              type="text"
-              id="warehouse"
-              value={warehouse}
-              onChange={(e) => setWarehouse(e.target.value)}
-              required
-            />
-          </div>
-          <button type="submit">Add Warehouse</button>
-        </form>
+        <div id="Organizations" className={`tab-content ${activeTab === 'Organizations' ? 'active' : ''}`}>
+          <button className="add-btn" onClick={() => openModal('organizationModal')}>ორგანიზაციის დამატება</button>
+          {/* Organization table and modal */}
+          {isModalOpen === 'organizationModal' && (
+            <div className="modal">
+              <div className="modal-content">
+                <span className="close-btn" onClick={closeModal}>&times;</span>
+                <h2>ორგანიზაციის დამატება</h2>
+                <form onSubmit={handleOrganizationSubmit}>
+                  <div className="form-group">
+                    <label htmlFor="orgName">ორგანიზაციის სახელი:</label>
+                    <input type="text" id="orgName" value={organization} onChange={(e) => setOrganization(e.target.value)} required />
+                  </div>
+                  <button type="submit" className="add-btn">დამატება</button>
+                </form>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div id="Administrators" className={`tab-content ${activeTab === 'Administrators' ? 'active' : ''}`}>
+          <button className="add-btn" onClick={() => openModal('adminModal')}>მომხმარებლის დამატება</button>
+          {/* Administrators table and modal */}
+          {isModalOpen === 'adminModal' && (
+            <div className="modal">
+              <div className="modal-content">
+                <span className="close-btn" onClick={closeModal}>&times;</span>
+                <h2>მომხმარებლის დამატება</h2>
+                <form onSubmit={handleUserSubmit}>
+                  <div className="form-group">
+                    <label htmlFor="adminName">სახელი:</label>
+                    <input type="text" id="adminName" value={user} onChange={(e) => setUser(e.target.value)} required />
+                  </div>
+                  <button type="submit" className="add-btn">დამატება</button>
+                </form>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

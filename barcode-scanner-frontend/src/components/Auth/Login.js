@@ -20,10 +20,10 @@ const Login = () => {
         username,
         password
       });
-      
-      const token = response.data.access_token;  // Get JWT token from response
-      const userRole = response.data.role.role_name;  // Get the user's role
 
+      const token = response.data.access_token;  // Get JWT token from response
+      const userRole = response.data.role;  // Get the user's role
+ 
       // Save the token and role using AuthContext's login function
       login(token, userRole);
 

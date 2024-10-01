@@ -17,9 +17,9 @@ const PrivateRoute = ({ children, allowedRoles }) => {
   // Check if user's role is allowed to access this route
   if (allowedRoles && !allowedRoles.includes(userRole)) {
     // Redirect based on the user's role
-    if (userRole === 'system_admin') {
+    if (userRole.role_name === 'system_admin') {
       return <Navigate to="/system-admin-dashboard" />;
-    } else if (userRole === 'admin') {
+    } else if (userRole.role_name === 'admin') {
       return <Navigate to="/dashboard" />;
     } else {
       return <Navigate to="/dashboard" />; // Default for other roles

@@ -1,68 +1,406 @@
-* {
-    box-sizing: border-box;
-  }
-  
-  body {
+body {
     font-family: Arial, sans-serif;
     margin: 0;
     padding: 0;
-    background-color: #f4f4f4;
   }
+  
+  
+  
+  
+  
+      .image-container {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background-color: white;
+        padding: 20px;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        text-align: center;
+      }
+  
+      .close-btn {
+        background-color: red;
+        color: white;
+        border: none;
+        padding: 5px 10px;
+        cursor: pointer;
+        margin-bottom: 10px;
+      }
+  
+      .close-btn:hover {
+        background-color: darkred;
+      }
+  
+      .image-container img {
+        max-width: 300px;
+        max-height: 300px;
+      }
+  
+  
+  
+  
+  
   
   .container {
-    max-width: 600px;
-    margin: 50px auto;
-    padding: 20px;
-    background-color: white;
-    border-radius: 10px;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    width: 90%;
+    max-width: 1200px;
+    margin: auto;
+    margin-top: 20px;
   }
   
-  h2, h3 {
-    text-align: center;
+  
+  .search-container {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
     margin-bottom: 20px;
   }
   
-  .form-section {
-    margin-bottom: 30px;
-  }
-  
-  .form-group {
-    margin-bottom: 15px;
-  }
-  
-  label {
-    display: block;
-    margin-bottom: 5px;
-  }
-  
-  input[type="text"] {
+  select, input, button {
+    padding: 10px;
+    font-size: 16px;
     width: 100%;
+    box-sizing: border-box;
+  }
+  
+  /* Make the search-container horizontal on larger screens */
+  @media(min-width: 768px) {
+    .search-container {
+      flex-direction: row;
+    }
+  
+    select, input, button {
+      width: 30%;
+    }
+  
+    button {
+      width: 20%;
+    }
+  }
+  
+  /* Make the table responsive */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    overflow-x: auto;
+    
+  }
+  
+  th, td {
+    padding: 10px;
+    text-align: center;
+    border: 1px solid #ccc;
+  }
+  
+  th {
+    background-color: #f1f1f1;
+  }
+  
+  /* Change table row colors */
+  tr:nth-child(even) {
+    background-color: #f9f9f9;
+  }
+  
+  /* Responsive table on smaller screens */
+  @media(max-width: 768px) {
+    table, th, td {
+      font-size: 14px;
+      width: 100%;
+    }
+  
+    table {
+      display:block;
+      overflow-x: auto;
+      white-space: nowrap;  
+    }
+  }
+  
+  
+  
+  
+
+.dashboard-container {
+    margin-top: 30px;
+  }
+  
+  .tabs {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 20px;
+  }
+  
+  .tab-link {
+    width: 100vh;
+    padding: 10px 20px;
+    cursor: pointer;
+    background-color: #f1f1f1;
+    border: none;
+    outline: none;
+    transition: background-color 0.3s;
+  }
+  
+  .tab-link.active {
+    background-color: #28a745;
+    color: white;
+  }
+  
+  .tab-content {
+    display: none;
+  }
+  
+  .tab-content.active {
+    display: block;
+  }
+  
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 20px;
+  }
+  
+  th, td {
     padding: 10px;
     border: 1px solid #ccc;
-    border-radius: 5px;
-    font-size: 16px;
+    text-align: center;
   }
   
-  button {
-    width: 100%;
-    padding: 10px;
-    background-color: #5cb85c;
+  th {
+    background-color: #f9f9f9;
+  }
+  
+  tbody tr:nth-child(even) {
+    background-color: #f1f1f1;
+  }
+  
+
+  /* Dark Mode Styles */
+body.dark-mode {
+    background-color: #121212;
     color: white;
-    border: none;
-    border-radius: 5px;
-    font-size: 16px;
+  }
+  
+  body.dark-mode table, body.dark-mode th, body.dark-mode td {
+    border-color: #333;
+  }
+  
+  body.dark-mode th {
+    background-color: #333;
+  }
+  
+  body.dark-mode tr:nth-child(even) {
+    background-color: #2a2a2a;
+  }
+  
+  body.dark-mode .add-btn {
+    background-color: #444;
+    color: white;
+  }
+  
+  body.dark-mode .add-btn:hover {
+    background-color: #555;
+  }
+  
+  body.dark-mode .modal-content {
+    background-color: #1e1e1e;
+    color: white;
+  }
+  
+  /* Dark mode toggle switch */
+  .switch {
+    position: relative;
+    display: inline-block;
+    width: 60px;
+    height: 34px;
+    margin-bottom: 10px;
+  }
+  
+  .switch input {
+    display: none;
+  }
+  
+  .slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #ccc;
+    transition: 0.4s;
+  }
+  
+  .slider:before {
+    position: absolute;
+    content: "";
+    height: 26px;
+    width: 26px;
+    left: 4px;
+    bottom: 4px;
+    background-color: white;
+    transition: 0.4s;
+  }
+  
+  input:checked + .slider {
+    background-color: #28a745;
+  }
+  
+  input:checked + .slider:before {
+    transform: translateX(26px);
+  }
+  
+  .slider.round {
+    border-radius: 34px;
+  }
+  
+  .slider.round:before {
+    border-radius: 50%;
+  }
+
+/* Style for the action icons */
+table td i {
+  cursor: pointer;
+  margin: 0 5px;
+}
+
+table td i:hover {
+  color: #28a745;  /* Change color on hover (green) */
+}
+
+.fas.fa-trash-alt:hover {
+  color: red; /* Red for delete */
+}
+
+
+/* Modal styling */
+/* Modal styling */
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 100;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+  }
+  
+  .modal-content {
+    background-color: #fefefe;
+    margin: 15% auto;
+    padding: 20px;
+    border: 1px solid #888;
+    width: 80%;
+    max-width: 400px;
+  }
+  
+  .close-btn {
+    color: #aaa;
+    float: right;
+    font-size: 28px;
+    font-weight: bold;
+  }
+  
+  .close-btn:hover,
+  .close-btn:focus {
+    color: black;
+    text-decoration: none;
     cursor: pointer;
   }
   
-  button:hover {
-    background-color: #4cae4c;
+
+/* Styling the modal form */
+.form-group {
+    margin-bottom: 15px;
   }
   
-  @media screen and (max-width: 600px) {
-    .container {
-      margin: 20px;
-      padding: 15px;
-    }
+  .form-group label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: bold;
+  }
+  
+  .form-group input {
+    width: 100%;
+    padding: 8px;
+    box-sizing: border-box;
+  }
+  
+  /* Align the submit button */
+  .add-btn {
+
+    padding: 10px;
+    background-color: #28a745;
+    color: white;
+    border: none;
+    cursor: pointer;
+  }
+  
+  .add-btn:hover {
+    background-color: #218838;
+  }
+  
+  /* Ensure the modal is centered */
+  .modal-content {
+    width: 100%;
+    max-width: 400px;
+  }
+  
+
+
+  /* Style for modal content */
+.modal-content {
+    padding: 20px;
+    background-color: white;
+    border-radius: 5px;
+    max-width: 500px; /* Adjust the width */
+    margin: auto;
+  }
+  
+  /* Style for form divs */
+  #addAdminForm div {
+    margin-bottom: 15px; /* Spacing between form fields */
+  }
+  
+  /* Style for form labels and inputs */
+  #addAdminForm label {
+    display: block; /* Force labels to be on their own lines */
+    margin-bottom: 5px;
+    font-weight: bold;
+  }
+  
+  #addAdminForm input {
+    width: 100%; /* Make inputs take up full width */
+    padding: 8px;
+    box-sizing: border-box;
+  }
+  
+  /* Style for buttons */
+  .add-btn {
+    background-color: #4CAF50;
+    color: white;
+    padding: 10px 20px;
+    border: none;
+    cursor: pointer;
+    font-size: 16px;
+  }
+  
+  .add-btn:hover {
+    background-color: #45a049;
+  }
+  
+  /* Modal close button */
+  .modal .close {
+    color: #aaa;
+    float: right;
+    font-size: 28px;
+    font-weight: bold;
+  }
+  
+  .modal .close:hover,
+  .modal .close:focus {
+    color: black;
+    text-decoration: none;
+    cursor: pointer;
   }
   

@@ -19,6 +19,7 @@ const Header = () => {
           {authData ? (
             <ul>
               <li><Link to="/dashboard">Dashboard</Link></li>
+              <li><Link to="/system-admin-dashboard">System Admin Dashboard</Link></li>
               <li><button onClick={logout}>Logout</button></li>
             </ul>
           ) : (
