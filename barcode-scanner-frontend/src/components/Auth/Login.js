@@ -1,12 +1,14 @@
-import React, { useState } from 'react';
+import React, { useState, useContext } from 'react';
 import { useNavigate } from 'react-router-dom'; // Import useNavigate from react-router-dom
 import api from '../../api';  // Assuming you're using api.js for API requests
+import AuthContext from '../Auth/AuthContext';  // Import AuthContext
 import './Login.css'; 
 
 const Login = () => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
+  const { login } = useContext(AuthContext);  // Access login from AuthContext
   const navigate = useNavigate();  // Replace useHistory with useNavigate
 
   const handleSubmit = async (event) => {
@@ -20,10 +22,10 @@ const Login = () => {
       });
       
       const token = response.data.access_token;  // Get JWT token from response
-      const userRole = response.data.role.role_name;  // Assume the backend returns the user's role along with the token
+      const userRole = response.data.role.role_name;  // Get the user's role
 
-      // Save the token to localStorage
-      localStorage.setItem('token', token);
+      // Save the token and role using AuthContext's login function
+      login(token, userRole);
 
       // Handle role-based redirection
       if (userRole === 'system_admin') {

@@ -4,7 +4,7 @@ import AuthContext from '../Auth/AuthContext';
 
 const Header = () => {
   const { authData, logout } = useContext(AuthContext);
-  const location = useLocation();  // Get current route
+  const location = useLocation();  // Get the current route
 
   // Hide header for login route
   if (location.pathname === '/login') {

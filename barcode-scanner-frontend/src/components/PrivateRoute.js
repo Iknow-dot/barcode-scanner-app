@@ -6,26 +6,27 @@ const PrivateRoute = ({ children, allowedRoles }) => {
   const { authData } = useContext(AuthContext);
   const location = useLocation();
 
+  // If not authenticated, redirect to login
   if (!authData || !authData.token) {
-    // Redirect to login if the user is not authenticated
     return <Navigate to="/login" state={{ from: location }} />;
   }
 
-  const userRole = authData.user?.role;
+  // Retrieve the role from authData or localStorage
+  const userRole = authData?.role || localStorage.getItem('role');
 
-  // Check if the user's role is allowed to access this route
+  // Check if user's role is allowed to access this route
   if (allowedRoles && !allowedRoles.includes(userRole)) {
-    // Redirect users to their specific dashboards if they try to access an unauthorized route
+    // Redirect based on the user's role
     if (userRole === 'system_admin') {
       return <Navigate to="/system-admin-dashboard" />;
     } else if (userRole === 'admin') {
       return <Navigate to="/dashboard" />;
     } else {
-      return <Navigate to="/dashboard" />; // Default dashboard for other roles
+      return <Navigate to="/dashboard" />; // Default for other roles
     }
   }
 
-  // Otherwise, allow access to the requested route
+  // Allow access to the requested route
   return children;
 };
 

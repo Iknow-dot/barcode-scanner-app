@@ -18,9 +18,10 @@ export const AuthProvider = ({ children }) => {
   };
 
   // Function to handle user login and token storage
-  const login = (token) => {
+  const login = (token, role) => {
     localStorage.setItem('token', token);  // Store the JWT token in localStorage
-    setAuthData({ token });  // Set the auth data in context
+    localStorage.setItem('role', role);
+    setAuthData({ token, role });  // Set the auth data in context
   };
 
   return (
