@@ -1,4 +1,4 @@
-from flask import Flask
+from flask import Flask, send_from_directory, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 from flask_login import LoginManager
@@ -18,7 +18,7 @@ jwt = JWTManager()  # Initialize JWT Manager
 
 def create_app():
     # Create the Flask app instance
-    app = Flask(__name__)
+    app = Flask(__name__, static_folder='../barcode-scanner-frontend/build', static_url_path='/')
 
     # Load configuration from config.py based on the environment
     env = os.getenv('FLASK_ENV', 'development')  # Default to 'development' if not set
@@ -48,5 +48,14 @@ def create_app():
     app.register_blueprint(warehouse.bp, url_prefix='/warehouse')
     app.register_blueprint(user_roles.bp, url_prefix='/roles')
     app.register_blueprint(user.bp, url_prefix='/user')
+
+    # Route to serve the React frontend
+    @app.route('/', defaults={'path': ''})
+    @app.route('/<path:path>')
+    def serve_react(path):
+        if path != "" and os.path.exists(app.static_folder + '/' + path):
+            return send_from_directory(app.static_folder, path)
+        else:
+            return send_from_directory(app.static_folder, 'index.html')
 
     return app
