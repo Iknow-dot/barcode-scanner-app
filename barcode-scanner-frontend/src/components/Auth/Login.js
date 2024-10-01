@@ -20,7 +20,7 @@ const Login = () => {
       });
       
       const token = response.data.access_token;  // Get JWT token from response
-      const userRole = response.data.role;  // Assume the backend returns the user's role along with the token
+      const userRole = response.data.role.role_name;  // Assume the backend returns the user's role along with the token
 
       // Save the token to localStorage
       localStorage.setItem('token', token);

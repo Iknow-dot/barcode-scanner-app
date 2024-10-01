@@ -106,6 +106,7 @@ def login():
             access_token = generate_jwt(user)
 
             current_app.logger.info(f"User {user.username} logged in successfully.")
+
             return jsonify({
                 "message": "Login successful",
                 "access_token": access_token,

@@ -1,10 +1,10 @@
 import React, { useContext } from 'react';
 import { Link } from 'react-router-dom';
-import AuthContext from '../Auth/AuthContext'; // Ensure the AuthContext is set up correctly
+import AuthContext from '../Auth/AuthContext';  // Ensure the AuthContext is set up correctly
 
 const Header = () => {
-  const { authData } = useContext(AuthContext);
-
+  const { authData, logout } = useContext(AuthContext);  // Add logout function
+    
   return (
     <header className="app-header">
       <div className="container">
@@ -13,7 +13,7 @@ const Header = () => {
           {authData ? (
             <ul>
               <li><Link to="/dashboard">Dashboard</Link></li>
-              <li><Link to="/logout">Logout</Link></li>
+              <li><button onClick={logout}>Logout</button></li>  {/* Updated Logout */}
             </ul>
           ) : (
             <ul>
