@@ -13,8 +13,8 @@ export const AuthProvider = ({ children }) => {
 
   // Function to handle user logout
   const logout = () => {
-    localStorage.removeItem('token');  // Clear the JWT token from localStorage
-    setAuthData(null);  // Clear the auth data in context
+    localStorage.removeItem('token');  // Ensure token is removed
+    setAuthData(null);  // Clear authentication data
   };
 
   // Function to handle user login and token storage
