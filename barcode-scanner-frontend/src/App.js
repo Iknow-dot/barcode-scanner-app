@@ -17,18 +17,56 @@ const App = () => {
       <Router>
         <Header />
         <Routes>
+          {/* Public Route for Login */}
           <Route path="/login" element={<Login />} />
 
           {/* Private Routes for authenticated users */}
-          <Route path="/dashboard" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
-          <Route path="/organizations" element={<PrivateRoute><Organization /></PrivateRoute>} />
-          <Route path="/warehouses" element={<PrivateRoute><Warehouse /></PrivateRoute>} />
+          <Route 
+            path="/dashboard" 
+            element={
+              <PrivateRoute allowedRoles={['admin', 'user']}>
+                <Dashboard />
+              </PrivateRoute>
+            } 
+          />
+          <Route 
+            path="/organizations" 
+            element={
+              <PrivateRoute allowedRoles={['admin', 'system_admin']}>
+                <Organization />
+              </PrivateRoute>
+            } 
+          />
+          <Route 
+            path="/warehouses" 
+            element={
+              <PrivateRoute allowedRoles={['admin', 'system_admin']}>
+                <Warehouse />
+              </PrivateRoute>
+            } 
+          />
 
-          <Route path="/logout" element={<PrivateRoute><Logout /></PrivateRoute>} />
+          {/* Private Route for Logout */}
+          <Route 
+            path="/logout" 
+            element={
+              <PrivateRoute allowedRoles={['admin', 'user', 'system_admin']}>
+                <Logout />
+              </PrivateRoute>
+            } 
+          />
           
           {/* System Admin Dashboard route */}
-          <Route path="/system-admin-dashboard" element={<PrivateRoute><SystemAdminDashboard /></PrivateRoute>} />
+          <Route 
+            path="/system-admin-dashboard" 
+            element={
+              <PrivateRoute allowedRoles={['system_admin']}>
+                <SystemAdminDashboard />
+              </PrivateRoute>
+            } 
+          />
 
+          {/* Redirect to Login by default */}
           <Route path="/" element={<Login />} />
         </Routes>
         <Footer />

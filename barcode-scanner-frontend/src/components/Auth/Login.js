@@ -20,12 +20,19 @@ const Login = () => {
       });
       
       const token = response.data.access_token;  // Get JWT token from response
-      
+      const userRole = response.data.role;  // Assume the backend returns the user's role along with the token
+
       // Save the token to localStorage
       localStorage.setItem('token', token);
-      
-      // Redirect to the dashboard after successful login
-      navigate('/dashboard');  // Replace history.push with navigate
+
+      // Handle role-based redirection
+      if (userRole === 'system_admin') {
+        navigate('/system-admin-dashboard');
+      } else if (userRole === 'admin') {
+        navigate('/dashboard');
+      } else {
+        navigate('/dashboard'); // Default for 'user' role or other roles
+      }
     } catch (error) {
       if (error.response && error.response.status === 401) {
         setErrorMessage('Invalid username or password');

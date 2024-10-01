@@ -21,6 +21,7 @@ def generate_jwt(user):
     exp = datetime.now(timezone.utc) + expires_in  # Correctly add timedelta to current time
     token = jwt.encode({
         'sub': str(user.id),
+        'role': user.role.role_name,  # Include user role in the token payload
         'exp': exp
     }, current_app.config['JWT_SECRET_KEY'], algorithm='HS256')
     return token
@@ -107,7 +108,8 @@ def login():
             current_app.logger.info(f"User {user.username} logged in successfully.")
             return jsonify({
                 "message": "Login successful",
-                "access_token": access_token
+                "access_token": access_token,
+                "role": user.role.role_name  # Include the user's role in the response
             }), 200
         else:
             current_app.logger.error(f"Login failed: Invalid credentials for username: {username}")
