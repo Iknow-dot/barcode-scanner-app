@@ -70,8 +70,8 @@ def update_warehouse(id):
         if not organization:
             return jsonify({'error': 'Invalid organization ID'}), 400
         warehouse.organization_id = data['organization_id']
-    if 'location' in data:
-        warehouse.location = data['location']
+    if 'code' in data:
+        warehouse.code = data['code']
     
     try:
         db.session.commit()

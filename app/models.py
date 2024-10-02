@@ -96,7 +96,7 @@ class Warehouse(db.Model):
     id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     organization_id = db.Column(UUID(as_uuid=True), db.ForeignKey('organizations.id'), nullable=False)
     name = db.Column(db.String(100), nullable=False)
-    location = db.Column(db.String(255), nullable=True)
+    code = db.Column(db.String(255), nullable=False, unique=True)
     
     organization = db.relationship('Organization', back_populates='warehouses')
     users = db.relationship('User', back_populates='warehouse', cascade="all, delete-orphan")
@@ -106,7 +106,7 @@ class Warehouse(db.Model):
             'id': str(self.id),
             'organization_id': str(self.organization_id),
             'name': self.name,
-            'location': self.location
+            'code': self.code
         }
 
 class UserRole(db.Model):

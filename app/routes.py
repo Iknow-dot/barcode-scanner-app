@@ -213,7 +213,7 @@ def update_warehouse(id):
 
         data = request.get_json() or {}
         warehouse.name = data.get('name', warehouse.name)
-        warehouse.location = data.get('location', warehouse.location)
+        warehouse.code = data.get('code', warehouse.code)
 
         db.session.commit()
         return jsonify({"message": "Warehouse updated successfully"})
