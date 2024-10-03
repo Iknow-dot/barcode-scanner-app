@@ -11,19 +11,19 @@ const PrivateRoute = ({ children, allowedRoles }) => {
     return <Navigate to="/login" state={{ from: location }} />;
   }
 
-  // Retrieve the role from authData or localStorage
+  // Retrieve the role from authData or localStorage (ensure it's a string)
   const userRole = authData?.role || localStorage.getItem('role');
-
-  // Check if user's role is allowed to access this route
+  
+  // Check if the user's role is allowed to access this route
   if (allowedRoles && !allowedRoles.includes(userRole)) {
     // Redirect based on the user's role
-    if (userRole.role_name === 'system_admin') {
-      return <Navigate to="/system-admin-dashboard" />;
-    } else if (userRole.role_name === 'admin') {
-      return <Navigate to="/dashboard" />;
-    } else {
-      return <Navigate to="/dashboard" />; // Default for other roles
-    }
+    if (userRole === 'system_admin' || userRole === 'admin') {
+        return <Navigate to="/system-admin-dashboard" />;
+      } else if (userRole === 'user') {
+        return <Navigate to="/dashboard" />;
+      } else {
+        return <Navigate to="/login" />;
+      }
   }
 
   // Allow access to the requested route

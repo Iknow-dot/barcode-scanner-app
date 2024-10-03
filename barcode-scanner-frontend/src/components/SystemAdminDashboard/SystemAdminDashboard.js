@@ -1,28 +1,33 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import './SystemAdminDashboard.css';
 import api from '../../api'; // Import the axios instance
+import AuthContext from '../Auth/AuthContext'; // Assuming you have an AuthContext
 
 const SystemAdminDashboard = () => {
+  const { authData } = useContext(AuthContext); // Get user data (including role)
   const [organizations, setOrganizations] = useState([]);
   const [warehouses, setWarehouses] = useState([]);
-  const [activeTab, setActiveTab] = useState('Organizations');
+  const [users, setUsers] = useState([]);
+  const [activeTab, setActiveTab] = useState('Users');
   const [isModalOpen, setModalOpen] = useState(null);
   const [darkMode, setDarkMode] = useState(localStorage.getItem('darkMode') === 'true');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  
-  // Fetch organizations and warehouses when component mounts
+  const userRole = authData?.role; // Get user role from context
+
+  // Fetch organizations, warehouses, and users when component mounts
   useEffect(() => {
     setLoading(true);
     const fetchData = async () => {
       try {
-        const [orgRes, whRes] = await Promise.all([
+        const [orgRes, whRes, userRes] = await Promise.all([
           api.get('/organizations'),
-          api.get('/warehouses')
+          api.get('/warehouses'),
+          api.get('/users')
         ]);
-
         setOrganizations(orgRes.data);
         setWarehouses(whRes.data);
+        setUsers(userRes.data);
       } catch (error) {
         setError('Error fetching data: ' + error.response?.data?.error || error.message);
       } finally {
@@ -67,7 +72,6 @@ const SystemAdminDashboard = () => {
         style={{ backgroundColor: 'rgba(159, 159, 159)' }}
         width="150"
       />
-      {/* <button onClick={logout}>Logout</button> */}
 
       <div className="dashboard-container">
         {/* Dark Mode Toggle */}
@@ -80,90 +84,181 @@ const SystemAdminDashboard = () => {
         </div>
 
         <div className="tabs">
+          {/* Conditionally render tabs based on user role */}
+          {userRole === 'system_admin' && (
+            <button
+              className={`tab-link ${activeTab === 'Organizations' ? 'active' : ''}`}
+              onClick={(e) => openTab(e, 'Organizations')}
+            >
+              ორგანიზაციები
+            </button>
+          )}
+
+          {userRole === 'admin' && (
+            <button
+              className={`tab-link ${activeTab === 'Warehouses' ? 'active' : ''}`}
+              onClick={(e) => openTab(e, 'Warehouses')}
+            >
+              საწყობები
+            </button>
+          )}
+
+          {/* Users tab is visible to both roles */}
           <button
-            className={`tab-link ${activeTab === 'Organizations' ? 'active' : ''}`}
-            onClick={(e) => openTab(e, 'Organizations')}
-          >
-            ორგანიზაციები
-          </button>
-          <button
-            className={`tab-link ${activeTab === 'Administrators' ? 'active' : ''}`}
-            onClick={(e) => openTab(e, 'Administrators')}
+            className={`tab-link ${activeTab === 'Users' ? 'active' : ''}`}
+            onClick={(e) => openTab(e, 'Users')}
           >
             მომხმარებლები
           </button>
         </div>
 
-        <div id="Organizations" className={`tab-content ${activeTab === 'Organizations' ? 'active' : ''}`}>
-          <button className="add-btn" onClick={() => openModal('organizationModal')}>
-            ორგანიზაციის დამატება
-          </button>
-          {/* Organization table */}
-          <table>
-            <thead>
-              <tr>
-                <th>ორგანიზაცია</th>
-                <th>გსნ</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {organizations.map((org) => (
-                <tr key={org.id}>
-                  <td>{org.name}</td>
-                  <td>{org.identification_code}</td>
-                  <td>Actions here</td>
+        {/* Organizations Tab - visible only to system admin */}
+        {userRole === 'system_admin' && activeTab === 'Organizations' && (
+          <div id="Organizations" className="tab-content active">
+            <button className="add-btn" onClick={() => openModal('organizationModal')}>
+              ორგანიზაციის დამატება
+            </button>
+            <table>
+              <thead>
+                <tr>
+                  <th>ორგანიზაცია</th>
+                  <th>გსნ</th>
+                  <th>Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {organizations.map((org) => (
+                  <tr key={org.id}>
+                    <td>{org.name}</td>
+                    <td>{org.identification_code}</td>
+                    <td>Actions here</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
 
-          {/* Organization Modal */}
-          {isModalOpen === 'organizationModal' && (
-            <div className="modal">
-              <div className="modal-content">
-                <span className="close-btn" onClick={closeModal}>
-                  &times;
-                </span>
-                <h2>ორგანიზაციის დამატება</h2>
-                <form>
-                  <div className="form-group">
-                    <label htmlFor="orgName">ორგანიზაციის სახელი:</label>
-                    <input type="text" id="orgName" required />
-                  </div>
-                  <button type="submit" className="add-btn">
-                    დამატება
-                  </button>
-                </form>
+            {/* Organization Modal */}
+            {isModalOpen === 'organizationModal' && (
+              <div className="modal">
+                <div className="modal-content">
+                  <span className="close-btn" onClick={closeModal}>
+                    &times;
+                  </span>
+                  <h2>ორგანიზაციის დამატება</h2>
+                  <form>
+                    <div className="form-group">
+                      <label htmlFor="orgName">ორგანიზაციის სახელი:</label>
+                      <input type="text" id="orgName" required />
+                    </div>
+                    <button type="submit" className="add-btn">
+                      დამატება
+                    </button>
+                  </form>
+                </div>
               </div>
-            </div>
-          )}
-        </div>
+            )}
+          </div>
+        )}
 
-        <div id="Administrators" className={`tab-content ${activeTab === 'Administrators' ? 'active' : ''}`}>
-          <button className="add-btn" onClick={() => openModal('adminModal')}>
-            მომხმარებლის დამატება
-          </button>
-          {/* Warehouses table */}
-          <table>
-            <thead>
-              <tr>
-                <th>სახელი</th>
-                <th>Organization ID</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {warehouses.map((wh) => (
-                <tr key={wh.id}>
-                  <td>{wh.name}</td>
-                  <td>{wh.organization_id}</td>
-                  <td>Actions here</td>
+        {/* Warehouses Tab - visible only to admin */}
+        {userRole === 'admin' && activeTab === 'Warehouses' && (
+          <div id="Warehouses" className="tab-content active">
+            <button className="add-btn" onClick={() => openModal('warehouseModal')}>
+              საწყობის დამატება
+            </button>
+            <table>
+              <thead>
+                <tr>
+                  <th>სახელი</th>
+                  <th>ორგანიზაცია</th>
+                  <th>Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {warehouses.map((wh) => (
+                  <tr key={wh.id}>
+                    <td>{wh.name}</td>
+                    <td>{wh.organization_id}</td>
+                    <td>Actions here</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+
+            {/* Warehouse Modal */}
+            {isModalOpen === 'warehouseModal' && (
+              <div className="modal">
+                <div className="modal-content">
+                  <span className="close-btn" onClick={closeModal}>
+                    &times;
+                  </span>
+                  <h2>საწყობის დამატება</h2>
+                  <form>
+                    <div className="form-group">
+                      <label htmlFor="warehouseName">სახელი:</label>
+                      <input type="text" id="warehouseName" required />
+                    </div>
+                    <button type="submit" className="add-btn">
+                      დამატება
+                    </button>
+                  </form>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Users Tab - visible to both system admin and admin */}
+        {activeTab === 'Users' && (
+          <div id="Users" className="tab-content active">
+            <button className="add-btn" onClick={() => openModal('userModal')}>
+              მომხმარებლის დამატება
+            </button>
+            <table>
+              <thead>
+                <tr>
+                  <th>სახელი</th>
+                  <th>Email</th>
+                  <th>ორგანიზაცია</th>
+                  <th>როლი</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {users.map((user) => (
+                  <tr key={user.id}>
+                    <td>{user.username}</td>
+                    <td>{user.email}</td>
+                    <td>{user.organization_id}</td>
+                    <td>{user.role}</td>
+                    <td>Actions here</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+
+            {/* User Modal */}
+            {isModalOpen === 'userModal' && (
+              <div className="modal">
+                <div className="modal-content">
+                  <span className="close-btn" onClick={closeModal}>
+                    &times;
+                  </span>
+                  <h2>მომხმარებლის დამატება</h2>
+                  <form>
+                    <div className="form-group">
+                      <label htmlFor="userName">სახელი:</label>
+                      <input type="text" id="userName" required />
+                    </div>
+                    <button type="submit" className="add-btn">
+                      დამატება
+                    </button>
+                  </form>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

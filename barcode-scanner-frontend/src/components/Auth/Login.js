@@ -2,7 +2,7 @@ import React, { useState, useContext } from 'react';
 import { useNavigate } from 'react-router-dom'; // Import useNavigate from react-router-dom
 import api from '../../api';  // Assuming you're using api.js for API requests
 import AuthContext from '../Auth/AuthContext';  // Import AuthContext
-import './Login.css'; 
+import './Login.css';
 
 const Login = () => {
   const [username, setUsername] = useState('');
@@ -23,18 +23,17 @@ const Login = () => {
 
       const token = response.data.access_token;  // Get JWT token from response
       const userRole = response.data.role;  // Get the user's role
- 
+
       // Save the token and role using AuthContext's login function
       login(token, userRole);
 
       // Handle role-based redirection
-      if (userRole === 'system_admin') {
+      if (userRole === 'system_admin' || userRole === 'admin') {
         navigate('/system-admin-dashboard');
-      } else if (userRole === 'admin') {
-        navigate('/dashboard');
       } else {
         navigate('/dashboard'); // Default for 'user' role or other roles
       }
+
     } catch (error) {
       if (error.response && error.response.status === 401) {
         setErrorMessage('Invalid username or password');
