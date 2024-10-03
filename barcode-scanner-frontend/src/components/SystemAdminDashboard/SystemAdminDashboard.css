@@ -1,13 +1,11 @@
 body {
     font-family: Arial, sans-serif;
-    margin: 0;
-    padding: 0;
+    margin: 0 auto;
+    padding: 20px;
     background-color: white;
+    display: inline-block;
   }
-  
-  
-  
-  
+
   
       .image-container {
         position: fixed;
@@ -44,10 +42,11 @@ body {
   
   
   .container {
-    width: 90%;
-    max-width: 1200px;
-    margin: auto;
-    margin-top: 20px;
+    width: 100%; /* Make sure it takes full width */
+    max-width: 100%; /* Remove fixed max-width */
+    margin: 0; /* Remove margin to prevent empty space */
+    padding: 10px; /* Optional: Adjust padding to control internal spacing */
+    box-sizing: border-box;
   }
   
   

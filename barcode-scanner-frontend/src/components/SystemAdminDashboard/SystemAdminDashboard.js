@@ -1,22 +1,37 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import './SystemAdminDashboard.css';
+import api from '../../api'; // Import the axios instance
 
 const SystemAdminDashboard = () => {
-  const [organization, setOrganization] = useState('');
-  const [user, setUser] = useState('');
+  const [organizations, setOrganizations] = useState([]);
+  const [warehouses, setWarehouses] = useState([]);
   const [activeTab, setActiveTab] = useState('Organizations');
   const [isModalOpen, setModalOpen] = useState(null);
   const [darkMode, setDarkMode] = useState(localStorage.getItem('darkMode') === 'true');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  
+  // Fetch organizations and warehouses when component mounts
+  useEffect(() => {
+    setLoading(true);
+    const fetchData = async () => {
+      try {
+        const [orgRes, whRes] = await Promise.all([
+          api.get('/organizations'),
+          api.get('/warehouses')
+        ]);
 
-  const handleOrganizationSubmit = (e) => {
-    e.preventDefault();
-    console.log('Organization Submitted: ', organization);
-  };
+        setOrganizations(orgRes.data);
+        setWarehouses(whRes.data);
+      } catch (error) {
+        setError('Error fetching data: ' + error.response?.data?.error || error.message);
+      } finally {
+        setLoading(false);
+      }
+    };
 
-  const handleUserSubmit = (e) => {
-    e.preventDefault();
-    console.log('User Submitted: ', user);
-  };
+    fetchData();
+  }, []);
 
   const toggleDarkMode = () => {
     const isDarkMode = !darkMode;
@@ -41,6 +56,9 @@ const SystemAdminDashboard = () => {
     setModalOpen(null);
   };
 
+  if (loading) return <p>Loading...</p>;
+  if (error) return <p>{error}</p>;
+
   return (
     <div className="container">
       <img 
@@ -49,6 +67,7 @@ const SystemAdminDashboard = () => {
         style={{ backgroundColor: 'rgba(159, 159, 159)' }}
         width="150"
       />
+      {/* <button onClick={logout}>Logout</button> */}
 
       <div className="dashboard-container">
         {/* Dark Mode Toggle */}
@@ -85,18 +104,17 @@ const SystemAdminDashboard = () => {
               <tr>
                 <th>ორგანიზაცია</th>
                 <th>გსნ</th>
-                <th>თანამშრომლების რაოდენობა</th>
                 <th>Actions</th>
               </tr>
             </thead>
             <tbody>
-              <tr>
-                <td>Example Org</td>
-                <td>123456</td>
-                <td>50</td>
-                <td>Actions here</td>
-              </tr>
-              {/* Dynamically populate more rows */}
+              {organizations.map((org) => (
+                <tr key={org.id}>
+                  <td>{org.name}</td>
+                  <td>{org.identification_code}</td>
+                  <td>Actions here</td>
+                </tr>
+              ))}
             </tbody>
           </table>
 
@@ -108,16 +126,10 @@ const SystemAdminDashboard = () => {
                   &times;
                 </span>
                 <h2>ორგანიზაციის დამატება</h2>
-                <form onSubmit={handleOrganizationSubmit}>
+                <form>
                   <div className="form-group">
                     <label htmlFor="orgName">ორგანიზაციის სახელი:</label>
-                    <input
-                      type="text"
-                      id="orgName"
-                      value={organization}
-                      onChange={(e) => setOrganization(e.target.value)}
-                      required
-                    />
+                    <input type="text" id="orgName" required />
                   </div>
                   <button type="submit" className="add-btn">
                     დამატება
@@ -132,55 +144,25 @@ const SystemAdminDashboard = () => {
           <button className="add-btn" onClick={() => openModal('adminModal')}>
             მომხმარებლის დამატება
           </button>
-          {/* Administrators table */}
+          {/* Warehouses table */}
           <table>
             <thead>
               <tr>
                 <th>სახელი</th>
-                <th>Email</th>
-                <th>ორგანიზაცია</th>
-                <th>როლი</th>
+                <th>Organization ID</th>
                 <th>Actions</th>
               </tr>
             </thead>
             <tbody>
-              <tr>
-                <td>John Doe</td>
-                <td>john@example.com</td>
-                <td>Example Org</td>
-                <td>Admin</td>
-                <td>Actions here</td>
-              </tr>
-              {/* Dynamically populate more rows */}
+              {warehouses.map((wh) => (
+                <tr key={wh.id}>
+                  <td>{wh.name}</td>
+                  <td>{wh.organization_id}</td>
+                  <td>Actions here</td>
+                </tr>
+              ))}
             </tbody>
           </table>
-
-          {/* Admin Modal */}
-          {isModalOpen === 'adminModal' && (
-            <div className="modal">
-              <div className="modal-content">
-                <span className="close-btn" onClick={closeModal}>
-                  &times;
-                </span>
-                <h2>მომხმარებლის დამატება</h2>
-                <form onSubmit={handleUserSubmit}>
-                  <div className="form-group">
-                    <label htmlFor="adminName">სახელი:</label>
-                    <input
-                      type="text"
-                      id="adminName"
-                      value={user}
-                      onChange={(e) => setUser(e.target.value)}
-                      required
-                    />
-                  </div>
-                  <button type="submit" className="add-btn">
-                    დამატება
-                  </button>
-                </form>
-              </div>
-            </div>
-          )}
         </div>
       </div>
     </div>

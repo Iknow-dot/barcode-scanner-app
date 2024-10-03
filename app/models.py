@@ -78,7 +78,8 @@ class Organization(db.Model):
     name = db.Column(db.String(100), nullable=False)
     identification_code = db.Column(db.String(50), unique=True, nullable=False)
     web_service_url = db.Column(db.String(255), nullable=False)
-    
+    employees_count = db.Column(db.Integer, nullable=False)  # Mandatory field
+
     users = db.relationship('User', back_populates='organization', cascade="all, delete-orphan")
     warehouses = db.relationship('Warehouse', back_populates='organization', cascade="all, delete-orphan")
     
@@ -87,9 +88,11 @@ class Organization(db.Model):
             'id': str(self.id),  # Convert UUID to string for JSON serialization
             'name': self.name,
             'identification_code': self.identification_code,
-            'web_service_url': self.web_service_url
+            'web_service_url': self.web_service_url,
+            'employees_count': self.employees_count
         }
-
+    
+    
 class Warehouse(db.Model):
     __tablename__ = 'warehouses'
     

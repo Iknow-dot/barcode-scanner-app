@@ -35,7 +35,8 @@ def get_organizations():
         "id": str(org.id),
         "name": org.name,
         "identification_code": org.identification_code,
-        "web_service_url": org.web_service_url
+        "web_service_url": org.web_service_url,
+        "employees_count": org.employees_count  # Include employees_count
     } for org in organizations])
 
 @bp.route('/organizations/<uuid:org_id>', methods=['GET'])
@@ -55,7 +56,8 @@ def get_organization(organization):
         "id": str(organization.id),
         "name": organization.name,
         "identification_code": organization.identification_code,
-        "web_service_url": organization.web_service_url
+        "web_service_url": organization.web_service_url,
+        "employees_count": organization.employees_count  # Include employees_count
     })
 
 @bp.route('/organizations', methods=['POST'])
@@ -63,8 +65,11 @@ def get_organization(organization):
 @role_required('system_admin')
 def create_organization():
     data = request.get_json()
-    if not data.get('name') or not data.get('identification_code') or not data.get('web_service_url'):
+    if not data.get('name') or not data.get('identification_code') or not data.get('web_service_url') or not data.get('employees_count'):
         abort(400, description="Missing required fields")
+
+    if data.get('employees_count') <= 0:
+        abort(400, description="Employees count must be greater than zero")
 
     existing_organization = Organization.query.filter_by(identification_code=data['identification_code']).first()
     if existing_organization:
@@ -74,7 +79,8 @@ def create_organization():
         id=uuid.uuid4(),
         name=data['name'],
         identification_code=data['identification_code'],
-        web_service_url=data['web_service_url']
+        web_service_url=data['web_service_url'],
+        employees_count=data['employees_count']  # Add employees_count during creation
     )
     db.session.add(organization)
     db.session.commit()
@@ -95,9 +101,14 @@ def update_organization(organization):
     organization.name = data.get('name', organization.name)
     organization.identification_code = data.get('identification_code', organization.identification_code)
     organization.web_service_url = data.get('web_service_url', organization.web_service_url)
+    organization.employees_count = data.get('employees_count', organization.employees_count)  # Allow updating employees_count
+
+    if organization.employees_count <= 0:
+        abort(400, description="Employees count must be greater than zero")
 
     db.session.commit()
     return jsonify({"message": "Organization updated successfully"})
+
 
 @bp.route('/organizations/<uuid:org_id>', methods=['DELETE'])
 @jwt_required()
@@ -128,7 +139,7 @@ def get_warehouses():
         "id": str(wh.id),
         "name": wh.name,
         "organization_id": str(wh.organization_id),
-        "location": wh.location
+        "code": wh.code
     } for wh in warehouses])
 
 @bp.route('/warehouses/<uuid:id>', methods=['GET'])
@@ -152,7 +163,7 @@ def get_warehouse(id):
         "id": str(warehouse.id),
         "name": warehouse.name,
         "organization_id": str(warehouse.organization_id),
-        "location": warehouse.location
+        "code": warehouse.code
     })
 
 @bp.route('/warehouses', methods=['POST'])
@@ -174,7 +185,7 @@ def create_warehouse():
             id=uuid.uuid4(),
             name=name,
             organization_id=current_user.organization_id,
-            location=data.get('location')
+            code=data.get('code')
         )
 
         db.session.add(warehouse)
@@ -185,7 +196,7 @@ def create_warehouse():
                 "id": str(warehouse.id),
                 "name": warehouse.name,
                 "organization_id": str(warehouse.organization_id),
-                "location": warehouse.location
+                "code": warehouse.code
             }), 201
         except IntegrityError:
             db.session.rollback()
@@ -323,6 +334,19 @@ def create_user():
         except ValueError:
             abort(400, description="Invalid UUID format for organization or warehouse ID")
 
+        # Get the organization and check the user limit
+        organization = Organization.query.get(organization_id)
+        if not organization:
+            abort(404, description="Organization not found")
+
+        # Count the existing users in the organization
+        user_count = User.query.filter_by(organization_id=organization_id).count()
+
+        # Check if the user count has reached the employees_count limit
+        if user_count >= organization.employees_count:
+            abort(400, description="User limit for this organization has been reached")
+
+        # Proceed with creating the new user
         user = User(
             id=uuid.uuid4(),
             username=data['username'],
@@ -344,6 +368,7 @@ def create_user():
     except Exception as e:
         db.session.rollback()
         abort(500, description="An unexpected error occurred while creating the user.")
+
 
 @bp.route('/users/<uuid:user_id>', methods=['PUT'])
 @jwt_required()
