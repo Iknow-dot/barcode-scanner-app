@@ -242,3 +242,24 @@ table td i:hover {
     max-width: 500px;
     margin: auto;
 }
+
+.logout-btn {
+    padding: 8px 16px;
+    background-color: #218838;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 16px;
+    margin-left: 20px; /* Adjust spacing */
+  }
+  
+  .logout-btn:hover {
+    background-color: #28a745;
+  }
+  
+  .header-line {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
