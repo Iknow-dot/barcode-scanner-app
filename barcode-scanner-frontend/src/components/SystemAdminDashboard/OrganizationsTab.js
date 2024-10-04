@@ -1,8 +1,8 @@
 import React from 'react';
 
-const OrganizationsTab = ({ organizations, isModalOpen, openModal, closeModal }) => (
+const OrganizationsTab = ({ organizations, openModal }) => (
   <div id="Organizations" className="tab-content active">
-    <button className="add-btn" onClick={() => openModal('organizationModal')}>
+    <button className="add-btn" onClick={openModal}>
       ორგანიზაციის დამატება
     </button>
     <table>

@@ -3,24 +3,24 @@ body {
     margin: 0;
     padding: 20px;
     background-color: white;
-    display: block; /* Changed to block for better layout control */
+    display: block;
 }
 
+/* Container setup */
 .container {
     width: 100%;
     max-width: 100%;
     margin: 0 auto;
     padding: 10px;
     box-sizing: border-box;
-    overflow-x: hidden; /* Ensures no horizontal overflow */
+    overflow-x: hidden;
 }
 
-/* Responsive tables */
+/* Table styles */
 table {
     width: 100%;
     border-collapse: collapse;
     overflow-x: auto;
-
 }
 
 th, td {
@@ -31,13 +31,14 @@ th, td {
 
 th {
     background-color: #f1f1f1;
-    color:black;
+    color: black;
 }
 
 tr:nth-child(even) {
     background-color: #f9f9f9;
 }
 
+/* Responsive design for smaller screens */
 @media(max-width: 768px) {
     table, th, td {
         font-size: 14px;
@@ -114,12 +115,11 @@ input:checked + .slider:before {
     border-radius: 50%;
 }
 
-/* Tabs */
+/* Tabs and buttons */
 .tabs {
     display: flex;
     justify-content: space-between;
     margin-bottom: 20px;
-    
 }
 
 .tab-link {
@@ -158,14 +158,14 @@ table td i {
 }
 
 table td i:hover {
-    color: #28a745;  /* Change color on hover (green) */
+    color: #28a745;
 }
 
 .fas.fa-trash-alt:hover {
-    color: red; /* Red for delete */
+    color: red;
 }
 
-/* Modal styles */
+/* Modal styles for adding organizations */
 .modal {
     display: none;
     position: fixed;
@@ -175,6 +175,10 @@ table td i:hover {
     width: 100%;
     height: 100%;
     background-color: rgba(0, 0, 0, 0.5);
+}
+
+.modal.active {
+    display: block;
 }
 
 .modal-content {
@@ -187,6 +191,7 @@ table td i:hover {
     box-sizing: border-box;
 }
 
+/* Close button inside modal */
 .close-btn {
     background-color: red;
     color: white;
@@ -215,7 +220,7 @@ table td i:hover {
     background-color: #218838;
 }
 
-/* Modal input forms */
+/* Form styles inside the modal */
 .form-group {
     margin-bottom: 15px;
 }

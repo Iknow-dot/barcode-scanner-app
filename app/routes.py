@@ -65,27 +65,39 @@ def get_organization(organization):
 @role_required('system_admin')
 def create_organization():
     data = request.get_json()
+
+    # Check for missing fields
     if not data.get('name') or not data.get('identification_code') or not data.get('web_service_url') or not data.get('employees_count'):
         abort(400, description="Missing required fields")
+    
+    # Convert employees_count to integer and validate
+    try:
+        employees_count = int(data.get('employees_count'))
+        if employees_count <= 0:
+            abort(400, description="Employees count must be greater than zero")
+    except ValueError:
+        abort(400, description="Employees count must be a valid number")
 
-    if data.get('employees_count') <= 0:
-        abort(400, description="Employees count must be greater than zero")
-
+    # Check if organization with the same identification_code already exists
     existing_organization = Organization.query.filter_by(identification_code=data['identification_code']).first()
     if existing_organization:
         abort(400, description="An organization with this identification code already exists")
 
+    # Create the organization
     organization = Organization(
         id=uuid.uuid4(),
         name=data['name'],
         identification_code=data['identification_code'],
         web_service_url=data['web_service_url'],
-        employees_count=data['employees_count']  # Add employees_count during creation
+        employees_count=employees_count  # Ensure employees_count is an integer
     )
+
+    # Add the new organization to the database
     db.session.add(organization)
     db.session.commit()
 
     return jsonify({"message": "Organization created successfully", "id": str(organization.id)}), 201
+
 
 @bp.route('/organizations/<uuid:org_id>', methods=['PUT'])
 @jwt_required()

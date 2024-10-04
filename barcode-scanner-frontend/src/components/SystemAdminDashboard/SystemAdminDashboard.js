@@ -5,7 +5,7 @@ import AuthContext from '../Auth/AuthContext';
 import OrganizationsTab from './OrganizationsTab';
 import WarehousesTab from './WarehousesTab';
 import UsersTab from './UsersTab';
-
+import AddOrganization from '../Organization/AddOrganization'; // Import the new AddOrganization component
 
 const SystemAdminDashboard = () => {
   const { authData } = useContext(AuthContext);
@@ -13,14 +13,13 @@ const SystemAdminDashboard = () => {
   const [warehouses, setWarehouses] = useState([]);
   const [users, setUsers] = useState([]);
   const [activeTab, setActiveTab] = useState('Users');
-  const [isModalOpen, setModalOpen] = useState(null);
+  const [isModalOpen, setModalOpen] = useState(false); // Modal for adding organizations
   const [darkMode, setDarkMode] = useState(localStorage.getItem('darkMode') === 'true');
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const userRole = authData?.role; 
 
+  const userRole = authData?.role;
+
+  // Fetch data for organizations, warehouses, and users
   useEffect(() => {
-    setLoading(true);
     const fetchData = async () => {
       try {
         const [orgRes, whRes, userRes] = await Promise.all([
@@ -32,9 +31,7 @@ const SystemAdminDashboard = () => {
         setWarehouses(whRes.data);
         setUsers(userRes.data);
       } catch (error) {
-        setError('Error fetching data: ' + (error.response?.data?.error || error.message));
-      } finally {
-        setLoading(false);
+        console.error('Error fetching data', error);
       }
     };
     fetchData();
@@ -52,15 +49,31 @@ const SystemAdminDashboard = () => {
   };
 
   const openTab = (tabName) => setActiveTab(tabName);
-  const openModal = (modalId) => setModalOpen(modalId);
-  const closeModal = () => setModalOpen(null);
 
-  if (loading) return <p>Loading...</p>;
-  if (error) return <p>{error}</p>;
+  const openModal = () => setModalOpen(true);
+  const closeModal = () => setModalOpen(false);
+
+  const handleAddOrganization = async (newOrgData) => {
+    try {
+      // Post new organization data to the API
+      await api.post('/organizations', newOrgData);
+      
+      // Fetch updated organizations list after successful creation
+      const orgRes = await api.get('/organizations');
+      
+      // Update the organizations state to reflect new data
+      setOrganizations(orgRes.data);
+      
+      // Close the modal after organization is added
+      closeModal();
+    } catch (error) {
+      console.error('Error adding organization', error);
+    }
+  };
 
   return (
     <div className="container">
-      <img 
+      <img
         src="http://iknow.ge/wp-content/uploads/2022/10/sliderlogo.png"
         alt="Logo"
         style={{ backgroundColor: 'rgba(159, 159, 159)' }}
@@ -102,31 +115,33 @@ const SystemAdminDashboard = () => {
           </button>
         </div>
 
+        {/* Organizations Tab */}
         {userRole === 'system_admin' && activeTab === 'Organizations' && (
           <OrganizationsTab
             organizations={organizations}
-            isModalOpen={isModalOpen}
-            openModal={openModal}
-            closeModal={closeModal}
+            openModal={openModal}  // Pass the openModal function
           />
         )}
 
+        {/* Warehouses Tab */}
         {userRole === 'admin' && activeTab === 'Warehouses' && (
           <WarehousesTab
             warehouses={warehouses}
-            isModalOpen={isModalOpen}
-            openModal={openModal}
-            closeModal={closeModal}
           />
         )}
 
+        {/* Users Tab */}
         {activeTab === 'Users' && (
           <UsersTab
             users={users}
-            isModalOpen={isModalOpen}
-            openModal={openModal}
-            closeModal={closeModal}
           />
+        )}
+
+        {/* Modal for adding organizations */}
+        {isModalOpen && (
+          <div className="modal active">
+            <AddOrganization handleAddOrganization={handleAddOrganization} closeModal={closeModal} />
+          </div>
         )}
       </div>
     </div>

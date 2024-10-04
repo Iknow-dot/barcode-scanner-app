@@ -45,7 +45,7 @@ const AppContent = () => {
         <Route 
           path="/system-admin-dashboard" 
           element={
-            <PrivateRoute allowedRoles={['system_admin']}>
+            <PrivateRoute allowedRoles={['admin','system_admin']}>
               <SystemAdminDashboard />
             </PrivateRoute>
           } 
