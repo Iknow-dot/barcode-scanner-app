@@ -2,9 +2,9 @@ import axios from 'axios';
 
 // Set up the base URL for the API
 const api = axios.create({
-  baseURL: 'http://127.0.0.1:5000',  // Ensure the base URL matches your Flask backend
+  baseURL: 'http://127.0.0.1:5000',
   headers: {
-    'Content-Type': 'application/json',  // Default content type for all requests
+    'Content-Type': 'application/json',
   },
 });
 
@@ -17,41 +17,33 @@ api.interceptors.request.use(
     }
     return config;
   },
-  (error) => {
-    return Promise.reject(error);
-  }
+  (error) => Promise.reject(error)
 );
 
 // Handle refresh token and unauthorized requests
 api.interceptors.response.use(
-  (response) => response,  // Return response normally if successful
+  (response) => response,
   async (error) => {
     const originalRequest = error.config;
-
-    // Check if error status is 401 (Unauthorized) and if the request hasn't been retried
-    if (error.response.status === 401 && !originalRequest._retry) {
-      originalRequest._retry = true;  // Set retry flag to prevent infinite loop
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      originalRequest._retry = true;
 
       try {
-        // Attempt to refresh the token
         const refreshResponse = await api.post('/auth/token/refresh');
         const newToken = refreshResponse.data.access_token;
 
-        // Store the new token and update the original request headers
+        // Store the new token and retry the request with updated token
         localStorage.setItem('token', newToken);
         originalRequest.headers['Authorization'] = `Bearer ${newToken}`;
-
-        // Retry the original request with the new token
         return api(originalRequest);
       } catch (refreshError) {
-        // If token refresh fails, clear token and redirect to login
+        // Redirect to login if refresh fails
         localStorage.removeItem('token');
-        window.location.href = '/login';  // Redirect to login page
+        window.location.href = '/login';
       }
     }
     return Promise.reject(error);
   }
 );
 
-// Export the Axios instance for use in the rest of the app
 export default api;

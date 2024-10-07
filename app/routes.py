@@ -105,21 +105,26 @@ def create_organization():
 @organization_exists
 def update_organization(organization):
     data = request.get_json()
+
     if data.get('identification_code') and organization.identification_code != data['identification_code']:
         existing_organization = Organization.query.filter_by(identification_code=data['identification_code']).first()
         if existing_organization:
             abort(400, description="An organization with this identification code already exists")
-
+    
     organization.name = data.get('name', organization.name)
     organization.identification_code = data.get('identification_code', organization.identification_code)
     organization.web_service_url = data.get('web_service_url', organization.web_service_url)
-    organization.employees_count = data.get('employees_count', organization.employees_count)  # Allow updating employees_count
-
-    if organization.employees_count <= 0:
-        abort(400, description="Employees count must be greater than zero")
-
+    
+    # Handle employees_count field update
+    if 'employees_count' in data:
+        employees_count = int(data.get('employees_count', organization.employees_count))
+        if employees_count <= 0:
+            abort(400, description="Employees count must be greater than zero")
+        organization.employees_count = employees_count
+    
     db.session.commit()
     return jsonify({"message": "Organization updated successfully"})
+
 
 
 @bp.route('/organizations/<uuid:org_id>', methods=['DELETE'])
@@ -127,9 +132,11 @@ def update_organization(organization):
 @role_required('system_admin')
 @organization_exists
 def delete_organization(organization):
+    current_app.logger.info(f"Deleting organization: {organization.id}, {organization.name}")
     db.session.delete(organization)
     db.session.commit()
     return '', 204
+
 
 # -------------------- Warehouse Routes -------------------- #
 

@@ -263,3 +263,22 @@ table td i:hover {
     align-items: center;
     justify-content: space-between;
   }
+
+  .edit-btn, .delete-btn {
+    margin-right: 10px;
+    padding: 5px 10px;
+    cursor: pointer;
+  }
+  
+  .edit-btn {
+    background-color: #28a745;
+    color: white;
+    border: none;
+  }
+  
+  .delete-btn {
+    background-color: red;
+    color: white;
+    border: none;
+  }
+  

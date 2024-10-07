@@ -57,6 +57,10 @@ def ip_whitelisted(fn):
     return wrapper
 
 
+import uuid
+from functools import wraps
+from flask import abort
+
 def organization_exists(fn):
     """
     Decorator to check if the organization exists.
@@ -65,7 +69,11 @@ def organization_exists(fn):
     @wraps(fn)
     def wrapper(org_id, *args, **kwargs):
         try:
-            org_uuid = uuid.UUID(org_id)  # Convert the org_id to UUID
+            # Ensure org_id is a UUID instance
+            if not isinstance(org_id, uuid.UUID):
+                org_uuid = uuid.UUID(org_id)
+            else:
+                org_uuid = org_id
         except ValueError:
             abort(400, description="Invalid UUID format for organization ID")
 
@@ -76,3 +84,4 @@ def organization_exists(fn):
         # Pass the organization object to the wrapped function
         return fn(organization, *args, **kwargs)
     return wrapper
+

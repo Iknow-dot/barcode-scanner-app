@@ -5,9 +5,10 @@ import AuthContext from '../Auth/AuthContext';
 import OrganizationsTab from './OrganizationsTab';
 import WarehousesTab from './WarehousesTab';
 import UsersTab from './UsersTab';
-import AddOrganization from '../Organization/AddOrganization'; // Import the AddOrganization component
-import AddUser from '../User/AddUser'; // Import the AddUser component
-import AddWarehouse from '../Warehouse/AddWarehouse'; // Import the AddWarehouse component
+import AddOrganization from '../Organization/AddOrganization';
+import EditOrganization from '../Organization/EditOrganization';
+import AddUser from '../User/AddUser';
+import AddWarehouse from '../Warehouse/AddWarehouse';
 
 const SystemAdminDashboard = () => {
   const { authData, logout } = useContext(AuthContext);
@@ -15,14 +16,14 @@ const SystemAdminDashboard = () => {
   const [warehouses, setWarehouses] = useState([]);
   const [users, setUsers] = useState([]);
   const [activeTab, setActiveTab] = useState('Users');
-  const [isModalOpen, setModalOpen] = useState(false); // Modal for adding organizations/users
-  const [modalContent, setModalContent] = useState(''); // Modal content type
+  const [isModalOpen, setModalOpen] = useState(false);
+  const [modalContent, setModalContent] = useState('');
   const [darkMode, setDarkMode] = useState(localStorage.getItem('darkMode') === 'true');
+  const [editOrgData, setEditOrgData] = useState(null);
 
   const userRole = authData?.role;
-  const userOrganizationId = authData?.organization_id; // Assuming you pass organization_id from authData
+  const userOrganizationId = authData?.organization_id;
 
-  // Fetch data for organizations, warehouses, and users
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -45,21 +46,21 @@ const SystemAdminDashboard = () => {
     const isDarkMode = !darkMode;
     setDarkMode(isDarkMode);
     localStorage.setItem('darkMode', isDarkMode);
-    if (isDarkMode) {
-      document.body.classList.add('dark-mode');
-    } else {
-      document.body.classList.remove('dark-mode');
-    }
+    document.body.classList.toggle('dark-mode', isDarkMode);
   };
 
   const openTab = (tabName) => setActiveTab(tabName);
 
-  const openModal = (contentType) => {
+  const openModal = (contentType, orgData = null) => {
     setModalContent(contentType);
     setModalOpen(true);
+    setEditOrgData(contentType === 'edit' ? orgData : null);
   };
 
-  const closeModal = () => setModalOpen(false);
+  const closeModal = () => {
+    setModalOpen(false);
+    setEditOrgData(null);
+  };
 
   const handleAddOrganization = async (newOrgData) => {
     try {
@@ -69,6 +70,19 @@ const SystemAdminDashboard = () => {
       closeModal();
     } catch (error) {
       console.error('Error adding organization', error);
+    }
+  };
+
+  const handleEditOrganization = async (updatedOrgData) => {
+    try {
+      if (editOrgData) {
+        await api.put(`/organizations/${editOrgData.id}`, updatedOrgData);
+        const orgRes = await api.get('/organizations');
+        setOrganizations(orgRes.data);
+      }
+      closeModal();
+    } catch (error) {
+      console.error('Error editing organization', error);
     }
   };
 
@@ -141,37 +155,42 @@ const SystemAdminDashboard = () => {
           </button>
         </div>
 
-        {/* Organizations Tab */}
         {userRole === 'system_admin' && activeTab === 'Organizations' && (
           <OrganizationsTab
             organizations={organizations}
-            openModal={() => openModal('organization')}
+            openModal={(mode, org) => openModal(mode, org)}
+            handleEdit={(org) => openModal('edit', org)}
           />
         )}
 
-        {/* Warehouses Tab */}
         {userRole === 'admin' && activeTab === 'Warehouses' && (
           <WarehousesTab
             warehouses={warehouses}
-            openModal={() => openModal('warehouse')}
+            openModal={(mode) => openModal(mode)}
           />
         )}
 
-        {/* Users Tab */}
         {activeTab === 'Users' && (
           <UsersTab
             users={users}
-            openModal={() => openModal('user')}  // Open the Add User modal
+            openModal={(mode) => openModal(mode)}
           />
         )}
 
-        {/* Modal for adding organizations/users/warehouses */}
         {isModalOpen && (
           <div className="modal active">
-            {modalContent === 'organization' && (
-              <AddOrganization handleAddOrganization={handleAddOrganization} closeModal={closeModal} />
-            )}
-            {modalContent === 'user' && (
+            {modalContent === 'edit' && editOrgData ? (
+              <EditOrganization
+                organizationData={editOrgData}
+                handleEditOrganization={handleEditOrganization}
+                closeModal={closeModal}
+              />
+            ) : modalContent === 'organization' ? (
+              <AddOrganization
+                handleAddOrganization={handleAddOrganization}
+                closeModal={closeModal}
+              />
+            ) : modalContent === 'user' ? (
               <AddUser
                 handleAddUser={handleAddUser}
                 closeModal={closeModal}
@@ -179,12 +198,11 @@ const SystemAdminDashboard = () => {
                 organizations={organizations}
                 warehouses={warehouses}
               />
-            )}
-            {modalContent === 'warehouse' && (
+            ) : (
               <AddWarehouse
                 handleAddWarehouse={handleAddWarehouse}
                 closeModal={closeModal}
-                organizationId={userOrganizationId} // Automatically pass the admin's organization ID
+                organizationId={userOrganizationId}
               />
             )}
           </div>
