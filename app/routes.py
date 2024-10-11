@@ -6,6 +6,7 @@ from . import db
 import uuid
 import requests
 from .decorators import role_required, organization_exists, ip_whitelisted
+from sqlalchemy.orm import joinedload
 
 # Create a blueprint
 bp = Blueprint('routes', __name__)
@@ -286,14 +287,15 @@ def get_users():
 
     # System Admin sees all users, Admin sees only their organization's users
     if current_user.is_system_admin():
-        users = User.query.all()
+        users = User.query.options(joinedload(User.role)).all()
     else:
-        users = User.query.filter_by(organization_id=current_user.organization_id).all()
+        users = User.query.options(joinedload(User.role)).filter_by(organization_id=current_user.organization_id).all()
 
     return jsonify([{
         "id": str(user.id),
         "username": user.username,
         "role_id": str(user.role_id),
+        "role_name": user.role.role_name,  # This ensures role_name is included
         "organization_id": str(user.organization_id),
         "warehouse_id": str(user.warehouse_id) if user.warehouse_id else None,
         "ip_address": user.ip_address
@@ -382,9 +384,15 @@ def create_user():
         return jsonify({"message": "User created successfully", "id": str(user.id)}), 201
 
     except IntegrityError as e:
+        current_app.logger.error(f"Database integrity error: {e}")
         db.session.rollback()
         abort(400, description="Database error, check if organization, warehouse, or user exists.")
+    except ValueError as e:
+        current_app.logger.error(f"Invalid UUID format: {e}")
+        db.session.rollback()
+        abort(400, description="Invalid UUID format.")
     except Exception as e:
+        current_app.logger.error(f"Unexpected error: {e}")
         db.session.rollback()
         abort(500, description="An unexpected error occurred while creating the user.")
 

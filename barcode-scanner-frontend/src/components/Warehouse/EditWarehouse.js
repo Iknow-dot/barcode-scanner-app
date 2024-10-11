@@ -1,30 +1,67 @@
-import React, { useEffect, useState, useCallback } from 'react';
-import { useParams, useHistory } from 'react-router-dom';
-import WarehouseForm from './WarehouseForm';
-import { getWarehouse, updateWarehouse } from '../api'; // Ensure these API functions are set up
+import React, { useState, useEffect } from 'react';
+import './AddWarehouse.css';
+import api from '../../api';
 
-const EditWarehouse = () => {
-  const { id } = useParams();
-  const history = useHistory();
-  const [warehouse, setWarehouse] = useState({});
+const EditWarehouse = ({ warehouseData, closeModal }) => {
+  const [editWarehouseData, setEditWarehouseData] = useState({
+    name: '',
+    code: '',
+    organization_id: warehouseData.organization_id,
+  });
 
   useEffect(() => {
-    const fetchWarehouse = async () => {
-      const data = await getWarehouse(id);
-      setWarehouse(data);
-    };
-    fetchWarehouse();
-  }, [id]);
+    if (warehouseData) {
+      setEditWarehouseData(warehouseData);
+    }
+  }, [warehouseData]);
 
-  const handleFormSubmit = useCallback(async (data) => {
-    await updateWarehouse(id, data);
-    history.push('/warehouses');
-  }, [id, history]);
+  const handleInputChange = (e) => {
+    setEditWarehouseData({ ...editWarehouseData, [e.target.name]: e.target.value });
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      await api.put(`/warehouses/${warehouseData.id}`, editWarehouseData);
+      alert('Warehouse updated successfully!');
+      closeModal();
+    } catch (error) {
+      console.error('Error updating warehouse:', error);
+      alert('Failed to update warehouse');
+    }
+  };
 
   return (
-    <div>
-      <h2>Edit Warehouse</h2>
-      <WarehouseForm onSubmit={handleFormSubmit} initialData={warehouse} />
+    <div className="modal active">
+      <div className="modal-content">
+        <span className="close-btn" onClick={closeModal}>&times;</span>
+        <h2>საწყობის განახლება</h2>
+        <form id="editWarehouseForm" onSubmit={handleSubmit}>
+          <div className="form-group">
+            <label htmlFor="warehouseName">სახელი:</label>
+            <input
+              type="text"
+              id="warehouseName"
+              name="name"
+              value={editWarehouseData.name}
+              onChange={handleInputChange}
+              required
+            />
+          </div>
+          <div className="form-group">
+            <label htmlFor="warehouseCode">კოდი:</label>
+            <input
+              type="text"
+              id="warehouseCode"
+              name="code"
+              value={editWarehouseData.code}
+              onChange={handleInputChange}
+              required
+            />
+          </div>
+          <button type="submit" className="add-btn">განახლება</button>
+        </form>
+      </div>
     </div>
   );
 };

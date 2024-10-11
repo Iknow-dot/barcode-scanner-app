@@ -1,44 +1,43 @@
-import React, { useState, useContext } from 'react';
-import { useNavigate } from 'react-router-dom'; // Import useNavigate from react-router-dom
-import api from '../../api';  // Assuming you're using api.js for API requests
-import AuthContext from '../Auth/AuthContext';  // Import AuthContext
+import React, { useState, useContext, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import api from '../../api';
+import AuthContext from '../Auth/AuthContext';
 import './Login.css';
 
 const Login = () => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
-  const { login } = useContext(AuthContext);  // Access login from AuthContext
-  const navigate = useNavigate();  // Replace useHistory with useNavigate
+  const [loading, setLoading] = useState(false);
+  const { login, token, userRole } = useContext(AuthContext);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (token) {
+      navigate(userRole === 'system_admin' || userRole === 'admin' ? '/system-admin-dashboard' : '/dashboard');
+    }
+  }, [token, userRole, navigate]);
 
   const handleSubmit = async (event) => {
     event.preventDefault();
-    setErrorMessage('');  // Clear any previous errors
+    setErrorMessage('');
+    if (!username || !password) {
+      setErrorMessage('Please enter both username and password');
+      return;
+    }
 
+    setLoading(true);
     try {
-      const response = await api.post('/auth/login', {
-        username,
-        password
-      });
-
-      const token = response.data.access_token;  // Get JWT token from response
-      const userRole = response.data.role;  // Get the user's role
-
-      // Save the token and role using AuthContext's login function
-      login(token, userRole);
-
-      // Handle role-based redirection
-      if (userRole === 'system_admin' || userRole === 'admin') {
-        navigate('/system-admin-dashboard');
-      } else {
-        navigate('/dashboard'); // Default for 'user' role or other roles
-      }
-
+      const response = await api.post('/auth/login', { username, password });
+      const { access_token, role } = response.data;
+      login(access_token, role);
+      navigate(role === 'system_admin' || role === 'admin' ? '/system-admin-dashboard' : '/dashboard');
     } catch (error) {
-      if (error.response && error.response.status === 401) {
-        setErrorMessage('Invalid username or password');
+      setLoading(false);
+      if (error.response) {
+        setErrorMessage(error.response.status === 401 ? 'Invalid username or password' : 'An error occurred. Please try again later.');
       } else {
-        setErrorMessage('An error occurred. Please try again later.');
+        setErrorMessage('Network error. Please try again later.');
       }
     }
   };
@@ -55,7 +54,8 @@ const Login = () => {
           placeholder="Username"
           required
           value={username}
-          onChange={e => setUsername(e.target.value)}
+          onChange={(e) => setUsername(e.target.value)}
+          disabled={loading}
         />
         <input
           type="password"
@@ -64,9 +64,10 @@ const Login = () => {
           placeholder="Password"
           required
           value={password}
-          onChange={e => setPassword(e.target.value)}
+          onChange={(e) => setPassword(e.target.value)}
+          disabled={loading}
         />
-        <input type="submit" value="Login" />
+        <input type="submit" value={loading ? 'Logging in...' : 'Login'} disabled={loading} />
         {errorMessage && <p className="error">{errorMessage}</p>}
       </form>
     </div>

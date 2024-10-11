@@ -9,7 +9,7 @@ const AddUser = ({ closeModal }) => {
     username: '',
     password: '',
     organization_id: '',
-    role_name: '',
+    role_name: authData?.role === 'admin' ? 'user' : 'admin',
     ip_address: '',
     warehouse_ids: [] // For admin users adding users
   });
@@ -48,7 +48,24 @@ const AddUser = ({ closeModal }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-
+    if (!newUserData.username || !newUserData.password || !newUserData.role_name || !newUserData.organization_id || !newUserData.ip_address || (isAdmin && newUserData.warehouse_ids.length === 0)){
+      if (!newUserData.username) {
+        alert("username");
+      } else if (!newUserData.password) {
+        alert("password");
+      } else if (!newUserData.role_name) {
+        console.log(newUserData);
+      } else if (!newUserData.organization_id) {
+        alert("organization_id");
+      } else if (!newUserData.ip_address) {
+        alert("ip_address");
+      } else if (isAdmin && newUserData.warehouse_ids.length === 0) {
+        alert("warehouse_ids");
+      }
+      
+      alert("All fields are required.");
+      return;
+    }
     try {
       // If admin, set the organization to their own organization and role to 'user'
       if (authData?.role === 'admin') {
@@ -173,7 +190,7 @@ const AddUser = ({ closeModal }) => {
                 multiple
                 value={newUserData.warehouse_ids}
                 onChange={handleWarehouseChange}
-                required
+                required={isAdmin}
               >
                 {warehouses.map(wh => (
                   <option key={wh.id} value={wh.id}>{wh.name}</option>
