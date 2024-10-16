@@ -29,8 +29,8 @@ const Login = () => {
     setLoading(true);
     try {
       const response = await api.post('/auth/login', { username, password });
-      const { access_token, role } = response.data;
-      login(access_token, role);
+      const { access_token, role, organization_id } = response.data;
+      login(access_token, role, organization_id);
       navigate(role === 'system_admin' || role === 'admin' ? '/system-admin-dashboard' : '/dashboard');
     } catch (error) {
       setLoading(false);

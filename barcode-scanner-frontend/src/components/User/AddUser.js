@@ -42,42 +42,42 @@ const AddUser = ({ closeModal }) => {
   };
 
   const handleWarehouseChange = (e) => {
-    const selectedWarehouses = Array.from(e.target.selectedOptions, option => option.value);
-    setNewUserData({ ...newUserData, warehouse_ids: selectedWarehouses });
+    const warehouseId = e.target.value;
+    const newWarehouseIds = newUserData.warehouse_ids.includes(warehouseId)
+      ? newUserData.warehouse_ids.filter(id => id !== warehouseId)
+      : [...newUserData.warehouse_ids, warehouseId];
+    setNewUserData({ ...newUserData, warehouse_ids: newWarehouseIds });
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!newUserData.username || !newUserData.password || !newUserData.role_name || !newUserData.organization_id || !newUserData.ip_address || (isAdmin && newUserData.warehouse_ids.length === 0)){
+
+    // Set organization_id and role_name for admin before validation checks
+    if (authData?.role === 'admin') {
+      newUserData.organization_id = authData.organization_id; // Admin's organization
+      newUserData.role_name = 'user'; // Admin adds users with the role 'user'
+        console.log("auth", authData)
+
+    }
+
+    // Check required fields
+    if (!newUserData.username || !newUserData.password || !newUserData.role_name || !newUserData.organization_id || !newUserData.ip_address || (isAdmin && newUserData.warehouse_ids.length === 0)) {
       if (!newUserData.username) {
-        alert("username");
+        alert("username field is required.");
       } else if (!newUserData.password) {
-        alert("password");
+        alert("password field is required.");
       } else if (!newUserData.role_name) {
-        console.log(newUserData);
-      } else if (!newUserData.organization_id) {
-        alert("organization_id");
+        //console.log(newUserData);
+        alert("role_name field is required.");
       } else if (!newUserData.ip_address) {
-        alert("ip_address");
+        alert("ip_address field is required.");
       } else if (isAdmin && newUserData.warehouse_ids.length === 0) {
-        alert("warehouse_ids");
+        alert("warehouse_ids field is required.");
       }
-      
-      alert("All fields are required.");
       return;
     }
-    try {
-      // If admin, set the organization to their own organization and role to 'user'
-      if (authData?.role === 'admin') {
-        newUserData.role_name = 'user'; // Admin adds users with the role 'user'
-        newUserData.organization_id = authData.organization_id; // Admin's organization
-      } else {
-        if (!newUserData.organization_id) {
-          alert('Organization is required for system admin');
-          return;
-        }
-      }
 
+    try {
       // Make the API call to create the user
       const response = await api.post('/users', newUserData, {
         headers: {
@@ -108,10 +108,10 @@ const AddUser = ({ closeModal }) => {
     <div className="modal active">
       <div className="modal-content">
         <span className="close-btn" onClick={closeModal}>&times;</span>
-        <h2>მომხმარებლის დამატება</h2>
+        <h2>Add User</h2>
         <form id="addUserForm" onSubmit={handleSubmit}>
           <div className="form-group">
-            <label htmlFor="username">მომხმარებლის სახელი:</label>
+            <label htmlFor="username">Username:</label>
             <input
               type="text"
               id="username"
@@ -123,7 +123,7 @@ const AddUser = ({ closeModal }) => {
           </div>
 
           <div className="form-group">
-            <label htmlFor="password">პაროლი:</label>
+            <label htmlFor="password">Password:</label>
             <input
               type="password"
               id="password"
@@ -134,10 +134,9 @@ const AddUser = ({ closeModal }) => {
             />
           </div>
 
-          {/* Organization field for system admin users */}
           {!isAdmin && (
             <div className="form-group">
-              <label htmlFor="organization">ორგანიზაცია:</label>
+              <label htmlFor="organization">Organization:</label>
               <select
                 id="organization"
                 name="organization_id"
@@ -145,7 +144,7 @@ const AddUser = ({ closeModal }) => {
                 onChange={handleInputChange}
                 required
               >
-                <option value="">აირჩიეთ ორგანიზაცია</option>
+                <option value="">Select an organization</option>
                 {organizations.map(org => (
                   <option key={org.id} value={org.id}>{org.name}</option>
                 ))}
@@ -154,7 +153,7 @@ const AddUser = ({ closeModal }) => {
           )}
 
           <div className="form-group">
-            <label htmlFor="role">როლი:</label>
+            <label htmlFor="role">Role:</label>
             <select
               id="role"
               name="role_name"
@@ -162,14 +161,13 @@ const AddUser = ({ closeModal }) => {
               onChange={handleInputChange}
               required
             >
-              {/* System admin defaults to 'admin', admin defaults to 'user' */}
               <option value={isAdmin ? 'user' : 'admin'}>{isAdmin ? 'user' : 'admin'}</option>
               {!isAdmin && <option value="system_admin">system admin</option>}
             </select>
           </div>
 
           <div className="form-group">
-            <label htmlFor="ipAddress">IP მისამართი:</label>
+            <label htmlFor="ipAddress">IP Address:</label>
             <input
               type="text"
               id="ipAddress"
@@ -180,26 +178,28 @@ const AddUser = ({ closeModal }) => {
             />
           </div>
 
-          {/* Warehouse field only for admin users */}
           {isAdmin && (
             <div className="form-group">
-              <label htmlFor="warehouses">საწყობები:</label>
-              <select
-                id="warehouses"
-                name="warehouse_ids"
-                multiple
-                value={newUserData.warehouse_ids}
-                onChange={handleWarehouseChange}
-                required={isAdmin}
-              >
+              <label htmlFor="warehouses">Warehouses:</label>
+              <div id="warehouse-container">
                 {warehouses.map(wh => (
-                  <option key={wh.id} value={wh.id}>{wh.name}</option>
+                  <div key={wh.id}>
+                    <input
+                      type="checkbox"
+                      id={`warehouse${wh.id}`}
+                      name="warehouses"
+                      value={wh.id}
+                      checked={newUserData.warehouse_ids.includes(wh.id)}
+                      onChange={handleWarehouseChange}
+                    />
+                    <label htmlFor={`warehouse${wh.id}`}>{wh.name}</label>
+                  </div>
                 ))}
-              </select>
+              </div>
             </div>
           )}
 
-          <button type="submit" className="add-btn">დამატება</button>
+          <button type="submit" className="add-btn">Add User</button>
         </form>
       </div>
     </div>

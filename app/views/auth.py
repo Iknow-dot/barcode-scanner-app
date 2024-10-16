@@ -19,11 +19,15 @@ def load_user(user_id):
 def generate_jwt(user):
     expires_in = current_app.config['JWT_ACCESS_TOKEN_EXPIRES']
     exp = datetime.now(timezone.utc) + expires_in  # Correctly add timedelta to current time
-    token = jwt.encode({
+    payload = {
         'sub': str(user.id),
         'role': user.role.role_name,  # Include user role in the token payload
         'exp': exp
-    }, current_app.config['JWT_SECRET_KEY'], algorithm='HS256')
+    }
+    if user.organization_id:  # Only add organization_id if it exists
+        payload['organization_id'] = str(user.organization_id)
+    
+    token = jwt.encode(payload, current_app.config['JWT_SECRET_KEY'], algorithm='HS256')
     return token
 
 # Password validation function
@@ -110,7 +114,8 @@ def login():
             return jsonify({
                 "message": "Login successful",
                 "access_token": access_token,
-                "role": user.role.role_name  # Include the user's role in the response
+                "role": user.role.role_name,  # Include the user's role in the response
+                "organization_id": str(user.organization_id)  # Include the organization_id in the response
             }), 200
         else:
             current_app.logger.error(f"Login failed: Invalid credentials for username: {username}")
@@ -118,6 +123,7 @@ def login():
     except Exception as e:
         current_app.logger.error(f"Unexpected error during login: {e}")
         return jsonify({"error": "An error occurred during login. Please try again."}), 500
+
 
 @bp.route('/logout', methods=['POST'])
 def logout():
@@ -131,17 +137,18 @@ def logout():
 def refresh_token():
     auth_header = request.headers.get('Authorization')
     
-    if not auth_header:
-        return jsonify({"error": "Authorization header missing"}), 401
+    if not auth_header or "Bearer" not in auth_header:
+        return jsonify({"error": "Authorization header missing or malformed"}), 401
 
     token = auth_header.split(" ")[1] if " " in auth_header else auth_header
     
     try:
         payload = jwt.decode(token, current_app.config['JWT_SECRET_KEY'], algorithms=['HS256'])
-        user = User.query.get(payload['sub'])  # 'sub' is the user id
+        user_id = payload['sub']  # 'sub' is supposed to be the user ID
+        user = User.query.get(user_id)
         
         if not user:
-            return jsonify({"error": "Invalid token, user not found"}), 401
+            return jsonify({"error": "User not found. Please login again."}), 401
 
         # Generate a new token
         new_token = generate_jwt(user)
@@ -155,6 +162,7 @@ def refresh_token():
     
     except jwt.InvalidTokenError:
         return jsonify({"error": "Invalid token"}), 401
+
 
 # Token required decorator
 def token_required(f):

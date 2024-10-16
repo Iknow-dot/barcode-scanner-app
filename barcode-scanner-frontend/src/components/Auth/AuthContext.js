@@ -1,29 +1,27 @@
 import React, { createContext, useState } from 'react';
 
-// Create a new context for authentication
 const AuthContext = createContext();
 
-// AuthProvider component to provide authentication state to the entire app
 export const AuthProvider = ({ children }) => {
   const [authData, setAuthData] = useState(() => {
-    // Fetch token and role from localStorage when the app starts
     const token = localStorage.getItem('token');
-    const role = localStorage.getItem('role');  // Fetch role from localStorage
-    return token && role ? { token, role } : null;
+    const role = localStorage.getItem('role');
+    const organization_id = localStorage.getItem('organization_id'); // Fetch organization ID from localStorage
+    return token && role ? { token, role, organization_id } : null;
   });
 
-  // Function to handle user logout
   const logout = () => {
     localStorage.removeItem('token');
-    localStorage.removeItem('role');  // Ensure role is removed
-    setAuthData(null);  // Clear authentication data
+    localStorage.removeItem('role');
+    localStorage.removeItem('organization_id'); // Also remove the organization_id
+    setAuthData(null);
   };
 
-  // Function to handle user login and token storage
-  const login = (token, role) => {
+  const login = (token, role, organization_id) => {
     localStorage.setItem('token', token);
     localStorage.setItem('role', role);
-    setAuthData({ token, role });  // Set the auth data in context
+    localStorage.setItem('organization_id', organization_id); // Store organization ID in localStorage
+    setAuthData({ token, role, organization_id }); // Update state to include organization ID
   };
 
   return (

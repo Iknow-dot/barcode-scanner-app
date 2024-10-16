@@ -1,12 +1,14 @@
 from flask import Blueprint, jsonify, request, abort, current_app
 from flask_jwt_extended import jwt_required, get_jwt_identity, create_access_token
 from sqlalchemy.exc import IntegrityError
-from .models import Organization, Warehouse, User, UserRole, AllowedIP
+from .models import Organization, Warehouse, User, UserRole, AllowedIP, UserWarehouse
 from . import db
 import uuid
 import requests
 from .decorators import role_required, organization_exists, ip_whitelisted
 from sqlalchemy.orm import joinedload
+from sqlalchemy.exc import SQLAlchemyError
+
 
 # Create a blueprint
 bp = Blueprint('routes', __name__)
@@ -338,7 +340,7 @@ def create_user():
         data = request.get_json()
         current_app.logger.info(f"Received user data: {data}")
 
-        if not data.get('username') or not data.get('password') or not data.get('role_name') or not data.get('organization_id') or not data.get('ip_address'):
+        if not data.get('username') or not data.get('password') or not data.get('role_name') or not data.get('ip_address'):
             abort(400, description="Missing required fields")
 
         role = UserRole.query.filter_by(role_name=data['role_name']).first()
@@ -349,52 +351,74 @@ def create_user():
         if existing_user:
             abort(400, description="Username already exists")
 
-        try:
-            organization_id = uuid.UUID(data['organization_id'])
-            warehouse_id = uuid.UUID(data.get('warehouse_id')) if data.get('warehouse_id') else None
-        except ValueError:
-            abort(400, description="Invalid UUID format for organization or warehouse ID")
+        organization_id = data.get('organization_id')
+        if organization_id:
+            try:
+                organization_id = uuid.UUID(organization_id)
+            except ValueError:
+                abort(400, description="Invalid UUID format for organization ID")
+        else:
+            if current_user.role.name == 'system_admin':
+                abort(400, description="Organization ID is required for system admin")
+            else:
+                organization_id = current_user.organization_id
 
-        # Get the organization and check the user limit
         organization = Organization.query.get(organization_id)
         if not organization:
             abort(404, description="Organization not found")
 
-        # Count the existing users in the organization
         user_count = User.query.filter_by(organization_id=organization_id).count()
-
-        # Check if the user count has reached the employees_count limit
         if user_count >= organization.employees_count:
             abort(400, description="User limit for this organization has been reached")
 
-        # Proceed with creating the new user
         user = User(
             id=uuid.uuid4(),
             username=data['username'],
             role_id=role.id,
             organization_id=organization_id,
-            warehouse_id=warehouse_id,
             ip_address=data['ip_address']
         )
+
         user.set_password(data['password'])
 
         db.session.add(user)
-        db.session.commit()
+        db.session.flush()  # Flush to get the user ID before commit
 
+        try:
+            warehouse_ids = data.get('warehouse_ids', [])
+            for wh_id in warehouse_ids:
+                warehouse_id = uuid.UUID(wh_id)  # Ensure this is a valid UUID
+                user_warehouse = UserWarehouse(user_id=user.id, warehouse_id=warehouse_id)
+                db.session.add(user_warehouse)
+            db.session.flush()  # Flush here after all UserWarehouse instances are added
+        except ValueError as e:
+            current_app.logger.error(f"Invalid UUID format for warehouse ID: {wh_id}, error: {str(e)}")
+            db.session.rollback()
+            abort(400, description="Invalid UUID format for warehouse ID")
+        
+        db.session.commit()
         return jsonify({"message": "User created successfully", "id": str(user.id)}), 201
 
     except IntegrityError as e:
-        current_app.logger.error(f"Database integrity error: {e}")
+        current_app.logger.error(f"Database integrity error during user creation: {e.orig}")
         db.session.rollback()
-        abort(400, description="Database error, check if organization, warehouse, or user exists.")
+        abort(400, description="Database integrity error. Ensure all references are valid.")
+
     except ValueError as e:
-        current_app.logger.error(f"Invalid UUID format: {e}")
+        current_app.logger.error(f"UUID format error: {e}")
         db.session.rollback()
-        abort(400, description="Invalid UUID format.")
+        abort(400, description="UUID format error. Check the format of your identifiers.")
+
+    except SQLAlchemyError as e:
+        current_app.logger.error(f"SQLAlchemy error during user creation: {e}")
+        db.session.rollback()
+        abort(500, description="Database operation failed. Contact the system administrator.")
+
     except Exception as e:
-        current_app.logger.error(f"Unexpected error: {e}")
+        current_app.logger.error(f"Unexpected error during user creation: {e}")
         db.session.rollback()
-        abort(500, description="An unexpected error occurred while creating the user.")
+        abort(500, description=f"An unexpected error occurred: {str(e)}")
+
 
 
 @bp.route('/users/<uuid:user_id>', methods=['PUT'])
@@ -403,8 +427,8 @@ def create_user():
 def update_user(user_id):
     try:
         identity = get_jwt_identity()
-        user_id = identity.get('user_id') if isinstance(identity, dict) else identity
-        current_user = User.query.get(uuid.UUID(user_id))
+        requester_id = identity.get('user_id') if isinstance(identity, dict) else identity
+        current_user = User.query.get(uuid.UUID(requester_id))
 
         user = User.query.get(user_id)
         if not user:
@@ -417,11 +441,33 @@ def update_user(user_id):
         user.username = data.get('username', user.username)
         user.ip_address = data.get('ip_address', user.ip_address)
 
+        if 'role_name' in data:
+            role = UserRole.query.filter_by(role_name=data['role_name']).first()
+            if role:
+                user.role_id = role.id
+
+        # Handle warehouses update
+        if 'warehouse_ids' in data:
+            # Clear existing warehouses
+            UserWarehouse.query.filter_by(user_id=user.id).delete()
+            # Add new warehouses
+            for wh_id in data['warehouse_ids']:
+                try:
+                    warehouse_id = uuid.UUID(wh_id)
+                    user_warehouse = UserWarehouse(user_id=user.id, warehouse_id=warehouse_id)
+                    db.session.add(user_warehouse)
+                except ValueError:
+                    current_app.logger.error(f"Invalid UUID format for warehouse ID: {wh_id}")
+                    db.session.rollback()
+                    return jsonify({'error': 'Invalid UUID format for warehouse ID'}), 400
+
         db.session.commit()
         return jsonify({"message": "User updated successfully"})
     except Exception as e:
         current_app.logger.error(f"Error updating user: {e}")
+        db.session.rollback()
         return jsonify({'error': 'An error occurred while updating the user'}), 500
+
 
 @bp.route('/users/<uuid:user_id>', methods=['DELETE'])
 @jwt_required()

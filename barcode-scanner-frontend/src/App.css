@@ -1,38 +1,60 @@
-/* If these styles are not used, you can remove them or set them to `unset` */
-.App {
-  text-align: center;
+/* Override App class effects within the modal */
+.modal-content {
+  text-align: left; /* Resets text alignment in case it's inherited from App */
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%); /* Centers the modal */
+  background-color: white;
+  padding: 20px;
+  border: 1px solid #888;
+  width: 80%;
+  max-width: 500px;
+  border-radius: 5px;
+  box-sizing: border-box;
+  overflow-y: auto;
+  z-index: 1050; /* Ensures it's above other content */
 }
 
-.App-logo {
-  height: 40vmin;
-  pointer-events: none;
+.modal.active {
+  display: block;
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  .App-logo {
-    animation: App-logo-spin infinite 20s linear;
-  }
+.close-btn {
+  color: #aaa;
+  float: right;
+  font-size: 28px;
+  font-weight: bold;
+  cursor: pointer;
 }
 
-.App-header {
-  background-color: unset;
-  min-height: unset;
-  display: unset;
-  align-items: unset;
-  justify-content: unset;
-  font-size: unset;
-  color: unset;
+.close-btn:hover {
+  color: black;
 }
 
-.App-link {
-  color: unset;
+/* Additional overrides for input and select elements to ensure they are not affected by App.css */
+.form-group input, .form-group select {
+  font-size: 16px; /* Ensures consistent font size */
+  color: #000; /* Ensures text is readable */
 }
 
-@keyframes App-logo-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
+/* Ensure that button styling is specific to the modal and not inherited */
+.add-btn {
+  background-color: #28a745;
+  color: white;
+  border: none;
+  padding: 10px;
+  cursor: pointer;
+  width: auto; /* Adjust width as needed */
+  border-radius: 5px;
+}
+
+.add-btn:hover {
+  background-color: #218838;
+}
+
+@media screen and (max-width: 600px) {
+  .modal-content {
+      width: 90%; /* Adjust width on smaller screens for better responsiveness */
   }
 }
