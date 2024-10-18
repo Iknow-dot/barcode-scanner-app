@@ -3,7 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { AuthProvider } from './components/Auth/AuthContext';
 import PrivateRoute from './components/PrivateRoute';
 import Footer from './components/Common/Footer';
-import Dashboard from './components/Dashboard/Dashboard';
+import Dashboard from './components/UserDashboard/UserDashboard';
 import Organization from './components/Organization/OrganizationList';
 import Warehouse from './components/Warehouse/WarehouseList';
 import Login from './components/Auth/Login';

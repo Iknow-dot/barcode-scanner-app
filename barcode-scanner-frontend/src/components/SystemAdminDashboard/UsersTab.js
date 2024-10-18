@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import api from '../../api';
 
-const UsersTab = ({ users, openModal }) => {
+const UsersTab = ({ users: initialUsers, openModal }) => {
+  const [users, setUsers] = useState(initialUsers);
   const [organizations, setOrganizations] = useState({});
 
   useEffect(() => {
@@ -20,6 +21,10 @@ const UsersTab = ({ users, openModal }) => {
     fetchOrganizations();
   }, []);
 
+  useEffect(() => {
+    setUsers(initialUsers);
+  }, [initialUsers]);
+
   const handleEdit = (user) => {
     openModal('editUser', user);
   };
@@ -28,7 +33,7 @@ const UsersTab = ({ users, openModal }) => {
     if (window.confirm("ნამდვილად გსურთ ამ მომხმარებლის წაშლა?")) {
       try {
         await api.delete(`/users/${userId}`);
-        window.location.reload();
+        setUsers(prevUsers => prevUsers.filter(user => user.id !== userId));
       } catch (error) {
         console.error("მომხმარებლის წაშლის შეცდომა:", error);
       }
@@ -50,24 +55,21 @@ const UsersTab = ({ users, openModal }) => {
           </tr>
         </thead>
         <tbody>
-          {users.map((user) => {
-            // console.log("User role data:", user); // Logs role data for debugging
-            return (
-              <tr key={user.id}>
-                <td>{user.username}</td>
-                <td>{organizations[user.organization_id] || 'N/A'}</td>
-                <td>{user.role_name || 'N/A'}</td>
-                <td>
-                  <button className="edit-btn" onClick={() => handleEdit(user)}>
-                    რედაქტირება
-                  </button>
-                  <button className="delete-btn" onClick={() => handleDelete(user.id)}>
-                    წაშლა
-                  </button>
-                </td>
-              </tr>
-            );
-          })}
+          {users.map((user) => (
+            <tr key={user.id}>
+              <td>{user.username}</td>
+              <td>{organizations[user.organization_id] || 'N/A'}</td>
+              <td>{user.role_name || 'N/A'}</td>
+              <td>
+                <button className="edit-btn" onClick={() => handleEdit(user)}>
+                  რედაქტირება
+                </button>
+                <button className="delete-btn" onClick={() => handleDelete(user.id)}>
+                  წაშლა
+                </button>
+              </td>
+            </tr>
+          ))}
         </tbody>
       </table>
     </div>

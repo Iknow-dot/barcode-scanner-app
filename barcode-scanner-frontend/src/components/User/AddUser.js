@@ -111,7 +111,7 @@ const AddUser = ({ closeModal }) => {
         <h2>Add User</h2>
         <form id="addUserForm" onSubmit={handleSubmit}>
           <div className="form-group">
-            <label htmlFor="username">Username:</label>
+            <label htmlFor="username">სახელი:</label>
             <input
               type="text"
               id="username"
@@ -123,7 +123,7 @@ const AddUser = ({ closeModal }) => {
           </div>
 
           <div className="form-group">
-            <label htmlFor="password">Password:</label>
+            <label htmlFor="password">პაროლი:</label>
             <input
               type="password"
               id="password"
@@ -136,7 +136,7 @@ const AddUser = ({ closeModal }) => {
 
           {!isAdmin && (
             <div className="form-group">
-              <label htmlFor="organization">Organization:</label>
+              <label htmlFor="organization">ორგანიზაცია:</label>
               <select
                 id="organization"
                 name="organization_id"
@@ -144,7 +144,7 @@ const AddUser = ({ closeModal }) => {
                 onChange={handleInputChange}
                 required
               >
-                <option value="">Select an organization</option>
+                <option value="">აირჩიეთ ორგანიზაცია</option>
                 {organizations.map(org => (
                   <option key={org.id} value={org.id}>{org.name}</option>
                 ))}
@@ -153,7 +153,7 @@ const AddUser = ({ closeModal }) => {
           )}
 
           <div className="form-group">
-            <label htmlFor="role">Role:</label>
+            <label htmlFor="role">როლი:</label>
             <select
               id="role"
               name="role_name"
@@ -167,7 +167,7 @@ const AddUser = ({ closeModal }) => {
           </div>
 
           <div className="form-group">
-            <label htmlFor="ipAddress">IP Address:</label>
+            <label htmlFor="ipAddress">IP მისამართი:</label>
             <input
               type="text"
               id="ipAddress"
@@ -180,7 +180,7 @@ const AddUser = ({ closeModal }) => {
 
           {isAdmin && (
             <div className="form-group">
-              <label htmlFor="warehouses">Warehouses:</label>
+              <label htmlFor="warehouses">საწყობები:</label>
               <div id="warehouse-container">
                 {warehouses.map(wh => (
                   <div key={wh.id}>
@@ -199,7 +199,7 @@ const AddUser = ({ closeModal }) => {
             </div>
           )}
 
-          <button type="submit" className="add-btn">Add User</button>
+          <button type="submit" className="add-btn">დამატება</button>
         </form>
       </div>
     </div>
