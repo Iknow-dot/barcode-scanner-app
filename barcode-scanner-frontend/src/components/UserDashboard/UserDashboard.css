@@ -1,0 +1,95 @@
+/* UsersDashboard.css */
+body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 0;
+}
+
+.container {
+    width: 90%;
+    max-width: 1200px;
+    margin: auto;
+    margin-top: 20px;
+}
+
+.search-container {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 20px;
+}
+
+select, input, button {
+    padding: 10px;
+    font-size: 16px;
+    width: 100%; /* Ensures full width in column layout */
+    box-sizing: border-box;
+}
+
+/* Adjustments for horizontal layout on larger screens */
+@media(min-width: 768px) {
+    .search-container {
+        flex-direction: row;
+        align-items: center; /* Aligns items vertically */
+    }
+
+    select, input {
+        flex: 1; /* Allows select and input to fill available space equally */
+    }
+
+    button {
+        width: auto; /* Auto width based on content */
+        flex-grow: 0; /* Prevents buttons from growing */
+        white-space: nowrap; /* Keeps button text on one line */
+        margin-left: 10px; /* Adds spacing between buttons and input/select */
+    }
+}
+
+/* Scanner container adjustments */
+.scanner-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 20px;
+    flex-direction: column; /* Stacks elements vertically */
+}
+
+.qr-reader {
+    width: 100%;
+    max-width: 400px; /* Ensures the scanner is not too wide */
+    height: auto; /* Sets a fixed height for the scanner area */
+    border: 1px solid #ccc; /* Optional: adds a border for visibility */
+}
+
+/* Table styling */
+table {
+    width: 100%;
+    border-collapse: collapse;
+    overflow-x: auto;
+}
+
+th, td {
+    padding: 10px;
+    text-align: center;
+    border: 1px solid #ccc;
+}
+
+th {
+    background-color: #f1f1f1;
+}
+
+tr:nth-child(even) {
+    background-color: #f9f9f9;
+}
+
+@media(max-width: 768px) {
+    table, th, td {
+        font-size: 12px; /* Slightly larger font for readability on small screens */
+    }
+
+    table {
+        display: block;
+        overflow-x: auto;
+        white-space: nowrap;  
+    }
+}

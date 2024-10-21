@@ -1,0 +1,35 @@
+.scanner-container {
+    width: 20%;
+}
+
+.scan-button,
+.stop-scan-button {
+    width: 100%;
+    height: 100%;
+    color: white;
+    border: none;
+    cursor: pointer;
+    font-size: 16px;
+    padding: 10px 20px;
+}
+
+.scan-button {
+    background-color: #28a745;
+}
+
+.stop-scan-button {
+    background-color: red;
+}
+
+.qr-reader {
+    width: 100%;
+}
+
+@media(min-width: 768px) {
+    .scanner-container{
+        width: 100%;
+    }
+    button {
+        width: 100%;
+    }
+}
