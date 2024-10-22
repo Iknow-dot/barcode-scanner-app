@@ -26,9 +26,45 @@ select, input, button {
     box-sizing: border-box;
 }
 
+.sec-line, .first-line{
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+}
+
+/* Adding the new style for scanning mode */
+.column-layout {
+    flex-direction: column;
+}
+
+.checkbox-cntr{
+    display: flex;
+    flex-direction: row-reverse;
+}
+
+/* Custom checkbox styles */
+.custom-checkbox {
+    display: flex;
+    align-items: center;
+    margin-bottom: 10px; /* Space below the checkbox for separation */
+}
+
+.custom-checkbox input[type="checkbox"] {
+    margin-right: 5px;
+    accent-color: #28a745; /* Custom color for the checkbox */
+}
+
+.custom-checkbox label {
+    margin: 0; /* Removes default margin */
+    font-size: 16px; /* Matches other input sizes */
+    color: #333; /* Sets text color */
+}
+
 /* Adjustments for horizontal layout on larger screens */
 @media(min-width: 768px) {
-    .search-container {
+    .search-container .first-line, .sec-line {
         flex-direction: row;
         align-items: center; /* Aligns items vertically */
     }
@@ -37,6 +73,10 @@ select, input, button {
         flex: 1; /* Allows select and input to fill available space equally */
     }
 
+    .column-layout {
+        flex-direction: column;
+    }
+    
     button {
         width: auto; /* Auto width based on content */
         flex-grow: 0; /* Prevents buttons from growing */
@@ -50,7 +90,7 @@ select, input, button {
     display: flex;
     justify-content: center;
     align-items: center;
-    padding: 20px;
+    padding: 10px;
     flex-direction: column; /* Stacks elements vertically */
 }
 
@@ -72,6 +112,7 @@ th, td {
     padding: 10px;
     text-align: center;
     border: 1px solid #ccc;
+    width: 25%;
 }
 
 th {
@@ -83,6 +124,9 @@ tr:nth-child(even) {
 }
 
 @media(max-width: 768px) {
+    .scanner-container{
+        width: 100%;
+    }
     table, th, td {
         font-size: 12px; /* Slightly larger font for readability on small screens */
     }
