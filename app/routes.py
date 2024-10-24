@@ -119,34 +119,43 @@ def create_organization():
 def update_organization(organization):
     data = request.get_json()
 
+    # Check if the identification_code is being updated and is unique
     if data.get('identification_code') and organization.identification_code != data['identification_code']:
         existing_organization = Organization.query.filter_by(identification_code=data['identification_code']).first()
         if existing_organization:
             abort(400, description="An organization with this identification code already exists")
-    
+
+    # Update name if provided
     organization.name = data.get('name', organization.name)
+
+    # Update identification_code if provided
     organization.identification_code = data.get('identification_code', organization.identification_code)
+
+    # Update web_service_url if provided
     organization.web_service_url = data.get('web_service_url', organization.web_service_url)
-    
+
     # Handle employees_count field update
     if 'employees_count' in data:
-        employees_count = int(data.get('employees_count', organization.employees_count))
-        if employees_count <= 0:
-            abort(400, description="Employees count must be greater than zero")
-        organization.employees_count = employees_count
+        try:
+            employees_count = int(data['employees_count'])
+            if employees_count <= 0:
+                abort(400, description="Employees count must be greater than zero")
+            organization.employees_count = employees_count
+        except ValueError:
+            abort(400, description="Employees count must be a valid number")
 
     # Update org_username if provided
     if 'org_username' in data:
         organization.org_username = data['org_username']
 
     # Update org_password securely if provided
-    # if 'org_password' in data:
-    #     hashed_password = generate_password_hash(data['org_password']).decode('utf-8')
-    #     organization.org_password = hashed_password
+    if 'org_password' in data:
+        organization.set_password(data['org_password'])
 
+    # Commit the changes to the database
     db.session.commit()
-    return jsonify({"message": "Organization updated successfully"})
 
+    return jsonify({"message": "Organization updated successfully"})
 
 
 @bp.route('/organizations/<uuid:org_id>', methods=['DELETE'])

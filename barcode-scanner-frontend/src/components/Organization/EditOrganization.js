@@ -6,23 +6,33 @@ const EditOrganization = ({ organizationData, handleEditOrganization, closeModal
     name: '',
     identification_code: '',
     employees_count: '',
-    web_service_url: ''
+    web_service_url: '',
+    org_username: '',    // New field
+    org_password: ''     // New field (optional)
   });
 
+  // Populate the form with existing organization data when the component loads
   useEffect(() => {
     if (organizationData) {
       setOrgData(organizationData);
     }
   }, [organizationData]);
 
+  // Handle input changes for the form fields
   const handleInputChange = (e) => {
     setOrgData({ ...orgData, [e.target.name]: e.target.value });
   };
 
+  // Handle form submission
   const handleSubmit = (e) => {
     e.preventDefault();
-    handleEditOrganization(orgData);  // Call the edit function
-    closeModal();
+    // Ensure the org_password is optional (only include it if provided)
+    const updatedOrgData = { ...orgData };
+    if (!updatedOrgData.org_password) {
+      delete updatedOrgData.org_password;  // Do not send the password if it's not being changed
+    }
+    handleEditOrganization(updatedOrgData);  // Call the function to edit the organization
+    closeModal();  // Close the modal
   };
 
   return (
@@ -73,6 +83,28 @@ const EditOrganization = ({ organizationData, handleEditOrganization, closeModal
               value={orgData.web_service_url}
               onChange={handleInputChange}
               required
+            />
+          </div>
+          <div className="form-group">
+            <label htmlFor="orgUsername">მომხმარებლის სახელი:</label>
+            <input
+              type="text"
+              id="orgUsername"
+              name="org_username"
+              value={orgData.org_username}
+              onChange={handleInputChange}
+              required
+            />
+          </div>
+          <div className="form-group">
+            <label htmlFor="orgPassword">პაროლი (თუ გსურთ ცვლილება):</label>
+            <input
+              type="password"
+              id="orgPassword"
+              name="org_password"
+              value={orgData.org_password}
+              onChange={handleInputChange}
+              placeholder="Enter new password if changing"
             />
           </div>
           <button type="submit" className="add-btn">განახლება</button>
