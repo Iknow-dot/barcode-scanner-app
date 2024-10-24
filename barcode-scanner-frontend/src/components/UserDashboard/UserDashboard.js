@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { scanProducts, getUserWarehouses } from '../../api';  // Import the new API call
+import { scanProducts, getUserWarehouses } from '../../api';
 import ScanButton from './ScanButton';
+import { Carousel } from 'react-responsive-carousel';
+import 'react-responsive-carousel/lib/styles/carousel.min.css';
 import './UserDashboard.css';
 
 const UserDashboard = () => {
@@ -8,56 +10,61 @@ const UserDashboard = () => {
   const [searchInput, setSearchInput] = useState('');
   const [scanning, setScanning] = useState(false);
   const [balances, setBalances] = useState([]);
-  const [price, setPrice] = useState(null); // State to store price
-  const [productName, setProductName] = useState(''); // State to store product name (sku_name)
-  const [allWarehouses, setAllWarehouses] = useState(false); // State to toggle between all warehouses or user-specific
-  const [userWarehouses, setUserWarehouses] = useState([]);  // State for storing the fetched user-specific warehouses
+  const [price, setPrice] = useState(null);
+  const [productName, setProductName] = useState('');
+  const [allWarehouses, setAllWarehouses] = useState(false);
+  const [userWarehouses, setUserWarehouses] = useState([]);
+  const [showModal, setShowModal] = useState(false);
+  const [selectedImages, setSelectedImages] = useState([]);
 
-  // Fetch user's warehouses when the component is mounted
   useEffect(() => {
     const fetchWarehouses = async () => {
       try {
-        const data = await getUserWarehouses();  // Fetch user-specific warehouses
-        setUserWarehouses(data);  // Store fetched warehouses
+        const data = await getUserWarehouses();
+        setUserWarehouses(data);
       } catch (error) {
         console.error("Failed to fetch user warehouses:", error);
       }
     };
 
     fetchWarehouses();
-  }, []);  // Only run once when the component is mounted
+  }, []);
 
   const handleSearch = async () => {
     try {
-      // If "All Warehouses" is checked, send an empty string
-      // Otherwise, join warehouse codes from the user's warehouses
       const warehouseCodes = allWarehouses ? '' : userWarehouses.map(warehouse => warehouse.code).join(',');
-      console.log("Sending data:", { searchInput, searchType, warehouseCodes });  // Log outgoing request data
-
       const data = await scanProducts(searchInput, searchType, warehouseCodes);
-      console.log("Received data:", data);  // Log response data
 
       if (data && data.stock) {
-        setBalances(data.stock);  // Set the stock data (balances)
-        setPrice(data.price);     // Set the price
-        setProductName(data.sku_name);  // Set the product name (sku_name)
+        setBalances(data.stock);
+        setPrice(data.price);
+        setProductName(data.sku_name);
       } else {
-        console.error("Received data does not contain stock information:", data);
-        setBalances([]);  // Reset to an empty array if the data is not valid
-        setPrice(null);   // Reset price
-        setProductName(''); // Reset product name
+        setBalances([]);
+        setPrice(null);
+        setProductName('');
       }
     } catch (error) {
-      console.error("Failed to fetch balances:", error.message);
-      setBalances([]);  // Set to an empty array on error
-      setPrice(null);   // Reset price on error
-      setProductName(''); // Reset product name on error
+      setBalances([]);
+      setPrice(null);
+      setProductName('');
     }
   };
 
   const handleScanResult = (decodedText) => {
     setSearchInput(decodedText);
-    setScanning(false); // Stop scanning after receiving the result
+    setScanning(false);
+  };
+
+  const handleOpenModal = (images) => {
+    // Ensure the images exist and are an array
+    if (Array.isArray(images) && images.length > 0) {
+      setSelectedImages(images);
+      setShowModal(true);
+    } else {
+      console.error("No images available or img_url is undefined.");
+      setSelectedImages([]);  // Set an empty array if no valid images
+    }
   };
 
   return (
@@ -106,16 +113,35 @@ const UserDashboard = () => {
           <tbody>
             {balances.map((item, index) => (
               <tr key={index}>
-                <td>{item.warehouse_name}</td>  {/* Display warehouse_name */}
-                <td>{searchInput}</td>  {/* Show the search input (article or barcode) */}
-                <td>{productName}</td>  {/* Display the product name (sku_name) */}
-                <td>{item.quantity}</td>  {/* Display the balance (quantity) */}
-                <td>{price}</td>  {/* Display the price */}
-                <td>{searchInput}</td>  {/* Display the search input again as the barcode/article */}
+                <td>{item.warehouse_name}</td>
+                <td>{searchInput}</td>
+                <td 
+                  onClick={() => handleOpenModal(item.img_url)} 
+                  style={{ cursor: 'pointer', color: 'blue' }}>
+                  {productName}
+                </td>
+                <td>{item.quantity}</td>
+                <td>{price}</td>
+                <td>{searchInput}</td>
               </tr>
             ))}
           </tbody>
         </table>
+      )}
+
+      {showModal && selectedImages.length > 0 && (
+        <div className="modal">
+          <div className="modal-content">
+            <span className="close" onClick={() => setShowModal(false)}>&times;</span>
+            <Carousel>
+              {selectedImages.map((img, index) => (
+                <div key={index}>
+                  <img src={img} alt={`Slide ${index}`} />
+                </div>
+              ))}
+            </Carousel>
+          </div>
+        </div>
       )}
     </div>
   );
