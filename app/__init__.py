@@ -44,10 +44,12 @@ def create_app():
     # Import and register views (blueprints)
     from .views import auth, organization, warehouse, user_roles, user
     app.register_blueprint(auth.bp, url_prefix='/auth')
-    app.register_blueprint(organization.bp, url_prefix='/organization')
-    app.register_blueprint(warehouse.bp, url_prefix='/warehouse')
+    app.register_blueprint(organization.bp, url_prefix='/organizations')
+    app.register_blueprint(warehouse.bp, url_prefix='/warehouses')
     app.register_blueprint(user_roles.bp, url_prefix='/roles')
-    app.register_blueprint(user.bp, url_prefix='/user')
+    app.register_blueprint(user.bp, url_prefix='/users')
+    # app.register_blueprint(product.product_bp, url_prefix='/products')
+  
 
     # Route to serve the React frontend
     @app.route('/', defaults={'path': ''})

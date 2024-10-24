@@ -6,8 +6,10 @@ from . import db
 import uuid
 import requests
 from .decorators import role_required, organization_exists, ip_whitelisted
-from sqlalchemy.orm import joinedload
+from sqlalchemy import create_engine
+from sqlalchemy.orm import joinedload, sessionmaker
 from sqlalchemy.exc import SQLAlchemyError
+import base64
 
 
 # Create a blueprint
@@ -39,7 +41,8 @@ def get_organizations():
         "name": org.name,
         "identification_code": org.identification_code,
         "web_service_url": org.web_service_url,
-        "employees_count": org.employees_count  # Include employees_count
+        "org_username": org.org_username,  # Added username to the response
+        "employees_count": org.employees_count
     } for org in organizations])
 
 @bp.route('/organizations/<uuid:org_id>', methods=['GET'])
@@ -60,8 +63,11 @@ def get_organization(organization):
         "name": organization.name,
         "identification_code": organization.identification_code,
         "web_service_url": organization.web_service_url,
+        "org_username": organization.org_username,  # Added username to the response
         "employees_count": organization.employees_count  # Include employees_count
     })
+
+
 
 @bp.route('/organizations', methods=['POST'])
 @jwt_required()
@@ -70,7 +76,7 @@ def create_organization():
     data = request.get_json()
 
     # Check for missing fields
-    if not data.get('name') or not data.get('identification_code') or not data.get('web_service_url') or not data.get('employees_count'):
+    if not data.get('name') or not data.get('identification_code') or not data.get('web_service_url') or not data.get('employees_count') or not data.get('org_username') or not data.get('org_password'):
         abort(400, description="Missing required fields")
     
     # Convert employees_count to integer and validate
@@ -92,8 +98,12 @@ def create_organization():
         name=data['name'],
         identification_code=data['identification_code'],
         web_service_url=data['web_service_url'],
-        employees_count=employees_count  # Ensure employees_count is an integer
+        employees_count=employees_count,  # Ensure employees_count is an integer
+        org_username=data['org_username']
     )
+
+    # Hash and set the org_password using the model's set_password method
+    organization.set_password(data['org_password'])
 
     # Add the new organization to the database
     db.session.add(organization)
@@ -124,7 +134,16 @@ def update_organization(organization):
         if employees_count <= 0:
             abort(400, description="Employees count must be greater than zero")
         organization.employees_count = employees_count
-    
+
+    # Update org_username if provided
+    if 'org_username' in data:
+        organization.org_username = data['org_username']
+
+    # Update org_password securely if provided
+    # if 'org_password' in data:
+    #     hashed_password = generate_password_hash(data['org_password']).decode('utf-8')
+    #     organization.org_password = hashed_password
+
     db.session.commit()
     return jsonify({"message": "Organization updated successfully"})
 
@@ -552,3 +571,47 @@ def delete_ip(ip_id):
 # Register the blueprint with the Flask app
 def register_routes(app):
     app.register_blueprint(bp)
+
+
+# -------------------- Get products info -------------------- #
+
+# # Assuming you have already set up your Flask and SQLAlchemy environment
+# bp = Blueprint('external_products', __name__)
+
+# @bp.route('/external_products', methods=['GET'])
+# @jwt_required()
+# def get_external_products():
+#     # Fetch user and organization info
+#     identity = get_jwt_identity()
+#     user_id = identity['user_id']
+
+#     # Assume we have a function or method to get the organization details
+#     organization = get_user_organization(user_id)
+#     if not organization or not organization['web_service_url']:
+#         abort(404, "No organization or web service URL found")
+
+#     # Set headers and parameters for the external API request
+#     headers = {
+#         'Authorization': f"Basic {organization['auth_credentials']}",
+#         'Content-Type': 'application/json'
+#     }
+#     params = {
+#         'IsBarcode': request.args.get('isBarcode', 'true').lower() == 'true',
+#         'Sku': request.args.get('sku', ''),
+#         'Warehouse': request.args.get('warehouseCodes', '')
+#     }
+
+#     # Send the request to the external service
+#     response = requests.get(organization['web_service_url'], headers=headers, params=params)
+#     if response.status_code != 200:
+#         abort(response.status_code, response.text)
+
+#     return jsonify(response.json())
+
+# def get_user_organization(user_id):
+#     # Here you'd implement logic to fetch the organization details for the user
+#     # For example, this could be a stub:
+#     return {
+#         'web_service_url': 'http://example.com/api',
+#         'auth_credentials': 'user:password'
+#     }

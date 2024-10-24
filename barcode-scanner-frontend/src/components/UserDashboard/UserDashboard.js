@@ -65,6 +65,7 @@ const UserDashboard = () => {
               <th>Article</th>
               <th>Product</th>
               <th>Balance</th>
+              <th>Price</th>
               <th>Barcode</th>
             </tr>
           </thead>
@@ -75,6 +76,7 @@ const UserDashboard = () => {
                 <td>{item.article}</td>
                 <td>{item.product}</td>
                 <td>{item.balance}</td>
+                <td>{item.price}</td>
                 <td>{item.barcode}</td>
               </tr>
             ))}

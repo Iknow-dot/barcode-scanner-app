@@ -78,20 +78,29 @@ class Organization(db.Model):
     name = db.Column(db.String(100), nullable=False)
     identification_code = db.Column(db.String(50), unique=True, nullable=False)
     web_service_url = db.Column(db.String(255), nullable=False)
+    org_username = db.Column(db.String(255), nullable=True)  # Optional if not all organizations use external services
+    org_password = db.Column(db.String(255), nullable=True)  # Optional if not all organizations use external services
     employees_count = db.Column(db.Integer, nullable=False)  # Mandatory field
 
     users = db.relationship('User', back_populates='organization', cascade="all, delete-orphan")
     warehouses = db.relationship('Warehouse', back_populates='organization', cascade="all, delete-orphan")
     
+    def set_password(self, password):
+        self.org_password = generate_password_hash(password)
+
+    def check_password(self, password):
+        return check_password_hash(self.org_password, password)
+
     def to_dict(self):
         return {
             'id': str(self.id),  # Convert UUID to string for JSON serialization
             'name': self.name,
             'identification_code': self.identification_code,
             'web_service_url': self.web_service_url,
+            'org_username': self.org_username,
+            # Exclude 'org_password' for security
             'employees_count': self.employees_count
         }
-    
     
 class Warehouse(db.Model):
     __tablename__ = 'warehouses'

@@ -5,7 +5,7 @@ from app.models import Organization
 import uuid
 from sqlalchemy.exc import IntegrityError
 
-bp = Blueprint('organization', __name__)
+bp = Blueprint('organization', __name__, url_prefix='/organizations')
 
 @bp.route('/organizations', methods=['GET'])
 @jwt_required()
