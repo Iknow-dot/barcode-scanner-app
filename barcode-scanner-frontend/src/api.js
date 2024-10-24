@@ -46,4 +46,31 @@ api.interceptors.response.use(
   }
 );
 
+// Function to call the scan API endpoint
+export const scanProducts = async (barcode, searchType, warehouseCodes) => {
+  try {
+    console.log("API Call - Payload:", { barcode, searchType, warehouseCodes });  // Debug log to inspect payload
+    const response = await api.post('/products/scan', {
+      barcode,
+      searchType,
+      warehouseCodes
+    });
+    return response.data;  // Assuming the response includes the data you need
+  } catch (error) {
+    console.error("Error during product scan:", error);
+    throw error;
+  }
+};
+
+// Function to get user-specific warehouses
+export const getUserWarehouses = async () => {
+  try {
+    const response = await api.get('/user-warehouses/user');  // Call to the new route
+    return response.data;  // Return the list of warehouses associated with the user
+  } catch (error) {
+    console.error("Error fetching user warehouses:", error);
+    throw error;
+  }
+};
+
 export default api;

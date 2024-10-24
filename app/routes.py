@@ -98,18 +98,19 @@ def create_organization():
         name=data['name'],
         identification_code=data['identification_code'],
         web_service_url=data['web_service_url'],
-        employees_count=employees_count,  # Ensure employees_count is an integer
+        employees_count=employees_count,
         org_username=data['org_username']
     )
 
-    # Hash and set the org_password using the model's set_password method
-    organization.set_password(data['org_password'])
+    # Encrypt and set the org_password using the model's encrypt_password method
+    organization.encrypt_password(data['org_password'])
 
     # Add the new organization to the database
     db.session.add(organization)
     db.session.commit()
 
     return jsonify({"message": "Organization created successfully", "id": str(organization.id)}), 201
+
 
 
 @bp.route('/organizations/<uuid:org_id>', methods=['PUT'])
@@ -150,7 +151,8 @@ def update_organization(organization):
 
     # Update org_password securely if provided
     if 'org_password' in data:
-        organization.set_password(data['org_password'])
+        #organization.set_password(data['org_password'])
+        organization.encrypt_password(data['org_password'])
 
     # Commit the changes to the database
     db.session.commit()
@@ -582,45 +584,23 @@ def register_routes(app):
     app.register_blueprint(bp)
 
 
-# -------------------- Get products info -------------------- #
+# -------------------- Get user-warehouses -------------------- #
 
-# # Assuming you have already set up your Flask and SQLAlchemy environment
-# bp = Blueprint('external_products', __name__)
+warehouse_bp = Blueprint('warehouse', __name__, url_prefix='/warehouses')
 
-# @bp.route('/external_products', methods=['GET'])
-# @jwt_required()
-# def get_external_products():
-#     # Fetch user and organization info
-#     identity = get_jwt_identity()
-#     user_id = identity['user_id']
+@warehouse_bp.route('/user-warehouses', methods=['GET'])
+@jwt_required()
+def get_user_warehouses():
+    # Get the current logged-in user's ID from the JWT token
+    user_id = get_jwt_identity()
+    
+    # Query the user_warehouses table for warehouses associated with the user
+    user_warehouses = db.session.query(Warehouse).join(UserWarehouse).filter(UserWarehouse.user_id == uuid.UUID(user_id)).all()
 
-#     # Assume we have a function or method to get the organization details
-#     organization = get_user_organization(user_id)
-#     if not organization or not organization['web_service_url']:
-#         abort(404, "No organization or web service URL found")
+    if not user_warehouses:
+        return jsonify({"error": "No warehouses found for this user"}), 404
 
-#     # Set headers and parameters for the external API request
-#     headers = {
-#         'Authorization': f"Basic {organization['auth_credentials']}",
-#         'Content-Type': 'application/json'
-#     }
-#     params = {
-#         'IsBarcode': request.args.get('isBarcode', 'true').lower() == 'true',
-#         'Sku': request.args.get('sku', ''),
-#         'Warehouse': request.args.get('warehouseCodes', '')
-#     }
+    # Prepare a response with warehouse codes
+    warehouses_data = [{'id': str(warehouse.id), 'code': warehouse.code, 'name': warehouse.name} for warehouse in user_warehouses]
 
-#     # Send the request to the external service
-#     response = requests.get(organization['web_service_url'], headers=headers, params=params)
-#     if response.status_code != 200:
-#         abort(response.status_code, response.text)
-
-#     return jsonify(response.json())
-
-# def get_user_organization(user_id):
-#     # Here you'd implement logic to fetch the organization details for the user
-#     # For example, this could be a stub:
-#     return {
-#         'web_service_url': 'http://example.com/api',
-#         'auth_credentials': 'user:password'
-#     }
+    return jsonify(warehouses_data), 200

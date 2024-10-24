@@ -6,6 +6,8 @@ from flask_login import UserMixin
 import jwt
 from datetime import datetime, timedelta, timezone
 from flask import current_app
+from cryptography.fernet import Fernet
+import os
 
 class User(db.Model, UserMixin):
     __tablename__ = 'users'
@@ -85,11 +87,28 @@ class Organization(db.Model):
     users = db.relationship('User', back_populates='organization', cascade="all, delete-orphan")
     warehouses = db.relationship('Warehouse', back_populates='organization', cascade="all, delete-orphan")
     
+    def encrypt_password(self, password):
+        key = os.getenv('FERNET_KEY')  # Fetch the Fernet key from environment variables
+        if not key:
+            raise ValueError("FERNET_KEY is not set or is invalid")
+        cipher_suite = Fernet(key)
+        self.org_password = cipher_suite.encrypt(password.encode()).decode()
+
+    def decrypt_password(self):
+        key = os.getenv('FERNET_KEY')  # Fetch the Fernet key from environment variables
+        if not key:
+            raise ValueError("FERNET_KEY is not set or is invalid")
+        cipher_suite = Fernet(key)
+        decrypted_password = cipher_suite.decrypt(self.org_password.encode())
+        return decrypted_password.decode() 
+
     def set_password(self, password):
         self.org_password = generate_password_hash(password)
 
     def check_password(self, password):
         return check_password_hash(self.org_password, password)
+    
+    
 
     def to_dict(self):
         return {
