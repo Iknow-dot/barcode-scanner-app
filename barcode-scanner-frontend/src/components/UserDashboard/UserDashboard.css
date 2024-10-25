@@ -5,6 +5,7 @@ body {
     padding: 0;
 }
 
+
 .container {
     width: 90%;
     max-width: 1200px;
@@ -12,11 +13,27 @@ body {
     margin-top: 20px;
 }
 
+.header{
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    margin-bottom: 10px;
+    max-height: 50px;
+}
+
+h2{
+    align-self:center;
+}
+
 .search-container {
     display: flex;
     flex-direction: column;
     gap: 10px;
     margin-bottom: 20px;
+}
+
+select{
+    margin-bottom: 5px;
 }
 
 select, input, button {
@@ -42,6 +59,7 @@ select, input, button {
 .checkbox-cntr{
     display: flex;
     flex-direction: row-reverse;
+    margin-bottom: 5px;
 }
 
 /* Custom checkbox styles */
@@ -53,6 +71,7 @@ select, input, button {
 
 .custom-checkbox input[type="checkbox"] {
     margin-right: 5px;
+    
     accent-color: #28a745; /* Custom color for the checkbox */
 }
 
@@ -82,6 +101,17 @@ select, input, button {
         flex-grow: 0; /* Prevents buttons from growing */
         white-space: nowrap; /* Keeps button text on one line */
         margin-left: 10px; /* Adds spacing between buttons and input/select */
+    }
+    .header{
+        display: flex;
+        flex-direction: row;
+        justify-content: space-between;
+        margin-bottom: 10px;
+        max-height: 50px;
+    }
+
+    h2{
+        align-self:center;
     }
 }
 

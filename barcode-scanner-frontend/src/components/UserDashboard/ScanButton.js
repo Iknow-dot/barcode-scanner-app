@@ -35,11 +35,11 @@ const ScanButton = ({ setScanning, scanning, onScan }) => {
         <div className="scanner-container">
             {!scanning ? (
                 <button className="scan-button" onClick={() => setScanning(true)}>
-                    Scan
+                    დასკანერება
                 </button>
             ) : (
                 <button className="stop-scan-button" style={{ 'background-color': 'red' }} onClick={() => setScanning(false)}>
-                    Stop Scanning
+                    დახურვა
                 </button>
             )}
             <div ref={qrRef} id="qr-reader" className="qr-reader"></div>
