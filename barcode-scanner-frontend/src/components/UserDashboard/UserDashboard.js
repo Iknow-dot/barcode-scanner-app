@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { scanProducts, getUserWarehouses } from '../../api';
 import ScanButton from './ScanButton';
-import { Carousel } from 'react-responsive-carousel';
-import 'react-responsive-carousel/lib/styles/carousel.min.css';
+import Carousel from 'react-multi-carousel';
+import 'react-multi-carousel/lib/styles.css';
 import './UserDashboard.css';
 import AuthContext from '../Auth/AuthContext';
 
@@ -15,7 +15,7 @@ const UserDashboard = () => {
   const [userWarehouses, setUserWarehouses] = useState([]);
   const [showModal, setShowModal] = useState(false);
   const [selectedImages, setSelectedImages] = useState([]);
-  const [productInfo, setProductInfo] = useState({ sku_name: '', article: '', price: '' });
+  const [productInfo, setProductInfo] = useState({ sku_name: '', article: '', price: '', img_url: [] });
   const { authData, logout } = useContext(AuthContext);
 
   useEffect(() => {
@@ -31,6 +31,21 @@ const UserDashboard = () => {
     fetchWarehouses();
   }, []);
 
+  const responsive = {
+    desktop: {
+      breakpoint: { max: 3000, min: 1024 },
+      items: 1
+    },
+    tablet: {
+      breakpoint: { max: 1024, min: 464 },
+      items: 1
+    },
+    mobile: {
+      breakpoint: { max: 464, min: 0 },
+      items: 1
+    }
+  };
+
   const handleSearch = async () => {
     try {
       const warehouseCodes = allWarehouses ? '' : userWarehouses.map(warehouse => warehouse.code).join(',');
@@ -41,16 +56,18 @@ const UserDashboard = () => {
         setProductInfo({
           sku_name: data.sku_name,
           article: data.article,
-          price: data.price
+          price: data.price,
+          img_url: data.img_url
         });
       } else {
         setBalances([]);
-        setProductInfo({ sku_name: '', article: '', price: '' });
+        setProductInfo({ sku_name: '', article: '', price: '', img_url: [] });
       }
     } catch (error) {
       console.error("Error during search:", error.message);
       setBalances([]);
-      setProductInfo({ sku_name: '', article: '', price: '' });
+      setProductInfo({ sku_name: '', article: '', price: '', img_url: [] });
+      alert("ვერ მოხერხდა დაკავშირება!")
     }
   };
 
@@ -59,9 +76,10 @@ const UserDashboard = () => {
     setScanning(false);
   };
 
-  const handleOpenModal = (images) => {
-    if (Array.isArray(images) && images.length > 0) {
-      setSelectedImages(images);
+  const handleOpenModal = () => {
+    console.log("Opening modal with images:", productInfo.img_url); // Debug: log the images
+    if (Array.isArray(productInfo.img_url) && productInfo.img_url.length > 0) {
+      setSelectedImages(productInfo.img_url);
       setShowModal(true);
     } else {
       console.error("No images available or img_url is undefined.");
@@ -105,7 +123,7 @@ const UserDashboard = () => {
       </div>
       {!scanning && balances.length > 0 && (
         <>
-          <p><strong>პროდუქტი:</strong> {productInfo.sku_name} </p>
+          <p><strong>პროდუქტი:</strong> <span onClick={handleOpenModal} style={{ cursor: 'pointer', textDecoration: 'underline' }}>{productInfo.sku_name}</span> </p>
           <p><strong>არტიკული:</strong> {productInfo.article}</p>
           <table>
             <thead>
@@ -128,14 +146,28 @@ const UserDashboard = () => {
         </>
       )}
 
-      {showModal && selectedImages.length > 0 && (
-        <div className="modal">
+      {showModal && (
+        <div className="modal" style={{ display: 'block', zIndex: 1000, position: 'absolute', width: '100%', height: '100%', top: '0', left: '0', background: 'rgba(0,0,0,0.5)' }}>
           <div className="modal-content">
             <span className="close" onClick={() => setShowModal(false)}>&times;</span>
-            <Carousel>
+            <Carousel
+              responsive={responsive}
+              ssr={true} // means to render carousel on server-side.
+              infinite={true}
+              autoPlay={scanning ? true : false}
+              autoPlaySpeed={3000}
+              keyBoardControl={true}
+              customTransition="all .5"
+              transitionDuration={500}
+              containerClass="carousel-container"
+              removeArrowOnDeviceType={["tablet", "mobile"]}
+              deviceType={responsive}
+              dotListClass="custom-dot-list-style"
+              itemClass="carousel-item-padding-40-px"
+            >
               {selectedImages.map((img, index) => (
                 <div key={index}>
-                  <img src={img} alt={`Slide ${index}`} />
+                  <img src={img} alt={`Slide ${index}`} style={{ width: '100%', height: 'auto' }} />
                 </div>
               ))}
             </Carousel>
@@ -146,4 +178,4 @@ const UserDashboard = () => {
   );
 };
 
-export default UserDashboard;
+export default UserDashboard
