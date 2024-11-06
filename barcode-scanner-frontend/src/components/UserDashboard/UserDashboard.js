@@ -67,7 +67,7 @@ const UserDashboard = () => {
       console.error("Error during search:", error.message);
       setBalances([]);
       setProductInfo({ sku_name: '', article: '', price: '', img_url: [] });
-      alert("ვერ მოხერხდა დაკავშირება!")
+      alert("არ მოიძებნა!")
     }
   };
 

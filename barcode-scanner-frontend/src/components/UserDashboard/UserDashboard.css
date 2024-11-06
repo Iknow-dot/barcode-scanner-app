@@ -5,7 +5,6 @@ body {
     padding: 0;
 }
 
-
 .container {
     width: 90%;
     max-width: 1200px;
@@ -60,6 +59,8 @@ select, input, button {
     display: flex;
     flex-direction: row-reverse;
     margin-bottom: 5px;
+    transform: scale(1.2);
+    accent-color:rgba(96, 174, 62, 1);
 }
 
 /* Custom checkbox styles */

@@ -6,7 +6,12 @@ body {
     justify-content: center;
     align-items: center;
     height: 100vh;
-    margin: 0; /* Reset margin for body */
+    margin: 0;
+    /* Reset margin for body */
+}
+
+#root {
+    height: 100%;
 }
 
 .login-container {
@@ -15,26 +20,39 @@ body {
     border-radius: 8px;
     box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
     text-align: center;
-    width: 300px; /* Set a specific width for the login container */
+    margin: 0 auto;
+    width: 300px;
+
 }
+
 
 .login-container h1 {
     text-align: center;
 }
 
 .login-container img {
-    width: 150px; /* Control the width of the logo */
-    height: auto; /* Maintain aspect ratio */
-    margin-bottom: 20px; /* Add space below the logo */
-    border-radius: 8px; /* Make the edges of the logo slightly rounded */
-    padding: 10px; /* Add padding around the logo */
-    border: 2px solid #ccc; /* Add a border around the logo */
-    display: block; /* Ensure it's treated like a block element */
-    margin-left: auto; /* Center horizontally */
-    margin-right: auto; /* Center horizontally */
+    width: 150px;
+    /* Control the width of the logo */
+    height: auto;
+    /* Maintain aspect ratio */
+    margin-bottom: 20px;
+    /* Add space below the logo */
+    border-radius: 8px;
+    /* Make the edges of the logo slightly rounded */
+    padding: 10px;
+    /* Add padding around the logo */
+    border: 2px solid #ccc;
+    /* Add a border around the logo */
+    display: block;
+    /* Ensure it's treated like a block element */
+    margin-left: auto;
+    /* Center horizontally */
+    margin-right: auto;
+    /* Center horizontally */
 }
 
-.login-container input[type="text"], .login-container input[type="password"] {
+.login-container input[type="text"],
+.login-container input[type="password"] {
     width: 100%;
     padding: 7px;
     margin: 10px 0;

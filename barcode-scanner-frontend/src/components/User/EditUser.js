@@ -26,9 +26,10 @@ const EditUser = ({ userData, closeModal }) => {
       } else if (authData?.role === 'admin') {
         const whRes = await api.get('/warehouses');
         setWarehouses(whRes.data);
+        console.log(whRes.data);
         setIsAdmin(true);
       }
-  
+
       // Initialize form with existing user data
       setEditUserData({
         ...userData,

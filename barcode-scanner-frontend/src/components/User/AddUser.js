@@ -162,7 +162,6 @@ const AddUser = ({ closeModal }) => {
               required
             >
               <option value={isAdmin ? 'user' : 'admin'}>{isAdmin ? 'user' : 'admin'}</option>
-              {!isAdmin && <option value="system_admin">system admin</option>}
             </select>
           </div>
 

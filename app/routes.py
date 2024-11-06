@@ -499,16 +499,16 @@ def update_user(user_id):
         return jsonify({'error': 'An error occurred while updating the user'}), 500
 
 
-@bp.route('/users/<uuid:user_id>', methods=['DELETE'])
+@bp.route('/users/<uuid:id>', methods=['DELETE'])
 @jwt_required()
 @role_required('admin', 'system_admin')
-def delete_user(user_id):
+def delete_user(id):
     try:
         identity = get_jwt_identity()
         user_id = identity.get('user_id') if isinstance(identity, dict) else identity
         current_user = User.query.get(uuid.UUID(user_id))
 
-        user = User.query.get(user_id)
+        user = User.query.get(id)
         if not user:
             return jsonify({'error': 'User not found'}), 404
 
