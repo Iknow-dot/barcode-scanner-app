@@ -2,7 +2,7 @@ import axios from 'axios';
 
 // Set up the base URL for the API
 const api = axios.create({
-  baseURL: 'http://192.168.50.28:8086',
+  baseURL: 'http://127.0.0.1:5000',
   headers: {
     'Content-Type': 'application/json',
   },
@@ -49,7 +49,7 @@ api.interceptors.response.use(
 // Function to call the scan API endpoint
 export const scanProducts = async (barcode, searchType, warehouseCodes) => {
   try {
-    console.log("API Call - Payload:", { barcode, searchType, warehouseCodes });  // Debug log to inspect payload
+    // console.log("API Call - Payload:", { barcode, searchType, warehouseCodes });  // Debug log to inspect payload
     const response = await api.post('/products/scan', {
       barcode,
       searchType,
@@ -66,6 +66,17 @@ export const scanProducts = async (barcode, searchType, warehouseCodes) => {
 export const getUserWarehouses = async () => {
   try {
     const response = await api.get('/user-warehouses/user');  // Call to the new route
+    return response.data;  // Return the list of warehouses associated with the user
+  } catch (error) {
+    console.error("Error fetching user warehouses:", error);
+    throw error;
+  }
+};
+
+
+export const getUserWarehousesByUserId = async (userId) => {
+  try {
+    const response = await api.get(`/user_warehouses/${userId}`);  // Adjust the endpoint as per the route configuration
     return response.data;  // Return the list of warehouses associated with the user
   } catch (error) {
     console.error("Error fetching user warehouses:", error);

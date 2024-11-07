@@ -15,7 +15,7 @@ const ScanButton = ({ setScanning, scanning, onScan }) => {
                     disableFlip: false
                 });
                 html5QrcodeScanner.render((decodedText) => {
-                    console.log(`Decoded text: ${decodedText}`);
+                    // console.log(`Decoded text: ${decodedText}`);
                     onScan(decodedText);  // Call the function passed as prop with the decoded text
 
                 }, errorMessage => {

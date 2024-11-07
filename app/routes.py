@@ -604,3 +604,39 @@ def get_user_warehouses():
     warehouses_data = [{'id': str(warehouse.id), 'code': warehouse.code, 'name': warehouse.name} for warehouse in user_warehouses]
 
     return jsonify(warehouses_data), 200
+
+
+
+@bp.route('/user_warehouses/<uuid:user_id>', methods=['GET'])
+@jwt_required()
+@role_required('admin', 'system_admin')  # Ensure only admins and system admins can access
+def get_user_warehouses(user_id):
+    try:
+        # Fetch user data or abort with 404 if not found
+        current_user = User.query.get_or_404(user_id, description="User not found.")
+
+        # Admins can only access warehouses if they are linked to their user unless they are system admins
+        if not current_user.is_system_admin() and current_user.id != user_id:
+            abort(403, description="Unauthorized to access this data")
+
+        user_warehouses = db.session.query(Warehouse).join(
+            UserWarehouse, UserWarehouse.warehouse_id == Warehouse.id
+        ).filter(UserWarehouse.user_id == user_id).all()
+
+        if not user_warehouses:
+            return jsonify({"error": "No warehouses found for this user"}), 404
+
+        # Prepare and return a list of warehouse data
+        warehouses_data = [{
+            'id': str(warehouse.id),
+            'name': warehouse.name,
+            'code': warehouse.code
+        } for warehouse in user_warehouses]
+
+        return jsonify(warehouses_data), 200
+
+    except ValueError:
+        return jsonify({"error": "Invalid UUID format"}), 400
+    except SQLAlchemyError as e:
+        current_app.logger.error(f"Database error occurred: {str(e)}")
+        return jsonify({"error": "Database error"}), 500

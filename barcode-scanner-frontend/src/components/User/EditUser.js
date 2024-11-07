@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useContext } from 'react';
 import './AddUser.css'; // Use appropriate CSS file
-import api from '../../api';
+import api, { getUserWarehousesByUserId } from '../../api';
 import AuthContext from '../Auth/AuthContext';
 
 const EditUser = ({ userData, closeModal }) => {
@@ -26,10 +26,15 @@ const EditUser = ({ userData, closeModal }) => {
       } else if (authData?.role === 'admin') {
         const whRes = await api.get('/warehouses');
         setWarehouses(whRes.data);
-        console.log(whRes.data);
         setIsAdmin(true);
+        const userSpecificWarehouses = await getUserWarehousesByUserId(userData.id);
+        setWarehouses(userSpecificWarehouses);
+        setEditUserData(prevState => ({
+          ...prevState,
+          warehouse_ids: userSpecificWarehouses.map(wh => wh.id)
+        }));
       }
-
+  
       // Initialize form with existing user data
       setEditUserData({
         ...userData,

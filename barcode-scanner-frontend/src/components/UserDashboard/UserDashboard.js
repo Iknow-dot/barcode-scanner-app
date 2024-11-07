@@ -50,6 +50,7 @@ const UserDashboard = () => {
     try {
       const warehouseCodes = allWarehouses ? '' : userWarehouses.map(warehouse => warehouse.code).join(',');
       const data = await scanProducts(searchInput, searchType, warehouseCodes);
+      console.log(warehouseCodes);
 
       if (data && data.stock) {
         setBalances(data.stock);
@@ -77,7 +78,7 @@ const UserDashboard = () => {
   };
 
   const handleOpenModal = () => {
-    console.log("Opening modal with images:", productInfo.img_url); // Debug: log the images
+    // console.log("Opening modal with images:", productInfo.img_url); // Debug: log the images
     if (Array.isArray(productInfo.img_url) && productInfo.img_url.length > 0) {
       setSelectedImages(productInfo.img_url);
       setShowModal(true);

@@ -56,7 +56,7 @@ const AddUser = ({ closeModal }) => {
     if (authData?.role === 'admin') {
       newUserData.organization_id = authData.organization_id; // Admin's organization
       newUserData.role_name = 'user'; // Admin adds users with the role 'user'
-        console.log("auth", authData)
+        // console.log("auth", authData)
 
     }
 
