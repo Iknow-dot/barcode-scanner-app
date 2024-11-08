@@ -609,7 +609,7 @@ def get_user_warehouses():
 
 @bp.route('/user_warehouses/<uuid:user_id>', methods=['GET'])
 @jwt_required()
-@role_required('admin', 'system_admin')  # Ensure only admins and system admins can access
+@role_required('admin')  # Ensure only admins and system admins can access
 def get_user_warehouses(user_id):
     try:
         # Fetch user data or abort with 404 if not found

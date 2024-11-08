@@ -16,6 +16,7 @@ const EditUser = ({ userData, closeModal }) => {
 
   const [organizations, setOrganizations] = useState([]);
   const [warehouses, setWarehouses] = useState([]);
+  const [userwarehouses, setuserWarehouses] = useState([]);
   const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
@@ -23,39 +24,57 @@ const EditUser = ({ userData, closeModal }) => {
       if (authData?.role === 'system_admin') {
         const orgRes = await api.get('/organizations');
         setOrganizations(orgRes.data);
-      } else if (authData?.role === 'admin') {
+      } 
+      
+      if (authData?.role === 'admin' && userData.role_name === 'user') {
         const whRes = await api.get('/warehouses');
         setWarehouses(whRes.data);
         setIsAdmin(true);
+      }
+
+  
+      if (authData?.role === 'admin' && userData.role_name === 'user' && userData.id) {
         const userSpecificWarehouses = await getUserWarehousesByUserId(userData.id);
-        setWarehouses(userSpecificWarehouses);
+        setuserWarehouses(userSpecificWarehouses.map(wh => wh.id));
+  
         setEditUserData(prevState => ({
           ...prevState,
-          warehouse_ids: userSpecificWarehouses.map(wh => wh.id)
+          warehouse_ids: userSpecificWarehouses.map(wh => wh.id) // Set initially checked warehouses
         }));
-      }
   
+      }
       // Initialize form with existing user data
-      setEditUserData({
-        ...userData,
-        warehouse_ids: userData.warehouse_ids || [] // Ensure this is always an array
-      });
+  
+      setEditUserData(prevState => ({
+        ...prevState,
+        ...userData
+      }));
     };
   
     fetchData();
+  
   }, [authData, userData]);
 
   const handleInputChange = (e) => {
-    setEditUserData({ ...editUserData, [e.target.name]: e.target.value });
+    setEditUserData(prevState => ({ ...prevState, [e.target.name]: e.target.value }));
   };
 
   const handleWarehouseChange = (e) => {
     const warehouseId = e.target.value;
-    const newWarehouseIds = editUserData.warehouse_ids.includes(warehouseId)
-      ? editUserData.warehouse_ids.filter(id => id !== warehouseId)
-      : [...editUserData.warehouse_ids, warehouseId];
-    setEditUserData({ ...editUserData, warehouse_ids: newWarehouseIds });
+    const isAlreadySelected = editUserData.warehouse_ids.includes(warehouseId);
+  
+    // Toggle the presence of warehouseId in the array
+    const newWarehouseIds = isAlreadySelected
+      ? editUserData.warehouse_ids.filter(id => id !== warehouseId) // Remove the ID if it's already included
+      : [...editUserData.warehouse_ids, warehouseId]; // Add the ID if it's not included
+  
+    setEditUserData(prevState => ({
+      ...prevState,
+      warehouse_ids: newWarehouseIds // Update state with the new array of IDs
+    }));
   };
+
+
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -123,7 +142,6 @@ const EditUser = ({ userData, closeModal }) => {
               required
             >
               <option value={isAdmin ? 'user' : 'admin'}>{isAdmin ? 'user' : 'admin'}</option>
-              {!isAdmin && <option value="system_admin">System Admin</option>}
             </select>
           </div>
           <div className="form-group">
