@@ -7,12 +7,12 @@ const OrganizationsTab = ({ organizations, openModal }) => {
   };
 
   const handleDelete = async (orgId) => {
-    if (window.confirm("Are you sure you want to delete this organization?")) {
+    if (window.confirm("ნამდვილად გსურთ ორგანიზაციის წაშლა?")) {
       try {
         await api.delete(`/organizations/${orgId}`);
         window.location.reload(); // Reload to refresh the organization list
       } catch (error) {
-        console.error("Error deleting organization:", error);
+        console.error("ორგანიზაციის წაშლის შეცდომა:", error);
       }
     }
   };

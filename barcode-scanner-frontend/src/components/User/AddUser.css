@@ -82,6 +82,7 @@
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); /* Adjust grid layout for checkboxes */
     gap: 10px;
+    
 }
 
 #warehouse-container label {
@@ -98,4 +99,11 @@
     .modal-content {
         width: 90%;
     }
+}
+
+.warehouse-display{
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
 }

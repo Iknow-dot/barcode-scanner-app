@@ -40,7 +40,7 @@ const SystemAdminDashboard = () => {
         setWarehouses(whRes.data);
         setUsers(userRes.data);
       } catch (error) {
-        console.error('Error fetching data', error);
+        console.error('შეცდომა მონაცემების მიღებისას', error);
       }
     };
     fetchData();
@@ -98,7 +98,7 @@ const SystemAdminDashboard = () => {
       setOrganizations(orgRes.data);
       closeModal();
     } catch (error) {
-      console.error('Error adding organization', error);
+      console.error('ორგანიზაციის შექმნის შეცდომა', error);
     }
   };
 
@@ -111,7 +111,7 @@ const SystemAdminDashboard = () => {
       }
       closeModal();
     } catch (error) {
-      console.error('Error editing organization', error);
+      console.error('ორგანიზაციის დამატების შეცდომა', error);
     }
   };
 
@@ -124,7 +124,7 @@ const SystemAdminDashboard = () => {
       }
       closeModal();
     } catch (error) {
-      console.error('Error editing warehouse', error);
+      console.error('საწყობის განახლების შეცდომა', error);
     }
   };
 
@@ -137,7 +137,7 @@ const SystemAdminDashboard = () => {
       }
       closeModal();
     } catch (error) {
-      console.error('Error editing user', error);
+      console.error('მომხმარებლის განახლების შეცდომა', error);
     }
   };
 
@@ -148,7 +148,7 @@ const SystemAdminDashboard = () => {
       setUsers(userRes.data);
       closeModal();
     } catch (error) {
-      console.error('Error adding user', error);
+      console.error('მომხმარებლის დამატების შეცდომა', error);
     }
   };
 
@@ -159,7 +159,7 @@ const SystemAdminDashboard = () => {
       setWarehouses(whRes.data);
       closeModal();
     } catch (error) {
-      console.error('Error adding warehouse', error);
+      console.error('საწყობის დამატების შეცდომა', error);
     }
   };
 

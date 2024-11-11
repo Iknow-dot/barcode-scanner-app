@@ -13,6 +13,14 @@
     padding: 10px 20px;
 }
 
+
+.scan-button:disabled {
+    background-color: #ccc; /* Grey out button */
+    color: #666; /* Dark grey text */
+    cursor: not-allowed; /* Change cursor to indicate non-interactivity */
+    opacity: 0.5; /* Make button transparent */
+}
+
 .scan-button {
     background-color: #28a745;
 }

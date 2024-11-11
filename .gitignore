@@ -22,3 +22,9 @@ instance/
 # OS-specific files
 .DS_Store
 Thumbs.db
+
+# Exclude virtual environment
+venv/
+
+# Exclude migration directories
+**/migrations/

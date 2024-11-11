@@ -92,10 +92,10 @@ const EditUser = ({ userData, closeModal }) => {
     <div className="modal active">
       <div className="modal-content">
         <span className="close-btn" onClick={closeModal}>&times;</span>
-        <h2>Edit User</h2>
+        <h2>მომხმარებლის განახლება</h2>
         <form id="editUserForm" onSubmit={handleSubmit}>
           <div className="form-group">
-            <label htmlFor="username">Username:</label>
+            <label htmlFor="username">სახელი:</label>
             <input
               type="text"
               id="username"
@@ -106,7 +106,7 @@ const EditUser = ({ userData, closeModal }) => {
             />
           </div>
           <div className="form-group">
-            <label htmlFor="password">Password (Leave blank to keep unchanged):</label>
+            <label htmlFor="password">პაროლი (დატოვეთ ცარიელი თუ ცვლილება არ გსურთ):</label>
             <input
               type="password"
               id="password"
@@ -117,7 +117,7 @@ const EditUser = ({ userData, closeModal }) => {
           </div>
           {!isAdmin && (
             <div className="form-group">
-              <label htmlFor="organization">Organization:</label>
+              <label htmlFor="organization">ორგანიზაცია:</label>
               <select
                 id="organization"
                 name="organization_id"
@@ -125,7 +125,7 @@ const EditUser = ({ userData, closeModal }) => {
                 onChange={handleInputChange}
                 required={authData?.role === 'system_admin'}
               >
-                <option value="">Select an organization</option>
+                <option value="">აირჩიეთ ორგანიზაცია</option>
                 {organizations.map(org => (
                   <option key={org.id} value={org.id}>{org.name}</option>
                 ))}
@@ -133,7 +133,7 @@ const EditUser = ({ userData, closeModal }) => {
             </div>
           )}
           <div className="form-group">
-            <label htmlFor="role">Role:</label>
+            <label htmlFor="role">როლი:</label>
             <select
               id="role"
               name="role_name"
@@ -145,7 +145,7 @@ const EditUser = ({ userData, closeModal }) => {
             </select>
           </div>
           <div className="form-group">
-            <label htmlFor="ipAddress">IP Address:</label>
+            <label htmlFor="ipAddress">IP მისამართი:</label>
             <input
               type="text"
               id="ipAddress"
@@ -157,10 +157,10 @@ const EditUser = ({ userData, closeModal }) => {
           </div>
           {isAdmin && (
             <div className="form-group">
-              <label htmlFor="warehouses">Warehouses:</label>
+              <label htmlFor="warehouses">საწყობი:</label>
               <div id="warehouse-container">
                 {warehouses.map(wh => (
-                  <div key={wh.id}>
+                  <div className="warehouse-display" key={wh.id}>
                     <input
                       type="checkbox"
                       id={`warehouse${wh.id}`}
@@ -175,7 +175,7 @@ const EditUser = ({ userData, closeModal }) => {
               </div>
             </div>
           )}
-          <button type="submit" className="edit-btn">Update User</button>
+          <button type="submit" className="edit-btn">განახლება</button>
         </form>
       </div>
     </div>

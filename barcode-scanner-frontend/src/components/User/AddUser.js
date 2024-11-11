@@ -108,7 +108,7 @@ const AddUser = ({ closeModal }) => {
     <div className="modal active">
       <div className="modal-content">
         <span className="close-btn" onClick={closeModal}>&times;</span>
-        <h2>Add User</h2>
+        <h2>მომხმარებლის დამატება</h2>
         <form id="addUserForm" onSubmit={handleSubmit}>
           <div className="form-group">
             <label htmlFor="username">სახელი:</label>
@@ -182,7 +182,7 @@ const AddUser = ({ closeModal }) => {
               <label htmlFor="warehouses">საწყობები:</label>
               <div id="warehouse-container">
                 {warehouses.map(wh => (
-                  <div key={wh.id}>
+                  <div className="warehouse-display" key={wh.id}>
                     <input
                       type="checkbox"
                       id={`warehouse${wh.id}`}

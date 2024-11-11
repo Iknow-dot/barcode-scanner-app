@@ -119,7 +119,7 @@ const UserDashboard = () => {
             </label>
           </div>
           <button className="search-button" style={{ backgroundColor: '#28a745' }} onClick={handleSearch}>ძებნა</button>
-          <ScanButton setScanning={setScanning} scanning={scanning} onScan={handleScanResult} />
+          <ScanButton setScanning={setScanning} scanning={scanning} onScan={handleScanResult} disabled={searchType === 'article'} />
         </div>
       </div>
       {!scanning && balances.length > 0 && (

@@ -23,11 +23,11 @@ const EditWarehouse = ({ warehouseData, closeModal }) => {
     e.preventDefault();
     try {
       await api.put(`/warehouses/${warehouseData.id}`, editWarehouseData);
-      alert('Warehouse updated successfully!');
+      alert('საწყობი განახლდა წარმატებით!');
       closeModal();
     } catch (error) {
-      console.error('Error updating warehouse:', error);
-      alert('Failed to update warehouse');
+      console.error('შეცდომა საწყობის განახლებისას:', error);
+      alert('ვერ მოხერხდა საწყობის განახლება');
     }
   };
 

@@ -18,11 +18,11 @@ const AddWarehouse = ({ closeModal, organizationId }) => {
     try {
       // Send data to API to create a new warehouse
       await api.post('/warehouses', newWarehouseData);
-      alert('Warehouse added successfully!');
+      alert('საწყობი შეიქმნა წარმატებით!');
       closeModal();
     } catch (error) {
-      console.error('Error adding warehouse:', error);
-      alert('Failed to add warehouse');
+      console.error('შეცდომა საწყობის შექმნისას:', error);
+      alert('ვერ მოხერხდა საწყობის შექმნა');
     }
   };
 

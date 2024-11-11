@@ -1,13 +1,12 @@
 import React, { useRef, useEffect } from 'react';
 import { Html5QrcodeScanner } from 'html5-qrcode';
 
-
-const ScanButton = ({ setScanning, scanning, onScan }) => {
+const ScanButton = ({ setScanning, scanning, onScan, disabled }) => {
     const qrRef = useRef(null);
 
     useEffect(() => {
         let html5QrcodeScanner;
-        if (scanning && qrRef.current) {
+        if (scanning && qrRef.current && !disabled) {
             setTimeout(() => {
                 html5QrcodeScanner = new Html5QrcodeScanner(qrRef.current.id, {
                     fps: 10,
@@ -15,13 +14,11 @@ const ScanButton = ({ setScanning, scanning, onScan }) => {
                     disableFlip: false
                 });
                 html5QrcodeScanner.render((decodedText) => {
-                    // console.log(`Decoded text: ${decodedText}`);
-                    onScan(decodedText);  // Call the function passed as prop with the decoded text
-
+                    onScan(decodedText);
                 }, errorMessage => {
                     console.error(errorMessage);
                 });
-            }, 100);  // Delay to ensure the ref is mounted
+            }, 100);
         }
 
         return () => {
@@ -29,16 +26,33 @@ const ScanButton = ({ setScanning, scanning, onScan }) => {
                 html5QrcodeScanner.clear();
             }
         };
-    }, [scanning, onScan]);
+    }, [scanning, onScan, disabled]);
+
+    // Apply styles based on the disabled state
+    const buttonStyle = disabled ? {
+        backgroundColor: '#ccc', // Grey out button
+        color: '#666', // Dark grey text
+        cursor: 'not-allowed', // Change cursor to indicate non-interactivity
+        opacity: 0.5 // Make button transparent
+    } : {};
 
     return (
         <div className="scanner-container">
             {!scanning ? (
-                <button className="scan-button" onClick={() => setScanning(true)}>
+                <button 
+                    className="scan-button" 
+                    onClick={() => { if (!disabled) setScanning(true); }} 
+                    disabled={disabled}
+                    style={buttonStyle}
+                >
                     დასკანერება
                 </button>
             ) : (
-                <button className="stop-scan-button" style={{ 'background-color': 'red' }} onClick={() => setScanning(false)}>
+                <button 
+                    className="stop-scan-button" 
+                    style={{ backgroundColor: 'red' }} 
+                    onClick={() => setScanning(false)}
+                >
                     დახურვა
                 </button>
             )}

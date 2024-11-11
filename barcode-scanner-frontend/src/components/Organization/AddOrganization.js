@@ -24,13 +24,13 @@ const AddOrganization = ({ closeModal }) => {
       const response = await api.post('/organizations', newOrgData);
 
       if (response.status === 201) {
-        alert('Organization created successfully!');
+        alert('ორგანიზაცია წარმატებით შეიქმნა!');
         setNewOrgData({ name: '', identification_code: '', employees_count: '', web_service_url: '', org_username: '', org_password: '' });  // Reset all fields
         closeModal();
       }
     } catch (error) {
-      console.error('Error creating organization:', error.response?.data?.error || error.message);
-      alert('Failed to create organization: ' + (error.response?.data?.error || error.message));
+      console.error('შეცდომა ორგანიზაციის შექმნისას:', error.response?.data?.error || error.message);
+      alert('ვერ მოხერხდა ორგანიზაციის შექმნა: ' + (error.response?.data?.error || error.message));
     }
   };
 

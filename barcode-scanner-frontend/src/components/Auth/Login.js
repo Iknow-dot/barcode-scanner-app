@@ -45,13 +45,13 @@ const Login = () => {
   return (
     <div className="login-container">
       <img src="http://portal.iknow.ge/bitrix/templates/corp_services_blue/images/iknowlogo.png" alt="Logo" />
-      <h1>Login</h1>
+      <h1>ავტორიზაცია</h1>
       <form onSubmit={handleSubmit}>
         <input
           type="text"
           id="username"
           name="username"
-          placeholder="Username"
+          placeholder="მომხმარებლის სახელი"
           required
           value={username}
           onChange={(e) => setUsername(e.target.value)}
@@ -61,13 +61,13 @@ const Login = () => {
           type="password"
           id="password"
           name="password"
-          placeholder="Password"
+          placeholder="პაროლი"
           required
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           disabled={loading}
         />
-        <input type="submit" value={loading ? 'Logging in...' : 'Login'} disabled={loading} />
+        <input type="submit" value={loading ? 'შესვლა...' : 'შესვლა'} disabled={loading} />
         {errorMessage && <p className="error">{errorMessage}</p>}
       </form>
     </div>
