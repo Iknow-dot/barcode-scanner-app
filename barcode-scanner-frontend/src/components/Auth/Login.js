@@ -44,7 +44,7 @@ const Login = () => {
 
   return (
     <div className="login-container">
-      <img src="http://portal.iknow.ge/bitrix/templates/corp_services_blue/images/iknowlogo.png" alt="Logo" />
+      <img src="https://i.imgur.com/VV5PiDB.png" alt="Logo" />
       <h1>ავტორიზაცია</h1>
       <form onSubmit={handleSubmit}>
         <input

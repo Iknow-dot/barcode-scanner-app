@@ -167,7 +167,7 @@ const SystemAdminDashboard = () => {
     <div className="container">
       <div className="header-line">
         <img
-          src="http://iknow.ge/wp-content/uploads/2022/10/sliderlogo.png"
+          src="https://imgur.com/VV5PiDB.png"
           alt="Logo"
           style={{ backgroundColor: 'rgba(159, 159, 159)' }}
           width="150"
