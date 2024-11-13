@@ -27,6 +27,8 @@ h2{
 .search-container {
     display: flex;
     flex-direction: column;
+    align-items: center;
+    justify-content: center;
     gap: 10px;
     margin-bottom: 20px;
 }
@@ -66,8 +68,9 @@ select, input, button {
 /* Custom checkbox styles */
 .custom-checkbox {
     display: flex;
-    align-items: center;
-    margin-bottom: 10px; /* Space below the checkbox for separation */
+    align-items: flex-start;
+    position: absolute;
+    right: 60%;
 }
 
 .custom-checkbox input[type="checkbox"] {
@@ -87,11 +90,16 @@ select, input, button {
     .search-container .first-line, .sec-line {
         flex-direction: row;
         align-items: center; /* Aligns items vertically */
+        justify-content: space-around;
     }
 
-    select, input {
-        flex: 1; /* Allows select and input to fill available space equally */
+    .sec-line {
+        width: 50%;
     }
+
+    /* select, input {
+        flex: 1; /* Allows select and input to fill available space equally */
+    /* } */ 
 
     .column-layout {
         flex-direction: column;
@@ -101,7 +109,7 @@ select, input, button {
         width: auto; /* Auto width based on content */
         flex-grow: 0; /* Prevents buttons from growing */
         white-space: nowrap; /* Keeps button text on one line */
-        margin-left: 10px; /* Adds spacing between buttons and input/select */
+        /* margin-left: 10px; Adds spacing between buttons and input/select */
     }
     .header{
         display: flex;
