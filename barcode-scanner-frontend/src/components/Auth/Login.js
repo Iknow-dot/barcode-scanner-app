@@ -42,7 +42,7 @@ const Login = () => {
           navigate('/dashboard');
         } else {
           setLoading(false);
-          setErrorMessage('Access from your IP address is restricted.');
+          setErrorMessage('წვდომა შეზღუდულია.');
         }
       } else {
         login(access_token, role, organization_id);

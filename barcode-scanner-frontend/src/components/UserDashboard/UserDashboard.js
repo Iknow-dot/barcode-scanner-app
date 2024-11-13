@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { scanProducts, getUserWarehouses } from '../../api';
+import { scanProducts, getUserWarehouses, getClientIp } from '../../api';
 import ScanButton from './ScanButton';
 import Carousel from 'react-multi-carousel';
 import 'react-multi-carousel/lib/styles.css';
@@ -47,11 +47,20 @@ const UserDashboard = () => {
   };
 
   const handleSearch = async () => {
+    
     try {
+      // Check IP before proceeding with search
+      const ipData = await getClientIp();
+      if (!ipData.success || !ipData.ip.allowed) {
+        alert("წვდომა შეზღუდულია!");
+        // setErrorMessage('Access from your IP address is restricted.');
+        return; // Exit function if IP check fails
+      }
+  
       const warehouseCodes = allWarehouses ? '' : userWarehouses.map(warehouse => warehouse.code).join(',');
       const data = await scanProducts(searchInput, searchType, warehouseCodes);
       console.log(warehouseCodes);
-
+  
       if (data && data.stock) {
         setBalances(data.stock);
         setProductInfo({
@@ -64,13 +73,14 @@ const UserDashboard = () => {
         setBalances([]);
         setProductInfo({ sku_name: '', article: '', price: '', img_url: [] });
       }
+       
     } catch (error) {
       console.error("Error during search:", error.message);
       setBalances([]);
       setProductInfo({ sku_name: '', article: '', price: '', img_url: [] });
-      alert("არ მოიძებნა!")
+      alert("არ მოიძებნა!");
     }
-  };
+  }
 
   const handleScanResult = (decodedText) => {
     setSearchInput(decodedText);
