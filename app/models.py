@@ -175,5 +175,5 @@ class AllowedIP(db.Model):
 class UserWarehouse(db.Model):
     __tablename__ = 'user_warehouses'
     id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = db.Column(UUID(as_uuid=True), db.ForeignKey('users.id'), nullable=False)
-    warehouse_id = db.Column(UUID(as_uuid=True), db.ForeignKey('warehouses.id'), nullable=False)
+    user_id = db.Column(UUID(as_uuid=True), db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    warehouse_id = db.Column(UUID(as_uuid=True), db.ForeignKey('warehouses.id', ondelete='CASCADE'), nullable=False)

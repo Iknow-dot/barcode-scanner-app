@@ -19,6 +19,7 @@ class Config:
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     
     JWT_SECRET_KEY = os.getenv('JWT_SECRET_KEY')
+    REFRESH_JWT_SECRET_KEY = os.getenv('REFRESH_JWT_SECRET_KEY')
     if not JWT_SECRET_KEY:
         raise ValueError("No JWT_SECRET_KEY set. Ensure it's securely set in your environment variables.")
     JWT_ACCESS_TOKEN_EXPIRES = timedelta(minutes=int(os.getenv('JWT_ACCESS_TOKEN_EXPIRES', 30)))

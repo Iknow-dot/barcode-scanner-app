@@ -10,6 +10,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import joinedload, sessionmaker
 from sqlalchemy.exc import SQLAlchemyError
 import base64
+from ipaddress import ip_address, AddressValueError
 
 
 # Create a blueprint
@@ -333,6 +334,7 @@ def get_users():
         "ip_address": user.ip_address
     } for user in users])
 
+
 @bp.route('/users/<uuid:user_id>', methods=['GET'])
 @jwt_required()
 @role_required('admin', 'system_admin')
@@ -513,13 +515,15 @@ def delete_user(id):
             return jsonify({'error': 'User not found'}), 404
 
         if current_user.is_admin() and current_user.organization_id != user.organization_id:
-            return jsonify({'error': 'Unauthorized to delete this user'}), 403
+            abort(403, description="Unauthorized to access this user")
+            # print("დჯდფჯგჯგჯგჯგჯგჯ", current_user.organization_id, user.organization_id)
 
         db.session.delete(user)
         db.session.commit()
         return '', 204
     except Exception as e:
-        current_app.logger.error(f"Error deleting user: {e}")
+        current_app.logger.error(f"Error deleting user {id}: {e}")
+        # db.session.rollback()
         return jsonify({'error': 'An error occurred while deleting the user'}), 500
 
 # -------------------- Barcode Scanning Route -------------------- #
@@ -549,40 +553,30 @@ def scan_barcode():
 
 # -------------------- IP Management Routes -------------------- #
 
-@bp.route('/ips', methods=['POST'])
-@jwt_required()
-@role_required('admin')
-def add_ip():
-    data = request.get_json()
-    ip_address = data.get('ip_address')
-    user_id = uuid.UUID(data.get('user_id'))
 
+@bp.route('/get-client-ip', methods=['GET'])
+@jwt_required()  # Require the user to be authenticated to access this route
+def get_client_ip():
+    """
+    Retrieve and validate the client's IP address against the allowed IP stored in the database.
+    """
+    user_id = get_jwt_identity()  # Assuming JWT tokens are used and contain the user ID
     user = User.query.get(user_id)
+
     if not user:
-        abort(404, description="User not found")
+        return jsonify({'error': 'User not found'}), 404
 
-    allowed_ip = AllowedIP(ip_address=ip_address, user_id=user.id)
-    db.session.add(allowed_ip)
-    db.session.commit()
+    # Determine the client's IP address
+    if not request.headers.getlist("X-Forwarded-For"):
+        ip = request.remote_addr
+    else:
+        ip = request.headers.getlist("X-Forwarded-For")[0]
 
-    return jsonify({"message": "IP added successfully", "id": allowed_ip.id}), 201
-
-@bp.route('/ips/<int:ip_id>', methods=['DELETE'])
-@jwt_required()
-@role_required('admin')
-def delete_ip(ip_id):
-    allowed_ip = AllowedIP.query.get(ip_id)
-    if not allowed_ip:
-        abort(404, description="IP not found")
-
-    db.session.delete(allowed_ip)
-    db.session.commit()
-    return jsonify({"message": "IP deleted successfully"})
-
-# Register the blueprint with the Flask app
-def register_routes(app):
-    app.register_blueprint(bp)
-
+    # Check if the retrieved IP matches the user's allowed IP
+    if ip == user.ip_address:
+        return jsonify({'ip': ip, 'allowed': True}), 200
+    else:
+        return jsonify({'ip': ip, 'allowed': False}), 403
 
 # -------------------- Get user-warehouses -------------------- #
 

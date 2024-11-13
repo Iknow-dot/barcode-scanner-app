@@ -1,6 +1,6 @@
 import React, { useState, useContext, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import api from '../../api';
+import api, { getClientIp } from '../../api';  // Make sure getClientIp is correctly imported
 import AuthContext from '../Auth/AuthContext';
 import './Login.css';
 
@@ -13,6 +13,7 @@ const Login = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
+    // Redirect if already logged in
     if (token) {
       navigate(userRole === 'system_admin' || userRole === 'admin' ? '/system-admin-dashboard' : '/dashboard');
     }
@@ -21,24 +22,38 @@ const Login = () => {
   const handleSubmit = async (event) => {
     event.preventDefault();
     setErrorMessage('');
+    setLoading(true);
     if (!username || !password) {
       setErrorMessage('Please enter both username and password');
+      setLoading(false);
       return;
     }
 
-    setLoading(true);
     try {
       const response = await api.post('/auth/login', { username, password });
-      const { access_token, role, organization_id } = response.data;
-      login(access_token, role, organization_id);
-      navigate(role === 'system_admin' || role === 'admin' ? '/system-admin-dashboard' : '/dashboard');
+      const { access_token, role, organization_id, userId } = response.data;
+      // Set the token for subsequent requests before making additional API calls
+      api.defaults.headers.common['Authorization'] = `Bearer ${access_token}`;
+
+      if (role === 'user') {
+        const ipData = await getClientIp();
+        if (ipData.success && ipData.ip.allowed) {
+          login(access_token, role, organization_id);
+          navigate('/dashboard');
+        } else {
+          setLoading(false);
+          setErrorMessage('Access from your IP address is restricted.');
+        }
+      } else {
+        login(access_token, role, organization_id);
+        navigate(role === 'system_admin' || role === 'admin' ? '/system-admin-dashboard' : '/dashboard');
+      }
     } catch (error) {
       setLoading(false);
-      if (error.response) {
-        setErrorMessage(error.response.status === 401 ? 'Invalid username or password' : 'An error occurred. Please try again later.');
-      } else {
-        setErrorMessage('Network error. Please try again later.');
-      }
+      const errorMessage = error.response?.status === 401
+        ? 'Invalid username or password'
+        : 'An error occurred. Please try again later.';
+      setErrorMessage(errorMessage);
     }
   };
 
