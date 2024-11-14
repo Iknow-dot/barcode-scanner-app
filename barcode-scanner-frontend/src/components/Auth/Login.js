@@ -51,7 +51,7 @@ const Login = () => {
     } catch (error) {
       setLoading(false);
       const errorMessage = error.response?.status === 401
-        ? 'Invalid username or password'
+        ? 'მომხმარებლის სახელი ან პაროლი არასწორია'
         : 'An error occurred. Please try again later.';
       setErrorMessage(errorMessage);
     }

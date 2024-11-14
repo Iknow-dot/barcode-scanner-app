@@ -131,13 +131,14 @@ select, input, button {
     align-items: center;
     padding: 10px;
     flex-direction: column; /* Stacks elements vertically */
+    max-width: 100%;
 }
 
 .qr-reader {
     width: 100%;
-    max-width: 400px; /* Ensures the scanner is not too wide */
-    height: auto; /* Sets a fixed height for the scanner area */
-    border: 1px solid #ccc; /* Optional: adds a border for visibility */
+    max-width: 100%; 
+    height: auto; 
+    /* border: 1px solid #ccc;  */
 }
 
 /* Table styling */

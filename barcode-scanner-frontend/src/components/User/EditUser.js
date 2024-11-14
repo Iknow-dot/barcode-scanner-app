@@ -141,7 +141,7 @@ const EditUser = ({ userData, closeModal }) => {
               onChange={handleInputChange}
               required
             >
-              <option value={isAdmin ? 'user' : 'admin'}>{isAdmin ? 'user' : 'admin'}</option>
+              <option value={editUserData.role_name}>{editUserData.role_name}</option>
             </select>
           </div>
           <div className="form-group">

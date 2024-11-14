@@ -87,7 +87,7 @@ const AddUser = ({ closeModal }) => {
       });
 
       if (response.status === 201) {
-        alert('User created successfully!');
+        alert('მომხმარებელი დაემატა წარმატებით!');
         setNewUserData({
           username: '',
           password: '',
