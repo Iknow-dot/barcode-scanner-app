@@ -2,7 +2,7 @@ import axios from 'axios';
 
 // Set up the base URL for the API
 const api = axios.create({
-  baseURL: 'http://127.0.0.1:5000',
+  baseURL: 'https://iflow.ge:4433',
   headers: {
     'Content-Type': 'application/json',
   },
