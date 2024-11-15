@@ -372,7 +372,7 @@ def create_user():
         data = request.get_json()
         current_app.logger.info(f"Received user data: {data}")
 
-        if not data.get('username') or not data.get('password') or not data.get('role_name') or not data.get('ip_address'):
+        if not data.get('username') or not data.get('password') or not data.get('role_name'):
             abort(400, description="Missing required fields")
 
         role = UserRole.query.filter_by(role_name=data['role_name']).first()

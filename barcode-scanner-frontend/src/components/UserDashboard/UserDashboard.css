@@ -178,6 +178,6 @@ tr:nth-child(even) {
     table {
         display: block;
         overflow-x: auto;
-        white-space: nowrap;  
+        /* white-space: nowrap;   */
     }
 }

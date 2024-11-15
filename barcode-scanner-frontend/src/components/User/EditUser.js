@@ -80,11 +80,11 @@ const EditUser = ({ userData, closeModal }) => {
     e.preventDefault();
     try {
       await api.put(`/users/${editUserData.id}`, editUserData);
-      alert('User updated successfully!');
+      alert('მომხმარებელი წარმატებით განახლდა!');
       closeModal();
     } catch (error) {
-      console.error('Error updating user:', error.response?.data?.error || error.message);
-      alert('Failed to update user: ' + (error.response?.data?.error || error.message));
+      console.error('შეცდომა მომხმარებლის განახლებისას:', error.response?.data?.error || error.message);
+      alert('ვერ მოხერხდა მომხმარებლის განახლება: ' + (error.response?.data?.error || error.message));
     }
   };
 

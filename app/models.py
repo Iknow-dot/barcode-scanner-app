@@ -18,7 +18,7 @@ class User(db.Model, UserMixin):
     role_id = db.Column(UUID(as_uuid=True), db.ForeignKey('user_roles.id'), nullable=False)
     organization_id = db.Column(UUID(as_uuid=True), db.ForeignKey('organizations.id'), nullable=True)
     warehouse_id = db.Column(UUID(as_uuid=True), db.ForeignKey('warehouses.id'), nullable=True)
-    ip_address = db.Column(db.String(45), nullable=False)
+    ip_address = db.Column(db.String(45), nullable=True)
 
     role = db.relationship('UserRole', back_populates='users')
     organization = db.relationship('Organization', back_populates='users')

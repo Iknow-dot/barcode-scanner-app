@@ -61,7 +61,7 @@ const AddUser = ({ closeModal }) => {
     }
 
     // Check required fields
-    if (!newUserData.username || !newUserData.password || !newUserData.role_name || !newUserData.organization_id || !newUserData.ip_address || (isAdmin && newUserData.warehouse_ids.length === 0)) {
+    if (!newUserData.username || !newUserData.password || !newUserData.role_name || !newUserData.organization_id || (!newUserData.ip_address && newUserData.role_name === "user" )|| (isAdmin && newUserData.warehouse_ids.length === 0)) {
       if (!newUserData.username) {
         alert("username field is required.");
       } else if (!newUserData.password) {
@@ -173,7 +173,7 @@ const AddUser = ({ closeModal }) => {
               name="ip_address"
               value={newUserData.ip_address}
               onChange={handleInputChange}
-              required
+              required = {newUserData.role_name === "user"}
             />
           </div>
 
