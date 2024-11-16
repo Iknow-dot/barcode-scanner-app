@@ -16,15 +16,17 @@ const registerServiceWorker = async () => {
     try {
       // Register service worker for production
       const swRegistration = await navigator.serviceWorker.register('/service-worker.js');
-      
+
       swRegistration.addEventListener('updatefound', () => {
         const installingWorker = swRegistration.installing;
-        
+
         installingWorker.addEventListener('statechange', () => {
           if (installingWorker.state === 'installed') {
             if (navigator.serviceWorker.controller) {
               alert('New version available! Refreshing the page...');
-              window.location.reload();
+              const currentUrl = window.location.href.split('?')[0]; // Remove existing query string
+              const newUrl = `${currentUrl}?nocache=${new Date().getTime()}`; // Add a unique query string
+              window.location.replace(newUrl); // Replace the current page with the new URL
             }
           }
         });
