@@ -24,6 +24,8 @@ const registerServiceWorker = async () => {
           if (installingWorker.state === 'installed') {
             if (navigator.serviceWorker.controller) {
               alert('New version available! Refreshing the page...');
+              localStorage.clear(); // Clears all items in localStorage
+              sessionStorage.clear(); // Clears all items in sessionStorage
               const currentUrl = window.location.href.split('?')[0]; // Remove existing query string
               const newUrl = `${currentUrl}?nocache=${new Date().getTime()}`; // Add a unique query string
               window.location.replace(newUrl); // Replace the current page with the new URL
