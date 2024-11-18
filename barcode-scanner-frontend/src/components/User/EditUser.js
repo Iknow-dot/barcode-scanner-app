@@ -153,7 +153,7 @@ const EditUser = ({ userData, closeModal }) => {
               name="ip_address"
               value={editUserData.ip_address}
               onChange={handleInputChange}
-              required
+              required = {editUserData.role_name === "user"}
             />
           </div>
           {isAdmin && (
