@@ -472,6 +472,11 @@ def update_user(user_id):
         data = request.get_json() or {}
         user.username = data.get('username', user.username)
         user.ip_address = data.get('ip_address', user.ip_address)
+        # user.password_hash = generate_password_hash(data['password']) if 'password' in data else user.password_hash
+        user.set_password(data['password'])
+
+        if 'organization_id' in data:
+            user.organization_id = data['organization_id']
 
         if 'role_name' in data:
             role = UserRole.query.filter_by(role_name=data['role_name']).first()
@@ -499,6 +504,7 @@ def update_user(user_id):
         current_app.logger.error(f"Error updating user: {e}")
         db.session.rollback()
         return jsonify({'error': 'An error occurred while updating the user'}), 500
+
 
 
 @bp.route('/users/<uuid:id>', methods=['DELETE'])
@@ -603,7 +609,7 @@ def get_user_warehouses():
 
 @bp.route('/user_warehouses/<uuid:user_id>', methods=['GET'])
 @jwt_required()
-@role_required('admin')  # Ensure only admins and system admins can access
+@role_required('admin', 'system_admin')  # Ensure only admins and system admins can access
 def get_user_warehouses(user_id):
     try:
         # Fetch user data or abort with 404 if not found

@@ -79,6 +79,7 @@ const EditUser = ({ userData, closeModal }) => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
+      // console.log(editUserData);
       await api.put(`/users/${editUserData.id}`, editUserData);
       alert('მომხმარებელი წარმატებით განახლდა!');
       closeModal();
