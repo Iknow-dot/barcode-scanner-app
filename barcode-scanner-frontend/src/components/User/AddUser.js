@@ -99,8 +99,8 @@ const AddUser = ({ closeModal }) => {
         closeModal();
       }
     } catch (error) {
-      console.error('Error creating user:', error.response?.data?.error || error.message);
-      alert('Failed to create user: ' + (error.response?.data?.error || error.message));
+      console.error('შეცდომა მომხმარებლის შექმნისას:', error.response?.data?.error || error.message);
+      alert('მომხმარებლის შექმნა ვერ მოხერხდა: ' + (error.response?.data?.error || error.message));
     }
   };
 

@@ -11,6 +11,7 @@ from sqlalchemy.orm import joinedload, sessionmaker
 from sqlalchemy.exc import SQLAlchemyError
 import base64
 from ipaddress import ip_address, AddressValueError
+import re
 
 
 # Create a blueprint
@@ -310,6 +311,18 @@ def delete_warehouse(id):
 
 # -------------------- User Routes -------------------- #
 
+# Password validation function
+def is_password_strong(password):
+    if len(password) < 8:
+        return False
+    if not re.search(r"[A-Za-z]", password):
+        return False
+    if not re.search(r"\d", password):
+        return False
+    if not re.search(r"[!@#$%^&*(),.?\":{}|<>]", password):
+        return False
+    return True
+
 @bp.route('/users', methods=['GET'])
 @jwt_required()
 @role_required('admin', 'system_admin')
@@ -399,6 +412,9 @@ def create_user():
         if not organization:
             abort(404, description="Organization not found")
 
+        if not is_password_strong(data.get('password')):
+            return jsonify(error="პაროლი უნდა შედგებოდეს მინიმუმ 8 სიმბოლოსგან, შეიცავდეს ასოებს, ციფრებს და სპეციალურ სიმბოლოებს"), 403
+
         user_count = User.query.filter_by(organization_id=organization_id).count()
         if user_count >= organization.employees_count:
             abort(400, description="User limit for this organization has been reached")
@@ -470,9 +486,14 @@ def update_user(user_id):
             return jsonify({'error': 'Unauthorized to update this user'}), 403
 
         data = request.get_json() or {}
+
+        if not is_password_strong(data['password']):
+            return jsonify(error="პაროლი უნდა შედგებოდეს მინიმუმ 8 სიმბოლოსგან, შეიცავდეს ასოებს, ციფრებს და სპეციალურ სიმბოლოებს"), 403
+        
         user.username = data.get('username', user.username)
         user.ip_address = data.get('ip_address', user.ip_address)
         # user.password_hash = generate_password_hash(data['password']) if 'password' in data else user.password_hash
+        
         user.set_password(data['password'])
 
         if 'organization_id' in data:
