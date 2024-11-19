@@ -486,15 +486,15 @@ def update_user(user_id):
             return jsonify({'error': 'Unauthorized to update this user'}), 403
 
         data = request.get_json() or {}
-
-        if not is_password_strong(data['password']):
-            return jsonify(error="პაროლი უნდა შედგებოდეს მინიმუმ 8 სიმბოლოსგან, შეიცავდეს ასოებს, ციფრებს და სპეციალურ სიმბოლოებს"), 403
+        if 'password' in data and data['password'] != "":
+            if not is_password_strong(data['password']):
+                return jsonify(error="პაროლი უნდა შედგებოდეს მინიმუმ 8 სიმბოლოსგან, შეიცავდეს ასოებს, ციფრებს და სპეციალურ სიმბოლოებს"), 403
         
         user.username = data.get('username', user.username)
         user.ip_address = data.get('ip_address', user.ip_address)
         # user.password_hash = generate_password_hash(data['password']) if 'password' in data else user.password_hash
-        
-        user.set_password(data['password'])
+        if 'password' in data and data['password'] != "":
+            user.set_password(data['password'])
 
         if 'organization_id' in data:
             user.organization_id = data['organization_id']
