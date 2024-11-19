@@ -11,36 +11,6 @@ root.render(
   </React.StrictMode>
 );
 
-const registerServiceWorker = async () => {
-  if (process.env.NODE_ENV === 'production') {
-    try {
-      // Register service worker for production
-      const swRegistration = await navigator.serviceWorker.register('/service-worker.js');
-
-      swRegistration.addEventListener('updatefound', () => {
-        const installingWorker = swRegistration.installing;
-
-        installingWorker.addEventListener('statechange', () => {
-          if (installingWorker.state === 'installed') {
-            if (navigator.serviceWorker.controller) {
-              alert('New version available! Refreshing the page...');
-              localStorage.clear(); // Clears all items in localStorage
-              sessionStorage.clear(); // Clears all items in sessionStorage
-              const currentUrl = window.location.href.split('?')[0]; // Remove existing query string
-              const newUrl = `${currentUrl}?nocache=${new Date().getTime()}`; // Add a unique query string
-              window.location.replace(newUrl); // Replace the current page with the new URL
-            }
-          }
-        });
-      });
-    } catch (error) {
-      console.error("Error during service worker registration:", error);
-    }
-  }
-};
-
-registerServiceWorker(); // Call the async function to register the service worker
-
 
 // If you want to start measuring performance in your app, pass a function
 // to log results (for example: reportWebVitals(console.log))

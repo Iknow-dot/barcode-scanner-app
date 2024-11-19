@@ -5,6 +5,7 @@ import Carousel from 'react-multi-carousel';
 import 'react-multi-carousel/lib/styles.css';
 import './UserDashboard.css';
 import AuthContext from '../Auth/AuthContext';
+import { registerServiceWorker } from '../serviceWorkerRegistration';
 
 const UserDashboard = () => {
   const [searchType, setSearchType] = useState('barcode');
@@ -17,6 +18,15 @@ const UserDashboard = () => {
   const [selectedImages, setSelectedImages] = useState([]);
   const [productInfo, setProductInfo] = useState({ sku_name: '', article: '', price: '', img_url: [] });
   const { authData, logout } = useContext(AuthContext);
+
+  // Function to be called on any click
+  function handleClick(event) {
+    registerServiceWorker();
+    // Your custom logic here
+  }
+
+  // Add event listener to the document to listen for any clicks
+  document.addEventListener('click', handleClick);
 
   useEffect(() => {
     const fetchWarehouses = async () => {
@@ -47,7 +57,6 @@ const UserDashboard = () => {
   };
 
   const handleSearch = async () => {
-    
     try {
       // Check IP before proceeding with search
       const ipData = await getClientIp();
@@ -56,11 +65,11 @@ const UserDashboard = () => {
         // setErrorMessage('Access from your IP address is restricted.');
         return; // Exit function if IP check fails
       }
-  
+
       const warehouseCodes = allWarehouses ? '' : userWarehouses.map(warehouse => warehouse.code).join(',');
       const data = await scanProducts(searchInput, searchType, warehouseCodes);
       console.log(warehouseCodes);
-  
+
       if (data && data.stock) {
         setBalances(data.stock);
         setProductInfo({
@@ -73,7 +82,7 @@ const UserDashboard = () => {
         setBalances([]);
         setProductInfo({ sku_name: '', article: '', price: '', img_url: [] });
       }
-       
+
     } catch (error) {
       console.error("Error during search:", error.message);
       setBalances([]);
@@ -101,11 +110,11 @@ const UserDashboard = () => {
   return (
     <div className="container">
       <div className='header'>
-      <img
+        <img
           src="https://imgur.com/VV5PiDB.png"
           alt="Logo"
           onClick={() => window.location.reload()}
-          style={  { cursor: 'pointer', backgroundColor: 'rgba(159, 159, 159)' }}
+          style={{ cursor: 'pointer', backgroundColor: 'rgba(159, 159, 159)' }}
           width="150"
         />
         <button onClick={logout} className="logout-btn">გასვლა</button>
