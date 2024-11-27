@@ -22,7 +22,7 @@ class Config:
     REFRESH_JWT_SECRET_KEY = os.getenv('REFRESH_JWT_SECRET_KEY')
     if not JWT_SECRET_KEY:
         raise ValueError("No JWT_SECRET_KEY set. Ensure it's securely set in your environment variables.")
-    JWT_ACCESS_TOKEN_EXPIRES = timedelta(minutes=int(os.getenv('JWT_ACCESS_TOKEN_EXPIRES', 30)))
+    JWT_ACCESS_TOKEN_EXPIRES = timedelta(minutes=int(os.getenv('JWT_ACCESS_TOKEN_EXPIRES', 240)))
     JWT_REFRESH_TOKEN_EXPIRES = timedelta(days=int(os.getenv('JWT_REFRESH_TOKEN_EXPIRES', 7)))
     
     SESSION_COOKIE_SECURE = True
