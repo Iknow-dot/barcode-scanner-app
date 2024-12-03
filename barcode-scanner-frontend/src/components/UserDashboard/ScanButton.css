@@ -1,16 +1,21 @@
 .scanner-container {
-    width: 20%;
+    width: 100%;
+    max-width: 600px;
+    margin: auto;
+    position: relative;
+    border: 1px solid #ccc;
+    padding: 15px;
+    box-shadow: 0 0 10px rgba(0,0,0,0.1);
 }
 
 .scan-button,
 .stop-scan-button {
     width: 100%;
-    height: 100%;
+    padding: 10px 20px;
+    font-size: 16px;
     color: white;
     border: none;
     cursor: pointer;
-    font-size: 16px;
-    padding: 10px 20px;
 }
 
 .scan-button {
@@ -23,13 +28,23 @@
 
 .qr-reader {
     width: 100%;
+    height: 400px; /* Adjust height to ensure the video stream fits well */
+    background-color: black; /* Fallback color */
+    position: relative;
+    overflow: hidden;
+}
+
+.qr-reader video {
+    width: 100%;
+    height: auto;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
 }
 
 @media(min-width: 768px) {
-    .scanner-container{
-        width: 100%;
-    }
-    button {
-        width: 100%;
+    .scanner-container {
+        width: 50%;
     }
 }
