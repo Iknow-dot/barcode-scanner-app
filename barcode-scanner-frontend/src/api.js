@@ -1,5 +1,6 @@
 import axios from 'axios';
 
+
 // Set up the base URL for the API
 const api = axios.create({
   baseURL: 'https://iflow.ge:4433',
@@ -83,6 +84,37 @@ export const getUserWarehousesByUserId = async (userId) => {
     return response.data;
   } catch (error) {
     console.error("Error fetching user warehouses:", error);
+    throw error;
+  }
+};
+
+export const processBarcode = async (file) => {
+  try {
+    // Create an instance of FormData
+    const formData = new FormData();
+    formData.append('file', file);
+
+    // Make the POST request to the process_barcode endpoint
+    const response = await api.post('/process_barcode', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
+    });
+    return response.data;
+  } catch (error) {
+    console.error("Error processing barcode:", error);
+    throw error;
+  }
+};
+
+export const fetchImageThroughProxy = async (url) => {
+  try {
+    const response = await api.get('/proxy', {
+      params: { url },
+    });
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching image through proxy:", error);
     throw error;
   }
 };

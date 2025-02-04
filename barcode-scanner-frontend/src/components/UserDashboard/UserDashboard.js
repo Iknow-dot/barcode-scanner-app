@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { scanProducts, getUserWarehouses, getClientIp } from '../../api';
+import { scanProducts, getUserWarehouses, getClientIp, fetchImageThroughProxy } from '../../api';
 import ScanButton from './ScanButton';
 import Carousel from 'react-multi-carousel';
 import 'react-multi-carousel/lib/styles.css';
@@ -68,7 +68,8 @@ const UserDashboard = () => {
 
       const warehouseCodes = allWarehouses ? '' : userWarehouses.map(warehouse => warehouse.code).join(',');
       const data = await scanProducts(searchInput, searchType, warehouseCodes);
-      console.log(warehouseCodes);
+      // console.log(warehouseCodes);
+      // console.log(data);
 
       if (data && data.stock) {
         setBalances(data.stock);
@@ -76,7 +77,7 @@ const UserDashboard = () => {
           sku_name: data.sku_name,
           article: data.article,
           price: data.price,
-          img_url: data.img_url
+          img_url: data.images
         });
       } else {
         setBalances([]);
@@ -97,15 +98,17 @@ const UserDashboard = () => {
   };
 
   const handleOpenModal = () => {
-    // console.log("Opening modal with images:", productInfo.img_url); // Debug: log the images
+    // Check and set base64 images
     if (Array.isArray(productInfo.img_url) && productInfo.img_url.length > 0) {
-      setSelectedImages(productInfo.img_url);
+      setSelectedImages(productInfo.img_url.map(img => img.base64));
       setShowModal(true);
     } else {
-      console.error("No images available or img_url is undefined.");
+      console.error("No base64 images available.");
       setSelectedImages([]);
     }
+    // console.log(productInfo.img_url.map(img => img.base64));
   };
+  
 
   return (
     <div className="container">

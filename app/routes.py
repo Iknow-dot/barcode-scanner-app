@@ -1,4 +1,4 @@
-from flask import Blueprint, jsonify, request, abort, current_app
+from flask import Blueprint, jsonify, request, abort, current_app,Response
 from flask_jwt_extended import jwt_required, get_jwt_identity, create_access_token
 from sqlalchemy.exc import IntegrityError
 from .models import Organization, Warehouse, User, UserRole, AllowedIP, UserWarehouse
@@ -12,6 +12,10 @@ from sqlalchemy.exc import SQLAlchemyError
 import base64
 from ipaddress import ip_address, AddressValueError
 import re
+from urllib.parse import urlparse, urlunparse
+import pyzbar.pyzbar as pyzbar
+import numpy as np
+import cv2
 
 
 # Create a blueprint
@@ -566,17 +570,59 @@ def scan_barcode():
     if not barcode:
         abort(400, description="Missing barcode")
 
+    # Fetch user and organization data
     user_id = get_jwt_identity()['user_id']
     user = User.query.get(uuid.UUID(user_id))
     organization = Organization.query.get(user.organization_id)
 
+    # Fetch product data from the external web service
     response = requests.get(f"{organization.web_service_url}/products/{barcode}")
-
     if response.status_code != 200:
         return jsonify({"error": "Product not found"}), 404
 
     product_data = response.json()
-    return jsonify(product_data), 200
+
+    # Convert img_url to Base64-encoded images
+    if 'img_url' in product_data:
+        base64_images = []
+        for url in product_data['img_url']:
+            try:
+                https_url = _convert_to_https(url)  # Ensure HTTPS
+                image_response = requests.get(https_url)
+                if image_response.status_code == 200:
+                    base64_string = base64.b64encode(image_response.content).decode('utf-8')
+                    base64_images.append({
+                        "original_url": https_url,
+                        "base64": f"data:image/jpeg;base64,{base64_string}"
+                    })
+                else:
+                    print(f"Failed to fetch image: {https_url}")
+            except Exception as e:
+                print(f"Error processing image {url}: {e}")
+        
+        # Add Base64 images to product data
+        product_data['images'] = base64_images
+        del product_data['img_url']  # Remove 'img_url' if needed
+
+    # Construct and return the final response
+    final_response = {
+        "article": product_data.get("article"),
+        "price": product_data.get("price"),
+        "sku": product_data.get("sku"),
+        "sku_name": product_data.get("sku_name"),
+        "stock": product_data.get("stock"),
+        "images": product_data.get("images")
+    }
+
+    return jsonify(final_response), 200
+
+
+
+def _convert_to_https(url):
+    """Helper function to convert a URL to HTTPS."""
+    parsed_url = urlparse(url)
+    secure_url = parsed_url._replace(scheme='https')
+    return urlunparse(secure_url)
 
 # -------------------- IP Management Routes -------------------- #
 
@@ -661,3 +707,64 @@ def get_user_warehouses(user_id):
     except SQLAlchemyError as e:
         current_app.logger.error(f"Database error occurred: {str(e)}")
         return jsonify({"error": "Database error"}), 500
+    
+# -------------------- Scan barcode route -------------------- #
+
+@bp.route('/process_barcode', methods=['POST'])
+def process_barcode():
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file part'}), 400
+    
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'error': 'No selected file'}), 400
+
+    try:
+        # Read the file to OpenCV format
+        filestr = file.read()
+        npimg = np.frombuffer(filestr, np.uint8)
+        frame = cv2.imdecode(npimg, cv2.IMREAD_COLOR)
+
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+
+        # Apply Gaussian Blurring
+        blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+
+        # Adaptive Thresholding
+        thresh = cv2.adaptiveThreshold(blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+                               cv2.THRESH_BINARY, 11, 2)
+
+        # Decode the barcode using Pyzbar
+        decoded_objects = pyzbar.decode(thresh)
+        if decoded_objects:
+            barcodes = [obj.data.decode('utf-8') for obj in decoded_objects]
+            return jsonify({'barcodes': barcodes})
+        else:
+            return jsonify({'error': 'No barcode found'}), 404
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500    
+
+
+@bp.route('/proxy', methods=['GET'])
+def proxy():
+    url = request.args.get('url')
+    if not url:
+        return "Missing 'url' parameter", 400
+
+    try:
+        # Fetch the image
+        response = requests.get(url, stream=True)
+        if response.status_code != 200:
+            return f"Failed to fetch image: {response.status_code}", response.status_code
+
+        content_type = response.headers.get('Content-Type', '')
+        if not content_type.startswith('image/'):
+            return "URL did not return an image", 400
+
+        # Forward the image data
+        return Response(
+            response.content,
+            content_type=content_type
+        )
+    except Exception as e:
+        return f"Error fetching the URL: {str(e)}", 500

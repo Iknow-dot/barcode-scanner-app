@@ -1,11 +1,12 @@
 import json
-from flask import Blueprint, jsonify, request, abort, current_app  # Import current_app for logging
+from flask import Blueprint, jsonify, request, abort, current_app
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from app.models import User, Organization
 from ..decorators import role_required
 import uuid
 import requests
 import base64
+from urllib.parse import urlparse, urlunparse
 
 # Create a blueprint for product-related routes
 product_bp = Blueprint('product', __name__, url_prefix='/products')
@@ -15,8 +16,9 @@ product_bp = Blueprint('product', __name__, url_prefix='/products')
 @role_required('user')
 def scan_barcode():
     data = request.get_json()
-    current_app.logger.info(f"Received data: {data}")  # Log the incoming request data
+    current_app.logger.info(f"Received data: {data}")
 
+    # Validate input
     if not data or 'barcode' not in data:
         abort(400, description="Missing barcode or data")
         
@@ -34,6 +36,7 @@ def scan_barcode():
     if not organization or not organization.web_service_url:
         abort(404, description="No web service URL found for the organization")
 
+    # Prepare headers with credentials
     decrypted_password = organization.decrypt_password()
     credentials = f"{organization.org_username}:{decrypted_password}"
     headers = {
@@ -43,25 +46,54 @@ def scan_barcode():
         'Sku': barcode,
         'Content-Type': 'application/json; charset=utf-8'
     }
-
     current_app.logger.info(f"Making request to {organization.web_service_url} with headers {headers}")
 
     try:
+        # Fetch product data
         response = requests.get(organization.web_service_url, headers=headers)
         response.raise_for_status()
 
+        # Decode response
         try:
-            # Try decoding with BOM removal
             response_text = response.content.decode('utf-8-sig')
             product_data = json.loads(response_text)
         except UnicodeDecodeError:
-            # If there's a decode error, fall back to standard utf-8
             product_data = response.json()
 
         if not product_data:
             return jsonify({"message": "Product not found"}), 404
 
-        return jsonify(product_data), 200
+        # Process images: convert to HTTPS and Base64
+        if 'img_url' in product_data:
+            base64_images = []
+            for url in product_data['img_url']:
+                try:
+                    https_url = _convert_to_https(url)
+                    image_response = requests.get(https_url)
+                    if image_response.status_code == 200:
+                        base64_string = base64.b64encode(image_response.content).decode('utf-8')
+                        base64_images.append({
+                            "original_url": https_url,
+                            "base64": f"data:image/jpeg;base64,{base64_string}"
+                        })
+                except Exception as e:
+                    current_app.logger.error(f"Error processing image {url}: {str(e)}")
+
+            # Replace img_url with images array
+            product_data['images'] = base64_images
+            del product_data['img_url']
+
+        # Return structured response
+        final_response = {
+            "article": product_data.get("article"),
+            "price": product_data.get("price"),
+            "sku": product_data.get("sku"),
+            "sku_name": product_data.get("sku_name"),
+            "stock": product_data.get("stock"),
+            "images": product_data.get("images", [])
+        }
+
+        return jsonify(final_response), 200
 
     except requests.RequestException as e:
         current_app.logger.error(f"External service error: {str(e)}")
@@ -70,3 +102,10 @@ def scan_barcode():
     except Exception as e:
         current_app.logger.error(f"Internal error: {str(e)}")
         abort(500, description=f"Internal error: {str(e)}")
+
+
+def _convert_to_https(url):
+    """Convert a URL to HTTPS."""
+    parsed_url = urlparse(url)
+    secure_url = parsed_url._replace(scheme='https')
+    return urlunparse(secure_url)

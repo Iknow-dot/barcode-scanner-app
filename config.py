@@ -49,7 +49,7 @@ class Config:
 class DevelopmentConfig(Config):
     DEBUG = True
     SQLALCHEMY_ECHO = True
-    SESSION_COOKIE_SECURE = False
+    SESSION_COOKIE_SECURE = True
     FLASK_ENV = 'development'
 
     @staticmethod
@@ -59,7 +59,7 @@ class DevelopmentConfig(Config):
 
 class ProductionConfig(Config):
     DEBUG = False
-    SQLALCHEMY_ECHO = False
+    SQLALCHEMY_ECHO = True
     SESSION_COOKIE_SECURE = True
 
     @staticmethod
