@@ -7,7 +7,6 @@ from flask_cors import CORS  # Import Flask-CORS
 app = create_app()
 
 # Enable CORS for the app (allowing requests from different origins)
-CORS(app)  # Apply CORS to the Flask app
 cors = CORS(app, resources={r"/*": {"origins": "*"}})
 # Initialize Migrate with app and db
 migrate = Migrate(app, db)
