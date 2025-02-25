@@ -22,7 +22,8 @@
     "start": "react-scripts --openssl-legacy-provider start",
     "build": "react-scripts --openssl-legacy-provider build",
     "test": "react-scripts --openssl-legacy-provider test",
-    "eject": "react-scripts --openssl-legacy-provider eject"
+    "eject": "react-scripts --openssl-legacy-provider eject",
+    "postbuild": "cp public/_redirects build/_redirects"
   },
   "eslintConfig": {
     "extends": [
