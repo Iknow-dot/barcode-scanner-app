@@ -639,7 +639,7 @@ def get_client_ip():
     if not user:
         return jsonify({'error': 'User not found'}), 404
 
-    for ip in request.headers.getlist("X-Forwarded-For"):
+    for ip in request.headers.getlist("X-Forwarded-For")[0].split(','):
         current_app.logger.info(f"Client IP: {ip} | Allowed IP: {user.ip_address}")
         if ip in user.ip_address:
             return jsonify({'ip': ip, 'allowed': True}), 200
