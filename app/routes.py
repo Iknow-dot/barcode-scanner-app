@@ -640,10 +640,7 @@ def get_client_ip():
         return jsonify({'error': 'User not found'}), 404
 
     # Determine the client's IP address
-    if not request.headers.getlist("X-Forwarded-For"):
-        ip = request.remote_addr
-    else:
-        ip = request.headers.getlist("X-Forwarded-For")[0]
+    ip = request.remote_addr or request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
 
     current_app.logger.info(f"Client IP: {ip} | Allowed IP: {user.ip_address}")
     # Check if the retrieved IP matches the user's allowed IP
