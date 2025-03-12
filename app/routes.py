@@ -639,15 +639,12 @@ def get_client_ip():
     if not user:
         return jsonify({'error': 'User not found'}), 404
 
-    # Determine the client's IP address
-    ip = request.remote_addr or request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
+    for ip in request.headers.getlist("X-Forwarded-For"):
+        if ip in user.ip_address:
+            current_app.logger.info(f"Client IP: {ip} | Allowed IP: {user.ip_address}")
+            return jsonify({'ip': ip, 'allowed': True}), 200
 
-    current_app.logger.info(f"Client IP: {ip} | Allowed IP: {user.ip_address}")
-    # Check if the retrieved IP matches the user's allowed IP
-    if ip == user.ip_address:
-        return jsonify({'ip': ip, 'allowed': True}), 200
-    else:
-        return jsonify({'ip': ip, 'allowed': False, 'DbIpAdress': user.ip_address}), 403
+    return jsonify({'ip': ip, 'allowed': False, 'DbIpAdress': user.ip_address}), 403
 
 # -------------------- Get user-warehouses -------------------- #
 
