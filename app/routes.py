@@ -645,6 +645,7 @@ def get_client_ip():
     else:
         ip = request.headers.getlist("X-Forwarded-For")[0]
 
+    current_app.logger.info(f"Client IP: {ip} | Allowed IP: {user.ip_address}")
     # Check if the retrieved IP matches the user's allowed IP
     if ip == user.ip_address:
         return jsonify({'ip': ip, 'allowed': True}), 200
