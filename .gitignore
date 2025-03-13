@@ -25,7 +25,6 @@ Thumbs.db
 
 
 # Exclude migration directories
-**/migrations/
 /venv
 /__pycache__
 app/__pycache__

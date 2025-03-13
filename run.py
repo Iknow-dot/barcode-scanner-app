@@ -14,5 +14,10 @@ migrate = Migrate(app, db)
 # Create a CLI context using FlaskGroup for app management
 cli = FlaskGroup(create_app=create_app)
 
+
+with app.app_context():
+    import commands
+    commands.register_commands()
+
 if __name__ == "__main__":
     cli()  # Use the Flask CLI to expose commands

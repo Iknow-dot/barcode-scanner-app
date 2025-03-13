@@ -35,6 +35,9 @@ class Config:
     
     @staticmethod
     def init_app(app):
+        stream_handler = logging.StreamHandler()
+        stream_handler.setLevel(logging.DEBUG)
+        app.logger.addHandler(stream_handler)
         if not app.debug:
             file_handler = RotatingFileHandler('instance/flask_app.log', maxBytes=10240, backupCount=10)
             file_handler.setFormatter(logging.Formatter(
@@ -42,11 +45,10 @@ class Config:
                 '[in %(pathname)s:%(lineno)d]'
             ))
             file_handler.setLevel(logging.INFO)
-            stream_handler = logging.StreamHandler()
-            stream_handler.setLevel(logging.DEBUG)
-            app.logger.addHandler(stream_handler)
+
             app.logger.addHandler(file_handler)
-            app.logger.info('Application startup')
+
+        app.logger.info('Application startup')
 
 class DevelopmentConfig(Config):
     DEBUG = True

@@ -82,7 +82,7 @@ def create_organization():
     data = request.get_json()
 
     # Check for missing fields
-    if not data.get('name') or not data.get('identification_code') or not data.get('web_service_url') or not data.get('employees_count') or not data.get('org_username') or not data.get('org_password'):
+    if not data.get('name') or not data.get('identification_code') or not data.get('web_service_url') or not data.get('employees_count') or not data.get('org_username'):
         abort(400, description="Missing required fields")
     
     # Convert employees_count to integer and validate
@@ -108,8 +108,9 @@ def create_organization():
         org_username=data['org_username']
     )
 
-    # Encrypt and set the org_password using the model's encrypt_password method
-    organization.encrypt_password(data['org_password'])
+    if data["org_password"]:
+        # Encrypt and set the org_password using the model's encrypt_password method
+        organization.encrypt_password(data['org_password'])
 
     # Add the new organization to the database
     db.session.add(organization)
@@ -639,10 +640,16 @@ def get_client_ip():
     if not user:
         return jsonify({'error': 'User not found'}), 404
 
-    for ip in request.headers.getlist("X-Forwarded-For")[0].split(','):
+    if 'X-Forwarded-For' not in request.headers:
+        ip = request.remote_addr
         current_app.logger.info(f"Client IP: {ip} | Allowed IP: {user.ip_address}")
         if ip in user.ip_address:
             return jsonify({'ip': ip, 'allowed': True}), 200
+    else:
+        for ip in request.headers.getlist("X-Forwarded-For")[0].split(','):
+            current_app.logger.info(f"Client IP: {ip} | Allowed IP: {user.ip_address}")
+            if ip in user.ip_address:
+                return jsonify({'ip': ip, 'allowed': True}), 200
 
     return jsonify({'ip': ip, 'allowed': False, 'DbIpAdress': user.ip_address}), 403
 
