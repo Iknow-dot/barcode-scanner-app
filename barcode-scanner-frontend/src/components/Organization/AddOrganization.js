@@ -62,7 +62,7 @@ const AddOrganization = ({ closeModal }) => {
           </div>
           <div className="form-group">
             <label htmlFor="orgPassword">პაროლი:</label>
-            <input type="password" id="orgPassword" name="org_password" value={newOrgData.org_password} onChange={handleInputChange} required />
+            <input type="password" id="orgPassword" name="org_password" value={newOrgData.org_password} onChange={handleInputChange} />
           </div>
           <button type="submit" className="add-btn">დამატება</button>
         </form>
