@@ -63,27 +63,6 @@ def scan_barcode():
         if not product_data:
             return jsonify({"message": "Product not found"}), 404
 
-        # Process images: convert to HTTPS and Base64
-        if 'img_url' in product_data:
-            base64_images = []
-            for url in product_data['img_url']:
-                try:
-                    https_url = _convert_to_https(url)
-                    image_response = requests.get(https_url)
-                    if image_response.status_code == 200:
-                        base64_string = base64.b64encode(image_response.content).decode('utf-8')
-                        base64_images.append({
-                            "original_url": https_url,
-                            "base64": f"data:image/jpeg;base64,{base64_string}"
-                        })
-                except Exception as e:
-                    current_app.logger.error(f"Error processing image {url}: {str(e)}")
-
-            # Replace img_url with images array
-            product_data['images'] = base64_images
-            del product_data['img_url']
-
-        # Return structured response
         final_response = {
             "article": product_data.get("article"),
             "price": product_data.get("price"),
