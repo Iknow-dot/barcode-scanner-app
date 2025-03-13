@@ -1,0 +1,39 @@
+services:
+  web:
+    build: .
+    command: gunicorn -b 0.0.0.0:8080 run:app
+    ports:
+      - "8080:8080"
+    depends_on:
+      - db
+    environment:
+      - SECRET_KEY=42p58769vyh24uyg02nv804895y7@^DBN$#*(
+      - JWT_SECRET_KEY=1c90n34857t#$t3976r^%&47x6
+      - FLASK_ENV=development
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/postgres
+      - DEBUG=True
+      - FLASK_APP=run.py
+      - FERNET_KEY=1c90n34&*#^$V57t#$t3976r^%&47)!@CFVEDVx6
+
+  db:
+    image: postgres:latest
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  frontend:
+    build:
+      context: ./barcode-scanner-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - REACT_APP_API_BASE_URL=http://localhost:8080
+
+volumes:
+  postgres_data:

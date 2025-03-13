@@ -1,8 +1,36 @@
 # Barcode Scanner App
 
+
+## Table of Contents
+- [Overview](#overview)
+- [Run the Application](#run-the-application)
+- [Features](#features)
+- [Tech Stack](#tech-stack)
+- [Project Structure](#project-structure)
+
 ## Overview
 
 The **Barcode Scanner App** is a web application designed to manage warehouse stock and retrieve product details using barcode scanning. The application supports multiple organizations, warehouses, and user roles with secure authentication and role-based access control.
+
+
+## Run the Application locally
+
+**Pre-requisites**
+- [Docker](https://docs.docker.com/)
+
+**Steps**
+1. Clone the repository:
+   ```shell
+    git clone
+    cd barcode-scanner-app
+    ```
+2. Run docker-compose
+   ```shell
+   docker-compose up --build -d
+   ```
+3. Access the application at http://localhost:5000
+4. Access the backend API at http://localhost:8080
+
 
 ## Features
 
@@ -37,7 +65,7 @@ The **Barcode Scanner App** is a web application designed to manage warehouse st
 
 ## Project Structure
 
-```plaintext
+```shell
 barcode-scanner/
 ├── app/
 │   ├── __init__.py 
@@ -85,8 +113,9 @@ barcode-scanner/
 ├── .gitignore
 ├── README.md
 └── Dockerfile (optional)
+```
 
-# Database Schema
+## Database Schema
 
 Users Table
 id (UUID, Primary Key): Unique identifier for each user.
@@ -113,70 +142,5 @@ User Roles Table
 id (UUID, Primary Key): Unique identifier for each role.
 role_name (VARCHAR, UNIQUE, NOT NULL): Name of the role (e.g., system_admin, admin, user).
 
-Installation & Setup
-
-Clone the Repository:
-git clone https://github.com/your-username/barcode-scanner-app.git
-cd barcode-scanner-app
-
-Set Up Virtual Environment:
-python3 -m venv venv
-source venv/bin/activate  # On Windows use `venv\Scripts\activate`
-
-Set Up Virtual Environment:
-python3 -m venv venv
-source venv/bin/activate  # On Windows use `venv\Scripts\activate`
-
-
-Install Dependencies:
-pip install -r requirements.txt
-
-Set Up Database:
-
-Make sure PostgreSQL is installed and running.
-Create a database for the app.
-Set up environment variables for database access in a .env file.
-
-Apply Migrations:
-flask db upgrade
-
-Run the Application:
-flask run
-
-Usage
-Visit http://127.0.0.1:5000 in your browser.
-Use Postman or similar tools to test API endpoints.
-Admin can manage organizations, warehouses, and users through provided endpoints.
-
-Security Considerations
-Passwords are hashed using industry-standard algorithms.
-HTTPS should be enabled in production.
-Strong password policies are enforced.
-IP-based access control ensures that users can only log in from authorized IPs.
-
-Future Enhancements
-Frontend Development: Build a React-based frontend for a more interactive user experience.
-Additional Product Data Integration: Implement real-time integration with more external web services.
-Advanced Reporting: Add advanced reporting features for inventory management.
-
-Contributing
-Contributions are welcome! Please submit a pull request or open an issue to discuss your ideas.
-
-icense
+### License
 This project is licensed under the MIT License.
-
-
-### Key Updates:
-- **Overview**: Provides a clear summary of the application’s purpose and features.
-- **Features**: Lists the key features currently implemented in the application.
-- **Tech Stack**: Specifies the technologies used.
-- **Project Structure**: Updated to reflect your project’s current organization.
-- **Database Schema**: Updated to include the current structure of your database tables.
-- **Installation & Setup**: Provides a step-by-step guide to setting up the application.
-- **Usage**: Explains how to access and interact with the application.
-- **Security Considerations**: Highlights important security practices in the application.
-- **Future Enhancements**: Mentions potential areas for further development.
-- **Contributing**: Encourages contributions from the community.
-
-This `README.md` should give users a clear understanding of your application and how to get started with it.
-
