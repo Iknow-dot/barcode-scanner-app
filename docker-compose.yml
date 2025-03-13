@@ -15,7 +15,7 @@ services:
       - DATABASE_URL=postgresql://postgres:postgres@db:5432/postgres
       - DEBUG=True
       - FLASK_APP=run.py
-      - FERNET_KEY=1c90n34&*#^$V57t#$t3976r^%&47)!@CFVEDVx6
+      - FERNET_KEY=MO69AxjxiFlmlCCZiZ1Bm3gOnlAa8iVKgnc67BV0jPA=
 
   db:
     image: postgres:latest
