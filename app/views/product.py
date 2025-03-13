@@ -37,8 +37,11 @@ def scan_barcode():
         abort(404, description="No web service URL found for the organization")
 
     # Prepare headers with credentials
-    decrypted_password = organization.decrypt_password()
-    credentials = f"{organization.org_username}:{decrypted_password}"
+    if organization.org_password:
+        decrypted_password = organization.decrypt_password()
+        credentials = f"{organization.org_username}:{decrypted_password}"
+    else:
+        credentials = organization.org_username
     headers = {
         'Authorization': 'Basic ' + base64.b64encode(credentials.encode()).decode(),
         'IsBarcode': isBarcode,
