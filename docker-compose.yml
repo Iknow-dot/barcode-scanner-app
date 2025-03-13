@@ -1,11 +1,13 @@
 services:
   web:
     build: .
-    command: gunicorn -b 0.0.0.0:8080 run:app
+    command: python -m flask run --host=0.0.0.0 --port=8080 --reload
     ports:
       - "8080:8080"
     depends_on:
       - db
+    volumes:
+      - .:/app
     environment:
       - SECRET_KEY=42p58769vyh24uyg02nv804895y7@^DBN$#*(
       - JWT_SECRET_KEY=1c90n34857t#$t3976r^%&47x6
