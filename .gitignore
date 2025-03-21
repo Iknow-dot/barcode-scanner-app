@@ -29,5 +29,4 @@ Thumbs.db
 /__pycache__
 app/__pycache__
 app/views/__pycache__
-
-__pycache__/
+**/node_modules/

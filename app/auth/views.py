@@ -1,54 +1,23 @@
-from flask import Blueprint, request, jsonify, current_app
+from flask import Blueprint, request, jsonify, current_app, Response
 from werkzeug.security import generate_password_hash, check_password_hash
-from flask_login import LoginManager, login_user, logout_user, current_user
+from flask_login import login_user, logout_user, current_user
 from app import db, login_manager
+from app.auth.utils import generate_jwt, is_password_strong, is_valid_ip
 from app.models import User, UserRole
 import jwt
-from datetime import datetime, timedelta, timezone
-import re
-from ipaddress import ip_address, AddressValueError
-from functools import wraps
 
 bp = Blueprint('auth', __name__)
+
+
+@bp.route("/ip", methods=["GET"])
+def get_ip_view() -> Response:
+    return jsonify({"ip": request.remote_addr})
+
 
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(user_id)
 
-# Utility function to generate JWT token
-def generate_jwt(user):
-    expires_in = current_app.config['JWT_ACCESS_TOKEN_EXPIRES']
-    exp = datetime.now(timezone.utc) + expires_in  # Correctly add timedelta to current time
-    payload = {
-        'sub': str(user.id),
-        'role': user.role.role_name,  # Include user role in the token payload
-        'exp': exp
-    }
-    if user.organization_id:  # Only add organization_id if it exists
-        payload['organization_id'] = str(user.organization_id)
-    
-    token = jwt.encode(payload, current_app.config['JWT_SECRET_KEY'], algorithm='HS256')
-    return token
-
-# Password validation function
-def is_password_strong(password):
-    if len(password) < 8:
-        return False
-    if not re.search(r"[A-Za-z]", password):
-        return False
-    if not re.search(r"\d", password):
-        return False
-    if not re.search(r"[!@#$%^&*(),.?\":{}|<>]", password):
-        return False
-    return True
-
-# IP address validation function
-def is_valid_ip(ip):
-    try:
-        ip_address(ip)
-        return True
-    except AddressValueError:
-        return False
 
 @bp.route('/register', methods=['POST'])
 def register():
@@ -64,7 +33,8 @@ def register():
 
     # Validate password strength
     if not is_password_strong(password):
-        return jsonify({"error": "Password must be at least 8 characters long, contain letters, numbers, and special characters"}), 400
+        return jsonify({
+            "error": "Password must be at least 8 characters long, contain letters, numbers, and special characters"}), 400
 
     # Validate IP address format
     if not is_valid_ip(ip_address):
@@ -88,6 +58,7 @@ def register():
 
     return jsonify({"message": "User registered successfully"}), 201
 
+
 @bp.route('/login', methods=['POST'])
 def login():
     data = request.get_json()
@@ -105,7 +76,7 @@ def login():
         # Check if user exists and password is correct
         if user and check_password_hash(user.password_hash, password):
             login_user(user)  # Optional Flask-Login session handling
-            
+
             # Generate JWT token
             access_token = generate_jwt(user)
 
@@ -133,73 +104,33 @@ def logout():
         logout_user()  # Optional if using Flask-Login for session management
     return jsonify({"message": "Logout successful. Please clear your JWT token on the client side."}), 200
 
+
 @bp.route('/token/refresh', methods=['POST'])
 def refresh_token():
     auth_header = request.headers.get('Authorization')
-    
+
     if not auth_header or "Bearer" not in auth_header:
         return jsonify({"error": "Authorization header missing or malformed"}), 401
 
     token = auth_header.split(" ")[1] if " " in auth_header else auth_header
-    
+
     try:
         payload = jwt.decode(token, current_app.config['JWT_SECRET_KEY'], algorithms=['HS256'])
         user_id = payload['sub']  # 'sub' is supposed to be the user ID
         user = User.query.get(user_id)
-        
+
         if not user:
             return jsonify({"error": "User not found. Please login again."}), 401
 
         # Generate a new token
         new_token = generate_jwt(user)
-        
+
         return jsonify({
             "access_token": new_token
         }), 200
-    
+
     except jwt.ExpiredSignatureError:
         return jsonify({"error": "Token expired, please log in again"}), 401
-    
+
     except jwt.InvalidTokenError:
         return jsonify({"error": "Invalid token"}), 401
-
-
-# Token required decorator
-def token_required(f):
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        token = None
-        auth_header = request.headers.get('Authorization')
-
-        if auth_header and 'Bearer' in auth_header:
-            token = auth_header.split(" ")[1]
-
-        if not token:
-            return jsonify({'message': 'Token is missing!'}), 401
-
-        try:
-            data = jwt.decode(token, current_app.config['JWT_SECRET_KEY'], algorithms=['HS256'])
-            current_user = User.query.get(data['user_id'])
-
-            if not current_user:
-                return jsonify({'message': 'User not found!'}), 404
-
-        except jwt.ExpiredSignatureError:
-            return jsonify({'message': 'Token has expired! Please log in again.'}), 401
-        except jwt.InvalidTokenError:
-            return jsonify({'message': 'Invalid token!'}), 401
-
-        return f(current_user, *args, **kwargs)
-    
-    return decorated
-
-# Role required decorator
-def role_required(*roles):
-    def wrapper(f):
-        @wraps(f)
-        def decorated(current_user, *args, **kwargs):
-            if current_user.role.role_name not in roles:
-                return jsonify({'message': 'You do not have access to this resource!'}), 403
-            return f(current_user, *args, **kwargs)
-        return decorated
-    return wrapper

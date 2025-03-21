@@ -16,6 +16,7 @@ login_manager = LoginManager()
 login_manager.login_view = 'auth.login'  # Redirect users to login if not authenticated
 jwt = JWTManager()  # Initialize JWT Manager
 
+
 def create_app():
     # Create the Flask app instance
     app = Flask(__name__, static_folder='../barcode-scanner-frontend/build', static_url_path='/')
@@ -42,15 +43,22 @@ def create_app():
     app.register_blueprint(routes_bp)
 
     # Import and register views (blueprints)
-    from .views import auth, organization, warehouse, user_roles, user, product,user_warehouse
-    app.register_blueprint(auth.bp, url_prefix='/auth')
+    from app.auth.views import bp as auth_bp
+    from .views import (
+        organization,
+        warehouse,
+        user_roles,
+        user,
+        product,
+        user_warehouse
+    )
+    app.register_blueprint(auth_bp, url_prefix='/auth')
     app.register_blueprint(organization.bp, url_prefix='/organizations')
     app.register_blueprint(warehouse.bp, url_prefix='/warehouses')
     app.register_blueprint(user_roles.bp, url_prefix='/roles')
     app.register_blueprint(user.bp, url_prefix='/users')
     app.register_blueprint(product.product_bp, url_prefix='/products')
     app.register_blueprint(user_warehouse.user_warehouse_bp, url_prefix='/user-warehouses')
-  
 
     # Route to serve the React frontend
     @app.route('/', defaults={'path': ''})
