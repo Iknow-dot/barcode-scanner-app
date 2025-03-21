@@ -31,11 +31,16 @@ services:
   frontend:
     build:
       context: ./barcode-scanner-frontend
+    volumes:
+      - ./barcode-scanner-frontend:/app
+      - /app/node_modules
     ports:
       - "3000:3000"
     environment:
       - NODE_ENV=development
       - REACT_APP_API_BASE_URL=http://localhost:8080
+      - CHOKIDAR_USEPOLLING=true
+      - WATCHPACK_POLLING=true
 
 volumes:
   postgres_data:
