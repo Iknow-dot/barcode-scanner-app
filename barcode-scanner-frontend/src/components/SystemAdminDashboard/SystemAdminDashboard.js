@@ -261,6 +261,7 @@ const SystemAdminDashboard = () => {
               <AddUser
                 handleAddUser={handleAddUser}
                 closeModal={closeModal}
+                isModalOpen={isModalOpen}
                 userRole={userRole}
                 organizations={organizations}
                 warehouses={warehouses}

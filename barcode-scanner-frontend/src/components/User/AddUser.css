@@ -52,14 +52,6 @@
     font-weight: bold;
 }
 
-.form-group input,
-.form-group select {
-    width: 100%;
-    padding: 8px;
-    box-sizing: border-box;
-    border-radius: 4px;
-    border: 1px solid #ccc;
-}
 
 /* Button styling */
 .add-btn {
@@ -90,9 +82,6 @@
     display: block;
 }
 
-#warehouse-container input[type="checkbox"] {
-    margin-right: 5px;
-}
 
 /* Responsive adjustments */
 @media screen and (max-width: 600px) {

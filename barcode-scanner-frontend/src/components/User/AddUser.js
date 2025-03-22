@@ -1,22 +1,26 @@
-import React, { useState, useEffect, useContext } from 'react';
+import React, {useState, useEffect, useContext, useCallback} from 'react';
 import './AddUser.css';
 import api from '../../api';
 import AuthContext from '../Auth/AuthContext';
+import {Button, Form, Input, Modal, Select, Space, Tag} from "antd";
 
-const AddUser = ({ closeModal }) => {
-  const { authData } = useContext(AuthContext);
-  const [newUserData, setNewUserData] = useState({
-    username: '',
-    password: '',
-    organization_id: '',
-    role_name: authData?.role === 'admin' ? 'user' : 'admin',
-    ip_address: '',
-    warehouse_ids: [] // For admin users adding users
-  });
+const AddUser = ({closeModal, isModalOpen}) => {
+  const renderOption = useCallback((option) => {
+    return (
+        <Space>
+        <span role="img">
+          {option.data.emoji}
+        </span>
+          {option.data.desc}
+        </Space>
+    );
+  }, []);
 
+  const {authData} = useContext(AuthContext);
+  const [IPOptions, setIPOptions] = useState([]);
   const [organizations, setOrganizations] = useState([]);
   const [warehouses, setWarehouses] = useState([]);
-  const [isAdmin, setIsAdmin] = useState(false); // Check if the logged-in user is admin
+  const [isAdmin, setIsAdmin] = useState(authData?.role === 'admin');
 
   // Fetch organizations and warehouses if applicable
   useEffect(() => {
@@ -37,49 +41,34 @@ const AddUser = ({ closeModal }) => {
     fetchData();
   }, [authData]);
 
-  const handleInputChange = (e) => {
-    setNewUserData({ ...newUserData, [e.target.name]: e.target.value });
-  };
-
-  const handleWarehouseChange = (e) => {
-    const warehouseId = e.target.value;
-    const newWarehouseIds = newUserData.warehouse_ids.includes(warehouseId)
-      ? newUserData.warehouse_ids.filter(id => id !== warehouseId)
-      : [...newUserData.warehouse_ids, warehouseId];
-    setNewUserData({ ...newUserData, warehouse_ids: newWarehouseIds });
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-
-    // Set organization_id and role_name for admin before validation checks
-    if (authData?.role === 'admin') {
-      newUserData.organization_id = authData.organization_id; // Admin's organization
-      newUserData.role_name = 'user'; // Admin adds users with the role 'user'
-        // console.log("auth", authData)
-
-    }
-
-    // Check required fields
-    if (!newUserData.username || !newUserData.password || !newUserData.role_name || !newUserData.organization_id || (!newUserData.ip_address && newUserData.role_name === "user" )|| (isAdmin && newUserData.warehouse_ids.length === 0)) {
-      if (!newUserData.username) {
-        alert("username field is required.");
-      } else if (!newUserData.password) {
-        alert("password field is required.");
-      } else if (!newUserData.role_name) {
-        //console.log(newUserData);
-        alert("role_name field is required.");
-      } else if (!newUserData.ip_address) {
-        alert("ip_address field is required.");
-      } else if (isAdmin && newUserData.warehouse_ids.length === 0) {
-        alert("warehouse_ids field is required.");
+  useEffect(() => {
+    const fetchIp = async () => {
+      try {
+        const {data} = await api.get('/auth/ip');
+        setIPOptions((prevState) => {
+          return [
+            ...prevState.filter((option) => option.value !== data.ip),
+            {label: data.ip, value: data.ip, desc: `Your current IP address: ${data.ip}`, emoji: '🌐'}
+          ];
+        });
+      } catch (error) {
+        console.error('Error fetching IP:', error);
       }
-      return;
     }
+    fetchIp();
+  }, []);
 
+  const onFinish = async (userData) => {
+
+    if (authData?.role === 'admin') {
+      userData.organization_id = authData.organization_id; // Admin's organization
+      userData.role_name = 'user'; // Admin adds users with the role 'user'
+    }
     try {
+      userData["ip_address"] = userData["ip_address"].join(", ");
+      console.log(userData);
       // Make the API call to create the user
-      const response = await api.post('/users', newUserData, {
+      const response = await api.post('/users', userData, {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${localStorage.getItem('token')}`
@@ -88,14 +77,6 @@ const AddUser = ({ closeModal }) => {
 
       if (response.status === 201) {
         alert('მომხმარებელი დაემატა წარმატებით!');
-        setNewUserData({
-          username: '',
-          password: '',
-          organization_id: '',
-          role_name: '',
-          ip_address: '',
-          warehouse_ids: []
-        });
         closeModal();
       }
     } catch (error) {
@@ -104,104 +85,163 @@ const AddUser = ({ closeModal }) => {
     }
   };
 
-  return (
-    <div className="modal active">
-      <div className="modal-content">
-        <span className="close-btn" onClick={closeModal}>&times;</span>
-        <h2>მომხმარებლის დამატება</h2>
-        <form id="addUserForm" onSubmit={handleSubmit}>
-          <div className="form-group">
-            <label htmlFor="username">სახელი:</label>
-            <input
-              type="text"
-              id="username"
-              name="username"
-              value={newUserData.username}
-              onChange={handleInputChange}
-              required
-            />
-          </div>
+  const onFinishFailed = (errorInfo) => {
+    console.log('Failed:', errorInfo);
+  }
 
-          <div className="form-group">
-            <label htmlFor="password">პაროლი:</label>
-            <input
-              type="password"
-              id="password"
+  return (
+      <Modal open={isModalOpen} title="მომხმარებლის დამატება" onCancel={closeModal} footer={null}>
+        <Form
+            name="addUserForm"
+            layout="vertical"
+            style={{
+              maxWidth: "none",
+              width: "100%"
+            }}
+            initialValues={{
+              remember: false,
+            }}
+            onFinish={onFinish}
+            onFinishFailed={onFinishFailed}
+            autoComplete="off"
+        >
+          <Form.Item
+              label="Username"
+              name="username"
+              rules={[
+                {
+                  required: true,
+                  message: 'Please input your username!',
+                },
+              ]}
+          >
+            <Input/>
+          </Form.Item>
+          <Form.Item
+              label="Password"
               name="password"
-              value={newUserData.password}
-              onChange={handleInputChange}
-              required
+              rules={[
+                {
+                  required: true,
+                  message: 'Please input your password!',
+                },
+              ]}
+          >
+            <Input.Password/>
+          </Form.Item>
+
+          <Form.Item
+              label="Role"
+              name="role_name"
+              rules={[
+                {
+                  required: true,
+                  message: 'Please select Role!',
+                }
+              ]}
+              initialValue={isAdmin ? 'user' : 'admin'}
+          >
+            <Select>
+              <Select.Option value={isAdmin ? 'user' : 'admin'} selected>{isAdmin ? 'user' : 'admin'}</Select.Option>
+            </Select>
+          </Form.Item>
+
+          <Form.Item
+              label="IP Address"
+              name="ip_address"
+              rules={[
+                {
+                  required: true,
+                  message: 'Please input your IP address!',
+                },
+              ]}
+              initialValue={IPOptions}
+          >
+            <Select
+                mode="tags"
+                placeholder="IP address"
+                options={IPOptions}
+                optionRender={(option) => (
+                    <Space>
+                        <span role="img" aria-label={option.data.label}>
+                          {option.data.emoji}
+                        </span>
+                      {option.data.desc}
+                    </Space>
+                )}
+                tagRender={(props) => (
+                    <Tag color='green'>
+                      {props.label}
+                    </Tag>
+                )}
             />
-          </div>
+          </Form.Item>
 
           {!isAdmin && (
-            <div className="form-group">
-              <label htmlFor="organization">ორგანიზაცია:</label>
-              <select
-                id="organization"
-                name="organization_id"
-                value={newUserData.organization_id}
-                onChange={handleInputChange}
-                required
+              <Form.Item
+                  label="Organization"
+                  name="organization_id"
+                  rules={[
+                    {
+                      required: true,
+                      message: 'Please select Organization!',
+                    }
+                  ]}
               >
-                <option value="">აირჩიეთ ორგანიზაცია</option>
-                {organizations.map(org => (
-                  <option key={org.id} value={org.id}>{org.name}</option>
-                ))}
-              </select>
-            </div>
+                <Select
+                    id="organization"
+                    name="organization_id"
+                    optionRender={renderOption}
+                    options={organizations.map(org => ({
+                          label: org.name,
+                          value: org.id,
+                          emoji: '🏢',
+                          desc: org.name
+                        })
+                    )}
+                >
+                </Select>
+              </Form.Item>
           )}
-
-          <div className="form-group">
-            <label htmlFor="role">როლი:</label>
-            <select
-              id="role"
-              name="role_name"
-              value={newUserData.role_name}
-              onChange={handleInputChange}
-              required
-            >
-              <option value={isAdmin ? 'user' : 'admin'}>{isAdmin ? 'user' : 'admin'}</option>
-            </select>
-          </div>
-
-          <div className="form-group">
-            <label htmlFor="ipAddress">IP მისამართი:</label>
-            <input
-              type="text"
-              id="ipAddress"
-              name="ip_address"
-              value={newUserData.ip_address}
-              onChange={handleInputChange}
-              required = {newUserData.role_name === "user"}
-            />
-          </div>
 
           {isAdmin && (
-            <div className="form-group">
-              <label htmlFor="warehouses">საწყობები:</label>
-              <div id="warehouse-container">
-                {warehouses.map(wh => (
-                  <div className="warehouse-display" key={wh.id}>
-                    <input
-                      type="checkbox"
-                      id={`warehouse${wh.id}`}
-                      name="warehouses"
-                      value={wh.id}
-                      checked={newUserData.warehouse_ids.includes(wh.id)}
-                      onChange={handleWarehouseChange}
-                    />
-                    <label htmlFor={`warehouse${wh.id}`}>{wh.name}</label>
-                  </div>
-                ))}
-              </div>
-            </div>
+              <Form.Item
+                  label="Warehouses"
+                  name="warehouse_ids"
+                  rules={[
+                    {
+                      required: true,
+                      message: 'Please select Warehouses!',
+                    }
+                  ]}
+              >
+                <Select
+                    mode="multiple"
+                    tagRender={(props) => (
+                        <Tag color='green'>
+                          {props.label}
+                        </Tag>
+                    )}
+                    options={warehouses.map(wh => ({
+                          label: wh.name,
+                          value: wh.id,
+                          emoji: '🏢',
+                          desc: wh.name
+                        })
+                    )}
+                    optionRender={renderOption}
+                >
+                </Select>
+              </Form.Item>
           )}
 
-          <button type="submit" className="add-btn">დამატება</button>
-        </form>
-      </div>
-    </div>
+          <Form.Item label={null}>
+            <Button block type="primary" htmlType="submit" variant="solid" color="green">
+              დამატება
+            </Button>
+          </Form.Item>
+        </Form>
+      </Modal>
   );
 };
 
