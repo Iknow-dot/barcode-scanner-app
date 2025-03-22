@@ -1,86 +1,79 @@
-import React, { useState, useEffect, useContext } from 'react';
+import React, {useState, useEffect, useContext, useCallback} from 'react';
 import './AddUser.css'; // Use appropriate CSS file
-import api, { getUserWarehousesByUserId } from '../../api';
+import api, {getUserWarehousesByUserId} from '../../api';
 import AuthContext from '../Auth/AuthContext';
+import {Button, Form, Input, Modal, Select, Space, Tag} from "antd";
 
-const EditUser = ({ userData, closeModal }) => {
-  const { authData } = useContext(AuthContext);
-  const [editUserData, setEditUserData] = useState({
-    username: '',
-    password: '',
-    organization_id: '',
-    role_name: '',
-    ip_address: '',
-    warehouse_ids: [], // Ensure this is always an array
-  });
+const EditUser = ({userData, closeModal, isModalOpen}) => {
+  const [form] = Form.useForm();
+  const renderOption = useCallback((option) => {
+    return (
+        <Space>
+        <span role="img">
+          {option.data.emoji}
+        </span>
+          {option.data.desc}
+        </Space>
+    );
+  }, []);
+  const {authData} = useContext(AuthContext);
 
+  const [IPOptions, setIPOptions] = useState([]);
   const [organizations, setOrganizations] = useState([]);
   const [warehouses, setWarehouses] = useState([]);
-  const [userwarehouses, setuserWarehouses] = useState([]);
-  const [isAdmin, setIsAdmin] = useState(false);
+  const [userWarehouses, setUserWarehouses] = useState([]);
+  const [isAdmin, setIsAdmin] = useState(authData && authData.role === 'admin');
 
   useEffect(() => {
     const fetchData = async () => {
       if (authData?.role === 'system_admin') {
         const orgRes = await api.get('/organizations');
         setOrganizations(orgRes.data);
-      } 
-      
+      }
+
       if (authData?.role === 'admin' && userData.role_name === 'user') {
         const whRes = await api.get('/warehouses');
         setWarehouses(whRes.data);
         setIsAdmin(true);
       }
 
-  
       if (authData?.role === 'admin' && userData.role_name === 'user' && userData.id) {
-        const userSpecificWarehouses = await getUserWarehousesByUserId(userData.id);
-        setuserWarehouses(userSpecificWarehouses.map(wh => wh.id));
-  
-        setEditUserData(prevState => ({
-          ...prevState,
-          warehouse_ids: userSpecificWarehouses.map(wh => wh.id) // Set initially checked warehouses
-        }));
-  
+        setUserWarehouses(await getUserWarehousesByUserId(userData.id));
       }
-      // Initialize form with existing user data
-  
-      setEditUserData(prevState => ({
-        ...prevState,
-        ...userData
-      }));
     };
-  
+
     fetchData();
-  
+
   }, [authData, userData]);
 
-  const handleInputChange = (e) => {
-    setEditUserData(prevState => ({ ...prevState, [e.target.name]: e.target.value }));
-  };
+  useEffect(() => {
+    form.setFieldsValue({
+        warehouse_ids: userWarehouses.map(wh => wh.id)
+    })
+  }, [userWarehouses, form]);
 
-  const handleWarehouseChange = (e) => {
-    const warehouseId = e.target.value;
-    const isAlreadySelected = editUserData.warehouse_ids.includes(warehouseId);
-  
-    // Toggle the presence of warehouseId in the array
-    const newWarehouseIds = isAlreadySelected
-      ? editUserData.warehouse_ids.filter(id => id !== warehouseId) // Remove the ID if it's already included
-      : [...editUserData.warehouse_ids, warehouseId]; // Add the ID if it's not included
-  
-    setEditUserData(prevState => ({
-      ...prevState,
-      warehouse_ids: newWarehouseIds // Update state with the new array of IDs
-    }));
-  };
+  useEffect(() => {
+    const fetchIp = async () => {
+      try {
+        const {data} = await api.get('/auth/ip');
+        setIPOptions((prevState) => {
+          return [
+            ...prevState.filter((option) => option.value !== data.ip),
+            {label: data.ip, value: data.ip, desc: `Your current IP address: ${data.ip}`, emoji: '🌐'}
+          ];
+        });
+      } catch (error) {
+        console.error('Error fetching IP:', error);
+      }
+    }
+    fetchIp();
+  }, []);
 
-
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const onFinish = async (userDataModified) => {
     try {
+      userDataModified["ip_address"] = userDataModified["ip_address"].join(", ");
       // console.log(editUserData);
-      await api.put(`/users/${editUserData.id}`, editUserData);
+      await api.put(`/users/${userData.id}`, userDataModified);
       alert('მომხმარებელი წარმატებით განახლდა!');
       closeModal();
     } catch (error) {
@@ -89,97 +82,165 @@ const EditUser = ({ userData, closeModal }) => {
     }
   };
 
+  const onFinishFailed = (errorInfo) => {
+    console.log('Failed:', errorInfo);
+  }
+
   return (
-    <div className="modal active">
-      <div className="modal-content">
-        <span className="close-btn" onClick={closeModal}>&times;</span>
-        <h2>მომხმარებლის განახლება</h2>
-        <form id="editUserForm" onSubmit={handleSubmit}>
-          <div className="form-group">
-            <label htmlFor="username">სახელი:</label>
-            <input
-              type="text"
-              id="username"
+      <Modal title="მომხმარებლის განახლება" open={isModalOpen} footer={null} onCancel={closeModal}>
+        <Form
+            form={form}
+            name="addUserForm"
+            layout="vertical"
+            style={{
+              maxWidth: "none",
+              width: "100%"
+            }}
+            initialValues={{
+              username: userData.username,
+              role_name: userData.role_name,
+              ip_address: userData.ip_address && userData.ip_address.split(", ")
+            }}
+            onFinish={onFinish}
+            onFinishFailed={onFinishFailed}
+            autoComplete="off"
+        >
+          <Form.Item
+              label="Username"
               name="username"
-              value={editUserData.username}
-              onChange={handleInputChange}
-              required
-            />
-          </div>
-          <div className="form-group">
-            <label htmlFor="password">პაროლი (დატოვეთ ცარიელი თუ ცვლილება არ გსურთ):</label>
-            <input
-              type="password"
-              id="password"
+              rules={[
+                {
+                  required: true,
+                  message: 'Please input your username!',
+                },
+              ]}
+          >
+            <Input/>
+          </Form.Item>
+          <Form.Item
+              label="Password"
               name="password"
-              value={editUserData.password}
-              onChange={handleInputChange}
-            />
-          </div>
-          {!isAdmin && (
-            <div className="form-group">
-              <label htmlFor="organization">ორგანიზაცია:</label>
-              <select
-                id="organization"
-                name="organization_id"
-                value={editUserData.organization_id}
-                onChange={handleInputChange}
-                required={authData?.role === 'system_admin'}
-              >
-                <option value="">აირჩიეთ ორგანიზაცია</option>
-                {organizations.map(org => (
-                  <option key={org.id} value={org.id}>{org.name}</option>
-                ))}
-              </select>
-            </div>
-          )}
-          <div className="form-group">
-            <label htmlFor="role">როლი:</label>
-            <select
-              id="role"
+              rules={[
+                {
+                  required: false,
+                  message: 'Please input your password!',
+                },
+              ]}
+              extra="Leave empty if you don't want to change the password"
+          >
+            <Input.Password/>
+          </Form.Item>
+
+          <Form.Item
+              label="Role"
               name="role_name"
-              value={editUserData.role_name}
-              onChange={handleInputChange}
-              required
-            >
-              <option value={editUserData.role_name}>{editUserData.role_name}</option>
-            </select>
-          </div>
-          <div className="form-group">
-            <label htmlFor="ipAddress">IP მისამართი:</label>
-            <input
-              type="text"
-              id="ipAddress"
+              rules={[
+                {
+                  required: true,
+                  message: 'Please select Role!',
+                }
+              ]}
+          >
+            <Select>
+              <Select.Option value={isAdmin ? 'user' : 'admin'} selected>{isAdmin ? 'user' : 'admin'}</Select.Option>
+            </Select>
+          </Form.Item>
+
+          <Form.Item
+              label="IP Address"
               name="ip_address"
-              value={editUserData.ip_address}
-              onChange={handleInputChange}
-              required = {editUserData.role_name === "user"}
+              rules={[
+                {
+                  required: true,
+                  message: 'Please input your IP address!',
+                },
+              ]}
+          >
+            <Select
+                mode="tags"
+                placeholder="IP address"
+                options={IPOptions}
+                optionRender={(option) => (
+                    <Space>
+                        <span role="img" aria-label={option.data.label}>
+                          {option.data.emoji}
+                        </span>
+                      {option.data.desc}
+                    </Space>
+                )}
+                tagRender={(props) => (
+                    <Tag color='green'>
+                      {props.label}
+                    </Tag>
+                )}
             />
-          </div>
-          {isAdmin && (
-            <div className="form-group">
-              <label htmlFor="warehouses">საწყობი:</label>
-              <div id="warehouse-container">
-                {warehouses.map(wh => (
-                  <div className="warehouse-display" key={wh.id}>
-                    <input
-                      type="checkbox"
-                      id={`warehouse${wh.id}`}
-                      name="warehouses"
-                      value={wh.id}
-                      checked={editUserData.warehouse_ids.includes(wh.id)}
-                      onChange={handleWarehouseChange}
-                    />
-                    <label htmlFor={`warehouse${wh.id}`}>{wh.name}</label>
-                  </div>
-                ))}
-              </div>
-            </div>
+          </Form.Item>
+
+          {!isAdmin && (
+              <Form.Item
+                  label="Organization"
+                  name="organization_id"
+                  rules={[
+                    {
+                      required: true,
+                      message: 'Please select Organization!',
+                    }
+                  ]}
+              >
+                <Select
+                    id="organization"
+                    name="organization_id"
+                    optionRender={renderOption}
+                    options={organizations.map(org => ({
+                          label: org.name,
+                          value: org.id,
+                          emoji: '🏢',
+                          desc: org.name
+                        })
+                    )}
+                >
+                </Select>
+              </Form.Item>
           )}
-          <button type="submit" className="edit-btn">განახლება</button>
-        </form>
-      </div>
-    </div>
+
+          {isAdmin && (
+              <Form.Item
+                  label="Warehouses"
+                  name="warehouse_ids"
+                  rules={[
+                    {
+                      required: true,
+                      message: 'Please select Warehouses!',
+                    }
+                  ]}
+              >
+                <Select
+                    mode="multiple"
+                    tagRender={(props) => (
+                        <Tag color='green'>
+                          {props.label}
+                        </Tag>
+                    )}
+                    options={warehouses.map(wh => ({
+                          label: wh.name,
+                          value: wh.id,
+                          emoji: '🏢',
+                          desc: wh.name
+                        })
+                    )}
+                    optionRender={renderOption}
+                >
+                </Select>
+              </Form.Item>
+          )}
+
+          <Form.Item label={null}>
+            <Button block type="primary" htmlType="submit" variant="solid" color="green">
+              შენახვა
+            </Button>
+          </Form.Item>
+        </Form>
+      </Modal>
   );
 };
 
