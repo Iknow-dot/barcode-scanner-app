@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import api from '../../api';
+import {UserAddOutlined} from "@ant-design/icons";
+import {Button, Table, Tag} from "antd";
 
 const UsersTab = ({ users: initialUsers, openModal }) => {
   const [users, setUsers] = useState(initialUsers);
@@ -42,36 +44,29 @@ const UsersTab = ({ users: initialUsers, openModal }) => {
 
   return (
     <div id="Users" className="tab-content active">
-      <button className="add-btn" onClick={() => openModal('user')}>
-        მომხმარებლის დამატება
-      </button>
-      <table>
-        <thead>
-          <tr>
-            <th>სახელი</th>
-            <th>ორგანიზაცია</th>
-            <th>როლი</th>
-            <th>ქმედებები</th>
-          </tr>
-        </thead>
-        <tbody>
-          {users.map((user) => (
-            <tr key={user.id}>
-              <td>{user.username}</td>
-              <td>{organizations[user.organization_id] || 'N/A'}</td>
-              <td>{user.role_name || 'N/A'}</td>
-              <td>
-                <button className="edit-btn" onClick={() => handleEdit(user)}>
-                  რედაქტირება
-                </button>
-                <button className="delete-btn" onClick={() => handleDelete(user.id)}>
-                  წაშლა
-                </button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <Button variant="solid" color="green" onClick={() => openModal('user')}>
+        <UserAddOutlined /> მომხმარებლის დამატება
+      </Button>
+
+      <Table
+        dataSource={users}
+        columns={[
+            { title: 'სახელი', dataIndex: 'username' },
+            { title: 'ორგანიზაცია', dataIndex: 'organization_id', render: (orgId) => organizations[orgId] || 'N/A' },
+            { title: 'როლი', dataIndex: 'role_name', render: (role) => (
+                <Tag color="geekblue">{role}</Tag>
+              ) },
+            {
+                title: 'ქმედებები',
+                render: (_, user) => (
+                <>
+                    <Button variant="outlined" color="primary" onClick={() => handleEdit(user)}>რედაქტირება</Button>
+                    <Button variant="outlined" color="danger" onClick={() => handleDelete(user.id)}>წაშლა</Button>
+                </>
+                ),
+            },
+        ]}
+      />
     </div>
   );
 };

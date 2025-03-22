@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useContext } from 'react';
+import React, {useState, useEffect, useContext} from 'react';
 import './SystemAdminDashboard.css';
 import api from '../../api';
 import AuthContext from '../Auth/AuthContext';
@@ -11,9 +11,12 @@ import AddUser from '../User/AddUser';
 import EditUser from '../User/EditUser';
 import AddWarehouse from '../Warehouse/AddWarehouse';
 import EditWarehouse from '../Warehouse/EditWarehouse';
+import {Tabs} from "antd";
+import {AppstoreOutlined, BankOutlined, UserOutlined} from "@ant-design/icons";
+
 
 const SystemAdminDashboard = () => {
-  const { authData, logout } = useContext(AuthContext);
+  const {authData, logout} = useContext(AuthContext);
   const [organizations, setOrganizations] = useState([]);
   const [warehouses, setWarehouses] = useState([]);
   const [users, setUsers] = useState([]);
@@ -27,6 +30,48 @@ const SystemAdminDashboard = () => {
 
   const userRole = authData?.role;
   const userOrganizationId = authData?.organization_id;
+
+  const tabItems = [
+    userRole === 'system_admin' && ({
+      key: "1",
+      label: (
+          <>
+            <BankOutlined/> ორგანიზაციები
+          </>
+      ),
+      children: (
+          <OrganizationsTab
+              organizations={organizations}
+              openModal={(mode, org) => openModal(mode, org)}
+              handleEdit={(org) => openModal('edit', org)}
+          />
+      )
+    }),
+    userRole === 'admin' && ({
+      key: "2",
+      label: (
+          <>
+            <AppstoreOutlined/> საწყობები
+          </>
+      ),
+      children: (
+          <WarehousesTab
+              warehouses={warehouses}
+              openModal={(mode, wh) => openModal(mode, null, wh)}
+          />
+      )
+    }),
+    {
+      key: "3",
+      label: <><UserOutlined/> მომხმარებლები</>,
+      children: (
+          <UsersTab
+              users={users}
+              openModal={(mode, User) => openModal(mode, null, null, User)}
+          />
+      )
+    }
+  ];
 
   useEffect(() => {
     const fetchData = async () => {
@@ -164,119 +209,74 @@ const SystemAdminDashboard = () => {
   };
 
   return (
-    <div className="container">
-      <div className="header-line">
-        <img
-          src="https://imgur.com/VV5PiDB.png"
-          alt="Logo"
-          style={{ backgroundColor: 'rgba(159, 159, 159)' }}
-          width="150"
-        />
-        <button onClick={logout} className="logout-btn">გასვლა</button>
-      </div>
-      <div className="dashboard-container">
-        <div className="header">
-          <h2>Dark Mode</h2>
-          <label className="switch">
-            <input type="checkbox" checked={darkMode} onChange={toggleDarkMode} />
-            <span className="slider round"></span>
-          </label>
-        </div>
+      <>
 
-        <div className="tabs">
-          {userRole === 'system_admin' && (
-            <button
-              className={`tab-link ${activeTab === 'Organizations' ? 'active' : ''}`}
-              onClick={() => openTab('Organizations')}
-            >
-              ორგანიზაციები
-            </button>
-          )}
+        <div className="container">
+          <div className="header-line">
+            <img
+                src="https://imgur.com/VV5PiDB.png"
+                alt="Logo"
+                style={{backgroundColor: 'rgba(159, 159, 159)'}}
+                width="150"
+            />
+            <button onClick={logout} className="logout-btn">გასვლა</button>
+          </div>
+          <div className="dashboard-container">
+            <div className="header">
+              <h2>Dark Mode</h2>
+              <label className="switch">
+                <input type="checkbox" checked={darkMode} onChange={toggleDarkMode}/>
+                <span className="slider round"></span>
+              </label>
+            </div>
+            <Tabs defaultActiveKey="1" items={tabItems}/>
 
-          {userRole === 'admin' && (
-            <button
-              className={`tab-link ${activeTab === 'Warehouses' ? 'active' : ''}`}
-              onClick={() => openTab('Warehouses')}
-            >
-              საწყობები
-            </button>
-          )}
-
-          <button
-            className={`tab-link ${activeTab === 'Users' ? 'active' : ''}`}
-            onClick={() => openTab('Users')}
-          >
-            მომხმარებლები
-          </button>
-        </div>
-
-        {userRole === 'system_admin' && activeTab === 'Organizations' && (
-          <OrganizationsTab
-            organizations={organizations}
-            openModal={(mode, org) => openModal(mode, org)}
-            handleEdit={(org) => openModal('edit', org)}
-          />
-        )}
-
-        {userRole === 'admin' && activeTab === 'Warehouses' && (
-          <WarehousesTab
-            warehouses={warehouses}
-            openModal={(mode, wh) => openModal(mode, null, wh)}
-          />
-        )}
-
-        {activeTab === 'Users' && (
-          <UsersTab
-            users={users}
-            openModal={(mode, User) => openModal(mode, null, null, User)}
-          />
-        )}
-
-        {isModalOpen && (
-          <div className="modal active">
-            {modalContent === 'edit' && editOrgData ? (
-              <EditOrganization
-                organizationData={editOrgData}
-                handleEditOrganization={handleEditOrganization}
-                closeModal={closeModal}
-              />
-            ) : modalContent === 'editWarehouse' && editWarehouseData ? (
-              <EditWarehouse
-                warehouseData={editWarehouseData} // Change 'warehouseDataData' to 'warehouseData'
-                handleEditWarehouse={handleEditWarehouse}
-                closeModal={closeModal}
-              />
-            ): modalContent === 'editUser' && editUserData ? (
-              <EditUser
-                userData={editUserData} // Change 'userDataData' to 'warehouseData'
-                handleEditUser={handleEditUser}
-                closeModal={closeModal}
-              />
-            ) : modalContent === 'organization' ? (
-              <AddOrganization
-                handleAddOrganization={handleAddOrganization}
-                closeModal={closeModal}
-              />
-            ) : modalContent === 'user' ? (
-              <AddUser
-                handleAddUser={handleAddUser}
-                closeModal={closeModal}
-                isModalOpen={isModalOpen}
-                userRole={userRole}
-                organizations={organizations}
-                warehouses={warehouses}
-              />
-            ) : (
-              <AddWarehouse
-                handleAddWarehouse={handleAddWarehouse}
-                closeModal={closeModal}
-                organizationId={userOrganizationId}
-              />
+            {isModalOpen && (
+                <div className="modal active">
+                  {modalContent === 'edit' && editOrgData ? (
+                      <EditOrganization
+                          organizationData={editOrgData}
+                          handleEditOrganization={handleEditOrganization}
+                          closeModal={closeModal}
+                      />
+                  ) : modalContent === 'editWarehouse' && editWarehouseData ? (
+                      <EditWarehouse
+                          warehouseData={editWarehouseData} // Change 'warehouseDataData' to 'warehouseData'
+                          handleEditWarehouse={handleEditWarehouse}
+                          closeModal={closeModal}
+                      />
+                  ) : modalContent === 'editUser' && editUserData ? (
+                      <EditUser
+                          userData={editUserData} // Change 'userDataData' to 'warehouseData'
+                          handleEditUser={handleEditUser}
+                          closeModal={closeModal}
+                      />
+                  ) : modalContent === 'organization' ? (
+                      <AddOrganization
+                          handleAddOrganization={handleAddOrganization}
+                          closeModal={closeModal}
+                      />
+                  ) : modalContent === 'user' ? (
+                      <AddUser
+                          handleAddUser={handleAddUser}
+                          closeModal={closeModal}
+                          isModalOpen={isModalOpen}
+                          userRole={userRole}
+                          organizations={organizations}
+                          warehouses={warehouses}
+                      />
+                  ) : (
+                      <AddWarehouse
+                          handleAddWarehouse={handleAddWarehouse}
+                          closeModal={closeModal}
+                          organizationId={userOrganizationId}
+                      />
+                  )}
+                </div>
             )}
           </div>
-        )}
-      </div>
-    </div>
+        </div>
+      </>
   );
 };
 
