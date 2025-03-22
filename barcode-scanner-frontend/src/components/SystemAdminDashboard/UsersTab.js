@@ -43,7 +43,7 @@ const UsersTab = ({ users: initialUsers, openModal }) => {
   };
 
   return (
-    <div id="Users" className="tab-content active">
+    <div>
       <Button variant="solid" color="green" onClick={() => openModal('user')}>
         <UserAddOutlined /> მომხმარებლის დამატება
       </Button>
