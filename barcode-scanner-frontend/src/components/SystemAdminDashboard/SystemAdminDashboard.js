@@ -16,9 +16,9 @@ const SystemAdminDashboard = () => {
   const [organizations, setOrganizations] = useState([]);
   const [warehouses, setWarehouses] = useState([]);
   const [users, setUsers] = useState([]);
-  const [activeTab, setActiveTab] = useState(authData.role === 'system_admin' ? 1 : 2);
-
   const userRole = authData?.role;
+  const [activeTab, setActiveTab] = useState(userRole === 'system_admin' ? 1 : 2);
+
 
   useEffect(() => {
     setSubNav([
@@ -28,12 +28,12 @@ const SystemAdminDashboard = () => {
         label: "ორგანიზაციები",
         onClick: () => setActiveTab(1)
       }),
-      {
+      userRole === 'admin' && ({
         key: '2',
         icon: <AppstoreOutlined/>,
         label: "საწყობები",
         onClick: () => setActiveTab(2)
-      },
+      }),
       {
         key: '3',
         active: "true",

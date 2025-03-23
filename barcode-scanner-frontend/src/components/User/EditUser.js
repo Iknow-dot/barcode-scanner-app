@@ -153,7 +153,7 @@ const EditUser = ({visible, setVisible, onFinish, object}) => {
                 name="organization_id"
                 rules={[
                   {
-                    required: true,
+                    required: false,
                     message: 'Please select Organization!',
                   }
                 ]}
