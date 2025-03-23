@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { scanProducts, getUserWarehouses, getClientIp, fetchImageThroughProxy } from '../../api';
+import { scanProducts, getUserWarehouses, getClientIp } from '../../api';
 import ScanButton from './ScanButton';
 import Carousel from 'react-multi-carousel';
 import AuthContext from '../Auth/AuthContext';

@@ -72,6 +72,7 @@ const UsersTab = ({users: initialUsers, AddModal, EditModal, addModalExtraProps}
           description: `მომხმარებელი "${newUser.username}" წარმატებიით შეიქმნა`
         })
         setUsers(prevUsers => [...prevUsers, newUser]);
+        return true;
       }
     } catch (error) {
       console.error('შეცდომა მომხმარებლის შექმნისას:', error.response?.data?.error || error.message);
@@ -80,34 +81,39 @@ const UsersTab = ({users: initialUsers, AddModal, EditModal, addModalExtraProps}
         message: 'შეცდომა',
         description: `მომხმარებლის შექმნისას შეცდომა "(${error.response?.data?.error || error.message})"`
       });
+      return false;
     }
   }
 
   const handleDelete = async (deleteUser) => {
-    if (window.confirm("ნამდვილად გსურთ ამ მომხმარებლის წაშლა?")) {
-      try {
-        await api.delete(`/users/${deleteUser.id}`);
-        setUsers(prevUsers => prevUsers.filter(user => user.id !== deleteUser.id));
-        setNotificationData({
-          type: 'success',
-          message: 'წარმატება',
-          description: `"${deleteUser.username}" წარმატებიით წაიშალა`
-        });
+    try {
+      await api.delete(`/users/${deleteUser.id}`);
+      setUsers(prevUsers => prevUsers.filter(user => user.id !== deleteUser.id));
+      setNotificationData({
+        type: 'success',
+        message: 'წარმატება',
+        description: `"${deleteUser.username}" წარმატებიით წაიშალა`
+      });
 
-      } catch (error) {
-        setNotificationData({
-          type: 'error',
-          message: 'შეცდომა',
-          description: `მომხმარებლის წაშლისას შეცდომა "(${error.response?.data?.error || error.message})"`
-        })
-      }
+    } catch (error) {
+      setNotificationData({
+        type: 'error',
+        message: 'შეცდომა',
+        description: `მომხმარებლის წაშლისას შეცდომა "(${error.response?.data?.error || error.message})"`
+      })
     }
   };
 
-  const handleEdit = async (editUser, modifiedFields, form) => {
+  const handleEdit = async (modifiedFields, editUser) => {
+    console.log(modifiedFields, editUser);
     try {
       editUser = {...editUser, ...modifiedFields};
-      editUser["ip_address"] = editUser["ip_address"].join(", ");
+      if (editUser.ip_address !== "") {
+        editUser.ip_address = editUser.ip_address.join(", ");
+      } else {
+        editUser.ip_address = null;
+      }
+      console.log(editUser);
       await api.put(`/users/${editUser.id}`, editUser);
       setUsers(prevUsers => prevUsers.map(user => user.id === editUser.id ? editUser : user));
       setNotificationData({
@@ -116,7 +122,6 @@ const UsersTab = ({users: initialUsers, AddModal, EditModal, addModalExtraProps}
         description: `მომხმარებელი "${editUser.username}" წარმატებიით განახლდა`
       })
     } catch (error) {
-      form.setFieldsValue(modifiedFields);
       setNotificationData({
         type: 'error',
         message: 'შეცდომა',

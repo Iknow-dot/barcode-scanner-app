@@ -1,9 +1,8 @@
-import React, {useState, useEffect, useContext, useCallback} from 'react';
+import React, {useState, useEffect, useContext} from 'react';
 import api from '../../api';
 import AuthContext from '../Auth/AuthContext';
-import {Button, Form, Input, Modal, Select, Space, Tag} from "antd";
-import ModalForm, {TagSelect} from "../ModalForm";
-
+import {Button, Form, Input, Select, Tag} from "antd";
+import ModalForm, {RenderOption, TagSelect} from "../ModalForm";
 
 
 const AddUserModal = ({visible, setVisible, onFinish}) => {
@@ -104,12 +103,12 @@ const AddUserModal = ({visible, setVisible, onFinish}) => {
             name="ip_address"
             rules={[
               {
-                required: true,
+                required: false,
                 message: 'Please input your IP address!',
               },
             ]}
         >
-          <TagSelect
+          <Select
               options={IPOptions}
               mode="tags"
               placeholder="IP address"
@@ -121,6 +120,12 @@ const AddUserModal = ({visible, setVisible, onFinish}) => {
                   message: 'Please input your IP address!',
                 },
               ]}
+              optionRender={RenderOption}
+              tagRender={(props) => (
+                  <Tag color='green'>
+                    {props.label}
+                  </Tag>
+              )}
           />
         </Form.Item>
 
@@ -135,7 +140,7 @@ const AddUserModal = ({visible, setVisible, onFinish}) => {
                   }
                 ]}
             >
-              <TagSelect
+              <Select
                   options={organizations.map(org => ({
                         label: org.name,
                         value: org.id,
@@ -143,16 +148,22 @@ const AddUserModal = ({visible, setVisible, onFinish}) => {
                         desc: org.name
                       })
                   )}
-                  mode="single"
+                  mode="multiple"
                   placeholder="Organization"
                   name="organization_id"
                   label="Organization"
+                  optionRender={RenderOption}
                   rules={[
                     {
                       required: true,
                       message: 'Please select Organization!',
                     }
                   ]}
+                  tagRender={(props) => (
+                      <Tag color='green'>
+                        {props.label}
+                      </Tag>
+                  )}
               />
             </Form.Item>
         )}
@@ -168,7 +179,15 @@ const AddUserModal = ({visible, setVisible, onFinish}) => {
                   }
                 ]}
             >
-              <TagSelect
+              <Select
+                  name="warehouse_ids"
+                  rules={[
+                    {
+                        required: true,
+                        message: 'Please select Warehouses!',
+                    }
+                  ]}
+                  optionRender={RenderOption}
                   mode="multiple"
                   tagRender={(props) => (
                       <Tag color='green'>

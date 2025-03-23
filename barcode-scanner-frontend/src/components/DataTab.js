@@ -1,8 +1,17 @@
-import {Button, Space, Table} from "antd";
+import {Button, Popconfirm, Space, Table} from "antd";
 import React, {useState} from "react";
 import {DeleteOutlined, EditOutlined, PlusOutlined} from "@ant-design/icons";
 
-export const DataTab = ({objects, columns, AddModal, addModalExtraProps = {}, handleAdd, EditModal, handleEdit, handleDelete}) => {
+export const DataTab = ({
+                          objects,
+                          columns,
+                          AddModal,
+                          addModalExtraProps = {},
+                          handleAdd,
+                          EditModal,
+                          handleEdit,
+                          handleDelete
+                        }) => {
   const [addModalVisible, setAddModalVisible] = useState(false);
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [selectedObject, setSelectedObject] = useState({});
@@ -14,13 +23,13 @@ export const DataTab = ({objects, columns, AddModal, addModalExtraProps = {}, ha
             setVisible={setAddModalVisible}
             onFinish={handleAdd}
             {...addModalExtraProps}
-          />}
+        />}
         {<EditModal
             visible={editModalVisible}
             setVisible={setEditModalVisible}
             object={selectedObject}
             onFinish={handleEdit}
-            />}
+        />}
 
         <Table
             dataSource={objects}
@@ -45,9 +54,22 @@ export const DataTab = ({objects, columns, AddModal, addModalExtraProps = {}, ha
                       }}>
                         <EditOutlined/>
                       </Button>
-                      <Button variant="outlined" color="danger" onClick={() => handleDelete(object)}>
-                        <DeleteOutlined/>
-                      </Button>
+                      <Popconfirm
+                          title={`გსურთ წაშლა?`}
+                          onConfirm={() => handleDelete(object)}
+                          okText="დიახ"
+                          cancelText="არა"
+                          okButtonProps={{
+                            danger: true
+                          }}
+                          cancelButtonProps={{
+                            type: 'primary'
+                          }}
+                      >
+                        <Button danger>
+                          <DeleteOutlined/>
+                        </Button>
+                      </Popconfirm>
                     </Space>
                 ),
               },

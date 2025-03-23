@@ -191,21 +191,10 @@ const SystemAdminDashboard = () => {
         {ActiveTabPane}
         {isModalOpen && (
             <div className="modal active">
-              {modalContent === 'edit' && editOrgData ? (
-                  <EditOrganization
-                      organizationData={editOrgData}
-                      handleEditOrganization={handleEditOrganization}
-                      closeModal={closeModal}
-                  />
-              ) : modalContent === 'editWarehouse' && editWarehouseData ? (
+              {modalContent === 'editWarehouse' && editWarehouseData ? (
                   <EditWarehouse
                       warehouseData={editWarehouseData} // Change 'warehouseDataData' to 'warehouseData'
                       handleEditWarehouse={handleEditWarehouse}
-                      closeModal={closeModal}
-                  />
-              )  : modalContent === 'organization' ? (
-                  <AddOrganization
-                      handleAddOrganization={handleAddOrganization}
                       closeModal={closeModal}
                   />
               ) : (

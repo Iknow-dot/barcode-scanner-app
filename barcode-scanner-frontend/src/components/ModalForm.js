@@ -1,24 +1,30 @@
 import {Form, Modal, Select, Space, Tag} from "antd";
-import React, {useCallback} from "react";
+import React, {useCallback, useEffect} from "react";
 
-export const ModalForm = ({visible, setVisible, onFinish, title, name, children}) => {
+export const ModalForm = ({visible, setVisible, onFinish, title, name, object = null, children}) => {
+  const [form] = Form.useForm();
+  useEffect(() => {
+    if (object && form) {
+      form.setFieldsValue(object);
+    }
+  }, [form, object]);
   return (
       <Modal open={visible} title={title} onCancel={() => setVisible(false)} footer={null}>
         <Form
+            form={form}
             name={name}
             layout="vertical"
             style={{
               maxWidth: "none",
               width: "100%"
             }}
-            initialValues={{
-              remember: false,
+            onFinish={async (data) => {
+              const ok = await onFinish(data)
+              if (ok) {
+                form.resetFields();
+                setVisible(false);
+              }
             }}
-            onFinish={(object) => {
-              onFinish(object);
-              setVisible(false);
-            }}
-            autoComplete="off"
         >
           {children}
         </Form>
@@ -26,17 +32,18 @@ export const ModalForm = ({visible, setVisible, onFinish, title, name, children}
   );
 };
 
-export const TagSelect = ({options, mode, placeholder, name, label, rules}) => {
-  const renderOption = useCallback((option) => {
-    return (
-        <Space>
-        <span role="img">
-          {option.data.emoji}
-        </span>
-          {option.data.desc}
-        </Space>
-    );
-  }, []);
+export const RenderOption = (option) => {
+  return useCallback(
+      <Space>
+          <span role="img">
+            {option.data.emoji}
+          </span>
+        {option.data.desc}
+      </Space>
+  );
+}
+
+export const TagSelect = ({options, mode, placeholder, name, rules}) => {
   return (
       <Select
           mode={mode}
@@ -44,7 +51,7 @@ export const TagSelect = ({options, mode, placeholder, name, label, rules}) => {
           name={name}
           rules={rules}
           options={options}
-          optionRender={renderOption}
+          optionRender={RenderOption}
           tagRender={(props) => (
               <Tag color='green'>
                 {props.label}

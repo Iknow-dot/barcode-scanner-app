@@ -1,4 +1,5 @@
-import React, {useContext, useEffect, useState} from 'react';
+import "antd/dist/reset.css";
+import React, {useContext, useState} from 'react';
 import {BrowserRouter as Router, Routes, Route, Navigate} from 'react-router-dom';
 import AuthContext, {AuthProvider} from './components/Auth/AuthContext';
 import PrivateRoute from './components/PrivateRoute';
@@ -11,7 +12,7 @@ import SystemAdminDashboard from './components/SystemAdminDashboard/SystemAdminD
 import {Breadcrumb, ConfigProvider, FloatButton, Layout, Menu, theme, App as AntdApp, Button, notification} from "antd";
 import {Content, Header, Footer} from "antd/es/layout/layout";
 import Sider from "antd/es/layout/Sider";
-import {LaptopOutlined, LogoutOutlined, MoonOutlined, NotificationOutlined, UserOutlined} from "@ant-design/icons";
+import {LogoutOutlined, MoonOutlined} from "@ant-design/icons";
 import SubNavContext, {SubNavProvider} from "./contexts/SubNavContext";
 
 
@@ -81,10 +82,7 @@ const MainContentView = ({children}) => {
       </Layout>
   );
 };
-const NotificationContextHolder = () => {
-  const [_, contextHolder] = notification.useNotification();
-  return contextHolder;
-};
+
 
 const AppContent = () => {
   const [isDark, setIsDark] = useState(localStorage.getItem("theme") === "dark");
@@ -92,7 +90,6 @@ const AppContent = () => {
   return (
       <ConfigProvider theme={{algorithm: isDark ? theme.darkAlgorithm : theme.defaultAlgorithm}}>
         <AntdApp>
-          <NotificationContextHolder/>
           <Routes>
             {/* Public route */}
             <Route path="/login" element={<Login/>}/>
