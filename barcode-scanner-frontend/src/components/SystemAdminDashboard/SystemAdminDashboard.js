@@ -103,17 +103,6 @@ const SystemAdminDashboard = () => {
     setEditOrgData(null);
   };
 
-  const handleAddOrganization = async (newOrgData) => {
-    try {
-      await api.post('/organizations', newOrgData);
-      const orgRes = await api.get('/organizations');
-      setOrganizations(orgRes.data);
-      closeModal();
-    } catch (error) {
-      console.error('ორგანიზაციის შექმნის შეცდომა', error);
-    }
-  };
-
   const handleEditOrganization = async (updatedOrgData) => {
     try {
       if (editOrgData) {
@@ -154,11 +143,7 @@ const SystemAdminDashboard = () => {
   switch (activeTab) {
     case 1:
       ActiveTabPane = (
-          <OrganizationsTab
-              organizations={organizations}
-              openModal={(mode, org) => openModal(mode, org)}
-              handleEdit={(org) => openModal('edit', org)}
-          />
+          <OrganizationsTab />
       );
       break;
     case 2:

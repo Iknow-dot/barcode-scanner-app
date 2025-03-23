@@ -1,24 +1,9 @@
 import React from 'react';
 import api from '../../api';
-import {Form, Input, InputNumber} from "antd";
+import {Button, Form, Input, InputNumber} from "antd";
 import ModalForm from "../ModalForm";  // Import your custom Axios instance
 
 const AddOrganization = ({visible, setVisible, onFinish}) => {
-  const handleSubmit = async (organization) => {
-
-    try {
-      // Make API call using the custom API instance from api.js
-      const response = await api.post('/organizations', organization);
-
-      if (response.status === 201) {
-        alert('ორგანიზაცია წარმატებით შეიქმნა!');
-      }
-    } catch (error) {
-      console.error('შეცდომა ორგანიზაციის შექმნისას:', error.response?.data?.error || error.message);
-      alert('ვერ მოხერხდა ორგანიზაციის შექმნა: ' + (error.response?.data?.error || error.message));
-    }
-  };
-
   return (
       <ModalForm
           visible={visible}
@@ -80,7 +65,7 @@ const AddOrganization = ({visible, setVisible, onFinish}) => {
 
         <Form.Item
             label="მომხმარელის სახელი"
-            name="username"
+            name="org_username"
             rules={[
               {
                 required: true,
@@ -93,7 +78,7 @@ const AddOrganization = ({visible, setVisible, onFinish}) => {
 
         <Form.Item
             label="პაროლი"
-            name="password"
+            name="org_password"
             rules={[
               {
                 required: true,
@@ -102,6 +87,11 @@ const AddOrganization = ({visible, setVisible, onFinish}) => {
             ]}
         >
           <Input.Password/>
+        </Form.Item>
+        <Form.Item label={null}>
+          <Button block type="primary" htmlType="submit" variant="solid" color="green">
+            დამატება
+          </Button>
         </Form.Item>
       </ModalForm>
   );

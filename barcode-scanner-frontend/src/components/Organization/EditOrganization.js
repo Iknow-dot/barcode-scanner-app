@@ -1,14 +1,15 @@
 import React from 'react';
 import ModalForm from "../ModalForm";
-import {Form, Input, InputNumber} from "antd";
+import {Button, Form, Input, InputNumber} from "antd";
 
-const EditOrganization = ({visible, setVisible, onFinish}) => {
+const EditOrganization = ({visible, setVisible, onFinish, object}) => {
   return (
       <ModalForm
+          object={object}
+          title="ორგანიზაციის დამატება"
           visible={visible}
           setVisible={setVisible}
           onFinish={onFinish}
-          title="ორგანიზაციის დამატება"
       >
         <Form.Item
             label="ორგანიზაციის სახელი:"
@@ -86,6 +87,12 @@ const EditOrganization = ({visible, setVisible, onFinish}) => {
             ]}
         >
           <Input.Password/>
+        </Form.Item>
+
+        <Form.Item label={null}>
+          <Button block type="primary" htmlType="submit" variant="solid" color="green">
+            შენახვა
+          </Button>
         </Form.Item>
       </ModalForm>
   );
