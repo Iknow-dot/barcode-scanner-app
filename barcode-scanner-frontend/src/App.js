@@ -8,20 +8,42 @@ import Warehouse from './components/Warehouse/WarehouseList';
 import Login from './components/Auth/Login';
 import Logout from './components/Auth/Logout';
 import SystemAdminDashboard from './components/SystemAdminDashboard/SystemAdminDashboard';
-import {Breadcrumb, ConfigProvider, FloatButton, Layout, Menu, theme, App as AntdApp, Button, notification} from "antd";
+import {
+  Breadcrumb,
+  ConfigProvider,
+  FloatButton,
+  Layout,
+  Menu,
+  theme,
+  App as AntdApp,
+  Button,
+  notification,
+  Space,
+  Dropdown
+} from "antd";
 import {Content, Header, Footer} from "antd/es/layout/layout";
 import Sider from "antd/es/layout/Sider";
-import {LogoutOutlined, MoonOutlined} from "@ant-design/icons";
+import {DownOutlined, LogoutOutlined, MoonOutlined, SmileOutlined, UserOutlined} from "@ant-design/icons";
 import SubNavContext, {SubNavProvider} from "./contexts/SubNavContext";
 import "antd/dist/reset.css";
 
+
 const MainContentView = ({children}) => {
+  const {authData} = useContext(AuthContext);
   const {subNav} = useContext(SubNavContext);
   const {
     token: {colorBgContainer, borderRadiusLG},
   } = theme.useToken();
   const {logout} = useContext(AuthContext);
-
+  const items = [
+    {
+      key: '1',
+      icon: <LogoutOutlined/>,
+      label: "გასვლა",
+      danger: true,
+      onClick: logout
+    }
+  ];
   return (
       <Layout style={{minHeight: "100vh"}}>
         <Header style={{display: 'flex', alignItems: 'center'}}>
@@ -31,13 +53,16 @@ const MainContentView = ({children}) => {
               width="100"
           />
 
-          <Button variant="solid"
-                  color="danger"
-                  className="float-right"
-                  style={{marginLeft: 'auto'}}
-                  onClick={logout}>
-            <LogoutOutlined/> Log Out
-          </Button>
+          <div style={{marginLeft: 'auto'}}>
+            <Dropdown menu={{items}}>
+              <Space style={{cursor: "pointer"}}>
+                {authData?.role}
+                <UserOutlined/>
+              </Space>
+            </Dropdown>
+          </div>
+
+
         </Header>
         <div style={{padding: '48px'}}>
           <Layout
