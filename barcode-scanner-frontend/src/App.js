@@ -1,4 +1,3 @@
-import "antd/dist/reset.css";
 import React, {useContext, useState} from 'react';
 import {BrowserRouter as Router, Routes, Route, Navigate} from 'react-router-dom';
 import AuthContext, {AuthProvider} from './components/Auth/AuthContext';
@@ -14,29 +13,19 @@ import {Content, Header, Footer} from "antd/es/layout/layout";
 import Sider from "antd/es/layout/Sider";
 import {LogoutOutlined, MoonOutlined} from "@ant-design/icons";
 import SubNavContext, {SubNavProvider} from "./contexts/SubNavContext";
-
+import "antd/dist/reset.css";
 
 const MainContentView = ({children}) => {
   const {subNav} = useContext(SubNavContext);
-  const [isDark, setIsDark] = useState(localStorage.getItem("theme") === "dark");
-
   const {
     token: {colorBgContainer, borderRadiusLG},
   } = theme.useToken();
   const {logout} = useContext(AuthContext);
 
+
   return (
       <Layout style={{minHeight: "100vh"}}>
-        <FloatButton
-            onClick={() => {
-              const newTheme = !isDark;
-              setIsDark(!isDark);
-              localStorage.setItem("theme", newTheme ? "dark" : "light");// Save theme preference
-            }}
-            shape="circle"
-            style={{insetInlineEnd: 24}}
-            icon={<MoonOutlined/>}
-        />
+
         <Header style={{display: 'flex', alignItems: 'center'}}>
           <img
               src="/iflow-logo.png"
@@ -86,10 +75,24 @@ const MainContentView = ({children}) => {
 
 const AppContent = () => {
   const [isDark, setIsDark] = useState(localStorage.getItem("theme") === "dark");
-
+  const toggleTheme = () => {
+    document.body.classList.add("theme-transition"); // Add transition class
+    const newTheme = !isDark;
+    setIsDark(!isDark);
+    localStorage.setItem("theme", newTheme ? "dark" : "light");
+    setTimeout(() => {
+      document.body.classList.remove("theme-transition"); // Remove after animation
+    }, 1000); // Match CSS animation duration
+  };
   return (
       <ConfigProvider theme={{algorithm: isDark ? theme.darkAlgorithm : theme.defaultAlgorithm}}>
         <AntdApp>
+          <FloatButton
+              onClick={toggleTheme}
+              shape="circle"
+              style={{insetInlineEnd: 24}}
+              icon={<MoonOutlined/>}
+          />
           <Routes>
             {/* Public route */}
             <Route path="/login" element={<Login/>}/>
