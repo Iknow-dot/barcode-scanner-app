@@ -2,11 +2,15 @@ import React, {useContext, useEffect} from 'react';
 import {useNavigate} from 'react-router-dom';
 import api, {getClientIp} from '../../api';  // Make sure getClientIp is correctly imported
 import AuthContext from '../Auth/AuthContext';
-import {Button, Checkbox, Form, Input, Layout} from "antd";
+import {Button, Checkbox, Form, Input, Layout, theme} from "antd";
+import {Content} from "antd/es/layout/layout";
 
 const Login = () => {
   const {login, token, userRole} = useContext(AuthContext);
   const navigate = useNavigate();
+  const {
+    token: {colorBgContainer, borderRadiusLG},
+  } = theme.useToken();
 
   useEffect(() => {
     // Redirect if already logged in
@@ -48,72 +52,72 @@ const Login = () => {
 
   return (
       <>
-        <Layout>
+        <Layout style={{
+          minHeight: "100vh",
+        }}>
+
           <img
-            src="/iflow-logo.png"
-            alt="iFlow"
-            style={{
-              display: "block",
-              marginLeft: "auto",
-              marginRight: "auto",
-              width: "50%",
-              marginBottom: 20
-            }}
-            />
-          <Form
-              name="basic"
-              labelCol={{
-                span: 8,
-              }}
-              wrapperCol={{
-                span: 16,
-              }}
+              src="/iflow-logo.png"
+              alt="iFlow"
               style={{
-                maxWidth: 600,
-                justifyContent: "center",
+                display: "block",
+                width: "50%",
+                margin: "auto",
               }}
-              initialValues={{
-                remember: true,
-              }}
-              autoComplete="on"
-              onFinish={handleSubmit}
-          >
-            <Form.Item
-                label="Username"
-                name="username"
-                rules={[
-                  {
-                    required: true,
-                    message: 'Please input your username!',
-                  },
-                ]}
+          />
+          <Layout>
+            <Content
+                style={{
+                  flex: "none",
+                  padding: 24,
+                  margin: "0 auto",
+                  width: "50%",
+                  background: colorBgContainer,
+                  borderRadius: borderRadiusLG,
+                }}
             >
-              <Input/>
-            </Form.Item>
+              <Form
+                  layout="vertical"
+                  initialValues={{
+                    remember: true,
+                  }}
+                  autoComplete="on"
+                  onFinish={handleSubmit}
+              >
+                <Form.Item
+                    label="მომხმარებელი"
+                    name="username"
+                    rules={[
+                      {
+                        required: true,
+                        message: 'Please input your username!',
+                      },
+                    ]}
+                >
+                  <Input/>
+                </Form.Item>
 
-            <Form.Item
-                label="Password"
-                name="password"
-                rules={[
-                  {
-                    required: true,
-                    message: 'Please input your password!',
-                  },
-                ]}
-            >
-              <Input.Password/>
-            </Form.Item>
+                <Form.Item
+                    label="პაროლი"
+                    name="password"
+                    rules={[
+                      {
+                        required: true,
+                        message: 'Please input your password!',
+                      },
+                    ]}
+                >
+                  <Input.Password/>
+                </Form.Item>
 
-            <Form.Item name="remember" valuePropName="checked" label={null}>
-              <Checkbox>Remember me</Checkbox>
-            </Form.Item>
-
-            <Form.Item label={null}>
-              <Button type="primary" htmlType="submit">
-                Submit
-              </Button>
-            </Form.Item>
-          </Form>
+                <Form.Item label={null}>
+                  <Button type="primary" htmlType="submit">
+                    შესვლა
+                  </Button>
+                </Form.Item>
+              </Form>
+            </Content>
+          </Layout>
         </Layout>
       </>
   );
