@@ -1,5 +1,4 @@
 import React, {useState, useEffect, useContext} from 'react';
-import './SystemAdminDashboard.css';
 import api from '../../api';
 import AuthContext from '../Auth/AuthContext';
 import OrganizationsTab from './OrganizationsTab';
@@ -7,71 +6,55 @@ import WarehousesTab from './WarehousesTab';
 import UsersTab from './UsersTab';
 import AddOrganization from '../Organization/AddOrganization';
 import EditOrganization from '../Organization/EditOrganization';
-import AddUser from '../User/AddUser';
+import AddUserModal from '../User/AddUserModal';
 import EditUser from '../User/EditUser';
 import AddWarehouse from '../Warehouse/AddWarehouse';
 import EditWarehouse from '../Warehouse/EditWarehouse';
 import {Tabs} from "antd";
 import {AppstoreOutlined, BankOutlined, UserOutlined} from "@ant-design/icons";
+import SubNavContext from "../../contexts/SubNavContext";
 
 
 const SystemAdminDashboard = () => {
+  const {setSubNav} = useContext(SubNavContext);
   const {authData, logout} = useContext(AuthContext);
   const [organizations, setOrganizations] = useState([]);
   const [warehouses, setWarehouses] = useState([]);
   const [users, setUsers] = useState([]);
-  const [activeTab, setActiveTab] = useState('Users');
+  const [activeTab, setActiveTab] = useState(3);
   const [isModalOpen, setModalOpen] = useState(false);
   const [modalContent, setModalContent] = useState('');
   const [darkMode, setDarkMode] = useState(localStorage.getItem('darkMode') === 'true');
   const [editOrgData, setEditOrgData] = useState(null);
   const [editWarehouseData, setEditWarehouseData] = useState(null);
-  const [editUserData, setEditUserData] = useState(null);
+  const [editUserData, setEditUserData] = useState({});
 
   const userRole = authData?.role;
   const userOrganizationId = authData?.organization_id;
 
-  const tabItems = [
-    userRole === 'system_admin' && ({
-      key: "1",
-      label: (
-          <>
-            <BankOutlined/> ორგანიზაციები
-          </>
-      ),
-      children: (
-          <OrganizationsTab
-              organizations={organizations}
-              openModal={(mode, org) => openModal(mode, org)}
-              handleEdit={(org) => openModal('edit', org)}
-          />
-      )
-    }),
-    userRole === 'admin' && ({
-      key: "2",
-      label: (
-          <>
-            <AppstoreOutlined/> საწყობები
-          </>
-      ),
-      children: (
-          <WarehousesTab
-              warehouses={warehouses}
-              openModal={(mode, wh) => openModal(mode, null, wh)}
-          />
-      )
-    }),
-    {
-      key: "3",
-      label: <><UserOutlined/> მომხმარებლები</>,
-      children: (
-          <UsersTab
-              users={users}
-              openModal={(mode, User) => openModal(mode, null, null, User)}
-          />
-      )
-    }
-  ];
+  useEffect(() => {
+    setSubNav([
+      userRole === 'system_admin' && ({
+        key: '1',
+        icon: <BankOutlined/>,
+        label: "ორგანიზაციები",
+        onClick: () => setActiveTab(1)
+      }),
+      {
+        key: '2',
+        icon: <AppstoreOutlined/>,
+        label: "საწყობები",
+        onClick: () => setActiveTab(2)
+      },
+      {
+        key: '3',
+        active: "true",
+        icon: <UserOutlined/>,
+        label: "მომხმარებლები",
+        onClick: () => setActiveTab(3)
+      }
+    ]);
+  }, []);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -90,22 +73,6 @@ const SystemAdminDashboard = () => {
     };
     fetchData();
   }, []);
-
-  const toggleDarkMode = () => {
-    const isDarkMode = !darkMode;
-    setDarkMode(isDarkMode);
-    localStorage.setItem('darkMode', isDarkMode);
-    document.body.classList.toggle('dark-mode', isDarkMode);
-  };
-
-  const openTab = (tabName) => setActiveTab(tabName);
-
-  // const openModal = (contentType, orgData = null, warehouseData = null) => {
-  //   setModalContent(contentType);
-  //   setModalOpen(true);
-  //   setEditOrgData(contentType === 'edit' ? orgData : null);
-  // };
-
 
   const openModal = (contentType, orgData = null, warehouseData = null, userData = null) => {
     setModalContent(contentType);
@@ -173,30 +140,6 @@ const SystemAdminDashboard = () => {
     }
   };
 
-  const handleEditUser = async (updatedUserData) => {
-    try {
-      if (editUserData) {
-        await api.put(`/users/${editUserData.id}`, updatedUserData);
-        const UserRes = await api.get('/users');
-        setEditUserData(UserRes.data);
-      }
-      closeModal();
-    } catch (error) {
-      console.error('მომხმარებლის განახლების შეცდომა', error);
-    }
-  };
-
-  const handleAddUser = async (newUserData) => {
-    try {
-      await api.post('/users', newUserData);
-      const userRes = await api.get('/users');
-      setUsers(userRes.data);
-      closeModal();
-    } catch (error) {
-      console.error('მომხმარებლის დამატების შეცდომა', error);
-    }
-  };
-
   const handleAddWarehouse = async (newWarehouseData) => {
     try {
       await api.post('/warehouses', newWarehouseData);
@@ -207,75 +150,73 @@ const SystemAdminDashboard = () => {
       console.error('საწყობის დამატების შეცდომა', error);
     }
   };
+  let ActiveTabPane = null;
+  switch (activeTab) {
+    case 1:
+      ActiveTabPane = (
+          <OrganizationsTab
+              organizations={organizations}
+              openModal={(mode, org) => openModal(mode, org)}
+              handleEdit={(org) => openModal('edit', org)}
+          />
+      );
+      break;
+    case 2:
+      ActiveTabPane = (
+          <WarehousesTab
+              warehouses={warehouses}
+              openModal={(mode, wh) => openModal(mode, null, wh)}
+              isModalOpen={isModalOpen}
+          />
+      );
+      break;
+    case 3:
+      ActiveTabPane = (
+          <UsersTab
+              users={users}
+              AddModal={AddUserModal}
+              addModalExtraProps={{
+                userRole,
+                organizations,
+                warehouses
+              }}
+              EditModal={EditUser}
+          />
+      );
+      break;
+  }
 
   return (
       <>
-
-        <div className="container">
-          <div className="header-line">
-            <img
-                src="https://imgur.com/VV5PiDB.png"
-                alt="Logo"
-                style={{backgroundColor: 'rgba(159, 159, 159)'}}
-                width="150"
-            />
-            <button onClick={logout} className="logout-btn">გასვლა</button>
-          </div>
-          <div className="dashboard-container">
-            <div className="header">
-              <h2>Dark Mode</h2>
-              <label className="switch">
-                <input type="checkbox" checked={darkMode} onChange={toggleDarkMode}/>
-                <span className="slider round"></span>
-              </label>
+        {ActiveTabPane}
+        {isModalOpen && (
+            <div className="modal active">
+              {modalContent === 'edit' && editOrgData ? (
+                  <EditOrganization
+                      organizationData={editOrgData}
+                      handleEditOrganization={handleEditOrganization}
+                      closeModal={closeModal}
+                  />
+              ) : modalContent === 'editWarehouse' && editWarehouseData ? (
+                  <EditWarehouse
+                      warehouseData={editWarehouseData} // Change 'warehouseDataData' to 'warehouseData'
+                      handleEditWarehouse={handleEditWarehouse}
+                      closeModal={closeModal}
+                  />
+              )  : modalContent === 'organization' ? (
+                  <AddOrganization
+                      handleAddOrganization={handleAddOrganization}
+                      closeModal={closeModal}
+                  />
+              ) : (
+                  <AddWarehouse
+                      handleAddWarehouse={handleAddWarehouse}
+                      closeModal={closeModal}
+                      organizationId={userOrganizationId}
+                  />
+              )}
             </div>
-            <Tabs defaultActiveKey="1" items={tabItems}/>
-
-            {isModalOpen && (
-                <div className="modal active">
-                  {modalContent === 'edit' && editOrgData ? (
-                      <EditOrganization
-                          organizationData={editOrgData}
-                          handleEditOrganization={handleEditOrganization}
-                          closeModal={closeModal}
-                      />
-                  ) : modalContent === 'editWarehouse' && editWarehouseData ? (
-                      <EditWarehouse
-                          warehouseData={editWarehouseData} // Change 'warehouseDataData' to 'warehouseData'
-                          handleEditWarehouse={handleEditWarehouse}
-                          closeModal={closeModal}
-                      />
-                  ) : modalContent === 'editUser' && editUserData ? (
-                      <EditUser
-                          userData={editUserData} // Change 'userDataData' to 'warehouseData'
-                          handleEditUser={handleEditUser}
-                          closeModal={closeModal}
-                      />
-                  ) : modalContent === 'organization' ? (
-                      <AddOrganization
-                          handleAddOrganization={handleAddOrganization}
-                          closeModal={closeModal}
-                      />
-                  ) : modalContent === 'user' ? (
-                      <AddUser
-                          handleAddUser={handleAddUser}
-                          closeModal={closeModal}
-                          isModalOpen={isModalOpen}
-                          userRole={userRole}
-                          organizations={organizations}
-                          warehouses={warehouses}
-                      />
-                  ) : (
-                      <AddWarehouse
-                          handleAddWarehouse={handleAddWarehouse}
-                          closeModal={closeModal}
-                          organizationId={userOrganizationId}
-                      />
-                  )}
-                </div>
-            )}
-          </div>
-        </div>
+        )}
       </>
   );
 };

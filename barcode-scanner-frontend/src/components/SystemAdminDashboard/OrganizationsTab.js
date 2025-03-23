@@ -1,7 +1,12 @@
 import React from 'react';
 import api from '../../api';
+import {Button, Space, Table} from "antd";
+import {DeleteOutlined, EditOutlined, PlusOutlined} from "@ant-design/icons";
+import DataTab from "../DataTab";
+import AddOrganization from "../Organization/AddOrganization";
+import EditOrganization from "../Organization/EditOrganization";
 
-const OrganizationsTab = ({ organizations, openModal }) => {
+const OrganizationsTab = ({organizations, openModal}) => {
   const handleEdit = (org) => {
     openModal('edit', org); // Pass 'edit' mode and organization data to the modal
   };
@@ -17,43 +22,49 @@ const OrganizationsTab = ({ organizations, openModal }) => {
     }
   };
 
+  const handleAddOrganization = async (newOrganizationData) => {
+
+  }
+
+  const handleEditOrganization = async (updatedOrganizationData) => {
+
+  }
+
   return (
-    <div id="Organizations" className="tab-content active">
-      <button className="add-btn" onClick={() => openModal('organization')}>ორგანიზაციის დამატება</button>
-      <table>
-        <thead>
-          <tr>
-            <th>ორგანიზაცია</th>
-            <th>გსნ</th>
-            <th>თანამშრომელთა რაოდენობა</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {organizations.map((org) => (
-            <tr key={org.id}>
-              <td>{org.name}</td>
-              <td>{org.identification_code}</td>
-              <td>{org.employees_count}</td>
-              <td>
-                <button
-                  className="edit-btn"
-                  onClick={() => handleEdit(org)} // Call handleEdit with the organization data
-                >
-                  Edit
-                </button>
-                <button
-                  className="delete-btn"
-                  onClick={() => handleDelete(org.id)}
-                >
-                  Delete
-                </button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+      <>
+
+        <div id="Organizations" className="tab-content active">
+          <Table
+              dataSource={organizations}
+              columns={[
+                {key: "name", title: 'ორგანიზაცია', dataIndex: 'name'},
+                {key: "identification_code", title: 'გსნ', dataIndex: 'identification_code'},
+                {key: "employees_count", title: 'თანამშრომელთა რაოდენობა', dataIndex: 'employees_count'},
+                {
+                  key: "actions",
+                  title: (
+                      <Button variant="outlined" color="green" onClick={() => openModal('organization')}>
+                        <PlusOutlined/>
+                      </Button>
+                  ),
+                  align: "right",
+                  render: (org) => (
+                      <Space size="middle">
+                        <Button variant="outlined"
+                                color="primary"
+                                onClick={() => handleEdit(org)}>
+                          <EditOutlined/>
+                        </Button>
+                        <Button variant="outlined" color="danger" onClick={() => handleDelete(org.id)}>
+                          <DeleteOutlined/>
+                        </Button>
+                      </Space>
+                  ),
+                },
+              ]}
+          />
+        </div>
+      </>
   );
 };
 

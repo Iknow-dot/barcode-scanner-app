@@ -1,10 +1,9 @@
 import React, {useState, useEffect, useContext, useCallback} from 'react';
-import './AddUser.css'; // Use appropriate CSS file
 import api, {getUserWarehousesByUserId} from '../../api';
 import AuthContext from '../Auth/AuthContext';
 import {Button, Form, Input, Modal, Select, Space, Tag} from "antd";
 
-const EditUser = ({userData, closeModal, isModalOpen}) => {
+const EditUser = ({visible, setVisible, onFinish, object}) => {
   const [form] = Form.useForm();
   const renderOption = useCallback((option) => {
     return (
@@ -31,26 +30,29 @@ const EditUser = ({userData, closeModal, isModalOpen}) => {
         setOrganizations(orgRes.data);
       }
 
-      if (authData?.role === 'admin' && userData.role_name === 'user') {
+      if (authData?.role === 'admin' && object.role_name === 'user') {
         const whRes = await api.get('/warehouses');
         setWarehouses(whRes.data);
         setIsAdmin(true);
       }
 
-      if (authData?.role === 'admin' && userData.role_name === 'user' && userData.id) {
-        setUserWarehouses(await getUserWarehousesByUserId(userData.id));
+      if (authData?.role === 'admin' && object.role_name === 'user' && object.id) {
+        setUserWarehouses(await getUserWarehousesByUserId(object.id));
       }
     };
 
     fetchData();
 
-  }, [authData, userData]);
+  }, [authData, object]);
 
   useEffect(() => {
     form.setFieldsValue({
-        warehouse_ids: userWarehouses.map(wh => wh.id)
+      username: object.username,
+      role_name: object.role_name,
+      ip_address: object.ip_address && object.ip_address.split(", "),
+      warehouse_ids: userWarehouses.map(wh => wh.id)
     })
-  }, [userWarehouses, form]);
+  }, [userWarehouses, form, object]);
 
   useEffect(() => {
     const fetchIp = async () => {
@@ -69,25 +71,9 @@ const EditUser = ({userData, closeModal, isModalOpen}) => {
     fetchIp();
   }, []);
 
-  const onFinish = async (userDataModified) => {
-    try {
-      userDataModified["ip_address"] = userDataModified["ip_address"].join(", ");
-      // console.log(editUserData);
-      await api.put(`/users/${userData.id}`, userDataModified);
-      alert('მომხმარებელი წარმატებით განახლდა!');
-      closeModal();
-    } catch (error) {
-      console.error('შეცდომა მომხმარებლის განახლებისას:', error.response?.data?.error || error.message);
-      alert('ვერ მოხერხდა მომხმარებლის განახლება: ' + (error.response?.data?.error || error.message));
-    }
-  };
-
-  const onFinishFailed = (errorInfo) => {
-    console.log('Failed:', errorInfo);
-  }
 
   return (
-      <Modal title="მომხმარებლის განახლება" open={isModalOpen} footer={null} onCancel={closeModal}>
+      <Modal title="მომხმარებლის განახლება" open={visible} footer={null} onCancel={() => setVisible(false)}>
         <Form
             form={form}
             name="addUserForm"
@@ -96,13 +82,11 @@ const EditUser = ({userData, closeModal, isModalOpen}) => {
               maxWidth: "none",
               width: "100%"
             }}
-            initialValues={{
-              username: userData.username,
-              role_name: userData.role_name,
-              ip_address: userData.ip_address && userData.ip_address.split(", ")
+            onFinish={(editUser) => {
+              console.log(`Object:`, object);
+              onFinish(object, editUser, form);
+              setVisible(false);
             }}
-            onFinish={onFinish}
-            onFinishFailed={onFinishFailed}
             autoComplete="off"
         >
           <Form.Item

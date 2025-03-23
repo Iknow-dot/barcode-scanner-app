@@ -2,8 +2,6 @@ import React, { useState, useEffect, useContext } from 'react';
 import { scanProducts, getUserWarehouses, getClientIp, fetchImageThroughProxy } from '../../api';
 import ScanButton from './ScanButton';
 import Carousel from 'react-multi-carousel';
-import 'react-multi-carousel/lib/styles.css';
-import './UserDashboard.css';
 import AuthContext from '../Auth/AuthContext';
 import { registerServiceWorker } from '../serviceWorkerRegistration';
 

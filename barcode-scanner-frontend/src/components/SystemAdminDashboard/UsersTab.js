@@ -1,12 +1,22 @@
-import React, { useEffect, useState } from 'react';
+import React, {useContext, useEffect, useState} from 'react';
 import api from '../../api';
-import {UserAddOutlined} from "@ant-design/icons";
-import {Button, Table, Tag} from "antd";
+import {notification, Tag} from "antd";
+import DataTab from "../DataTab";
+import AuthContext from "../Auth/AuthContext";
 
-const UsersTab = ({ users: initialUsers, openModal }) => {
+
+const UsersTab = ({users: initialUsers, AddModal, EditModal, addModalExtraProps}) => {
+  const {authData} = useContext(AuthContext);
   const [users, setUsers] = useState(initialUsers);
   const [organizations, setOrganizations] = useState({});
+  const [notificationApi, contextHolder] = notification.useNotification();
+  const [notificationData, setNotificationData] = useState({});
 
+  const openNotificationWithIcon = (type, message, description) => {
+    notificationApi[type]({
+      message, description, showProgress: true, pauseOnHover: true,
+    });
+  };
   useEffect(() => {
     const fetchOrganizations = async () => {
       try {
@@ -27,47 +37,122 @@ const UsersTab = ({ users: initialUsers, openModal }) => {
     setUsers(initialUsers);
   }, [initialUsers]);
 
-  const handleEdit = (user) => {
-    openModal('editUser', user);
-  };
+  useEffect(() => {
+    if (notificationData.message) {
+      openNotificationWithIcon(
+          notificationData.type,
+          notificationData.message,
+          notificationData.description
+      );
+    }
+  }, [notificationData]);
 
-  const handleDelete = async (userId) => {
+
+  const handleAdd = async (newUser) => {
+    if (authData?.role === 'admin') {
+      newUser.organization_id = authData.organization_id; // Admin's organization
+      newUser.role_name = 'user'; // Admin adds users with the role 'user'
+    }
+    try {
+      newUser["ip_address"] = newUser["ip_address"].join(", ");
+      // Make the API call to create the user
+      const response = await api.post('/users', newUser, {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+
+      if (response.status === 201) {
+        const {id} = response.data;
+        newUser.id = id;
+        setNotificationData({
+          type: 'success',
+          message: 'წარმატება',
+          description: `მომხმარებელი "${newUser.username}" წარმატებიით შეიქმნა`
+        })
+        setUsers(prevUsers => [...prevUsers, newUser]);
+      }
+    } catch (error) {
+      console.error('შეცდომა მომხმარებლის შექმნისას:', error.response?.data?.error || error.message);
+      setNotificationData({
+        type: 'error',
+        message: 'შეცდომა',
+        description: `მომხმარებლის შექმნისას შეცდომა "(${error.response?.data?.error || error.message})"`
+      });
+    }
+  }
+
+  const handleDelete = async (deleteUser) => {
     if (window.confirm("ნამდვილად გსურთ ამ მომხმარებლის წაშლა?")) {
       try {
-        await api.delete(`/users/${userId}`);
-        setUsers(prevUsers => prevUsers.filter(user => user.id !== userId));
+        await api.delete(`/users/${deleteUser.id}`);
+        setUsers(prevUsers => prevUsers.filter(user => user.id !== deleteUser.id));
+        setNotificationData({
+          type: 'success',
+          message: 'წარმატება',
+          description: `"${deleteUser.username}" წარმატებიით წაიშალა`
+        });
+
       } catch (error) {
-        console.error("მომხმარებლის წაშლის შეცდომა:", error);
+        setNotificationData({
+          type: 'error',
+          message: 'შეცდომა',
+          description: `მომხმარებლის წაშლისას შეცდომა "(${error.response?.data?.error || error.message})"`
+        })
       }
     }
   };
 
-  return (
-    <div>
-      <Button variant="solid" color="green" onClick={() => openModal('user')}>
-        <UserAddOutlined /> მომხმარებლის დამატება
-      </Button>
+  const handleEdit = async (editUser, modifiedFields, form) => {
+    try {
+      editUser = {...editUser, ...modifiedFields};
+      editUser["ip_address"] = editUser["ip_address"].join(", ");
+      await api.put(`/users/${editUser.id}`, editUser);
+      setUsers(prevUsers => prevUsers.map(user => user.id === editUser.id ? editUser : user));
+      setNotificationData({
+        type: 'success',
+        message: 'წარმატება',
+        description: `მომხმარებელი "${editUser.username}" წარმატებიით განახლდა`
+      })
+    } catch (error) {
+      form.setFieldsValue(modifiedFields);
+      setNotificationData({
+        type: 'error',
+        message: 'შეცდომა',
+        description: `მომხმარებლის "${editUser.username}" განახლებისას შეცდომა "(${error.response?.data?.error || error.message})"`
+      })
+    }
+  };
 
-      <Table
-        dataSource={users}
-        columns={[
-            { title: 'სახელი', dataIndex: 'username' },
-            { title: 'ორგანიზაცია', dataIndex: 'organization_id', render: (orgId) => organizations[orgId] || 'N/A' },
-            { title: 'როლი', dataIndex: 'role_name', render: (role) => (
-                <Tag color="geekblue">{role}</Tag>
-              ) },
-            {
-                title: 'ქმედებები',
-                render: (_, user) => (
-                <>
-                    <Button variant="outlined" color="primary" onClick={() => handleEdit(user)}>რედაქტირება</Button>
-                    <Button variant="outlined" color="danger" onClick={() => handleDelete(user.id)}>წაშლა</Button>
-                </>
-                ),
-            },
-        ]}
-      />
-    </div>
+  return (
+      <>
+        {contextHolder}
+        <DataTab
+            objects={users}
+            columns={[
+              {key: "username", title: 'სახელი', dataIndex: 'username'},
+              {
+                key: "organization_id",
+                title: 'ორგანიზაცია',
+                dataIndex: 'organization_id',
+                render: (orgId) => organizations[orgId] || 'N/A'
+              },
+              {
+                key: "role_name", title: 'როლი', dataIndex: 'role_name', render: (role) => (
+                    <Tag color="geekblue">{role}</Tag>
+                )
+              },
+            ]}
+            AddModal={AddModal}
+            handleAdd={handleAdd}
+            addModalExtraProps={addModalExtraProps}
+            EditModal={EditModal}
+            handleEdit={handleEdit}
+            handleDelete={handleDelete}
+        />
+      </>
+
   );
 };
 

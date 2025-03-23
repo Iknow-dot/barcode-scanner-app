@@ -1,7 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, {useState, useEffect} from 'react';
 import api from '../../api';
+import {Button, Space, Table} from "antd";
+import {DeleteOutlined, EditOutlined, PlusOutlined} from "@ant-design/icons";
 
-const WarehousesTab = ({ warehouses: initialWarehouses, openModal }) => {
+const WarehousesTab = ({warehouses: initialWarehouses, openModal}) => {
   const [warehouses, setWarehouses] = useState(initialWarehouses);
   const [organizations, setOrganizations] = useState({});
 
@@ -37,36 +39,39 @@ const WarehousesTab = ({ warehouses: initialWarehouses, openModal }) => {
   };
 
   return (
-    <div id="Warehouses" className="tab-content active">
-      <button className="add-btn" onClick={() => openModal('addWarehouse')}>
-        საწყობის დამატება
-      </button>
-      <table>
-        <thead>
-          <tr>
-            <th>სახელი</th>
-            <th>ორგანიზაცია</th>
-            <th>ქმედებები</th>
-          </tr>
-        </thead>
-        <tbody>
-          {warehouses.map((wh) => (
-            <tr key={wh.id}>
-              <td>{wh.name}</td>
-              <td>{organizations[wh.organization_id] || 'N/A'}</td>
-              <td>
-                <button className="edit-btn" onClick={() => handleEdit(wh)}>
-                  რედაქტირება
-                </button>
-                <button className="delete-btn" onClick={() => handleDelete(wh.id)}>
-                  წაშლა
-                </button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+      <div id="Warehouses" className="tab-content active">
+        <Table
+            dataSource={warehouses.map(wh => ({...wh, key: wh.id}))}
+            columns={[
+              {key: "name", title: 'სახელი', dataIndex: 'name'},
+              {
+                key: "organization_id",
+                title: 'ორგანიზაცია',
+                dataIndex: 'organization_id',
+                render: (orgId) => organizations[orgId] || 'N/A'
+              },
+              {
+                key: "x",
+                title: (
+                    <Button variant="outlined" color="green" onClick={() => openModal('addWarehouse')}>
+                      <PlusOutlined/>
+                    </Button>
+                ),
+                align: "right",
+                render: (wh) => (
+                    <Space size="middle">
+                      <Button variant="outlined" color="primary" onClick={() => handleEdit(wh)}>
+                        <EditOutlined/>
+                      </Button>
+                      <Button variant="outlined" color="danger" onClick={() => handleDelete(wh.id)}>
+                        <DeleteOutlined/>
+                      </Button>
+                    </Space>
+                )
+              }
+            ]}
+        />
+      </div>
   );
 };
 

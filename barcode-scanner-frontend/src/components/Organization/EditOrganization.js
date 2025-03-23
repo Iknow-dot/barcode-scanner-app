@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import './AddOrganization.css';
 
 const EditOrganization = ({ organizationData, handleEditOrganization, closeModal }) => {
   const [orgData, setOrgData] = useState({

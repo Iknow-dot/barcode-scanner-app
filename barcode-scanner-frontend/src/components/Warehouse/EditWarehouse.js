@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import './AddWarehouse.css';
 import api from '../../api';
 
 const EditWarehouse = ({ warehouseData, closeModal }) => {

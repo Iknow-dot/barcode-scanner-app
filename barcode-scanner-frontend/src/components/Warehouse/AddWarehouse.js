@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import './AddWarehouse.css';
 import api from '../../api'; // Ensure you have an api setup for handling requests
 
 const AddWarehouse = ({ closeModal, organizationId }) => {
