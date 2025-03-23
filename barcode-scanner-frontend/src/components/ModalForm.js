@@ -5,6 +5,7 @@ export const ModalForm = ({visible, setVisible, onFinish, title, name, object = 
   const [form] = Form.useForm();
   useEffect(() => {
     if (object && form) {
+      form.resetFields();
       form.setFieldsValue(object);
     }
   }, [form, object]);

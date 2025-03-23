@@ -35,20 +35,27 @@ const OrganizationsTab = () => {
     fetchData();
   }, []);
 
-  const handleDelete = async (orgId) => {
-    if (window.confirm("ნამდვილად გსურთ ორგანიზაციის წაშლა?")) {
-      try {
-        await api.delete(`/organizations/${orgId}`);
-        window.location.reload(); // Reload to refresh the organization list
-      } catch (error) {
-        console.error("ორგანიზაციის წაშლის შეცდომა:", error);
-      }
+  const handleDelete = async (organization) => {
+    try {
+      await api.delete(`/organizations/${organization.id}`);
+      setOrganizations(organizations.filter(org => org.id !== organization.id));
+      setNotificationData({
+        type: 'warning',
+        message: 'ორგანიზაცია წაიშლა',
+        description: `ორგანიზაცია: ${organization.name}`
+      })
+
+    } catch (error) {
+      setNotificationData({
+        type: 'error',
+        message: 'შეცდომა ორგანიზაციის წაშლისას:',
+        description: error.response?.data?.error || error.message
+      });
     }
   };
 
   const handleAddOrganization = async (newOrganizationData) => {
     try {
-      // Make API call using the custom API instance from api.js
       const response = await api.post('/organizations', newOrganizationData);
 
       if (response.status === 201) {
@@ -66,12 +73,33 @@ const OrganizationsTab = () => {
         message: 'შეცდომა ორგანიზაციის შექმნისას:',
         description: error.response?.data?.error || error.message
       });
-        return false;
+      return false;
     }
   }
 
-  const handleEditOrganization = async (updatedOrganizationData) => {
-    console.log(updatedOrganizationData)
+  const handleEditOrganization = async (updatedOrganizationData, originalOrganization) => {
+    try {
+      const updatedOrgData = {
+        ...originalOrganization,
+        ...updatedOrganizationData
+      }
+      await api.put(`/organizations/${updatedOrgData.id}`, updatedOrgData);
+      const orgRes = await api.get('/organizations');
+      setOrganizations(orgRes.data);
+      setNotificationData({
+        type: 'success',
+        message: 'ორგანიზაცია წარმატებიით შეირედაქტირდა',
+        description: `ორგანიზაცია: ${updatedOrgData.name}`
+      });
+      return true;
+    } catch (error) {
+      setNotificationData({
+        type: 'error',
+        message: 'შეცდომა ორგანიზაციის რედაქტირებისას:',
+        description: error.response?.data?.error || error.message
+      });
+      return false;
+    }
   }
 
   return (

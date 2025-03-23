@@ -9,7 +9,7 @@ const EditOrganization = ({visible, setVisible, onFinish, object}) => {
           title="ორგანიზაციის დამატება"
           visible={visible}
           setVisible={setVisible}
-          onFinish={onFinish}
+          onFinish={(data) => onFinish(data, object)}
       >
         <Form.Item
             label="ორგანიზაციის სახელი:"
@@ -65,7 +65,7 @@ const EditOrganization = ({visible, setVisible, onFinish, object}) => {
 
         <Form.Item
             label="მომხმარელის სახელი"
-            name="username"
+            name="org_username"
             rules={[
               {
                 required: true,
@@ -78,13 +78,14 @@ const EditOrganization = ({visible, setVisible, onFinish, object}) => {
 
         <Form.Item
             label="პაროლი"
-            name="password"
+            name="org_password"
             rules={[
               {
-                required: true,
+                required: false,
                 message: 'შეავსეთ პაროლი!',
               }
             ]}
+            extra="Leave empty if you don't want to change the password"
         >
           <Input.Password/>
         </Form.Item>
