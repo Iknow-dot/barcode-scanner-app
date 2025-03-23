@@ -17,7 +17,6 @@ const SystemAdminDashboard = () => {
   const [warehouses, setWarehouses] = useState([]);
   const [users, setUsers] = useState([]);
   const [activeTab, setActiveTab] = useState(authData.role === 'system_admin' ? 1 : 2);
-  const [editWarehouseData, setEditWarehouseData] = useState(null);
 
   const userRole = authData?.role;
 

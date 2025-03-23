@@ -22,10 +22,8 @@ const MainContentView = ({children}) => {
   } = theme.useToken();
   const {logout} = useContext(AuthContext);
 
-
   return (
       <Layout style={{minHeight: "100vh"}}>
-
         <Header style={{display: 'flex', alignItems: 'center'}}>
           <img
               src="/iflow-logo.png"
@@ -41,14 +39,7 @@ const MainContentView = ({children}) => {
             <LogoutOutlined/> Log Out
           </Button>
         </Header>
-        <Breadcrumb
-            style={{padding: '16px 48px'}}
-            items={[
-              {title: 'Home'},
-              {title: 'Dashboard'},
-            ]}
-        />
-        <div style={{padding: '0 48px'}}>
+        <div style={{padding: '48px'}}>
           <Layout
               style={{padding: '24px 0', background: colorBgContainer, borderRadius: borderRadiusLG}}
           >
