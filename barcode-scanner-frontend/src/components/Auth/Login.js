@@ -9,8 +9,9 @@ const Login = () => {
   const {login, token, userRole} = useContext(AuthContext);
   const navigate = useNavigate();
   const {
-    token: {colorBgContainer, borderRadiusLG},
+    token: {colorBgContainer, borderRadiusLG, colorBgBase},
   } = theme.useToken();
+  const isDarkMode = colorBgBase === "#000";
   const [error, setError] = React.useState("");
 
   useEffect(() => {
@@ -57,7 +58,7 @@ const Login = () => {
           minHeight: "100vh",
         }}>
           <img
-              src="/logo-01.jpg"
+              src={isDarkMode ? "/logo-dark.png" : "/logo-light.png"}
               alt="iFlow"
               style={{
                 display: "block",
