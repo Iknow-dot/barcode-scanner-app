@@ -1,6 +1,8 @@
 import React, { useRef, useEffect } from 'react';
 import { Html5QrcodeScanner } from 'html5-qrcode';
 import { processBarcode } from '../../api';
+import {ScanOutlined} from "@ant-design/icons";
+import {Button} from "antd";
 
 const ScanButton = ({ setScanning, scanning, onScan, disabled }) => {
     const qrRef = useRef(null);
@@ -70,22 +72,23 @@ const ScanButton = ({ setScanning, scanning, onScan, disabled }) => {
     return (
         <div className="scanner-container">
             {!scanning ? (
-                <button
-                    className="scan-button"
+                <Button
+                    variant="outlined"
+                    color="green"
                     onClick={() => { if (!disabled) setScanning(true); }}
                     disabled={disabled}
                     style={buttonStyle}
                 >
-                    დასკანერება
-                </button>
+                    <ScanOutlined /> დასკანერება
+                </Button>
             ) : (
-                <button
-                    className="stop-scan-button"
-                    style={{ backgroundColor: 'red' }}
+                <Button
+                    variant="outlined"
                     onClick={() => setScanning(false)}
+                    danger
                 >
                     დახურვა
-                </button>
+                </Button>
             )}
             <div ref={qrRef} id="qr-reader" className="qr-reader"></div>
         </div>

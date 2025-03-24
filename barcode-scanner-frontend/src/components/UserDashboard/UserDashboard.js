@@ -1,21 +1,22 @@
-import React, { useState, useEffect, useContext } from 'react';
-import { scanProducts, getUserWarehouses, getClientIp } from '../../api';
+import React, {useState, useEffect, useContext} from 'react';
+import {scanProducts, getUserWarehouses, getClientIp} from '../../api';
 import ScanButton from './ScanButton';
 import Carousel from 'react-multi-carousel';
 import AuthContext from '../Auth/AuthContext';
-import { registerServiceWorker } from '../serviceWorkerRegistration';
+import {registerServiceWorker} from '../serviceWorkerRegistration';
+import subNavContext from "../../contexts/SubNavContext";
+import {Button, Checkbox, Descriptions, Form, Input, Modal, Select, Space, Switch, Table} from "antd";
+import {BarcodeOutlined, NumberOutlined, SearchOutlined} from "@ant-design/icons";
 
 const UserDashboard = () => {
-  const [searchType, setSearchType] = useState('barcode');
-  const [searchInput, setSearchInput] = useState('');
+  const [form] = Form.useForm();
+  const {setSubNav} = useContext(subNavContext);
   const [scanning, setScanning] = useState(false);
   const [balances, setBalances] = useState([]);
-  const [allWarehouses, setAllWarehouses] = useState(false);
   const [userWarehouses, setUserWarehouses] = useState([]);
   const [showModal, setShowModal] = useState(false);
   const [selectedImages, setSelectedImages] = useState([]);
-  const [productInfo, setProductInfo] = useState({ sku_name: '', article: '', price: '', img_url: [] });
-  const { authData, logout } = useContext(AuthContext);
+  const [productInfo, setProductInfo] = useState({sku_name: '', article: '', price: '', img_url: []});
 
   // Function to be called on any click
   function handleClick(event) {
@@ -27,6 +28,7 @@ const UserDashboard = () => {
   document.addEventListener('click', handleClick);
 
   useEffect(() => {
+    setSubNav(null);
     const fetchWarehouses = async () => {
       try {
         const data = await getUserWarehouses();
@@ -41,20 +43,20 @@ const UserDashboard = () => {
 
   const responsive = {
     desktop: {
-      breakpoint: { max: 3000, min: 1024 },
+      breakpoint: {max: 3000, min: 1024},
       items: 1
     },
     tablet: {
-      breakpoint: { max: 1024, min: 464 },
+      breakpoint: {max: 1024, min: 464},
       items: 1
     },
     mobile: {
-      breakpoint: { max: 464, min: 0 },
+      breakpoint: {max: 464, min: 0},
       items: 1
     }
   };
 
-  const handleSearch = async () => {
+  const handleSearch = async ({search, allWarehouses, searchType}) => {
     try {
       // Check IP before proceeding with search
       const ipData = await getClientIp();
@@ -65,7 +67,7 @@ const UserDashboard = () => {
       }
 
       const warehouseCodes = allWarehouses ? '' : userWarehouses.map(warehouse => warehouse.code).join(',');
-      const data = await scanProducts(searchInput, searchType, warehouseCodes);
+      const data = await scanProducts(search, searchType, warehouseCodes);
       // console.log(warehouseCodes);
       // console.log(data);
 
@@ -79,19 +81,18 @@ const UserDashboard = () => {
         });
       } else {
         setBalances([]);
-        setProductInfo({ sku_name: '', article: '', price: '', img_url: [] });
+        setProductInfo({sku_name: '', article: '', price: '', img_url: []});
       }
 
     } catch (error) {
       console.error("Error during search:", error.message);
       setBalances([]);
-      setProductInfo({ sku_name: '', article: '', price: '', img_url: [] });
+      setProductInfo({sku_name: '', article: '', price: '', img_url: []});
       alert("არ მოიძებნა!");
     }
   }
 
   const handleScanResult = (decodedText) => {
-    setSearchInput(decodedText);
     setScanning(false);
   };
 
@@ -106,68 +107,112 @@ const UserDashboard = () => {
     }
     // console.log(productInfo.img_url.map(img => img.base64));
   };
-  
+
 
   return (
-    <div className="container">
-      <div className="search-container">
-        <div className="first-line">
-          <select value={searchType} onChange={e => setSearchType(e.target.value)}>
-            <option value="barcode">შტრიხკოდი</option>
-            <option value="article">არტიკული</option>
-          </select>
-          <input
-            type="text"
-            placeholder="Search..."
-            value={searchInput}
-            onChange={e => setSearchInput(e.target.value)}
-          />
-        </div>
-        <div className={`sec-line ${scanning ? 'column-layout' : ''}`}>
-          <div className="checkbox-cntr">
-            <label>
-              <input
-                className="custom-checkbox"
-                type="checkbox"
-                checked={allWarehouses}
-                onChange={() => setAllWarehouses(!allWarehouses)}
-              /> ყველა საწყობი
-            </label>
-          </div>
-          <button className="search-button" style={{ backgroundColor: '#28a745' }} onClick={handleSearch}>ძებნა</button>
-          <ScanButton setScanning={setScanning} scanning={scanning} onScan={handleScanResult} disabled={searchType === 'article'} />
-        </div>
-      </div>
-      {!scanning && balances.length > 0 && (
-        <>
-          <p><strong>პროდუქტი:</strong> <span onClick={handleOpenModal} style={{ cursor: 'pointer', textDecoration: 'underline' }}>{productInfo.sku_name}</span> </p>
-          <p><strong>არტიკული:</strong> {productInfo.article}</p>
-          <table>
-            <thead>
-              <tr>
-                <th>საწყობი</th>
-                <th>ნაშთი</th>
-                <th>ფასი</th>
-              </tr>
-            </thead>
-            <tbody>
-              {balances.map((item, index) => (
-                <tr key={index}>
-                  <td>{item.warehouse_name}</td>
-                  <td>{item.quantity}</td>
-                  <td>{productInfo.price} ₾</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </>
-      )}
+      <div className="container">
+        <Form
+            form={form}
+            onFinish={handleSearch}
+            initialValues={{
+              searchType: 'barcode'
+            }}
+        >
+          <Space>
+            <Form.Item
+                name="searchType"
+            >
+              <Select
+                  options={[
+                    {
+                      label: (
+                          <>
+                            <BarcodeOutlined/> შტრიხკოდი
+                          </>
+                      ),
+                      value: "barcode",
+                    },
+                    {
+                      label: (
+                          <>
+                            <NumberOutlined/> არტიკული
+                          </>
+                      ),
+                      value: "article",
+                    }
+                  ]}
+              >
 
-      {showModal && (
-        <div className="modal" style={{ display: 'block', zIndex: 1000, position: 'absolute', width: '100%', height: '100%', top: '0', left: '0', background: 'rgba(0,0,0,0.5)' }}>
-          <div className="modal-content">
-            <span className="close" onClick={() => setShowModal(false)}>&times;</span>
-            <Carousel
+              </Select>
+            </Form.Item>
+            <Form.Item
+                name="search"
+                rules={[
+                  {
+                    required: true,
+                    message: 'გთხოვთ შეიყვანოთ ძიების ტექსტი!',
+                  },
+                ]}
+            >
+              <Input.Search
+                  placeholder="ძიება"
+                  onSearch={form.submit}
+                  enterButton={<SearchOutlined/>}
+
+              />
+            </Form.Item>
+            <Form.Item>
+
+            </Form.Item>
+            <Form.Item
+                name="allWarehouses"
+                label="ყველა საწყობი"
+                initialValue={false}
+            >
+              <Switch/>
+            </Form.Item>
+          </Space>
+        </Form>
+
+        <Space align="center">
+          <ScanButton setScanning={setScanning} scanning={scanning} onScan={handleScanResult}/>
+        </Space>
+        {!scanning && balances.length > 0 && (
+            <>
+              <Descriptions>
+                <Descriptions.Item label="პროდუქტი" onClick={handleOpenModal}>
+                  {productInfo.sku_name}
+                </Descriptions.Item>
+                <Descriptions.Item label="არტიკული">{productInfo.article}</Descriptions.Item>
+              </Descriptions>
+              <Table
+                  dataSource={balances}
+                  columns={[
+                    {
+                      title: 'საწყობი',
+                      dataIndex: 'warehouse_name',
+                      key: 'warehouse_name'
+                    },
+                    {
+                      title: 'ნაშთი',
+                      dataIndex: 'quantity',
+                      key: 'quantity'
+                    },
+                    {
+                      title: 'ფასი',
+                      dataIndex: 'price',
+                      key: 'price',
+                      render: (text, record) => (
+                          <span>{text} ₾</span>
+                      )
+                    }
+                  ]}
+              />
+            </>
+        )}
+
+        <Modal open={showModal} onCancel={() => setShowModal(false)}>
+          <Carousel
               responsive={responsive}
               ssr={true} // means to render carousel on server-side.
               infinite={true}
@@ -181,17 +226,15 @@ const UserDashboard = () => {
               deviceType={responsive}
               dotListClass="custom-dot-list-style"
               itemClass="carousel-item-padding-40-px"
-            >
-              {selectedImages.map((img, index) => (
+          >
+            {selectedImages.map((img, index) => (
                 <div key={index}>
-                  <img src={img} alt={`Slide ${index}`} style={{ width: '100%', height: 'auto' }} />
+                  <img src={img} alt={`Slide ${index}`} style={{width: '100%', height: 'auto'}}/>
                 </div>
-              ))}
-            </Carousel>
-          </div>
-        </div>
-      )}
-    </div>
+            ))}
+          </Carousel>
+        </Modal>
+      </div>
   );
 };
 
