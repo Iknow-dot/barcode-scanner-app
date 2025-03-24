@@ -72,7 +72,7 @@ const Login = () => {
                   flex: "none",
                   padding: 24,
                   margin: "0 auto",
-                  width: "50%",
+                  width: "350px",
                   background: colorBgContainer,
                   borderRadius: borderRadiusLG,
                 }}
@@ -119,7 +119,7 @@ const Login = () => {
                 </Form.Item>
 
                 <Form.Item label={null}>
-                  <Button type="primary" htmlType="submit">
+                  <Button type="primary" htmlType="submit" style={{width: "100%"}}>
                     შესვლა
                   </Button>
                 </Form.Item>
