@@ -56,7 +56,7 @@ const WarehousesTab = ({}) => {
       setNotificationData({
         type: 'success',
         message: 'საწყობის წაშლა',
-        description: `საწყობი: ${warehouse.name} წაიშლა`
+        description: `საწყობი: "${warehouse.name}" წაიშალა`
       });
     } catch (error) {
       setNotificationData({
@@ -82,7 +82,7 @@ const WarehousesTab = ({}) => {
       setNotificationData({
         type: 'error',
         message: 'საწყობის შეცვლა',
-        description: error.message
+        description: error?.response?.data?.error || error.message
       })
       return false;
     }
@@ -93,8 +93,19 @@ const WarehousesTab = ({}) => {
       await api.post('/warehouses', newWarehouseData);
       const whRes = await api.get('/warehouses');
       setWarehouses(whRes.data);
+        setNotificationData({
+            type: 'success',
+            message: 'საწყობის დამატება',
+            description: `საწყობი: "${newWarehouseData.name}" დაემატა`
+        });
+        return true;
     } catch (error) {
-      console.error('საწყობის დამატების შეცდომა', error);
+        setNotificationData({
+            type: 'error',
+            message: 'საწყობის დამატება',
+            description: error?.response?.data?.error || error.message
+        });
+        return false;
     }
   };
 

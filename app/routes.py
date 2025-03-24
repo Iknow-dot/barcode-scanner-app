@@ -287,9 +287,11 @@ def update_warehouse(id):
 
         db.session.commit()
         return jsonify({"message": "Warehouse updated successfully"})
-    except Exception as e:
+    except IntegrityError as e:
+        if 'unique constraint' in str(e.orig):
+            return jsonify({'error': 'Warehouse code must be unique'}), 400
         current_app.logger.error(f"Error updating warehouse: {e}")
-        return jsonify({'error': 'An error occurred while updating the warehouse'}), 500
+        return jsonify({'error': str(e.orig)}), 400
 
 @bp.route('/warehouses/<uuid:id>', methods=['DELETE'])
 @jwt_required()

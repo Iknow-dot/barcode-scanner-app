@@ -119,7 +119,7 @@ const UsersTab = ({users: initialUsers, AddModal, EditModal, addModalExtraProps}
       setNotificationData({
         type: 'success',
         message: 'წარმატება',
-        description: `მომხმარებელი "${editUser.username}" წარმატებიით განახლდა`
+        description: `მომხმარებელი "${editUser.username}" წარმატებით განახლდა`
       });
       return true;
     } catch (error) {
