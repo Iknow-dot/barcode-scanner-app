@@ -11,7 +11,7 @@ const Login = () => {
   const {
     token: {colorBgContainer, borderRadiusLG},
   } = theme.useToken();
-  const [error, setError] = React.useState(false);
+  const [error, setError] = React.useState("");
 
   useEffect(() => {
     // Redirect if already logged in
@@ -39,22 +39,23 @@ const Login = () => {
           login(access_token, role, organization_id);
           navigate('/dashboard');
         } else {
+          setError("თქვენი IP მისამართი არ არის დაშვებული");
         }
       } else {
         login(access_token, role, organization_id);
         navigate(role === 'system_admin' || role === 'admin' ? '/system-admin-dashboard' : '/dashboard');
       }
     } catch (error) {
-      setError(true);
+      setError("მომხმარებელი ან პაროლი არასწორია");
     }
   };
+
 
   return (
       <>
         <Layout style={{
           minHeight: "100vh",
         }}>
-
           <img
               src="/iflow-logo.png"
               alt="iFlow"
@@ -84,7 +85,7 @@ const Login = () => {
                   onFinish={handleSubmit}
               >
                 {error && (
-                    <Alert message="მომხმარებელი ან პაროლი არასწორია"
+                    <Alert message={error}
                            type="error"
                            style={{marginBottom: 24}}
                            showIcon
