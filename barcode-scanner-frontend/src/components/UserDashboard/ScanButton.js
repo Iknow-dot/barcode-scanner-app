@@ -4,8 +4,7 @@ import { processBarcode } from '../../api';
 import {ScanOutlined} from "@ant-design/icons";
 import {Button} from "antd";
 
-const ScanButton = ({ setScanning, scanning, onScan, disabled }) => {
-    const qrRef = useRef(null);
+const ScanButton = ({ setScanning, scanning, onScan, disabled, qrRef }) => {
 
     useEffect(() => {
         let html5QrcodeScanner;
@@ -61,14 +60,6 @@ const ScanButton = ({ setScanning, scanning, onScan, disabled }) => {
         });
     };
 
-    // Apply styles based on the disabled state
-    const buttonStyle = disabled ? {
-        backgroundColor: '#ccc', // Grey out button
-        color: '#666', // Dark grey text
-        cursor: 'not-allowed', // Change cursor to indicate non-interactivity
-        opacity: 0.5 // Make button transparent
-    } : {};
-
     return (
         <div className="scanner-container">
             {!scanning ? (
@@ -77,7 +68,6 @@ const ScanButton = ({ setScanning, scanning, onScan, disabled }) => {
                     color="green"
                     onClick={() => { if (!disabled) setScanning(true); }}
                     disabled={disabled}
-                    style={buttonStyle}
                 >
                     <ScanOutlined /> დასკანერება
                 </Button>
@@ -90,7 +80,6 @@ const ScanButton = ({ setScanning, scanning, onScan, disabled }) => {
                     დახურვა
                 </Button>
             )}
-            <div ref={qrRef} id="qr-reader" className="qr-reader"></div>
         </div>
     );
 };

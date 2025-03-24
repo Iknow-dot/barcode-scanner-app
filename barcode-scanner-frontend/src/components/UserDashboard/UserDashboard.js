@@ -1,15 +1,16 @@
-import React, {useState, useEffect, useContext} from 'react';
+import React, {useState, useEffect, useContext, useRef} from 'react';
 import {scanProducts, getUserWarehouses, getClientIp} from '../../api';
 import ScanButton from './ScanButton';
 import Carousel from 'react-multi-carousel';
 import AuthContext from '../Auth/AuthContext';
 import {registerServiceWorker} from '../serviceWorkerRegistration';
 import subNavContext from "../../contexts/SubNavContext";
-import {Button, Checkbox, Descriptions, Form, Input, Modal, Select, Space, Switch, Table} from "antd";
+import {Button, Card, Checkbox, Descriptions, Form, Input, Modal, Select, Space, Switch, Table} from "antd";
 import {BarcodeOutlined, NumberOutlined, SearchOutlined} from "@ant-design/icons";
 
 const UserDashboard = () => {
   const [form] = Form.useForm();
+  const [disableScan, setDisableScan] = useState(false);
   const {setSubNav} = useContext(subNavContext);
   const [scanning, setScanning] = useState(false);
   const [balances, setBalances] = useState([]);
@@ -17,6 +18,7 @@ const UserDashboard = () => {
   const [showModal, setShowModal] = useState(false);
   const [selectedImages, setSelectedImages] = useState([]);
   const [productInfo, setProductInfo] = useState({sku_name: '', article: '', price: '', img_url: []});
+  const qrRef = useRef(null);
 
   // Function to be called on any click
   function handleClick(event) {
@@ -117,33 +119,58 @@ const UserDashboard = () => {
             initialValues={{
               searchType: 'barcode'
             }}
+            layout="horizontal"
         >
-          <Space>
-            <Form.Item
-                name="searchType"
+          <Form.Item
+              name="searchType"
+          >
+            <Select
+                options={[
+                  {
+                    label: (
+                        <>
+                          <BarcodeOutlined/> შტრიხკოდი
+                        </>
+                    ),
+                    value: "barcode",
+                  },
+                  {
+                    label: (
+                        <>
+                          <NumberOutlined/> არტიკული
+                        </>
+                    ),
+                    value: "article",
+                  }
+                ]}
+                onChange={(value) => {
+                  if (value === 'barcode') {
+                    setDisableScan(false);
+                  } else {
+                    setDisableScan(true);
+                  }
+                }}
             >
-              <Select
-                  options={[
-                    {
-                      label: (
-                          <>
-                            <BarcodeOutlined/> შტრიხკოდი
-                          </>
-                      ),
-                      value: "barcode",
-                    },
-                    {
-                      label: (
-                          <>
-                            <NumberOutlined/> არტიკული
-                          </>
-                      ),
-                      value: "article",
-                    }
-                  ]}
-              >
 
-              </Select>
+            </Select>
+          </Form.Item>
+
+          <Form.Item
+              name="allWarehouses"
+              label="ყველა საწყობი"
+              initialValue={false}
+          >
+            <Switch/>
+          </Form.Item>
+          <Space>
+            <Form.Item>
+              <ScanButton
+                  setScanning={setScanning}
+                  scanning={scanning}
+                  onScan={handleScanResult}
+                  disabled={disableScan}
+                  qrRef={qrRef}
+              />
             </Form.Item>
             <Form.Item
                 name="search"
@@ -161,22 +188,13 @@ const UserDashboard = () => {
 
               />
             </Form.Item>
-            <Form.Item>
-
-            </Form.Item>
-            <Form.Item
-                name="allWarehouses"
-                label="ყველა საწყობი"
-                initialValue={false}
-            >
-              <Switch/>
-            </Form.Item>
           </Space>
         </Form>
+        <div ref={qrRef} id="qr-reader">
 
-        <Space align="center">
-          <ScanButton setScanning={setScanning} scanning={scanning} onScan={handleScanResult}/>
-        </Space>
+        </div>
+
+
         {!scanning && balances.length > 0 && (
             <>
               <Descriptions>
