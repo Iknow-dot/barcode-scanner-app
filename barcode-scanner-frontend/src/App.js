@@ -9,21 +9,18 @@ import Login from './components/Auth/Login';
 import Logout from './components/Auth/Logout';
 import SystemAdminDashboard from './components/SystemAdminDashboard/SystemAdminDashboard';
 import {
-  Breadcrumb,
   ConfigProvider,
   FloatButton,
   Layout,
   Menu,
   theme,
   App as AntdApp,
-  Button,
-  notification,
   Space,
   Dropdown
 } from "antd";
 import {Content, Header, Footer} from "antd/es/layout/layout";
 import Sider from "antd/es/layout/Sider";
-import {DownOutlined, LogoutOutlined, MoonOutlined, SmileOutlined, UserOutlined} from "@ant-design/icons";
+import {LogoutOutlined, MoonOutlined, UserOutlined} from "@ant-design/icons";
 import SubNavContext, {SubNavProvider} from "./contexts/SubNavContext";
 import "antd/dist/reset.css";
 

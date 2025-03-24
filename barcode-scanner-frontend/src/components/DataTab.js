@@ -32,7 +32,7 @@ export const DataTab = ({
         />}
 
         <Table
-            dataSource={objects}
+            dataSource={objects.map(object => ({...object, key: object.id}))}
             columns={[
               ...columns,
               {
