@@ -15,8 +15,7 @@ def debug_headers():
 
 @bp.route("/ip", methods=["GET"])
 def get_ip_view() -> Response:
-    ip = request.headers.get("HTTP_X_REAL_IP", request.remote_addr)
-    current_app.logger.debug(request.headers.get("HTTP_X_REAL_IP"))
+    ip = request.headers.get("X-Forwarded-For", request.remote_addr)
     if ip:
         ip = ip.split(",")[0].strip()
     return jsonify({"ip": ip})
