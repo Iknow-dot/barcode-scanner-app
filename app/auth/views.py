@@ -9,9 +9,14 @@ import jwt
 bp = Blueprint('auth', __name__)
 
 
+@bp.route("/debug/headers", methods=["GET"])
+def debug_headers():
+    return dict(request.headers)
+
 @bp.route("/ip", methods=["GET"])
 def get_ip_view() -> Response:
-    ip = request.headers.get("X-Forwarded-For", request.remote_addr)
+    ip = request.headers.get("HTTP_X_REAL_IP", request.remote_addr)
+    current_app.logger.debug(request.headers.get("HTTP_X_REAL_IP"))
     if ip:
         ip = ip.split(",")[0].strip()
     return jsonify({"ip": ip})
