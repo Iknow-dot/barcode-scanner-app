@@ -57,7 +57,7 @@ const Login = () => {
           minHeight: "100vh",
         }}>
           <img
-              src="/iflow-logo.png"
+              src="/logo-01.jpg"
               alt="iFlow"
               style={{
                 display: "block",

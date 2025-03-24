@@ -48,7 +48,6 @@ export const DataTab = ({
                 render: (_, object) => (
                     <Space size="middle">
                       <Button variant="outlined" color="primary" onClick={() => {
-                        console.log("Changing object to", object);
                         setSelectedObject(object);
                         setEditModalVisible(true);
                       }}>

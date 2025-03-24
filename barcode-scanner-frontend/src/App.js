@@ -29,8 +29,9 @@ const MainContentView = ({children}) => {
   const {authData} = useContext(AuthContext);
   const {subNav} = useContext(SubNavContext);
   const {
-    token: {colorBgContainer, borderRadiusLG},
+    token: {colorBgContainer, borderRadiusLG, colorText, colorBgBase},
   } = theme.useToken();
+  const isDarkMode = colorBgBase === "#000";
   const {logout} = useContext(AuthContext);
   const items = [
     {
@@ -41,11 +42,17 @@ const MainContentView = ({children}) => {
       onClick: logout
     }
   ];
+
   return (
       <Layout style={{minHeight: "100vh"}}>
-        <Header style={{display: 'flex', alignItems: 'center', color: "white"}}>
+        <Header style={{
+          display: 'flex',
+          alignItems: 'center',
+          color: colorText,
+          background: colorBgContainer,
+        }}>
           <img
-              src="/iflow-logo.png"
+              src={isDarkMode ? "logo-dark.png" : "logo-light.png"}
               alt="Logo"
               width="100"
           />
@@ -100,7 +107,9 @@ const AppContent = () => {
     }, 1000); // Match CSS animation duration
   };
   return (
-      <ConfigProvider theme={{algorithm: isDark ? theme.darkAlgorithm : theme.defaultAlgorithm}}>
+      <ConfigProvider theme={{
+        algorithm: isDark ? theme.darkAlgorithm : theme.defaultAlgorithm
+      }}>
         <AntdApp>
           <FloatButton
               onClick={toggleTheme}

@@ -110,16 +110,6 @@ const UserDashboard = () => {
 
   return (
     <div className="container">
-      <div className='header'>
-        <img
-          src="https://imgur.com/VV5PiDB.png"
-          alt="Logo"
-          onClick={() => window.location.reload()}
-          style={{ cursor: 'pointer', backgroundColor: 'rgba(159, 159, 159)' }}
-          width="150"
-        />
-        <button onClick={logout} className="logout-btn">გასვლა</button>
-      </div>
       <div className="search-container">
         <div className="first-line">
           <select value={searchType} onChange={e => setSearchType(e.target.value)}>
