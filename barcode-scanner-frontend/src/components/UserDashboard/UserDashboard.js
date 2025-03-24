@@ -205,6 +205,7 @@ const UserDashboard = () => {
               </Descriptions>
               <Table
                   dataSource={balances}
+                  rowClassName={(record, index) => userWarehouses.map(wh => wh.name).includes(record.warehouse_name) ? 'highlight-row' : ''}
                   columns={[
                     {
                       title: 'საწყობი',
