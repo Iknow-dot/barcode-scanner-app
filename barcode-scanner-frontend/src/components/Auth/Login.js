@@ -60,7 +60,7 @@ const Login = () => {
               alt="iFlow"
               style={{
                 display: "block",
-                width: "50%",
+                width: "200px",
                 margin: "auto",
               }}
           />

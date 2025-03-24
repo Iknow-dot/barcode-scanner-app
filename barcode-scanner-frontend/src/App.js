@@ -65,14 +65,16 @@ const MainContentView = ({children}) => {
           <Layout
               style={{padding: '24px 0', background: colorBgContainer, borderRadius: borderRadiusLG}}
           >
-            <Sider style={{background: colorBgContainer}} width={200}>
-              <Menu
-                  mode="inline"
-                  defaultSelectedKeys={'3'}
-                  style={{height: '100%'}}
-                  items={subNav}
-              />
-            </Sider>
+            {subNav && (
+                <Sider style={{background: colorBgContainer}} width={200}>
+                  <Menu
+                      mode="inline"
+                      defaultSelectedKeys={authData?.role === "system_admin" ? ['1'] : ['2']}
+                      style={{height: '100%'}}
+                      items={subNav}
+                  />
+                </Sider>
+            )}
             <Content style={{padding: '0 24px', minHeight: 280}}>
               {children}
             </Content>
