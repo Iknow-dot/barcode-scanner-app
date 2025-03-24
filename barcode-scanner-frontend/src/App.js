@@ -43,7 +43,7 @@ const MainContentView = ({children}) => {
   ];
   return (
       <Layout style={{minHeight: "100vh"}}>
-        <Header style={{display: 'flex', alignItems: 'center'}}>
+        <Header style={{display: 'flex', alignItems: 'center', color: "white"}}>
           <img
               src="/iflow-logo.png"
               alt="Logo"
