@@ -2,7 +2,7 @@ import React, {useState, useEffect, useContext, useCallback} from 'react';
 import api, {getUserWarehousesByUserId} from '../../api';
 import AuthContext from '../Auth/AuthContext';
 import {Button, Form, Input, Select, Space, Tag} from "antd";
-import ModalForm from "../ModalForm";
+import ModalForm, {RenderOption} from "../ModalForm";
 
 const EditUser = ({visible, setVisible, onFinish, object}) => {
   const renderOption = useCallback((option) => {
@@ -67,7 +67,7 @@ const EditUser = ({visible, setVisible, onFinish, object}) => {
           object={{
             username: object.username,
             role_name: object.role_name,
-            ip_address: object.ip_address && object.ip_address.split(", "),
+            ip_address: object.ip_address ? object.ip_address.split(", ") : [],
             warehouse_ids: userWarehouses.map(wh => wh.id)
           }}
           name="editUser"
@@ -131,14 +131,7 @@ const EditUser = ({visible, setVisible, onFinish, object}) => {
               mode="tags"
               placeholder="IP address"
               options={IPOptions}
-              optionRender={(option) => (
-                  <Space>
-                        <span role="img" aria-label={option.data.label}>
-                          {option.data.emoji}
-                        </span>
-                    {option.data.desc}
-                  </Space>
-              )}
+              optionRender={RenderOption}
               tagRender={(props) => (
                   <Tag color='green'>
                     {props.label}
@@ -169,6 +162,9 @@ const EditUser = ({visible, setVisible, onFinish, object}) => {
                         desc: org.name
                       })
                   )}
+                  filterOption={(input, option) =>
+                      option?.label.toLowerCase().includes(input.toLowerCase())
+                  }
               >
               </Select>
             </Form.Item>
@@ -200,6 +196,9 @@ const EditUser = ({visible, setVisible, onFinish, object}) => {
                       })
                   )}
                   optionRender={renderOption}
+                  filterOption={(input, option) =>
+                      option?.label.toLowerCase().includes(input.toLowerCase())
+                  }
               >
               </Select>
             </Form.Item>

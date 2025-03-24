@@ -120,13 +120,15 @@ const UsersTab = ({users: initialUsers, AddModal, EditModal, addModalExtraProps}
         type: 'success',
         message: 'წარმატება',
         description: `მომხმარებელი "${editUser.username}" წარმატებიით განახლდა`
-      })
+      });
+      return true;
     } catch (error) {
       setNotificationData({
         type: 'error',
         message: 'შეცდომა',
         description: `მომხმარებლის "${editUser.username}" განახლებისას შეცდომა "(${error.response?.data?.error || error.message})"`
-      })
+      });
+      return false;
     }
   };
 

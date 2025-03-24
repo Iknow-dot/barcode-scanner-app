@@ -34,12 +34,12 @@ export const ModalForm = ({visible, setVisible, onFinish, title, name, object = 
 };
 
 export const RenderOption = (option) => {
-  return useCallback(
+  return (
       <Space>
-          <span role="img">
-            {option.data.emoji}
-          </span>
-        {option.data.desc}
+        <span role="img">
+          {option.data?.emoji}
+        </span>
+        {option.data?.desc || option.data?.label}
       </Space>
   );
 }

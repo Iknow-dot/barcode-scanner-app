@@ -1,7 +1,7 @@
 import React, {useState, useEffect, useContext} from 'react';
 import api from '../../api';
 import AuthContext from '../Auth/AuthContext';
-import {Button, Form, Input, Select, Tag} from "antd";
+import {Button, Form, Input, Select, Space, Tag} from "antd";
 import ModalForm, {RenderOption, TagSelect} from "../ModalForm";
 
 
@@ -111,16 +111,17 @@ const AddUserModal = ({visible, setVisible, onFinish}) => {
           <Select
               options={IPOptions}
               mode="tags"
-              placeholder="IP address"
+              placeholder="IP მისამართი"
               name="ip_address"
               label="IP address"
-              rules={[
-                {
-                  required: true,
-                  message: 'Please input your IP address!',
-                },
-              ]}
-              optionRender={RenderOption}
+              optionRender={(option) => (
+                  <Space>
+                    <span role="img">
+                      {option.data?.emoji}
+                    </span>
+                    {option.data?.desc || option.data?.label}
+                  </Space>
+              )}
               tagRender={(props) => (
                   <Tag color='green'>
                     {props.label}
@@ -149,7 +150,7 @@ const AddUserModal = ({visible, setVisible, onFinish}) => {
                       })
                   )}
                   mode="multiple"
-                  placeholder="Organization"
+                  placeholder="აირჩიეთ ორგანიზაცია"
                   name="organization_id"
                   label="Organization"
                   optionRender={RenderOption}
@@ -164,31 +165,36 @@ const AddUserModal = ({visible, setVisible, onFinish}) => {
                         {props.label}
                       </Tag>
                   )}
+                  filterOption={(input, option) =>
+                      option?.label.toLowerCase().includes(input.toLowerCase())
+                  }
               />
             </Form.Item>
         )}
 
         {isAdmin && (
             <Form.Item
-                label="Warehouses"
+                label="საწყობები"
                 name="warehouse_ids"
                 rules={[
                   {
                     required: true,
-                    message: 'Please select Warehouses!',
+                    message: 'გთხოვთ აირჩიოთ საწყობები!',
                   }
                 ]}
             >
               <Select
                   name="warehouse_ids"
+                  mode="multiple"
+                  allowClear
+                  placeholder="აირჩიეთ საწყობები"
                   rules={[
                     {
-                        required: true,
-                        message: 'Please select Warehouses!',
+                      required: true,
+                      message: 'Please select Warehouses!',
                     }
                   ]}
                   optionRender={RenderOption}
-                  mode="multiple"
                   tagRender={(props) => (
                       <Tag color='green'>
                         {props.label}
@@ -201,6 +207,9 @@ const AddUserModal = ({visible, setVisible, onFinish}) => {
                         desc: wh.name
                       })
                   )}
+                  filterOption={(input, option) =>
+                      option?.label.toLowerCase().includes(input.toLowerCase())
+                  }
               />
             </Form.Item>
         )}
