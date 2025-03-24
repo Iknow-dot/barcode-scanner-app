@@ -11,9 +11,9 @@ bp = Blueprint('auth', __name__)
 
 @bp.route("/ip", methods=["GET"])
 def get_ip_view() -> Response:
-    ip = request.remote_addr
-    if request.headers.get("X-Forwarded-For"):
-        ip = request.headers.getlist("X-Forwarded-For")[0].split(',')[0]
+    ip = request.headers.get("X-Forwarded-For", request.remote_addr)
+    if ip:
+        ip = ip.split(",")[0].strip()
     return jsonify({"ip": ip})
 
 

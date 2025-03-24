@@ -2,7 +2,7 @@ import React, {useContext, useEffect} from 'react';
 import {useNavigate} from 'react-router-dom';
 import api, {getClientIp} from '../../api';  // Make sure getClientIp is correctly imported
 import AuthContext from '../Auth/AuthContext';
-import {Button, Checkbox, Form, Input, Layout, theme} from "antd";
+import {Alert, Button, Form, Input, Layout, theme} from "antd";
 import {Content} from "antd/es/layout/layout";
 
 const Login = () => {
@@ -11,6 +11,7 @@ const Login = () => {
   const {
     token: {colorBgContainer, borderRadiusLG},
   } = theme.useToken();
+  const [error, setError] = React.useState(false);
 
   useEffect(() => {
     // Redirect if already logged in
@@ -44,9 +45,7 @@ const Login = () => {
         navigate(role === 'system_admin' || role === 'admin' ? '/system-admin-dashboard' : '/dashboard');
       }
     } catch (error) {
-      const errorMessage = error.response?.status === 401
-          ? 'მომხმარებლის სახელი ან პაროლი არასწორია'
-          : 'An error occurred. Please try again later.';
+      setError(true);
     }
   };
 
@@ -84,6 +83,13 @@ const Login = () => {
                   autoComplete="on"
                   onFinish={handleSubmit}
               >
+                {error && (
+                    <Alert message="მომხმარებელი ან პაროლი არასწორია"
+                           type="error"
+                           style={{marginBottom: 24}}
+                           showIcon
+                    />
+                )}
                 <Form.Item
                     label="მომხმარებელი"
                     name="username"
