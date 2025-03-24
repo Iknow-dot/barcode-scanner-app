@@ -62,7 +62,7 @@ const WarehousesTab = ({}) => {
       setNotificationData({
         type: 'error',
         message: 'საწყობის წაშლა',
-        description: error
+        description: error.message
       });
     }
   };
@@ -82,7 +82,7 @@ const WarehousesTab = ({}) => {
       setNotificationData({
         type: 'error',
         message: 'საწყობის შეცვლა',
-        description: error
+        description: error.message
       })
       return false;
     }
