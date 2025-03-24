@@ -198,7 +198,7 @@ const UserDashboard = () => {
         {!scanning && balances.length > 0 && (
             <>
               <Descriptions>
-                <Descriptions.Item label="პროდუქტი" onClick={handleOpenModal}>
+                <Descriptions.Item label="პროდუქტი">
                   {productInfo.sku_name}
                 </Descriptions.Item>
                 <Descriptions.Item label="არტიკული">{productInfo.article}</Descriptions.Item>
@@ -228,30 +228,6 @@ const UserDashboard = () => {
               />
             </>
         )}
-
-        <Modal open={showModal} onCancel={() => setShowModal(false)}>
-          <Carousel
-              responsive={responsive}
-              ssr={true} // means to render carousel on server-side.
-              infinite={true}
-              autoPlay={scanning ? true : false}
-              autoPlaySpeed={3000}
-              keyBoardControl={true}
-              customTransition="all .5"
-              transitionDuration={500}
-              containerClass="carousel-container"
-              removeArrowOnDeviceType={["tablet", "mobile"]}
-              deviceType={responsive}
-              dotListClass="custom-dot-list-style"
-              itemClass="carousel-item-padding-40-px"
-          >
-            {selectedImages.map((img, index) => (
-                <div key={index}>
-                  <img src={img} alt={`Slide ${index}`} style={{width: '100%', height: 'auto'}}/>
-                </div>
-            ))}
-          </Carousel>
-        </Modal>
       </div>
   );
 };
