@@ -38,7 +38,7 @@ const AddUserModal = ({visible, setVisible, onFinish}) => {
         setIPOptions((prevState) => {
           return [
             ...prevState.filter((option) => option.value !== data.ip),
-            {label: data.ip, value: data.ip, desc: `Your current IP address: ${data.ip}`, emoji: '🌐'}
+            {label: data.ip, value: data.ip, desc: `თქვენი IP მისამართი: ${data.ip}`, emoji: '🌐'}
           ];
         });
       } catch (error) {
@@ -58,24 +58,24 @@ const AddUserModal = ({visible, setVisible, onFinish}) => {
           name="addUser"
       >
         <Form.Item
-            label="Username"
+            label="მომხმარებელი"
             name="username"
             rules={[
               {
                 required: true,
-                message: 'Please input your username!',
+                message: 'გთხოვთ შეიყვანოთ მომხმარებელი!',
               },
             ]}
         >
           <Input/>
         </Form.Item>
         <Form.Item
-            label="Password"
+            label="პაროლი"
             name="password"
             rules={[
               {
                 required: true,
-                message: 'Please input your password!',
+                message: 'გთხოვთ შეიყვანოთ პაროლი!',
               },
             ]}
         >
@@ -83,12 +83,12 @@ const AddUserModal = ({visible, setVisible, onFinish}) => {
         </Form.Item>
 
         <Form.Item
-            label="Role"
+            label="როლი"
             name="role_name"
             rules={[
               {
                 required: true,
-                message: 'Please select Role!',
+                message: 'გთხოვთ აირჩიოთ როლი!',
               }
             ]}
             initialValue={isAdmin ? 'user' : 'admin'}
@@ -132,12 +132,12 @@ const AddUserModal = ({visible, setVisible, onFinish}) => {
 
         {!isAdmin && (
             <Form.Item
-                label="Organization"
+                label="ორგანიზაცია"
                 name="organization_id"
                 rules={[
                   {
                     required: true,
-                    message: 'Please select Organization!',
+                    message: 'გთხოვთ აირჩიოთ ორგანიზაცია!',
                   }
                 ]}
             >
@@ -154,12 +154,6 @@ const AddUserModal = ({visible, setVisible, onFinish}) => {
                   name="organization_id"
                   label="Organization"
                   optionRender={RenderOption}
-                  rules={[
-                    {
-                      required: true,
-                      message: 'Please select Organization!',
-                    }
-                  ]}
                   tagRender={(props) => (
                       <Tag color='green'>
                         {props.label}
@@ -191,7 +185,7 @@ const AddUserModal = ({visible, setVisible, onFinish}) => {
                   rules={[
                     {
                       required: true,
-                      message: 'Please select Warehouses!',
+                      message: 'გთხოვთ აირჩიოთ საწყობი!',
                     }
                   ]}
                   optionRender={RenderOption}

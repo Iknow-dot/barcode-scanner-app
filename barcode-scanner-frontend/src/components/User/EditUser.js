@@ -52,7 +52,7 @@ const EditUser = ({visible, setVisible, onFinish, object}) => {
         setIPOptions((prevState) => {
           return [
             ...prevState.filter((option) => option.value !== data.ip),
-            {label: data.ip, value: data.ip, desc: `Your current IP address: ${data.ip}`, emoji: '🌐'}
+            {label: data.ip, value: data.ip, desc: `თქვენი IP მისამართი: ${data.ip}`, emoji: '🌐'}
           ];
         });
       } catch (error) {
@@ -77,38 +77,38 @@ const EditUser = ({visible, setVisible, onFinish, object}) => {
           onFinish={(data) => onFinish(data, object)}
       >
         <Form.Item
-            label="Username"
+            label="მომხმარებელი"
             name="username"
             rules={[
               {
                 required: true,
-                message: 'Please input your username!',
+                message: 'გთხოვთ შეიყვანოთ მომხმარებელი!',
               },
             ]}
         >
           <Input/>
         </Form.Item>
         <Form.Item
-            label="Password"
+            label="პაროლი"
             name="password"
             rules={[
               {
                 required: false,
-                message: 'Please input your password!',
+                message: 'გთხოვთ შეიყვანოთ პაროლი!',
               },
             ]}
-            extra="Leave empty if you don't want to change the password"
+            extra="თუ არ გსურთ პაროლის შეცვლა, დატოვეთ ცარიელი"
         >
           <Input.Password/>
         </Form.Item>
 
         <Form.Item
-            label="Role"
+            label="როლი"
             name="role_name"
             rules={[
               {
                 required: true,
-                message: 'Please select Role!',
+                message: 'გთხოვთ აირჩიოთ როლი!',
               }
             ]}
         >
@@ -118,18 +118,18 @@ const EditUser = ({visible, setVisible, onFinish, object}) => {
         </Form.Item>
 
         <Form.Item
-            label="IP Address"
+            label="IP მისამართი"
             name="ip_address"
             rules={[
               {
                 required: false,
-                message: 'Please input your IP address!',
+                message: 'გთხოვთ შეიყვანოთ IP მისამართი!',
               },
             ]}
         >
           <Select
               mode="tags"
-              placeholder="IP address"
+              placeholder="IP მისამართი"
               options={IPOptions}
               optionRender={RenderOption}
               tagRender={(props) => (
@@ -142,12 +142,12 @@ const EditUser = ({visible, setVisible, onFinish, object}) => {
 
         {!isAdmin && (
             <Form.Item
-                label="Organization"
+                label="ორგანიზაცია"
                 name="organization_id"
                 rules={[
                   {
                     required: false,
-                    message: 'Please select Organization!',
+                    message: 'გთხოვთ აირჩიოთ ორგანიზაცია!',
                   }
                 ]}
             >
@@ -172,12 +172,12 @@ const EditUser = ({visible, setVisible, onFinish, object}) => {
 
         {isAdmin && (
             <Form.Item
-                label="Warehouses"
+                label="საწყობი"
                 name="warehouse_ids"
                 rules={[
                   {
                     required: object.role_name === 'user',
-                    message: 'Please select Warehouses!',
+                    message: 'გთხოვთ აირჩიოთ საწყობი!',
                   }
                 ]}
             >
