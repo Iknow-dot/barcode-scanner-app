@@ -11,7 +11,10 @@ bp = Blueprint('auth', __name__)
 
 @bp.route("/ip", methods=["GET"])
 def get_ip_view() -> Response:
-    return jsonify({"ip": request.remote_addr})
+    ip = request.remote_addr
+    if request.headers.get("X-Forwarded-For"):
+        ip = request.headers.getlist("X-Forwarded-For")[0].split(',')[0]
+    return jsonify({"ip": ip})
 
 
 @login_manager.user_loader
