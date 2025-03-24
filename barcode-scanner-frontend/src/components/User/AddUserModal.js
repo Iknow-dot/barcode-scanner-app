@@ -99,12 +99,12 @@ const AddUserModal = ({visible, setVisible, onFinish}) => {
         </Form.Item>
 
         <Form.Item
-            label="IP Address"
+            label="IP მისამართი"
             name="ip_address"
             rules={[
               {
                 required: false,
-                message: 'Please input your IP address!',
+                message: 'გთხოვთ შეიყვანოთ IP მისამართი!',
               },
             ]}
         >
