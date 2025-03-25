@@ -48,7 +48,8 @@ const MainContentView = ({children}) => {
         <Sider
             breakpoint="lg"
             theme={isDarkMode ? "dark" : "light"}
-            collapsible
+            collapsible={!!subNav}
+            collapsed={!subNav}
         >
           <img
               src={isDarkMode ? "logo-dark.png" : "logo-light.png"}
