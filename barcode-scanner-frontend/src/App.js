@@ -45,51 +45,54 @@ const MainContentView = ({children}) => {
 
   return (
       <Layout style={{minHeight: "100vh"}}>
-        <Header style={{
-          display: 'flex',
-          alignItems: 'center',
-          color: colorText,
-          background: colorBgContainer,
-        }}>
+        <Sider
+            breakpoint="lg"
+            theme={isDarkMode ? "dark" : "light"}
+            collapsible
+        >
           <img
               src={isDarkMode ? "logo-dark.png" : "logo-light.png"}
               alt="Logo"
-              width="100"
+              width="75%"
+              style={{
+                margin: "16px auto",
+                display: "block",
+              }}
           />
-
-          <div style={{marginLeft: 'auto'}}>
-            <Dropdown menu={{items}}>
-              <Space style={{cursor: "pointer"}}>
-                {authData?.role}
-                <UserOutlined/>
-              </Space>
-            </Dropdown>
-          </div>
-
-
-        </Header>
-        <div style={{padding: '48px'}}>
-          <Layout
-              style={{padding: '24px 0', background: colorBgContainer, borderRadius: borderRadiusLG}}
-          >
-            {subNav && (
-                <Sider style={{background: colorBgContainer}} width={200}>
-                  <Menu
-                      mode="inline"
-                      defaultSelectedKeys={authData?.role === "system_admin" ? ['1'] : ['2']}
-                      style={{height: '100%'}}
-                      items={subNav}
-                  />
-                </Sider>
-            )}
-            <Content style={{padding: '0 24px', minHeight: 280}}>
+          <Menu theme={isDarkMode ? "dark" : "light"}
+                mode="inline"
+                defaultSelectedKeys={authData?.role === "system_admin" ? ['1'] : ['2']}
+                items={subNav}
+          />
+        </Sider>
+        <Layout>
+          <Header style={{padding: "0 24px", background: colorBgContainer}}>
+            <Space style={{float: 'right'}}>
+              <Dropdown menu={{items}}>
+                <Space style={{cursor: "pointer"}}>
+                  {authData?.role}
+                  <UserOutlined/>
+                </Space>
+              </Dropdown>
+            </Space>
+          </Header>
+          <Content style={{margin: '24px 16px 0'}}>
+            <div
+                style={{
+                  padding: 24,
+                  minHeight: 360,
+                  background: colorBgContainer,
+                  borderRadius: borderRadiusLG,
+                }}
+            >
               {children}
-            </Content>
-          </Layout>
-        </div>
-        <Footer style={{textAlign: 'center'}}>
-          <p>© 2024 iFlow.ge Powered by IKnow LTD. All rights reserved.</p>
-        </Footer>
+            </div>
+          </Content>
+          <Footer style={{textAlign: 'center'}}>
+            <p>© 2024 iFlow.ge Powered by IKnow LTD. All rights reserved.</p>
+          </Footer>
+        </Layout>
+
       </Layout>
   );
 };

@@ -149,7 +149,6 @@ const AddUserModal = ({visible, setVisible, onFinish}) => {
                         desc: org.name
                       })
                   )}
-                  mode="multiple"
                   placeholder="აირჩიეთ ორგანიზაცია"
                   name="organization_id"
                   label="Organization"

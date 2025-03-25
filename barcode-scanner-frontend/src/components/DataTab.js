@@ -32,6 +32,7 @@ export const DataTab = ({
         />}
 
         <Table
+            scroll={{ x: "max-content"}}
             dataSource={objects.map(object => ({...object, key: object.id}))}
             columns={[
               ...columns,

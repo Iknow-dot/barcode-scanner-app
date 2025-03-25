@@ -54,7 +54,9 @@ const UsersTab = ({users: initialUsers, AddModal, EditModal, addModalExtraProps}
       newUser.role_name = 'user'; // Admin adds users with the role 'user'
     }
     try {
-      newUser["ip_address"] = newUser["ip_address"].join(", ");
+      if (newUser.ip_address) {
+        newUser.ip_address = newUser.ip_address.join(", ");
+      }
       // Make the API call to create the user
       const response = await api.post('/users', newUser, {
         headers: {
