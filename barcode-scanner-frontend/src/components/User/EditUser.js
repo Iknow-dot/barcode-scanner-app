@@ -68,7 +68,8 @@ const EditUser = ({visible, setVisible, onFinish, object}) => {
             username: object.username,
             role_name: object.role_name,
             ip_address: object.ip_address ? object.ip_address.split(", ") : [],
-            warehouse_ids: userWarehouses.map(wh => wh.id)
+            warehouse_ids: userWarehouses.map(wh => wh.id),
+            organization_id: object.organization_id
           }}
           name="editUser"
           visible={visible}
