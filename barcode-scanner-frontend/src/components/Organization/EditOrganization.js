@@ -1,6 +1,6 @@
 import React from 'react';
 import ModalForm from "../ModalForm";
-import {Button, Form, Input, InputNumber} from "antd";
+import {Button, Flex, Form, Input, InputNumber, Switch} from "antd";
 
 const EditOrganization = ({visible, setVisible, onFinish, object}) => {
   return (
@@ -76,19 +76,30 @@ const EditOrganization = ({visible, setVisible, onFinish, object}) => {
           <Input/>
         </Form.Item>
 
-        <Form.Item
-            label="პაროლი"
-            name="org_password"
-            rules={[
-              {
-                required: false,
-                message: 'შეავსეთ პაროლი!',
-              }
-            ]}
-            extra="Leave empty if you don't want to change the password"
-        >
-          <Input.Password/>
-        </Form.Item>
+        <Flex gap="small">
+          <Form.Item
+              style={{
+                flex: 1
+              }}
+              label="პაროლი"
+              name="org_password"
+              rules={[
+                {
+                  required: false,
+                  message: 'შეავსეთ პაროლი!',
+                }
+              ]}
+              extra="Leave empty if you don't want to change the password"
+          >
+            <Input.Password/>
+          </Form.Item>
+          <Form.Item
+              label="წაშლა"
+              name="clear_password"
+          >
+            <Switch/>
+          </Form.Item>
+        </Flex>
 
         <Form.Item label={null}>
           <Button block type="primary" htmlType="submit" variant="solid" color="green">

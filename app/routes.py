@@ -156,9 +156,10 @@ def update_organization(organization):
     if 'org_username' in data:
         organization.org_username = data['org_username']
 
-    # Update org_password securely if provided
-    if 'org_password' in data:
-        #organization.set_password(data['org_password'])
+    clear_password = data.get('clear_password', False)
+    if clear_password:
+        organization.org_password = None
+    elif 'org_password' in data:
         organization.encrypt_password(data['org_password'])
 
     # Commit the changes to the database
