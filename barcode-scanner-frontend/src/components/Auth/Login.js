@@ -1,18 +1,19 @@
-import React, {useContext, useEffect} from 'react';
+import React, {useContext, useEffect, useState} from 'react';
 import {useNavigate} from 'react-router-dom';
 import api, {getClientIp} from '../../api';  // Make sure getClientIp is correctly imported
 import AuthContext from '../Auth/AuthContext';
-import {Alert, Button, Form, Input, Layout, theme} from "antd";
+import {Alert, Button, Flex, Form, Input, Layout, Spin, theme} from "antd";
 import {Content} from "antd/es/layout/layout";
 
 const Login = () => {
+  const [loading, setLoading] = useState(false);
   const {login, token, userRole} = useContext(AuthContext);
   const navigate = useNavigate();
   const {
     token: {colorBgContainer, borderRadiusLG, colorBgBase},
   } = theme.useToken();
   const isDarkMode = colorBgBase === "#000";
-  const [error, setError] = React.useState("");
+  const [error, setError] = React.useState(null);
 
   useEffect(() => {
     // Redirect if already logged in
@@ -22,6 +23,8 @@ const Login = () => {
   }, [token, userRole, navigate]);
 
   const handleSubmit = async (users) => {
+    setLoading(true);
+    setError(null)
     const {username, password} = users;
 
     if (!username || !password) {
@@ -49,6 +52,7 @@ const Login = () => {
     } catch (error) {
       setError("მომხმარებელი ან პაროლი არასწორია");
     }
+    setLoading(false);
   };
 
 
@@ -92,6 +96,18 @@ const Login = () => {
                            showIcon
                     />
                 )}
+                {loading && (
+                    <Flex gap="middle" justify="center">
+                      <Spin tip="იტვირთება" size="large">
+                        <div style={{
+                          padding: 50,
+                          background: 'rgba(0, 0, 0, 0.05)',
+                          borderRadius: 4,
+                        }}/>
+                      </Spin>
+                    </Flex>
+                )}
+
                 <Form.Item
                     label="მომხმარებელი"
                     name="username"
