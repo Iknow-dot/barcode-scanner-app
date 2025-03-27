@@ -16,7 +16,7 @@ import {
   theme,
   App as AntdApp,
   Space,
-  Dropdown
+  Dropdown, Grid, Flex
 } from "antd";
 import {Content, Header, Footer} from "antd/es/layout/layout";
 import Sider from "antd/es/layout/Sider";
@@ -24,8 +24,10 @@ import {LogoutOutlined, MoonOutlined, UserOutlined} from "@ant-design/icons";
 import SubNavContext, {SubNavProvider} from "./contexts/SubNavContext";
 import "antd/dist/reset.css";
 
+const {useBreakpoint} = Grid;
 
 const MainContentView = ({children}) => {
+  const screens = useBreakpoint()
   const {authData} = useContext(AuthContext);
   const {subNav} = useContext(SubNavContext);
   const {
@@ -43,39 +45,72 @@ const MainContentView = ({children}) => {
     }
   ];
 
+
+  console.log(screens.sm);
   return (
       <Layout style={{minHeight: "100vh"}}>
-        <Sider
-            breakpoint="lg"
-            theme={isDarkMode ? "dark" : "light"}
-            collapsible={!!subNav}
-            collapsed={!subNav}
-        >
-          <img
-              src={isDarkMode ? "logo-dark.png" : "logo-light.png"}
-              alt="Logo"
-              width="75%"
-              style={{
-                margin: "16px auto",
-                display: "block",
-              }}
-          />
-          <Menu theme={isDarkMode ? "dark" : "light"}
-                mode="inline"
-                defaultSelectedKeys={authData?.role === "system_admin" ? ['1'] : ['2']}
-                items={subNav}
-          />
-        </Sider>
+        {screens.lg && (
+            <Sider
+                breakpoint="lg"
+                theme={isDarkMode ? "dark" : "light"}
+                collapsible={!!subNav}
+                collapsed={!subNav}
+            >
+              <img
+                  src={isDarkMode ? "logo-dark.png" : "logo-light.png"}
+                  alt="Logo"
+                  width="75%"
+                  style={{
+                    margin: "16px auto",
+                    display: "block",
+                  }}
+              />
+              <Menu theme={isDarkMode ? "dark" : "light"}
+                    mode="inline"
+                    defaultSelectedKeys={authData?.role === "system_admin" ? ['1'] : ['2']}
+                    items={subNav}
+              />
+            </Sider>
+        )}
         <Layout>
           <Header style={{padding: "0 24px", background: colorBgContainer}}>
-            <Space style={{float: 'right'}}>
-              <Dropdown menu={{items}}>
-                <Space style={{cursor: "pointer"}}>
-                  {authData?.role}
-                  <UserOutlined/>
+            {!screens.lg && (
+                <Flex>
+                  <img
+                      src={isDarkMode ? "logo-dark.png" : "logo-light.png"}
+                      alt="Logo"
+                      width="75px"
+                  />
+                  <Menu
+                      style={{
+                        flex: 1,
+                        background: "transparent",
+                      }}
+                      theme={isDarkMode ? "dark" : "light"}
+                      mode="horizontal"
+                      defaultSelectedKeys={authData?.role === "system_admin" ? ['1'] : ['2']}
+                      items={subNav}
+                  />
+                  <Space style={{float: 'right'}}>
+                    <Dropdown menu={{items}}>
+                      <Space style={{cursor: "pointer"}}>
+                        {authData?.role}
+                        <UserOutlined/>
+                      </Space>
+                    </Dropdown>
+                  </Space>
+                </Flex>
+            )}
+            {screens.lg && (
+                <Space style={{float: 'right'}}>
+                  <Dropdown menu={{items}}>
+                    <Space style={{cursor: "pointer"}}>
+                      {authData?.role}
+                      <UserOutlined/>
+                    </Space>
+                  </Dropdown>
                 </Space>
-              </Dropdown>
-            </Space>
+            )}
           </Header>
           <Content style={{margin: '24px 16px 0'}}>
             <div
