@@ -4,6 +4,11 @@ import {notification, Tag} from "antd";
 import DataTab from "../DataTab";
 import AuthContext from "../Auth/AuthContext";
 
+const roleColors = {
+  system_admin: "red",
+  admin: "green",
+  user: "geekblue"
+}
 
 const UsersTab = ({users: initialUsers, AddModal, EditModal, addModalExtraProps}) => {
   const {authData} = useContext(AuthContext);
@@ -148,8 +153,11 @@ const UsersTab = ({users: initialUsers, AddModal, EditModal, addModalExtraProps}
                 render: (orgId) => organizations[orgId] || 'N/A'
               },
               {
-                key: "role_name", title: 'როლი', dataIndex: 'role_name', render: (role) => (
-                    <Tag color="geekblue">{role}</Tag>
+                key: "role_name",
+                title: 'როლი',
+                dataIndex: 'role_name',
+                render: (role) => (
+                    <Tag color={roleColors[role]}>{role}</Tag>
                 )
               },
             ]}
