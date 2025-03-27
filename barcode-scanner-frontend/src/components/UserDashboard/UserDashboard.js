@@ -114,115 +114,114 @@ const UserDashboard = () => {
   return (
       <>
         {contextHolder}
-        <Form
-            form={form}
-            onFinish={handleSearch}
-            initialValues={{
-              searchType: 'barcode'
+        <Spin
+            spinning={loading}
+            tip="ვეძებ პროდუქტს..."
+            style={{
+              background: 'rgba(0, 0, 0, 0.1)',
+              borderRadius: 4,
             }}
-            layout="horizontal"
+            size="large"
         >
-          <Flex
-              gap="middle"
-              justify="center"
+          <Form
+              form={form}
+              onFinish={handleSearch}
+              initialValues={{
+                searchType: 'barcode'
+              }}
+              layout="horizontal"
           >
-            <Form.Item
-                name="searchType"
-                initialValue="barcode"
-                rules={[
-                  {
-                    required: true,
-                    message: 'გთხოვთ აირჩიოთ ძიების ტიპი!',
-                  },
-                ]}
+            <Flex
+                gap="middle"
+                justify="center"
             >
-              <Select
-                  options={[
+              <Form.Item
+                  name="searchType"
+                  initialValue="barcode"
+                  rules={[
                     {
-                      label: (
-                          <>
-                            <BarcodeOutlined/> შტრიხკოდი
-                          </>
-                      ),
-                      value: "barcode",
+                      required: true,
+                      message: 'გთხოვთ აირჩიოთ ძიების ტიპი!',
                     },
-                    {
-                      label: (
-                          <>
-                            <NumberOutlined/> არტიკული
-                          </>
-                      ),
-                      value: "article",
-                    }
                   ]}
-                  onChange={(value) => {
-                    if (value === 'barcode') {
-                      setBalances([]);
-                      setDisableScan(false);
-                    } else {
-                      setDisableScan(true);
-                    }
-                  }}
-              />
-            </Form.Item>
-            <Form.Item
-                name="search"
-                rules={[
-                  {
-                    required: true,
-                    message: 'გთხოვთ შეიყვანოთ ძიების ტექსტი!',
-                  },
-                ]}
-            >
-              <Input.Search
-                  placeholder="ძიება"
-                  enterButton={<SearchOutlined/>}
-                  onSearch={form.submit}
-                  allowClear
-              />
-            </Form.Item>
-          </Flex>
-          <Flex
-              gap="middle"
-              justify="center"
-
-          >
-            <Form.Item
-                name="allWarehouses"
-                label="ყველა საწყობი"
-                initialValue={false}
-            >
-              <Switch/>
-            </Form.Item>
-            <Space>
-              <Form.Item>
-                <ScanButton
-                    setScanning={setScanning}
-                    scanning={scanning}
-                    onScan={handleScanResult}
-                    disabled={disableScan}
-                    qrRef={qrRef}
+              >
+                <Select
+                    options={[
+                      {
+                        label: (
+                            <>
+                              <BarcodeOutlined/> შტრიხკოდი
+                            </>
+                        ),
+                        value: "barcode",
+                      },
+                      {
+                        label: (
+                            <>
+                              <NumberOutlined/> არტიკული
+                            </>
+                        ),
+                        value: "article",
+                      }
+                    ]}
+                    onChange={(value) => {
+                      if (value === 'barcode') {
+                        setBalances([]);
+                        setDisableScan(false);
+                      } else {
+                        setDisableScan(true);
+                      }
+                    }}
                 />
               </Form.Item>
-            </Space>
-          </Flex>
+              <Form.Item
+                  name="search"
+                  rules={[
+                    {
+                      required: true,
+                      message: 'გთხოვთ შეიყვანოთ ძიების ტექსტი!',
+                    },
+                  ]}
+              >
+                <Input.Search
+                    placeholder="ძიება"
+                    enterButton={<SearchOutlined/>}
+                    onSearch={form.submit}
+                    allowClear
+                />
+              </Form.Item>
+            </Flex>
+            <Flex
+                gap="middle"
+                justify="center"
 
-        </Form>
+            >
+              <Form.Item
+                  name="allWarehouses"
+                  label="ყველა საწყობი"
+                  initialValue={false}
+              >
+                <Switch/>
+              </Form.Item>
+              <Space>
+                <Form.Item>
+                  <ScanButton
+                      setScanning={setScanning}
+                      scanning={scanning}
+                      onScan={handleScanResult}
+                      disabled={disableScan}
+                      qrRef={qrRef}
+                  />
+                </Form.Item>
+              </Space>
+            </Flex>
+
+          </Form>
+        </Spin>
+
         <div ref={qrRef} id="qr-reader">
 
         </div>
-
-        {loading && (
-            <Flex gap="middle" justify="center">
-              <Spin tip="იტვირთება" size="large">
-                <div style={{
-                  padding: 50,
-                  background: 'rgba(0, 0, 0, 0.05)',
-                  borderRadius: 4,
-                }}/>
-              </Spin>
-            </Flex>
-        )}
 
         {!scanning && balances.length > 0 && (
             <>
