@@ -431,7 +431,7 @@ def create_user():
             username=data['username'],
             role_id=role.id,
             organization_id=organization_id,
-            ip_address=data['ip_address']
+            ip_address=data.get('ip_address')
         )
 
         user.set_password(data['password'])
