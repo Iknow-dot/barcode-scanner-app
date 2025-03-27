@@ -1,3 +1,7 @@
 .ant-input {
   font-size: 16px !important;
 }
+.highlight-row {
+    background-color: #e6f7ff !important;
+    color: #1890ff !important;
+}
