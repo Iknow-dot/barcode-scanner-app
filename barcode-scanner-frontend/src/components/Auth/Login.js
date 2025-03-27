@@ -96,18 +96,6 @@ const Login = () => {
                            showIcon
                     />
                 )}
-                {loading && (
-                    <Flex gap="middle" justify="center">
-                      <Spin tip="იტვირთება" size="large">
-                        <div style={{
-                          padding: 50,
-                          background: 'rgba(0, 0, 0, 0.05)',
-                          borderRadius: 4,
-                        }}/>
-                      </Spin>
-                    </Flex>
-                )}
-
                 <Form.Item
                     label="მომხმარებელი"
                     name="username"
@@ -134,11 +122,14 @@ const Login = () => {
                   <Input.Password/>
                 </Form.Item>
 
-                <Form.Item label={null}>
-                  <Button type="primary" htmlType="submit" style={{width: "100%"}}>
-                    შესვლა
-                  </Button>
-                </Form.Item>
+                <Spin spinning={loading}>
+                  <Form.Item label={null}>
+                    <Button type="primary" htmlType="submit" style={{width: "100%"}}>
+                      შესვლა
+                    </Button>
+                  </Form.Item>
+                </Spin>
+
               </Form>
             </Content>
           </Layout>
