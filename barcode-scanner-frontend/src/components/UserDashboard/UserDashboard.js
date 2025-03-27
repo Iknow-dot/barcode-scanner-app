@@ -1,11 +1,9 @@
 import React, {useState, useEffect, useContext, useRef} from 'react';
 import {scanProducts, getUserWarehouses, getClientIp} from '../../api';
 import ScanButton from './ScanButton';
-import Carousel from 'react-multi-carousel';
-import AuthContext from '../Auth/AuthContext';
-import {registerServiceWorker} from '../serviceWorkerRegistration';
 import subNavContext from "../../contexts/SubNavContext";
 import {
+  Carousel,
   Descriptions,
   Flex,
   Form,
@@ -18,7 +16,6 @@ import {
 } from "antd";
 import {BarcodeOutlined, NumberOutlined, SearchOutlined} from "@ant-design/icons";
 
-const {Option} = Select;
 
 const UserDashboard = () => {
   const [form] = Form.useForm();
@@ -81,6 +78,7 @@ const UserDashboard = () => {
 
       const warehouseCodes = allWarehouses ? '' : userWarehouses.map(warehouse => warehouse.code).join(',');
       const data = await scanProducts(search, searchType, warehouseCodes);
+      console.log(data);
       if (data && data.stock) {
         setBalances(data.stock);
         setProductInfo({
@@ -231,6 +229,23 @@ const UserDashboard = () => {
                 </Descriptions.Item>
                 <Descriptions.Item label="არტიკული">{productInfo.article}</Descriptions.Item>
               </Descriptions>
+              <Carousel
+                  arrows
+                  infinite
+                  style={{
+                    margin: '0 auto',
+                    width: '300px',
+                  }}
+              >
+                {productInfo.img_url.map((img, index) => (
+                    <div key={index}>
+                      <img
+                          src={img}
+                          style={{width: '100%'}}
+                      />
+                    </div>
+                ))}
+              </Carousel>
               <Table
                   dataSource={balances}
                   rowClassName={(record, index) => userWarehouses.map(wh => wh.name).includes(record.warehouse_name) ? 'highlight-row' : ''}

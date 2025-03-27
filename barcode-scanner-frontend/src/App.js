@@ -45,8 +45,6 @@ const MainContentView = ({children}) => {
     }
   ];
 
-
-  console.log(screens.sm);
   return (
       <Layout style={{minHeight: "100vh"}}>
         {screens.lg && (

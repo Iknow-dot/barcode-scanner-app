@@ -72,7 +72,7 @@ def scan_barcode():
             "sku": product_data.get("sku"),
             "sku_name": product_data.get("sku_name"),
             "stock": product_data.get("stock"),
-            "images": product_data.get("images", [])
+            "images": product_data.get("img_url", [])
         }
 
         return jsonify(final_response), 200
