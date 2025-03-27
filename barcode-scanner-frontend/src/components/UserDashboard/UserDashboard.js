@@ -28,8 +28,6 @@ const UserDashboard = () => {
   const [scanning, setScanning] = useState(false);
   const [balances, setBalances] = useState([]);
   const [userWarehouses, setUserWarehouses] = useState([]);
-  const [showModal, setShowModal] = useState(false);
-  const [selectedImages, setSelectedImages] = useState([]);
   const [productInfo, setProductInfo] = useState({sku_name: '', article: '', price: '', img_url: []});
   const qrRef = useRef(null);
 
@@ -66,21 +64,6 @@ const UserDashboard = () => {
 
     fetchWarehouses();
   }, []);
-
-  const responsive = {
-    desktop: {
-      breakpoint: {max: 3000, min: 1024},
-      items: 1
-    },
-    tablet: {
-      breakpoint: {max: 1024, min: 464},
-      items: 1
-    },
-    mobile: {
-      breakpoint: {max: 464, min: 0},
-      items: 1
-    }
-  };
 
   const handleSearch = async ({search, searchType, allWarehouses}) => {
     try {
@@ -267,8 +250,8 @@ const UserDashboard = () => {
                       title: 'ფასი',
                       dataIndex: 'price',
                       key: 'price',
-                      render: (text, record) => (
-                          <span>{text} ₾</span>
+                      render: () => (
+                          <span>{productInfo.price} ₾</span>
                       )
                     }
                   ]}
