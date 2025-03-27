@@ -5,11 +5,24 @@ import Carousel from 'react-multi-carousel';
 import AuthContext from '../Auth/AuthContext';
 import {registerServiceWorker} from '../serviceWorkerRegistration';
 import subNavContext from "../../contexts/SubNavContext";
-import {Button, Card, Checkbox, Descriptions, Form, Input, Modal, Select, Space, Switch, Table} from "antd";
+import {
+  Descriptions,
+  Flex,
+  Form,
+  Input, notification,
+  Select,
+  Space,
+  Spin,
+  Switch,
+  Table
+} from "antd";
 import {BarcodeOutlined, NumberOutlined, SearchOutlined} from "@ant-design/icons";
+
+const {Option} = Select;
 
 const UserDashboard = () => {
   const [form] = Form.useForm();
+  const [loading, setLoading] = useState(false);
   const [disableScan, setDisableScan] = useState(false);
   const {setSubNav} = useContext(subNavContext);
   const [scanning, setScanning] = useState(false);
@@ -20,14 +33,25 @@ const UserDashboard = () => {
   const [productInfo, setProductInfo] = useState({sku_name: '', article: '', price: '', img_url: []});
   const qrRef = useRef(null);
 
-  // Function to be called on any click
-  function handleClick(event) {
-    registerServiceWorker();
-    // Your custom logic here
-  }
+  const [notificationApi, contextHolder] = notification.useNotification();
+  const [notificationData, setNotificationData] = useState({});
 
-  // Add event listener to the document to listen for any clicks
-  document.addEventListener('click', handleClick);
+  const openNotificationWithIcon = (type, message, description) => {
+    notificationApi[type]({
+      message, description, showProgress: true, pauseOnHover: true,
+    });
+  };
+
+  useEffect(() => {
+    if (notificationData.message) {
+      openNotificationWithIcon(
+          notificationData.type,
+          notificationData.message,
+          notificationData.description
+      );
+    }
+  }, [notificationData]);
+
 
   useEffect(() => {
     setSubNav(null);
@@ -58,21 +82,22 @@ const UserDashboard = () => {
     }
   };
 
-  const handleSearch = async ({search, allWarehouses, searchType}) => {
+  const handleSearch = async ({search, searchType, allWarehouses}) => {
     try {
+      setLoading(true);
       // Check IP before proceeding with search
       const ipData = await getClientIp();
       if (!ipData.success || !ipData.ip.allowed) {
-        alert("წვდომა შეზღუდულია!");
-        // setErrorMessage('Access from your IP address is restricted.');
-        return; // Exit function if IP check fails
+        setNotificationData({
+          type: 'error',
+          message: 'შეცდომა',
+          description: `შეცდომა იპ-ის შემოწმებისას "(${ipData.ip.error || 'არ გაქვთ წვდომა'})"`
+        });
+        return;
       }
 
       const warehouseCodes = allWarehouses ? '' : userWarehouses.map(warehouse => warehouse.code).join(',');
       const data = await scanProducts(search, searchType, warehouseCodes);
-      // console.log(warehouseCodes);
-      // console.log(data);
-
       if (data && data.stock) {
         setBalances(data.stock);
         setProductInfo({
@@ -87,32 +112,25 @@ const UserDashboard = () => {
       }
 
     } catch (error) {
-      console.error("Error during search:", error.message);
       setBalances([]);
       setProductInfo({sku_name: '', article: '', price: '', img_url: []});
-      alert("არ მოიძებნა!");
+      setNotificationData({
+        type: 'error',
+        message: 'შეცდომა',
+        description: `პროდუქტის ძიებისას შეცდომა "(${error.response?.data?.error || error.message})"`
+      })
     }
+    setLoading(false);
   }
 
   const handleScanResult = (decodedText) => {
     setScanning(false);
   };
 
-  const handleOpenModal = () => {
-    // Check and set base64 images
-    if (Array.isArray(productInfo.img_url) && productInfo.img_url.length > 0) {
-      setSelectedImages(productInfo.img_url.map(img => img.base64));
-      setShowModal(true);
-    } else {
-      console.error("No base64 images available.");
-      setSelectedImages([]);
-    }
-    // console.log(productInfo.img_url.map(img => img.base64));
-  };
-
 
   return (
-      <div className="container">
+      <>
+        {contextHolder}
         <Form
             form={form}
             onFinish={handleSearch}
@@ -121,55 +139,47 @@ const UserDashboard = () => {
             }}
             layout="horizontal"
         >
-          <Form.Item
-              name="searchType"
+          <Flex
+              gap="middle"
+              justify="center"
           >
-            <Select
-                options={[
+            <Form.Item
+                name="searchType"
+                initialValue="barcode"
+                rules={[
                   {
-                    label: (
-                        <>
-                          <BarcodeOutlined/> შტრიხკოდი
-                        </>
-                    ),
-                    value: "barcode",
+                    required: true,
+                    message: 'გთხოვთ აირჩიოთ ძიების ტიპი!',
                   },
-                  {
-                    label: (
-                        <>
-                          <NumberOutlined/> არტიკული
-                        </>
-                    ),
-                    value: "article",
-                  }
                 ]}
-                onChange={(value) => {
-                  if (value === 'barcode') {
-                    setDisableScan(false);
-                  } else {
-                    setDisableScan(true);
-                  }
-                }}
             >
-
-            </Select>
-          </Form.Item>
-
-          <Form.Item
-              name="allWarehouses"
-              label="ყველა საწყობი"
-              initialValue={false}
-          >
-            <Switch/>
-          </Form.Item>
-          <Space>
-            <Form.Item>
-              <ScanButton
-                  setScanning={setScanning}
-                  scanning={scanning}
-                  onScan={handleScanResult}
-                  disabled={disableScan}
-                  qrRef={qrRef}
+              <Select
+                  options={[
+                    {
+                      label: (
+                          <>
+                            <BarcodeOutlined/> შტრიხკოდი
+                          </>
+                      ),
+                      value: "barcode",
+                    },
+                    {
+                      label: (
+                          <>
+                            <NumberOutlined/> არტიკული
+                          </>
+                      ),
+                      value: "article",
+                    }
+                  ]}
+                  onChange={(value) => {
+                    if (value === 'barcode') {
+                      setBalances([]);
+                      setDisableScan(false);
+                    } else {
+                      setDisableScan(true);
+                    }
+                  }}
               />
             </Form.Item>
             <Form.Item
@@ -183,17 +193,53 @@ const UserDashboard = () => {
             >
               <Input.Search
                   placeholder="ძიება"
-                  onSearch={form.submit}
                   enterButton={<SearchOutlined/>}
-
+                  onSearch={form.submit}
+                  allowClear
               />
             </Form.Item>
-          </Space>
+          </Flex>
+          <Flex
+              gap="middle"
+              justify="center"
+
+          >
+            <Form.Item
+                name="allWarehouses"
+                label="ყველა საწყობი"
+                initialValue={false}
+            >
+              <Switch/>
+            </Form.Item>
+            <Space>
+              <Form.Item>
+                <ScanButton
+                    setScanning={setScanning}
+                    scanning={scanning}
+                    onScan={handleScanResult}
+                    disabled={disableScan}
+                    qrRef={qrRef}
+                />
+              </Form.Item>
+            </Space>
+          </Flex>
+
         </Form>
         <div ref={qrRef} id="qr-reader">
 
         </div>
 
+        {loading && (
+            <Flex gap="middle" justify="center">
+              <Spin tip="იტვირთება" size="large">
+                <div style={{
+                  padding: 50,
+                  background: 'rgba(0, 0, 0, 0.05)',
+                  borderRadius: 4,
+                }}/>
+              </Spin>
+            </Flex>
+        )}
 
         {!scanning && balances.length > 0 && (
             <>
@@ -229,7 +275,7 @@ const UserDashboard = () => {
               />
             </>
         )}
-      </div>
+      </>
   );
 };
 
