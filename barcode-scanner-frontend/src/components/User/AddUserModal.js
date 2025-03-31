@@ -54,7 +54,7 @@ const AddUserModal = ({visible, setVisible, onFinish}) => {
           visible={visible}
           setVisible={setVisible}
           onFinish={onFinish}
-          title="Add User"
+          title="მომხმარებლის დამატება"
           name="addUser"
       >
         <Form.Item
