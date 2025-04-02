@@ -1,6 +1,6 @@
 import {Button, Popconfirm, Space, Table} from "antd";
 import React, {useState} from "react";
-import {DeleteOutlined, EditOutlined, PlusOutlined} from "@ant-design/icons";
+import {CheckOutlined, DeleteOutlined, EditOutlined, PlusOutlined} from "@ant-design/icons";
 
 export const DataTab = ({
                           objects,
@@ -10,8 +10,10 @@ export const DataTab = ({
                           handleAdd,
                           EditModal,
                           handleEdit,
-                          handleDelete
+                          handleDelete,
+                          ...props
                         }) => {
+  const [editable, setEditable] = useState(false);
   const [addModalVisible, setAddModalVisible] = useState(false);
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [selectedObject, setSelectedObject] = useState({});
@@ -32,7 +34,8 @@ export const DataTab = ({
         />}
 
         <Table
-            scroll={{ x: "max-content"}}
+            {...props}
+            scroll={{x: "max-content"}}
             dataSource={objects.map(object => ({...object, key: object.id}))}
             columns={[
               ...columns,
@@ -40,37 +43,52 @@ export const DataTab = ({
                 key: "x",
                 title: (
                     <>
-                      <Button variant="outlined" color="green" onClick={() => setAddModalVisible(true)}>
-                        <PlusOutlined/>
-                      </Button>
+                      {editable ? (
+                          <Space>
+                            <Button variant="outlined" color="green" onClick={() => setAddModalVisible(true)}>
+                              <PlusOutlined/>
+                            </Button>
+                            <Button variant="outlined" color="primary" onClick={() => setEditable(false)}>
+                              <CheckOutlined/>
+                            </Button>
+                          </Space>
+                      ) : (
+                          <Button variant="outlined" color="primary" onClick={() => setEditable(true)}>
+                            <EditOutlined/>
+                          </Button>
+                      )}
                     </>
                 ),
                 align: "right",
                 render: (_, object) => (
-                    <Space size="middle">
-                      <Button variant="outlined" color="primary" onClick={() => {
-                        setSelectedObject(object);
-                        setEditModalVisible(true);
-                      }}>
-                        <EditOutlined/>
-                      </Button>
-                      <Popconfirm
-                          title={`გსურთ წაშლა?`}
-                          onConfirm={() => handleDelete(object)}
-                          okText="დიახ"
-                          cancelText="არა"
-                          okButtonProps={{
-                            danger: true
-                          }}
-                          cancelButtonProps={{
-                            type: 'primary'
-                          }}
-                      >
-                        <Button danger>
-                          <DeleteOutlined/>
-                        </Button>
-                      </Popconfirm>
-                    </Space>
+                    <>
+                      {editable && (
+                          <Space>
+                            <Button variant="outlined" color="primary" onClick={() => {
+                              setSelectedObject(object);
+                              setEditModalVisible(true);
+                            }}>
+                              <EditOutlined/>
+                            </Button>
+                            <Popconfirm
+                                title={`გსურთ წაშლა?`}
+                                onConfirm={() => handleDelete(object)}
+                                okText="დიახ"
+                                cancelText="არა"
+                                okButtonProps={{
+                                  danger: true
+                                }}
+                                cancelButtonProps={{
+                                  type: 'primary'
+                                }}
+                            >
+                              <Button danger>
+                                <DeleteOutlined/>
+                              </Button>
+                            </Popconfirm>
+                          </Space>
+                      )}
+                    </>
                 ),
               },
             ]}
