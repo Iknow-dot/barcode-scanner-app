@@ -5,7 +5,7 @@ import {Button, Form, Input, Select, Space, Tag} from "antd";
 import ModalForm, {RenderOption, TagSelect} from "../ModalForm";
 
 
-const AddUserModal = ({visible, setVisible, onFinish}) => {
+const AddUserModal = ({visible, setVisible, onFinish, organization = null}) => {
   const {authData} = useContext(AuthContext);
   const [IPOptions, setIPOptions] = useState([]);
   const [organizations, setOrganizations] = useState([]);
@@ -140,6 +140,7 @@ const AddUserModal = ({visible, setVisible, onFinish}) => {
                     message: 'გთხოვთ აირჩიოთ ორგანიზაცია!',
                   }
                 ]}
+                initialValue={organization ? organization.id : null}
             >
               <Select
                   options={organizations.map(org => ({

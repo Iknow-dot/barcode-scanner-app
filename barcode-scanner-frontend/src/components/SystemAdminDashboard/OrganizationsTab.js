@@ -136,6 +136,9 @@ const OrganizationsTab = () => {
                       return org;
                     }));
                   }}
+                  addModalExtraProps={{
+                    organization
+                  }}
                 />
             )}
 
