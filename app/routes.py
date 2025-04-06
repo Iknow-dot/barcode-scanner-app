@@ -1,4 +1,4 @@
-from flask import Blueprint, jsonify, request, abort, current_app,Response
+from flask import Blueprint, jsonify, request, abort, current_app, Response
 from flask_jwt_extended import jwt_required, get_jwt_identity, create_access_token
 from sqlalchemy.exc import IntegrityError
 from .models import Organization, Warehouse, User, UserRole, AllowedIP, UserWarehouse
@@ -17,14 +17,15 @@ import pyzbar.pyzbar as pyzbar
 import numpy as np
 import cv2
 
-
 # Create a blueprint
 bp = Blueprint('routes', __name__)
+
 
 # Home route
 @bp.route('/')
 def home():
     return jsonify({"message": "Welcome to the Barcode Scanner App!"})
+
 
 # -------------------- Organization Routes -------------------- #
 
@@ -48,8 +49,19 @@ def get_organizations():
         "identification_code": org.identification_code,
         "web_service_url": org.web_service_url,
         "org_username": org.org_username,  # Added username to the response
-        "employees_count": org.employees_count
+        "employees_count": org.employees_count,
+        "users": [
+            {
+                "id": str(user.id),
+                "username": user.username,
+                "role_id": str(user.role_id),
+                "role_name": user.role.role_name,
+                "organization_id": str(user.organization_id),
+                "warehouse_id": str(user.warehouse_id) if user.warehouse_id else None,
+                "ip_address": user.ip_address
+            } for user in org.users]
     } for org in organizations])
+
 
 @bp.route('/organizations/<uuid:org_id>', methods=['GET'])
 @jwt_required()
@@ -74,7 +86,6 @@ def get_organization(organization):
     })
 
 
-
 @bp.route('/organizations', methods=['POST'])
 @jwt_required()
 @role_required('system_admin')
@@ -82,9 +93,10 @@ def create_organization():
     data = request.get_json()
 
     # Check for missing fields
-    if not data.get('name') or not data.get('identification_code') or not data.get('web_service_url') or not data.get('employees_count') or not data.get('org_username'):
+    if not data.get('name') or not data.get('identification_code') or not data.get('web_service_url') or not data.get(
+            'employees_count') or not data.get('org_username'):
         abort(400, description="Missing required fields")
-    
+
     # Convert employees_count to integer and validate
     try:
         employees_count = int(data.get('employees_count'))
@@ -117,7 +129,6 @@ def create_organization():
     db.session.commit()
 
     return jsonify({"message": "Organization created successfully", "id": str(organization.id)}), 201
-
 
 
 @bp.route('/organizations/<uuid:org_id>', methods=['PUT'])
@@ -202,6 +213,7 @@ def get_warehouses():
         "code": wh.code
     } for wh in warehouses])
 
+
 @bp.route('/warehouses/<uuid:id>', methods=['GET'])
 @jwt_required()
 @role_required('admin', 'system_admin')
@@ -225,6 +237,7 @@ def get_warehouse(id):
         "organization_id": str(warehouse.organization_id),
         "code": warehouse.code
     })
+
 
 @bp.route('/warehouses', methods=['POST'])
 @jwt_required()
@@ -266,6 +279,7 @@ def create_warehouse():
         current_app.logger.error(f"Error creating warehouse: {e}")
         return jsonify({'error': 'An error occurred while creating the warehouse'}), 500
 
+
 @bp.route('/warehouses/<uuid:id>', methods=['PUT'])
 @jwt_required()
 @role_required('admin', 'system_admin')
@@ -294,6 +308,7 @@ def update_warehouse(id):
         current_app.logger.error(f"Error updating warehouse: {e}")
         return jsonify({'error': str(e.orig)}), 400
 
+
 @bp.route('/warehouses/<uuid:id>', methods=['DELETE'])
 @jwt_required()
 @role_required('admin', 'system_admin')
@@ -317,6 +332,7 @@ def delete_warehouse(id):
         current_app.logger.error(f"Error deleting warehouse: {e}")
         return jsonify({'error': 'An error occurred while deleting the warehouse'}), 500
 
+
 # -------------------- User Routes -------------------- #
 
 # Password validation function
@@ -331,6 +347,7 @@ def is_password_strong(password):
         return False
     return True
 
+
 @bp.route('/users', methods=['GET'])
 @jwt_required()
 @role_required('admin', 'system_admin')
@@ -344,6 +361,24 @@ def get_users():
         users = User.query.options(joinedload(User.role)).all()
     else:
         users = User.query.options(joinedload(User.role)).filter_by(organization_id=current_user.organization_id).all()
+
+    return jsonify([{
+        "id": str(user.id),
+        "username": user.username,
+        "role_id": str(user.role_id),
+        "role_name": user.role.role_name,  # This ensures role_name is included
+        "organization_id": str(user.organization_id),
+        "warehouse_id": str(user.warehouse_id) if user.warehouse_id else None,
+        "ip_address": user.ip_address
+    } for user in users])
+
+
+@bp.route('/organizations/<uuid:organization_id>/users', methods=['GET'])
+@jwt_required()
+@role_required('system_admin')
+def get_organization_users(organization_id: uuid):
+    # System Admin sees all users, Admin sees only their organization's users
+    users = User.query.options(joinedload(User.role)).filter_by(organization_id=organization_id).all()
 
     return jsonify([{
         "id": str(user.id),
@@ -380,6 +415,7 @@ def get_user(user_id):
         "warehouse_id": str(user.warehouse_id) if user.warehouse_id else None,
         "ip_address": user.ip_address
     })
+
 
 @bp.route('/users', methods=['POST'])
 @jwt_required()
@@ -421,7 +457,8 @@ def create_user():
             abort(404, description="Organization not found")
 
         if not is_password_strong(data.get('password')):
-            return jsonify(error="პაროლი უნდა შედგებოდეს მინიმუმ 8 სიმბოლოსგან, შეიცავდეს ასოებს, ციფრებს და სპეციალურ სიმბოლოებს"), 403
+            return jsonify(
+                error="პაროლი უნდა შედგებოდეს მინიმუმ 8 სიმბოლოსგან, შეიცავდეს ასოებს, ციფრებს და სპეციალურ სიმბოლოებს"), 403
 
         user_count = User.query.filter_by(organization_id=organization_id).count()
         if user_count >= organization.employees_count:
@@ -451,7 +488,7 @@ def create_user():
             current_app.logger.error(f"Invalid UUID format for warehouse ID: {wh_id}, error: {str(e)}")
             db.session.rollback()
             abort(400, description="Invalid UUID format for warehouse ID")
-        
+
         db.session.commit()
         return jsonify({"message": "User created successfully", "id": str(user.id)}), 201
 
@@ -476,7 +513,6 @@ def create_user():
         abort(500, description=f"An unexpected error occurred: {str(e)}")
 
 
-
 @bp.route('/users/<uuid:user_id>', methods=['PUT'])
 @jwt_required()
 @role_required('admin', 'system_admin')
@@ -496,8 +532,9 @@ def update_user(user_id):
         data = request.get_json() or {}
         if 'password' in data and data['password'] != "":
             if not is_password_strong(data['password']):
-                return jsonify(error="პაროლი უნდა შედგებოდეს მინიმუმ 8 სიმბოლოსგან, შეიცავდეს ასოებს, ციფრებს და სპეციალურ სიმბოლოებს"), 403
-        
+                return jsonify(
+                    error="პაროლი უნდა შედგებოდეს მინიმუმ 8 სიმბოლოსგან, შეიცავდეს ასოებს, ციფრებს და სპეციალურ სიმბოლოებს"), 403
+
         user.username = data.get('username', user.username)
         user.ip_address = data.get('ip_address', user.ip_address)
         # user.password_hash = generate_password_hash(data['password']) if 'password' in data else user.password_hash
@@ -535,7 +572,6 @@ def update_user(user_id):
         return jsonify({'error': 'An error occurred while updating the user'}), 500
 
 
-
 @bp.route('/users/<uuid:id>', methods=['DELETE'])
 @jwt_required()
 @role_required('admin', 'system_admin')
@@ -560,6 +596,7 @@ def delete_user(id):
         current_app.logger.error(f"Error deleting user {id}: {e}")
         # db.session.rollback()
         return jsonify({'error': 'An error occurred while deleting the user'}), 500
+
 
 # -------------------- Barcode Scanning Route -------------------- #
 
@@ -603,7 +640,7 @@ def scan_barcode():
                     print(f"Failed to fetch image: {https_url}")
             except Exception as e:
                 print(f"Error processing image {url}: {e}")
-        
+
         # Add Base64 images to product data
         product_data['images'] = base64_images
         del product_data['img_url']  # Remove 'img_url' if needed
@@ -621,12 +658,12 @@ def scan_barcode():
     return jsonify(final_response), 200
 
 
-
 def _convert_to_https(url):
     """Helper function to convert a URL to HTTPS."""
     parsed_url = urlparse(url)
     secure_url = parsed_url._replace(scheme='https')
     return urlunparse(secure_url)
+
 
 # -------------------- IP Management Routes -------------------- #
 
@@ -652,27 +689,30 @@ def get_client_ip():
 
     return jsonify({'ip': ip, 'allowed': False, 'DbIpAdress': user.ip_address}), 403
 
+
 # -------------------- Get user-warehouses -------------------- #
 
 warehouse_bp = Blueprint('warehouse', __name__, url_prefix='/warehouses')
+
 
 @warehouse_bp.route('/user-warehouses', methods=['GET'])
 @jwt_required()
 def get_user_warehouses():
     # Get the current logged-in user's ID from the JWT token
     user_id = get_jwt_identity()
-    
+
     # Query the user_warehouses table for warehouses associated with the user
-    user_warehouses = db.session.query(Warehouse).join(UserWarehouse).filter(UserWarehouse.user_id == uuid.UUID(user_id)).all()
+    user_warehouses = db.session.query(Warehouse).join(UserWarehouse).filter(
+        UserWarehouse.user_id == uuid.UUID(user_id)).all()
 
     if not user_warehouses:
         return jsonify({"error": "No warehouses found for this user"}), 404
 
     # Prepare a response with warehouse codes
-    warehouses_data = [{'id': str(warehouse.id), 'code': warehouse.code, 'name': warehouse.name} for warehouse in user_warehouses]
+    warehouses_data = [{'id': str(warehouse.id), 'code': warehouse.code, 'name': warehouse.name} for warehouse in
+                       user_warehouses]
 
     return jsonify(warehouses_data), 200
-
 
 
 @bp.route('/user_warehouses/<uuid:user_id>', methods=['GET'])
@@ -708,14 +748,15 @@ def get_user_warehouses(user_id):
     except SQLAlchemyError as e:
         current_app.logger.error(f"Database error occurred: {str(e)}")
         return jsonify({"error": "Database error"}), 500
-    
+
+
 # -------------------- Scan barcode route -------------------- #
 
 @bp.route('/process_barcode', methods=['POST'])
 def process_barcode():
     if 'file' not in request.files:
         return jsonify({'error': 'No file part'}), 400
-    
+
     file = request.files['file']
     if file.filename == '':
         return jsonify({'error': 'No selected file'}), 400
@@ -733,7 +774,7 @@ def process_barcode():
 
         # Adaptive Thresholding
         thresh = cv2.adaptiveThreshold(blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-                               cv2.THRESH_BINARY, 11, 2)
+                                       cv2.THRESH_BINARY, 11, 2)
 
         # Decode the barcode using Pyzbar
         decoded_objects = pyzbar.decode(thresh)
@@ -743,7 +784,7 @@ def process_barcode():
         else:
             return jsonify({'error': 'No barcode found'}), 404
     except Exception as e:
-        return jsonify({'error': str(e)}), 500    
+        return jsonify({'error': str(e)}), 500
 
 
 @bp.route('/proxy', methods=['GET'])

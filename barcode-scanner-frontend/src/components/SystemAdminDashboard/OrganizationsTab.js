@@ -4,6 +4,7 @@ import DataTab from "../DataTab";
 import AddOrganization from "../Organization/AddOrganization";
 import EditOrganization from "../Organization/EditOrganization";
 import {notification} from "antd";
+import UsersTab from "./UsersTab";
 
 const OrganizationsTab = () => {
   const [organizations, setOrganizations] = useState([]);
@@ -117,6 +118,27 @@ const OrganizationsTab = () => {
             EditModal={EditOrganization}
             handleEdit={handleEditOrganization}
             handleDelete={handleDelete}
+             expandedRowRender={(organization) => (
+                <UsersTab
+                  initialUsers={organization.users}
+                  handleEditCallback={(user) => {
+                    const organization = organizations.find(org => org.id === user.organization_id);
+                    const prevOrg = organizations.find(org => org.id === user.prevOrg);
+                    const updatedPrevOrgUsers = prevOrg.users.filter(u => u.id !== user.id);
+                    const updatedUsers = [...organization.users, user];
+
+                    setOrganizations(organizations.map(org => {
+                      if (org.id === user.organization_id) {
+                        return {...org, users: updatedUsers};
+                      } else if (org.id === user.prevOrg) {
+                        return {...org, users: updatedPrevOrgUsers};
+                      }
+                      return org;
+                    }));
+                  }}
+                />
+            )}
+
         />
       </>
   );

@@ -13,8 +13,6 @@ import SubNavContext from "../../contexts/SubNavContext";
 const SystemAdminDashboard = () => {
   const {setSubNav} = useContext(SubNavContext);
   const {authData} = useContext(AuthContext);
-  const [organizations, setOrganizations] = useState([]);
-  const [warehouses, setWarehouses] = useState([]);
   const [users, setUsers] = useState([]);
   const userRole = authData?.role;
   const [activeTab, setActiveTab] = useState(userRole === 'system_admin' ? 1 : 2);
@@ -47,13 +45,7 @@ const SystemAdminDashboard = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [orgRes, whRes, userRes] = await Promise.all([
-          api.get('/organizations'),
-          api.get('/warehouses'),
-          api.get('/users')
-        ]);
-        setOrganizations(orgRes.data);
-        setWarehouses(whRes.data);
+        const userRes = await api.get('/users');
         setUsers(userRes.data);
       } catch (error) {
         console.error('შეცდომა მონაცემების მიღებისას', error);
@@ -78,14 +70,7 @@ const SystemAdminDashboard = () => {
     case 3:
       ActiveTabPane = (
           <UsersTab
-              users={users}
-              AddModal={AddUserModal}
-              addModalExtraProps={{
-                userRole,
-                organizations,
-                warehouses
-              }}
-              EditModal={EditUser}
+              initialUsers={users}
           />
       );
       break;

@@ -3,6 +3,8 @@ import api from '../../api';
 import {notification, Tag} from "antd";
 import DataTab from "../DataTab";
 import AuthContext from "../Auth/AuthContext";
+import AddUserModal from "../User/AddUserModal";
+import EditUserModal from "../User/EditUser";
 
 const roleColors = {
   system_admin: "red",
@@ -10,7 +12,11 @@ const roleColors = {
   user: "geekblue"
 }
 
-const UsersTab = ({users: initialUsers, AddModal, EditModal, addModalExtraProps}) => {
+const UsersTab = ({
+                    initialUsers,
+                    addModalExtraProps,
+                    handleEditCallback = null,
+                  }) => {
   const {authData} = useContext(AuthContext);
   const [users, setUsers] = useState(initialUsers);
   const [organizations, setOrganizations] = useState({});
@@ -112,15 +118,13 @@ const UsersTab = ({users: initialUsers, AddModal, EditModal, addModalExtraProps}
   };
 
   const handleEdit = async (modifiedFields, editUser) => {
-    console.log(modifiedFields, editUser);
     try {
-      editUser = {...editUser, ...modifiedFields};
+      editUser = {...editUser, ...modifiedFields, prevOrg: editUser.organization_id};
       if (editUser.ip_address !== "") {
         editUser.ip_address = editUser.ip_address.join(", ");
       } else {
         editUser.ip_address = null;
       }
-      console.log(editUser);
       await api.put(`/users/${editUser.id}`, editUser);
       setUsers(prevUsers => prevUsers.map(user => user.id === editUser.id ? editUser : user));
       setNotificationData({
@@ -128,6 +132,9 @@ const UsersTab = ({users: initialUsers, AddModal, EditModal, addModalExtraProps}
         message: 'წარმატება',
         description: `მომხმარებელი "${editUser.username}" წარმატებით განახლდა`
       });
+      if (handleEditCallback) {
+        handleEditCallback(editUser);
+      }
       return true;
     } catch (error) {
       setNotificationData({
@@ -161,10 +168,10 @@ const UsersTab = ({users: initialUsers, AddModal, EditModal, addModalExtraProps}
                 )
               },
             ]}
-            AddModal={AddModal}
+            AddModal={AddUserModal}
             handleAdd={handleAdd}
             addModalExtraProps={addModalExtraProps}
-            EditModal={EditModal}
+            EditModal={EditUserModal}
             handleEdit={handleEdit}
             handleDelete={handleDelete}
         />
