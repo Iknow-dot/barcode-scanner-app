@@ -153,6 +153,7 @@ const EditUser = ({visible, setVisible, onFinish, object}) => {
                 ]}
             >
               <Select
+                  allowClear
                   id="organization"
                   name="organization_id"
                   optionRender={renderOption}
@@ -170,6 +171,7 @@ const EditUser = ({visible, setVisible, onFinish, object}) => {
               </Select>
             </Form.Item>
         )}
+
 
         {isAdmin && (
             <Form.Item
