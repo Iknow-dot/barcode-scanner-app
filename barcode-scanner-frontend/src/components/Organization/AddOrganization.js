@@ -64,7 +64,7 @@ const AddOrganization = ({visible, setVisible, onFinish}) => {
         </Form.Item>
 
         <Form.Item
-            label="მომხმარელის სახელი"
+            label="მომხმარებლის სახელი"
             name="org_username"
             rules={[
               {

@@ -64,7 +64,7 @@ const EditOrganization = ({visible, setVisible, onFinish, object}) => {
         </Form.Item>
 
         <Form.Item
-            label="მომხმარელის სახელი"
+            label="მომხმარებლის სახელი"
             name="org_username"
             rules={[
               {
