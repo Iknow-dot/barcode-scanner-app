@@ -106,6 +106,11 @@ const UserDashboard = () => {
 
   const handleScanResult = (decodedText) => {
     setScanning(false);
+    handleSearch({
+      search: decodedText,
+      searchType: form.getFieldValue('searchType'),
+      allWarehouses: form.getFieldValue('allWarehouses')
+     });
   };
 
 
