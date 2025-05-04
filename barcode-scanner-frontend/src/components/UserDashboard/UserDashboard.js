@@ -3,8 +3,9 @@ import {scanProducts, getUserWarehouses, getClientIp} from '../../api';
 import ScanButton from './ScanButton';
 import subNavContext from "../../contexts/SubNavContext";
 import {
+  Button,
   Carousel,
-  Descriptions,
+  Descriptions, Drawer,
   Flex,
   Form,
   Input, notification,
@@ -14,7 +15,7 @@ import {
   Switch,
   Table
 } from "antd";
-import {BarcodeOutlined, NumberOutlined, SearchOutlined} from "@ant-design/icons";
+import {BarcodeOutlined, NumberOutlined, QrcodeOutlined, SearchOutlined} from "@ant-design/icons";
 
 
 const UserDashboard = () => {
@@ -108,9 +109,9 @@ const UserDashboard = () => {
     setScanning(false);
     handleSearch({
       search: decodedText,
-      searchType: form.getFieldValue('searchType'),
+      searchType: 'barcode',
       allWarehouses: form.getFieldValue('allWarehouses')
-     });
+    });
   };
 
 
@@ -197,34 +198,47 @@ const UserDashboard = () => {
             <Flex
                 gap="middle"
                 justify="center"
-
             >
               <Form.Item
                   name="allWarehouses"
                   label="ყველა საწყობი"
                   initialValue={false}
+
               >
                 <Switch/>
               </Form.Item>
-              <Space>
-                <Form.Item>
-                  <ScanButton
-                      setScanning={setScanning}
-                      scanning={scanning}
-                      onScan={handleScanResult}
-                      disabled={disableScan}
-                      qrRef={qrRef}
-                  />
-                </Form.Item>
-              </Space>
             </Flex>
 
           </Form>
         </Spin>
+        <div
+            style={{
+              width: '100%',
+              height: '100%',
+              display: scanning ? 'block' : 'none',
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              zIndex: 1000,
+              background: 'rgba(0, 0, 0, 0.5)'
+            }}
+        >
+          <div
+              ref={qrRef}
+              id="qr-reader"
+          >
 
-        <div ref={qrRef} id="qr-reader">
+          </div>
 
         </div>
+
+        <ScanButton
+            setScanning={setScanning}
+            scanning={scanning}
+            onScan={handleScanResult}
+            disabled={disableScan}
+            qrRef={qrRef}
+        />
 
         {!scanning && balances.length > 0 && (
             <>
