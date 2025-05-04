@@ -16,7 +16,7 @@ import {
   theme,
   App as AntdApp,
   Space,
-  Dropdown, Grid, Flex
+  Dropdown, Grid, Flex, Avatar
 } from "antd";
 import {Content, Header, Footer} from "antd/es/layout/layout";
 import Sider from "antd/es/layout/Sider";
@@ -35,7 +35,22 @@ const MainContentView = ({children}) => {
   } = theme.useToken();
   const isDarkMode = colorBgBase === "#000";
   const {logout} = useContext(AuthContext);
+  const userIcon = (
+      <Avatar style={{cursor: "pointer", backgroundColor: "#0765c2"}} size="large">
+        {authData?.role?.charAt(0).toUpperCase()}
+      </Avatar>
+  );
+
   const items = [
+    {
+      key: '0',
+      icon: (
+          <Avatar style={{backgroundColor: "#0765c2"}} size="large">
+            {authData?.role?.charAt(0).toUpperCase()}
+          </Avatar>
+      ),
+      label: authData?.role,
+    },
     {
       key: '1',
       icon: <LogoutOutlined/>,
@@ -91,10 +106,7 @@ const MainContentView = ({children}) => {
                   />
                   <Space style={{float: 'right'}}>
                     <Dropdown menu={{items}}>
-                      <Space style={{cursor: "pointer"}}>
-                        {authData?.role}
-                        <UserOutlined/>
-                      </Space>
+                      {userIcon}
                     </Dropdown>
                   </Space>
                 </Flex>
@@ -102,10 +114,7 @@ const MainContentView = ({children}) => {
             {screens.lg && (
                 <Space style={{float: 'right'}}>
                   <Dropdown menu={{items}}>
-                    <Space style={{cursor: "pointer"}}>
-                      {authData?.role}
-                      <UserOutlined/>
-                    </Space>
+                    {userIcon}
                   </Dropdown>
                 </Space>
             )}
