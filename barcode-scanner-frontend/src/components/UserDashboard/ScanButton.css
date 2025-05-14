@@ -1,49 +1,22 @@
-.scanner-container {
-    width: 100%;
-    max-width: 600px;
-    margin: auto;
-    position: relative;
-    border: 1px solid #ccc;
-    padding: 15px;
-    box-shadow: 0 0 10px rgba(0,0,0,0.1);
-}
 
-.scan-button,
-.stop-scan-button {
-    width: 100%;
-    padding: 10px 20px;
-    font-size: 16px;
-    color: white;
-    border: none;
+#qr-reader button {
+    background: #4096ff;
+    color: #fff;
+    box-shadow: 0 2px 0 rgba(5, 145, 255, 0.1);
+    font-size: 14px;
+    height: 32px;
+    padding: 0 15px;
+    border-radius: 6px;
+    border: 1px solid transparent;
     cursor: pointer;
-}
-
-.scan-button {
-    background-color: #28a745;
-}
-
-.stop-scan-button {
-    background-color: red;
-}
-
-#qr-reader {
-    width: 100%;
-    height: 400px; /* Adjust height to ensure the video stream fits well */
-    background-color: black; /* Fallback color */
-    position: relative;
-    overflow: hidden;
-    align-content: center;
-    justify-content: center;
-    display: flex;
+    transition: all 0.2s cubic-bezier(0.645, 0.045, 0.355, 1);
+    user-select: none;
+    touch-action: manipulation;
 }
 
 #qr-reader video {
     width: 100%;
-    height: auto;
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
+    height: 100%;
 }
 
 

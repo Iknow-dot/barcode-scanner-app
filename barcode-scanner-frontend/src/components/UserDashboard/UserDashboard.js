@@ -131,8 +131,30 @@ const UserDashboard = () => {
                   >
                     ძებნა
                   </Button>
+                  <div style={{
+                    marginTop: 20,
+                  }}>
+                    <div
+                        ref={qrRef}
+                        id="qr-reader"
+                    />
+                    {scanning && (
+                        <Button
+                            variant="outlined"
+                            onClick={() => setScanning(false)}
+                            danger
+                            style={{
+                              marginTop: 10,
+                            }}
+                        >
+                          დახურვა
+                        </Button>
+                    )}
+
+                  </div>
                 </>}
             >
+
             </Result>
         )}
         <Button
@@ -248,7 +270,10 @@ const UserDashboard = () => {
 
             </Form>
             <ScanButton
-                setScanning={setScanning}
+                setScanning={() => {
+                  setScanning(prev => !prev);
+                  setDrawerVisible(false);
+                }}
                 scanning={scanning}
                 onScan={handleScanResult}
                 disabled={disableScan}
@@ -258,27 +283,6 @@ const UserDashboard = () => {
           </Drawer>
 
         </Spin>
-        <div
-            style={{
-              width: '100%',
-              height: '100%',
-              display: scanning ? 'block' : 'none',
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              zIndex: 1000,
-              background: 'rgba(0, 0, 0, 0.5)',
-            }}
-        >
-          <div
-              ref={qrRef}
-              id="qr-reader"
-          >
-
-          </div>
-
-        </div>
-
         {!scanning && balances.length > 0 && (
             <>
               <Descriptions>

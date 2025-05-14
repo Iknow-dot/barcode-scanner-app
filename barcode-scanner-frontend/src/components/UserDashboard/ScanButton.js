@@ -3,6 +3,7 @@ import {Html5QrcodeScanner} from 'html5-qrcode';
 import {processBarcode} from '../../api';
 import {QrcodeOutlined, ScanOutlined} from "@ant-design/icons";
 import {Button} from "antd";
+import "./ScanButton.css"
 
 const buttonStyle = {
   position: 'fixed',
