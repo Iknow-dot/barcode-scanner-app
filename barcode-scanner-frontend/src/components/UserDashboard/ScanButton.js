@@ -15,6 +15,13 @@ const buttonStyle = {
 };
 
 const ScanButton = ({setScanning, scanning, onScan, disabled, qrRef}) => {
+  const handleScanClick = () => {
+    if (!disabled) {
+      setScanning(true);
+    }
+  };
+
+  // Effect to initialize and clean up Html5QrcodeScanner
 
   useEffect(() => {
     let html5QrcodeScanner;

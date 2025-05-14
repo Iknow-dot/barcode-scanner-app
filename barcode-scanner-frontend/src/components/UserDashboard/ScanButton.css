@@ -26,15 +26,18 @@
     background-color: red;
 }
 
-.qr-reader {
+#qr-reader {
     width: 100%;
     height: 400px; /* Adjust height to ensure the video stream fits well */
     background-color: black; /* Fallback color */
     position: relative;
     overflow: hidden;
+    align-content: center;
+    justify-content: center;
+    display: flex;
 }
 
-.qr-reader video {
+#qr-reader video {
     width: 100%;
     height: auto;
     position: absolute;
@@ -42,6 +45,7 @@
     left: 50%;
     transform: translate(-50%, -50%);
 }
+
 
 @media(min-width: 768px) {
     .scanner-container {
