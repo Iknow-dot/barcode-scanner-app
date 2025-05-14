@@ -160,7 +160,7 @@ const UserDashboard = () => {
         <Button
             type="primary"
             style={{
-              position: 'absolute',
+              position: 'fixed',
               bottom: 50,
               right: "50%",
               transform: 'translateX(50%)',
