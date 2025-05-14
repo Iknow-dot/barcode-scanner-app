@@ -120,7 +120,7 @@ const UserDashboard = () => {
   return (
       <>
         {contextHolder}
-        {balances.length === 0 && (
+        {(balances.length === 0 || scanning) && (
             <Result
                 status="info"
                 title="პროდუქტის ძიება"
