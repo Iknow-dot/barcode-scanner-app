@@ -97,7 +97,7 @@ const Login = () => {
                     />
                 )}
                 <Form.Item
-                    label="მომხმარებელი"
+                    label="მომხმარებელი სახელი"
                     name="username"
                     rules={[
                       {
