@@ -2,7 +2,7 @@ FROM python:3.12-slim
 
 # Install dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libzbar0 libgl1-mesa-glx build-essential \
+    libzbar0 build-essential \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

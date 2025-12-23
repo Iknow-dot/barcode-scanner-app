@@ -17,11 +17,11 @@ export const AuthProvider = ({ children }) => {
     setAuthData(null);
   };
 
-  const login = (token, role, organization_id) => {
+  const login = (token, role, organization_id, user) => {
     localStorage.setItem('token', token);
     localStorage.setItem('role', role);
     localStorage.setItem('organization_id', organization_id); // Store organization ID in localStorage
-    setAuthData({ token, role, organization_id }); // Update state to include organization ID
+    setAuthData({ token, role, organization_id, user }); // Update state to include organization ID
   };
 
   return (

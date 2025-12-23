@@ -576,6 +576,8 @@ def update_user(user_id):
 @jwt_required()
 @role_required('admin', 'system_admin')
 def delete_user(id):
+    if str(id) == str(get_jwt_identity()):
+        return jsonify({'error': 'Users cannot delete themselves'}), 400
     try:
         identity = get_jwt_identity()
         user_id = identity.get('user_id') if isinstance(identity, dict) else identity

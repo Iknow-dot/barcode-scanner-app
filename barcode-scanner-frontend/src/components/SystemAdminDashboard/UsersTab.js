@@ -99,6 +99,14 @@ const UsersTab = ({
   }
 
   const handleDelete = async (deleteUser) => {
+    if (deleteUser.id === authData.user.id) {
+      setNotificationData({
+        type: 'error',
+        message: 'შეცდომა',
+        description: `თქვენ არ შეგიძლიათ თქვენი საკუთარი ანგარიშის წაშლა! დაუკავშირდით სისტემის ადმინისტრატორს.`,
+        });
+        return false;
+    }
     try {
       await api.delete(`/users/${deleteUser.id}`);
       setUsers(prevUsers => prevUsers.filter(user => user.id !== deleteUser.id));

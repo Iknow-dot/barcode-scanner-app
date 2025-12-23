@@ -18,7 +18,7 @@ services:
       - FERNET_KEY=MO69AxjxiFlmlCCZiZ1Bm3gOnlAa8iVKgnc67BV0jPA=
 
   db:
-    image: postgres:latest
+    image: postgres:17
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres

@@ -33,20 +33,20 @@ const Login = () => {
 
     try {
       const response = await api.post('/auth/login', {username, password});
-      const {access_token, role, organization_id, userId} = response.data;
+      const {access_token, role, organization_id, user} = response.data;
       // Set the token for subsequent requests before making additional API calls
       api.defaults.headers.common['Authorization'] = `Bearer ${access_token}`;
 
       if (role === 'user') {
         const ipData = await getClientIp();
         if (ipData.success && ipData.ip.allowed) {
-          login(access_token, role, organization_id);
+          login(access_token, role, organization_id, user);
           navigate('/dashboard');
         } else {
           setError("თქვენი IP მისამართი არ არის დაშვებული");
         }
       } else {
-        login(access_token, role, organization_id);
+        login(access_token, role, organization_id, user);
         navigate(role === 'system_admin' || role === 'admin' ? '/system-admin-dashboard' : '/dashboard');
       }
     } catch (error) {

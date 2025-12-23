@@ -90,6 +90,10 @@ def login():
             current_app.logger.info(f"User {user.username} logged in successfully.")
 
             return jsonify({
+                "user": {
+                    "id": str(user.id),
+                    "username": user.username,
+                },
                 "message": "Login successful",
                 "access_token": access_token,
                 "role": user.role.role_name,  # Include the user's role in the response
