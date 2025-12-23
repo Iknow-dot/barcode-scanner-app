@@ -6,22 +6,25 @@ export const AuthProvider = ({ children }) => {
   const [authData, setAuthData] = useState(() => {
     const token = localStorage.getItem('token');
     const role = localStorage.getItem('role');
-    const organization_id = localStorage.getItem('organization_id'); // Fetch organization ID from localStorage
-    return token && role ? { token, role, organization_id } : null;
+    const organization_id = localStorage.getItem('organization_id');
+    const user = localStorage.getItem('user') ? JSON.parse(localStorage.getItem('user')) : null;
+    return token && role ? { token, role, organization_id, user } : null;
   });
 
   const logout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('role');
-    localStorage.removeItem('organization_id'); // Also remove the organization_id
+    localStorage.removeItem('organization_id');
+    localStorage.removeItem('user');
     setAuthData(null);
   };
 
   const login = (token, role, organization_id, user) => {
     localStorage.setItem('token', token);
     localStorage.setItem('role', role);
-    localStorage.setItem('organization_id', organization_id); // Store organization ID in localStorage
-    setAuthData({ token, role, organization_id, user }); // Update state to include organization ID
+    localStorage.setItem('organization_id', organization_id);
+    localStorage.setItem('user', JSON.stringify(user));
+    setAuthData({ token, role, organization_id, user });
   };
 
   return (
