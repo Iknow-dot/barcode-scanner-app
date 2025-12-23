@@ -101,7 +101,7 @@ const UserDashboard = () => {
       setNotificationData({
         type: 'error',
         message: 'შეცდომა',
-        description: `პროდუქტის ძიებისას შეცდომა "(${error.response?.data?.error || error.message})"`
+        description: `პროდუქტი ვერ მოიძებნა`
       })
     }
     setLoading(false);
