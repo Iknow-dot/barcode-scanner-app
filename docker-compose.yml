@@ -41,6 +41,8 @@ services:
       - REACT_APP_API_BASE_URL=http://localhost:8080
       - CHOKIDAR_USEPOLLING=true
       - WATCHPACK_POLLING=true
+      - REACT_APP_PUBLIC_POSTHOG_KEY=phc_yg5k071dOq3uRdhBL0rSMh6SXjsuE6WkEq6Et5A7bYP
+      - REACT_APP_PUBLIC_POSTHOG_HOST=https://eu.i.posthog.com
 
 volumes:
   postgres_data:
