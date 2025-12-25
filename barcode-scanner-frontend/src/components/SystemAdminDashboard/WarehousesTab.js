@@ -117,10 +117,9 @@ const WarehousesTab = ({}) => {
             columns={[
               {key: "name", title: 'სახელი', dataIndex: 'name'},
               {
-                key: "organization_id",
-                title: 'ორგანიზაცია',
-                dataIndex: 'organization_id',
-                render: (orgId) => organizations[orgId] || 'N/A'
+                key: "code",
+                title: 'კოდი',
+                dataIndex: 'code',
               }
             ]}
             AddModal={AddWarehouseModal}
