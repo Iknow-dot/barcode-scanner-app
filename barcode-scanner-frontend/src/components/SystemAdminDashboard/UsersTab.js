@@ -193,7 +193,7 @@ const UsersTab = ({initialUsers, addModalExtraProps, handleEditCallback = null, 
                     <Row gutter={8} align="middle">
                         <Col>
                             <Input.Search
-                                placeholder="სახელი (შეიყვანეთ ნაწილის სახელი)"
+                                placeholder="სახელი"
                                 allowClear
                                 onSearch={(v) => {
                                     if (debounceTimer.current) clearTimeout(debounceTimer.current);
