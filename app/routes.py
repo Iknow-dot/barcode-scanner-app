@@ -430,39 +430,40 @@ def create_user():
         current_app.logger.info(f"Received user data: {data}")
 
         if not data.get('username') or not data.get('password') or not data.get('role_name'):
-            abort(400, description="Missing required fields")
+            return jsonify(error="Missing required fields"), 400
 
         role = UserRole.query.filter_by(role_name=data['role_name']).first()
         if not role:
-            abort(400, description="Invalid role name provided")
+            return jsonify(error="Role not found"), 404
 
         existing_user = User.query.filter_by(username=data['username']).first()
         if existing_user:
-            abort(400, description="Username already exists")
+            return jsonify(error="Username already exists"), 400
 
         organization_id = data.get('organization_id')
         if organization_id:
             try:
                 organization_id = uuid.UUID(organization_id)
             except ValueError:
-                abort(400, description="Invalid UUID format for organization ID")
+                return jsonify(error="Invalid UUID format for organization ID"), 400
         else:
             if current_user.role.name == 'system_admin':
-                abort(400, description="Organization ID is required for system admin")
+                return jsonify(error="Organization ID is required for system admin"), 400
             else:
                 organization_id = current_user.organization_id
 
         organization = Organization.query.get(organization_id)
         if not organization:
-            abort(404, description="Organization not found")
+            return jsonify(error="Organization not found"), 404
 
         if not is_password_strong(data.get('password')):
             return jsonify(
-                error="პაროლი უნდა შედგებოდეს მინიმუმ 8 სიმბოლოსგან, შეიცავდეს ასოებს, ციფრებს და სპეციალურ სიმბოლოებს"), 403
+                error="პაროლი უნდა შედგებოდეს მინიმუმ 8 სიმბოლოსგან, შეიცავდეს ასოებს, ციფრებს და სპეციალურ სიმბოლოებს"), 400
 
-        user_count = User.query.filter_by(organization_id=organization_id).count()
+        normal_user_role_id = UserRole.query.filter_by(role_name='user').first().id
+        user_count = User.query.filter_by(organization_id=organization_id, role_id=normal_user_role_id).count()
         if user_count >= organization.employees_count:
-            abort(400, description="User limit for this organization has been reached")
+            return jsonify(error="User limit for this organization has been reached"), 400
 
         user = User(
             id=uuid.uuid4(),
@@ -487,7 +488,7 @@ def create_user():
         except ValueError as e:
             current_app.logger.error(f"Invalid UUID format for warehouse ID: {wh_id}, error: {str(e)}")
             db.session.rollback()
-            abort(400, description="Invalid UUID format for warehouse ID")
+            return jsonify(error="Invalid UUID format for warehouse ID"), 400
 
         db.session.commit()
         return jsonify({"message": "User created successfully", "id": str(user.id)}), 201
