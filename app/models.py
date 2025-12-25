@@ -9,9 +9,10 @@ from flask import current_app
 from cryptography.fernet import Fernet
 import os
 
+
 class User(db.Model, UserMixin):
     __tablename__ = 'users'
-    
+
     id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     username = db.Column(db.String(100), unique=True, nullable=False)
     password_hash = db.Column(db.String(255), nullable=False)
@@ -36,10 +37,10 @@ class User(db.Model, UserMixin):
 
     def is_system_admin(self):
         return self.role.role_name == 'system_admin'
-    
+
     def has_role(self, role_name):
         return self.role.role_name == role_name
-    
+
     def generate_jwt_token(self):
         """
         Generates a JWT token using the configured expiration time.
@@ -73,9 +74,10 @@ class User(db.Model, UserMixin):
         """
         return any(ip.ip_address == ip_address for ip in self.allowed_ips)
 
+
 class Organization(db.Model):
     __tablename__ = 'organizations'
-    
+
     id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name = db.Column(db.String(100), nullable=False)
     identification_code = db.Column(db.String(50), unique=True, nullable=False)
@@ -86,7 +88,7 @@ class Organization(db.Model):
 
     users = db.relationship('User', back_populates='organization', cascade="all, delete-orphan")
     warehouses = db.relationship('Warehouse', back_populates='organization', cascade="all, delete-orphan")
-    
+
     def encrypt_password(self, password):
         key = os.getenv('FERNET_KEY')  # Fetch the Fernet key from environment variables
         if not key:
@@ -100,15 +102,13 @@ class Organization(db.Model):
             raise ValueError("FERNET_KEY is not set or is invalid")
         cipher_suite = Fernet(key)
         decrypted_password = cipher_suite.decrypt(self.org_password.encode())
-        return decrypted_password.decode() 
+        return decrypted_password.decode()
 
     def set_password(self, password):
         self.org_password = generate_password_hash(password)
 
     def check_password(self, password):
         return check_password_hash(self.org_password, password)
-    
-    
 
     def to_dict(self):
         return {
@@ -120,15 +120,19 @@ class Organization(db.Model):
             # Exclude 'org_password' for security
             'employees_count': self.employees_count
         }
-    
+
+
 class Warehouse(db.Model):
     __tablename__ = 'warehouses'
-    
+    __table_args__ = (
+        db.UniqueConstraint('organization_id', 'code', name='uq_organization_code'),
+    )
+
     id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     organization_id = db.Column(UUID(as_uuid=True), db.ForeignKey('organizations.id'), nullable=False)
     name = db.Column(db.String(100), nullable=False)
-    code = db.Column(db.String(255), nullable=False, unique=True)
-    
+    code = db.Column(db.String(255), nullable=False)
+
     organization = db.relationship('Organization', back_populates='warehouses')
     users = db.relationship('User', back_populates='warehouse', cascade="all, delete-orphan")
 
@@ -139,6 +143,7 @@ class Warehouse(db.Model):
             'name': self.name,
             'code': self.code
         }
+
 
 class UserRole(db.Model):
     __tablename__ = 'user_roles'
@@ -153,6 +158,7 @@ class UserRole(db.Model):
             'id': str(self.id),
             'role_name': self.role_name
         }
+
 
 class AllowedIP(db.Model):
     __tablename__ = 'allowed_ips'
@@ -169,7 +175,6 @@ class AllowedIP(db.Model):
             'id': self.id,
             'ip_address': self.ip_address
         }
-
 
 
 class UserWarehouse(db.Model):
