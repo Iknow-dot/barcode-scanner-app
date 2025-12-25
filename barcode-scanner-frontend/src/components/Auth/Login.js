@@ -4,6 +4,7 @@ import api, {getClientIp} from '../../api';  // Make sure getClientIp is correct
 import AuthContext from '../Auth/AuthContext';
 import {Alert, Button, Flex, Form, Input, Layout, Spin, theme} from "antd";
 import {Content} from "antd/es/layout/layout";
+import {LockOutlined, UserOutlined} from "@ant-design/icons";
 
 const Login = () => {
   const [loading, setLoading] = useState(false);
@@ -106,7 +107,7 @@ const Login = () => {
                       },
                     ]}
                 >
-                  <Input/>
+                  <Input  prefix={<UserOutlined />}/>
                 </Form.Item>
 
                 <Form.Item
@@ -119,7 +120,7 @@ const Login = () => {
                       },
                     ]}
                 >
-                  <Input.Password/>
+                  <Input.Password prefix={<LockOutlined />}/>
                 </Form.Item>
 
                 <Spin spinning={loading}>

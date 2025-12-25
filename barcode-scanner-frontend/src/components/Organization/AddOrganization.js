@@ -64,7 +64,7 @@ const AddOrganization = ({visible, setVisible, onFinish}) => {
         </Form.Item>
 
         <Form.Item
-            label="მომხმარებლის სახელი"
+            label="ვებ სერვისის მომხმარებლი"
             name="org_username"
             rules={[
               {
@@ -73,11 +73,11 @@ const AddOrganization = ({visible, setVisible, onFinish}) => {
               }
             ]}
         >
-          <Input/>
+          <Input autoComplete="off"/>
         </Form.Item>
 
         <Form.Item
-            label="პაროლი"
+            label="ვებ სერვისის პაროლი"
             name="org_password"
             rules={[
               {
@@ -86,7 +86,7 @@ const AddOrganization = ({visible, setVisible, onFinish}) => {
               }
             ]}
         >
-          <Input.Password/>
+          <Input.Password autoComplete="new-password"/>
         </Form.Item>
         <Form.Item label={null}>
           <Button block type="primary" htmlType="submit" variant="solid" color="green">
