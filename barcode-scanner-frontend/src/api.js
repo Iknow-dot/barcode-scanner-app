@@ -26,11 +26,9 @@ api.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
-    // console.log("Interceptor caught error:", error.response?.status);
 
     // Check if the error is 401 and it is not a retry of a token refresh request
     if (error.response?.status === 401 && !originalRequest._retry && originalRequest.url !== '/auth/token/refresh') {
-      // console.log("Attempting to refresh token");
       originalRequest._retry = true; // mark this request as already retried
 
       try {
@@ -42,7 +40,6 @@ api.interceptors.response.use(
         originalRequest.headers['Authorization'] = `Bearer ${newToken}`;
         return api(originalRequest);
       } catch (refreshError) {
-        // console.log("Refresh token attempt failed:", refreshError);
         // Redirect to login if refresh fails
         localStorage.removeItem('token');
         // window.location.href = '/login';

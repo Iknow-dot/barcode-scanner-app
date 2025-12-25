@@ -80,7 +80,6 @@ const UserDashboard = () => {
 
       const warehouseCodes = allWarehouses ? '' : userWarehouses.map(warehouse => warehouse.code).join(',');
       const data = await scanProducts(search, searchType, warehouseCodes);
-      console.log(data);
       if (data && data.stock) {
         setBalances(data.stock);
         setProductInfo({
