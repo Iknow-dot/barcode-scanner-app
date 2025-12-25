@@ -71,6 +71,7 @@ const SystemAdminDashboard = () => {
       ActiveTabPane = (
           <UsersTab
               initialUsers={users}
+              filtersEnabled={true}
           />
       );
       break;

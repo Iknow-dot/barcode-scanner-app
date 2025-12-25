@@ -1,16 +1,14 @@
 from flask import Blueprint, jsonify, request, abort, current_app, Response
-from flask_jwt_extended import jwt_required, get_jwt_identity, create_access_token
+from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy.exc import IntegrityError
-from .models import Organization, Warehouse, User, UserRole, AllowedIP, UserWarehouse
+from .models import Organization, Warehouse, User, UserRole, UserWarehouse
 from . import db
 import uuid
 import requests
 from .decorators import role_required, organization_exists, ip_whitelisted
-from sqlalchemy import create_engine
-from sqlalchemy.orm import joinedload, sessionmaker
+from sqlalchemy.orm import joinedload
 from sqlalchemy.exc import SQLAlchemyError
 import base64
-from ipaddress import ip_address, AddressValueError
 import re
 from urllib.parse import urlparse, urlunparse
 import pyzbar.pyzbar as pyzbar
@@ -356,17 +354,41 @@ def get_users():
     user_id = identity.get('user_id') if isinstance(identity, dict) else identity
     current_user = User.query.get(uuid.UUID(user_id))
 
-    # System Admin sees all users, Admin sees only their organization's users
-    if current_user.is_system_admin():
-        users = User.query.options(joinedload(User.role)).all()
-    else:
-        users = User.query.options(joinedload(User.role)).filter_by(organization_id=current_user.organization_id).all()
+    # Base query with role joined for easy access
+    query = User.query.options(joinedload(User.role))
+
+    # Scope non-system-admins to their organization
+    if not current_user.is_system_admin():
+        query = query.filter_by(organization_id=current_user.organization_id)
+
+    # Query params
+    q = request.args.get('q')
+    organization_filter = request.args.get('organization_id')
+    role_filter = request.args.get('role')
+
+    # organization filter (must be valid uuid)
+    if organization_filter:
+        try:
+            org_uuid = uuid.UUID(organization_filter)
+            query = query.filter_by(organization_id=org_uuid)
+        except ValueError:
+            return jsonify(error="Invalid UUID format for organization_id"), 400
+
+    # username partial, case-insensitive
+    if q:
+        query = query.filter(User.username.ilike(f"%{q}%"))
+
+    # role filter (exact match on role_name)
+    if role_filter:
+        query = query.join(UserRole).filter(UserRole.role_name == role_filter)
+
+    users = query.all()
 
     return jsonify([{
         "id": str(user.id),
         "username": user.username,
         "role_id": str(user.role_id),
-        "role_name": user.role.role_name,  # This ensures role_name is included
+        "role_name": user.role.role_name,
         "organization_id": str(user.organization_id),
         "warehouse_id": str(user.warehouse_id) if user.warehouse_id else None,
         "ip_address": user.ip_address
@@ -376,7 +398,7 @@ def get_users():
 @bp.route('/organizations/<uuid:organization_id>/users', methods=['GET'])
 @jwt_required()
 @role_required('system_admin')
-def get_organization_users(organization_id: uuid):
+def get_organization_users(organization_id):
     # System Admin sees all users, Admin sees only their organization's users
     users = User.query.options(joinedload(User.role)).filter_by(organization_id=organization_id).all()
 
