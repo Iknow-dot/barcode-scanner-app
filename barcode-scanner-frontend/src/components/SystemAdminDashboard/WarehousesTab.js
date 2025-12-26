@@ -6,130 +6,139 @@ import AddWarehouseModal from "../Warehouse/AddWarehouseModal";
 import EditWarehouseModal from "../Warehouse/EditWarehouseModal";
 
 const WarehousesTab = ({}) => {
-  const [warehouses, setWarehouses] = useState([]);
-  const [organizations, setOrganizations] = useState({});
-  const [notificationApi, contextHolder] = notification.useNotification();
-  const [notificationData, setNotificationData] = useState({});
+    const [warehouses, setWarehouses] = useState([]);
+    const [organizations, setOrganizations] = useState({});
+    const [notificationApi, contextHolder] = notification.useNotification();
+    const [notificationData, setNotificationData] = useState({});
 
-  const openNotificationWithIcon = (type, message, description) => {
-    notificationApi[type]({
-      message, description, showProgress: true, pauseOnHover: true,
-    });
-  };
-  useEffect(() => {
-    if (notificationData.message) {
-      openNotificationWithIcon(
-          notificationData.type,
-          notificationData.message,
-          notificationData.description
-      );
-    }
-  }, [notificationData]);
+    const openNotificationWithIcon = (type, message, description) => {
+        notificationApi[type]({
+            message, description, showProgress: true, pauseOnHover: true,
+        });
+    };
+    useEffect(() => {
+        if (notificationData.message) {
+            openNotificationWithIcon(
+                notificationData.type,
+                notificationData.message,
+                notificationData.description
+            );
+        }
+    }, [notificationData]);
 
 
-  useEffect(() => {
-    const fetchOrganizations = async () => {
-      try {
-        const response = await api.get('/organizations');
-        const orgMap = response.data.reduce((acc, org) => {
-          acc[org.id] = org.name;
-          return acc;
-        }, {});
-        setOrganizations(orgMap);
-      } catch (error) {
-        console.error('Error fetching organizations:', error);
-      }
+    useEffect(() => {
+        const fetchOrganizations = async () => {
+            try {
+                const response = await api.get('/organizations');
+                const orgMap = response.data.reduce((acc, org) => {
+                    acc[org.id] = org.name;
+                    return acc;
+                }, {});
+                setOrganizations(orgMap);
+            } catch (error) {
+                console.error('Error fetching organizations:', error);
+            }
+        };
+
+        const fetchWarehouses = async () => {
+            const response = await api.get('/warehouses');
+            setWarehouses(response.data);
+        }
+        fetchOrganizations();
+        fetchWarehouses();
+    }, []);
+
+    const handleDelete = async (warehouse) => {
+        try {
+            await api.delete(`/warehouses/${warehouse.id}`);
+            setWarehouses(currentWarehouses => currentWarehouses.filter(wh => wh.id !== warehouse.id));
+            setNotificationData({
+                type: 'success',
+                message: 'საწყობის წაშლა',
+                description: `საწყობი: "${warehouse.name}" წაიშალა`
+            });
+        } catch (error) {
+            setNotificationData({
+                type: 'error',
+                message: 'საწყობის წაშლა',
+                description: error.message
+            });
+        }
     };
 
-    const fetchWarehouses = async () => {
-      const response = await api.get('/warehouses');
-      setWarehouses(response.data);
-    }
-    fetchOrganizations();
-    fetchWarehouses();
-  }, []);
+    const handleEditWarehouse = async (updateWarehouse, originalWarehouse) => {
+        try {
+            updateWarehouse = {...originalWarehouse, ...updateWarehouse};
+            await api.put(`/warehouses/${updateWarehouse.id}`, updateWarehouse);
+            setWarehouses((prevWarehouses) => prevWarehouses.map(wh => wh.id === updateWarehouse.id ? updateWarehouse : wh));
+            setNotificationData({
+                type: 'success',
+                message: 'საწყობის შეცვლა',
+                description: `საწყობი: ${updateWarehouse.name} შეცვლილია`
+            });
+            return true;
+        } catch (error) {
+            setNotificationData({
+                type: 'error',
+                message: 'საწყობის შეცვლა',
+                description: error?.response?.data?.error || error.message
+            })
+            return false;
+        }
+    };
 
-  const handleDelete = async (warehouse) => {
-    try {
-      await api.delete(`/warehouses/${warehouse.id}`);
-      setWarehouses(currentWarehouses => currentWarehouses.filter(wh => wh.id !== warehouse.id));
-      setNotificationData({
-        type: 'success',
-        message: 'საწყობის წაშლა',
-        description: `საწყობი: "${warehouse.name}" წაიშალა`
-      });
-    } catch (error) {
-      setNotificationData({
-        type: 'error',
-        message: 'საწყობის წაშლა',
-        description: error.message
-      });
-    }
-  };
+    const handleAddWarehouse = async (newWarehouseData) => {
+        try {
+            await api.post('/warehouses', newWarehouseData);
+            const whRes = await api.get('/warehouses');
+            setWarehouses(whRes.data);
+            setNotificationData({
+                type: 'success',
+                message: 'საწყობის დამატება',
+                description: `საწყობი: "${newWarehouseData.name}" დაემატა`
+            });
+            return true;
+        } catch (error) {
+            const response = error?.response;
+            const data = response?.data;
+            let message = "უცნობი შეცდომა.";
+            switch (data.key) {
+                case 'error.warehouse_code_exists':
+                    message = `საწყობი კოდით "${newWarehouseData.code}" უკვე არსებობს სისტემაში.`;
+                    break;
+            }
 
-  const handleEditWarehouse = async (updateWarehouse, originalWarehouse) => {
-    try {
-      updateWarehouse = {...originalWarehouse, ...updateWarehouse};
-      await api.put(`/warehouses/${updateWarehouse.id}`, updateWarehouse);
-      setWarehouses((prevWarehouses) => prevWarehouses.map(wh => wh.id === updateWarehouse.id ? updateWarehouse : wh));
-      setNotificationData({
-        type: 'success',
-        message: 'საწყობის შეცვლა',
-        description: `საწყობი: ${updateWarehouse.name} შეცვლილია`
-      });
-      return true;
-    } catch (error) {
-      setNotificationData({
-        type: 'error',
-        message: 'საწყობის შეცვლა',
-        description: error?.response?.data?.error || error.message
-      })
-      return false;
-    }
-  };
+            setNotificationData({
+                type: 'error',
+                message: 'საწყობის დამატება',
+                description: message
+            });
+            return false;
+        }
+    };
 
-  const handleAddWarehouse = async (newWarehouseData) => {
-    try {
-      await api.post('/warehouses', newWarehouseData);
-      const whRes = await api.get('/warehouses');
-      setWarehouses(whRes.data);
-        setNotificationData({
-            type: 'success',
-            message: 'საწყობის დამატება',
-            description: `საწყობი: "${newWarehouseData.name}" დაემატა`
-        });
-        return true;
-    } catch (error) {
-        setNotificationData({
-            type: 'error',
-            message: 'საწყობის დამატება',
-            description: error?.response?.data?.error || error.message
-        });
-        return false;
-    }
-  };
-
-  return (
-      <>
-        {contextHolder}
-        <DataTab
-            objects={warehouses}
-            columns={[
-              {key: "name", title: 'სახელი', dataIndex: 'name'},
-              {
-                key: "code",
-                title: 'კოდი',
-                dataIndex: 'code',
-              }
-            ]}
-            AddModal={AddWarehouseModal}
-            handleAdd={handleAddWarehouse}
-            EditModal={EditWarehouseModal}
-            handleEdit={handleEditWarehouse}
-            handleDelete={handleDelete}
-        />
-      </>
-  );
+    return (
+        <>
+            {contextHolder}
+            <DataTab
+                objects={warehouses}
+                columns={[
+                    {key: "name", title: 'სახელი', dataIndex: 'name'},
+                    {
+                        key: "code",
+                        title: 'კოდი',
+                        dataIndex: 'code',
+                    }
+                ]}
+                AddModal={AddWarehouseModal}
+                handleAdd={handleAddWarehouse}
+                EditModal={EditWarehouseModal}
+                handleEdit={handleEditWarehouse}
+                handleDelete={handleDelete}
+            />
+        </>
+    );
 };
 
 export default WarehousesTab;

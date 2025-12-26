@@ -127,11 +127,22 @@ const UsersTab = ({initialUsers, addModalExtraProps, handleEditCallback = null, 
                 return true;
             }
         } catch (err) {
-            setNotificationData({
-                type: 'error',
-                message: 'შეცდომა',
-                description: err.response?.data?.error || err.message
-            });
+
+            const message = err.response?.data?.error || err.message;
+
+            if (message.includes('User limit')) {
+                setNotificationData({
+                    type: 'error',
+                    message: 'შეცდომა',
+                    description: "მომხმარებელთა ლიმიტი მიღწეულია. გთხოვთ, დაუკავშირდით ადმინისტრატორს დამატებითი ინფორმაციისთვის.",
+                });
+            } else {
+                setNotificationData({
+                    type: 'error',
+                    message: 'შეცდომა',
+                    description: err.response?.data?.error || err.message
+                });
+            }
             return false;
         }
     };

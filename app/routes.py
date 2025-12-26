@@ -252,6 +252,13 @@ def create_warehouse():
         if not name:
             return jsonify({'error': 'Missing warehouse name'}), 400
 
+        warehouse_code_exists = Warehouse.query.filter_by(code=data.get('code')).first()
+        if warehouse_code_exists:
+            return jsonify({
+                'error': True,
+                'key': 'error.warehouse_code_exists',
+            }), 400
+
         warehouse = Warehouse(
             id=uuid.uuid4(),
             name=name,
@@ -271,11 +278,17 @@ def create_warehouse():
             }), 201
         except IntegrityError:
             db.session.rollback()
-            return jsonify({'error': 'Error creating warehouse. Please try again.'}), 500
+            return jsonify({
+                'error': True,
+                'key': 'error.unknown',
+            }), 500
 
     except Exception as e:
         current_app.logger.error(f"Error creating warehouse: {e}")
-        return jsonify({'error': 'An error occurred while creating the warehouse'}), 500
+        return jsonify({
+            'error': True,
+            'key': 'error.unknown',
+        }), 500
 
 
 @bp.route('/warehouses/<uuid:id>', methods=['PUT'])
