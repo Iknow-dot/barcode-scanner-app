@@ -248,11 +248,15 @@ def create_warehouse():
 
         data = request.get_json() or {}
         name = data.get('name')
+        organization_id = current_user.organization_id
 
         if not name:
             return jsonify({'error': 'Missing warehouse name'}), 400
 
-        warehouse_code_exists = Warehouse.query.filter_by(code=data.get('code')).first()
+        warehouse_code_exists = Warehouse.query.filter_by(
+            code=data.get('code'),
+            organization_id=organization_id
+        ).first()
         if warehouse_code_exists:
             return jsonify({
                 'error': True,
