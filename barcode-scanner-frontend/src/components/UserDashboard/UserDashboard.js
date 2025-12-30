@@ -326,8 +326,8 @@ const UserDashboard = () => {
                         title: 'ფასი',
                         dataIndex: 'price',
                         key: 'price',
-                        render: () => (
-                            <span>{productInfo.price} ₾</span>
+                        render: (price) => (
+                            <span>{price} ₾</span>
                         )
                       }
                     ]}
