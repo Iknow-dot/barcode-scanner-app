@@ -184,7 +184,7 @@ const UsersTab = ({initialUsers, addModalExtraProps, handleEditCallback = null, 
                 message: 'წარმატება',
                 description: `მომხმარებელი "${editUser.username}" წარმატებით განახლდა`
             });
-            if (handleEditCallback) handleEditCallback(payload);
+            if (handleEditCallback) handleEditCallback(payload, modifiedFields, editUser);
             return true;
         } catch (err) {
             setNotificationData({
