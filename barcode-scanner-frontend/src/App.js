@@ -69,7 +69,7 @@ const MainContentView = ({children}) => {
                     collapsible={!!subNav}
                     collapsed={!subNav}
                 >
-                    <a href={window.location.host}>
+                    <Link to={window.location.href}>
                         <img
                             src={isDarkMode ? "logo-dark.png" : "logo-light.png"}
                             alt="Logo"
@@ -79,7 +79,7 @@ const MainContentView = ({children}) => {
                                 display: "block",
                             }}
                         />
-                    </a>
+                    </Link>
                     <Menu theme={isDarkMode ? "dark" : "light"}
                           mode="inline"
                           defaultSelectedKeys={authData?.role === "system_admin" ? ['1'] : ['2']}
@@ -91,13 +91,13 @@ const MainContentView = ({children}) => {
                 <Header style={{padding: "0 24px", background: colorBgContainer}}>
                     {!screens.lg && (
                         <Flex>
-                            <a href={window.location.host}>
+                            <Link to={window.location.href}>
                                 <img
                                     src={isDarkMode ? "logo-dark.png" : "logo-light.png"}
                                     alt="Logo"
                                     width="75px"
                                 />
-                            </a>
+                            </Link>
                             <Menu
                                 style={{
                                     flex: 1,
