@@ -123,15 +123,15 @@ const OrganizationsTab = () => {
                   initialUsers={organization.users}
                   handleEditCallback={(user, modifiedFields, editUser) => {
                     const organization = organizations.find(org => org.id === user.organization_id);
-                    const prevOrg = organizations.find(org => org.id === editUser.organization_id);
-                    const updatedPrevOrgUsers = prevOrg.users.filter(u => u.id !== user.id);
-                    const updatedUsers = [...organization.users, user];
+                    const updatedUsers = [
+                        ...organization.users.filter(u => u.id !== user.id),
+                        user
+                    ];
+
 
                     setOrganizations(organizations.map(org => {
                       if (org.id === user.organization_id) {
                         return {...org, users: updatedUsers};
-                      } else if (org.id === editUser.organization_id) {
-                        return {...org, users: updatedPrevOrgUsers};
                       }
                       return org;
                     }));
