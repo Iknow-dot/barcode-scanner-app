@@ -97,7 +97,8 @@ def login():
                 "message": "Login successful",
                 "access_token": access_token,
                 "role": user.role.role_name,  # Include the user's role in the response
-                "organization_id": str(user.organization_id)  # Include the organization_id in the response
+                "organization_id": str(user.organization_id),  # Include the organization_id in the response
+                "organization_name": user.organization.name
             }), 200
         else:
             current_app.logger.error(f"Login failed: Invalid credentials for username: {username}")
