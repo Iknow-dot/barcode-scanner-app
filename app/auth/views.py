@@ -3,7 +3,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from flask_login import login_user, logout_user, current_user
 from app import db, login_manager
 from app.auth.utils import generate_jwt, is_password_strong, is_valid_ip
-from app.models import User, UserRole
+from app.models import User, UserRole, UserWarehouse, Warehouse
 import jwt
 
 bp = Blueprint('auth', __name__)
@@ -89,6 +89,14 @@ def login():
 
             current_app.logger.info(f"User {user.username} logged in successfully.")
 
+            # Fetch warehouses from the UserWarehouse join table
+            user_warehouses = (
+                db.session.query(Warehouse)
+                .join(UserWarehouse)
+                .filter(UserWarehouse.user_id == user.id)
+                .all()
+            )
+
             return jsonify({
                 "user": {
                     "id": str(user.id),
@@ -98,7 +106,10 @@ def login():
                 "access_token": access_token,
                 "role": user.role.role_name,  # Include the user's role in the response
                 "organization_id": str(user.organization_id),  # Include the organization_id in the response
-                "organization_name": user.organization.name if user.organization else None
+                "organization_name": user.organization.name if user.organization else None,
+                "warehouses": [
+                    warehouse.name for warehouse in user_warehouses
+                ]
             }), 200
         else:
             current_app.logger.error(f"Login failed: Invalid credentials for username: {username}")

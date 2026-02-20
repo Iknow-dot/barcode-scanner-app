@@ -9,7 +9,8 @@ export const AuthProvider = ({ children }) => {
     const role = localStorage.getItem('role');
     const organization_id = localStorage.getItem('organization_id');
     const organization_name = localStorage.getItem('organization_name');
-    const user = localStorage.getItem('user') ? JSON.parse(localStorage.getItem('user')) : null;
+    const warehouses = localStorage.getItem('warehouses') && JSON.parse(localStorage.getItem('warehouses'));
+    const user = localStorage.getItem('user') && JSON.parse(localStorage.getItem('user'));
 
     // Re-identify user in PostHog on page refresh if already logged in
     if (token && role && user) {
@@ -17,6 +18,7 @@ export const AuthProvider = ({ children }) => {
         role: role,
         organization_id: organization_id,
         organization_name: organization_name,
+        warehouses: warehouses,
         username: user?.username,
       });
     }
@@ -29,24 +31,26 @@ export const AuthProvider = ({ children }) => {
     localStorage.removeItem('role');
     localStorage.removeItem('organization_id');
     localStorage.removeItem('organization_name');
+    localStorage.removeItem('warehouses');
     localStorage.removeItem('user');
     posthog.reset();
     setAuthData(null);
   };
 
-  const login = (token, role, organization_id, organization_name, user) => {
+  const login = (token, role, organization_id, organization_name, warehouses, user) => {
     localStorage.setItem('token', token);
     localStorage.setItem('role', role);
     localStorage.setItem('organization_id', organization_id);
     localStorage.setItem('organization_name', organization_name);
+    localStorage.setItem('warehouses', JSON.stringify(warehouses));
     localStorage.setItem('user', JSON.stringify(user));
-    console.log(organization_name);
     // Identify user in PostHog with role and organization
     posthog.identify(user?.username, {
       role: role,
       organization_id: organization_id,
       organization_name: organization_name,
       username: user?.username,
+      warehouse: warehouses,
     });
 
     setAuthData({ token, role, organization_id, user });

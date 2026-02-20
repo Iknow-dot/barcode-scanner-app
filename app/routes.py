@@ -582,7 +582,12 @@ def update_user(user_id):
             user.set_password(data['password'])
 
         if 'organization_id' in data:
-            user.organization_id = data['organization_id']
+            org_id_value = data['organization_id']
+            if org_id_value and str(org_id_value) != 'None':
+                try:
+                    user.organization_id = uuid.UUID(str(org_id_value))
+                except ValueError:
+                    return jsonify({'error': 'Invalid UUID format for organization_id'}), 400
 
         if 'role_name' in data:
             role = UserRole.query.filter_by(role_name=data['role_name']).first()
