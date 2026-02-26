@@ -46,6 +46,15 @@ class IsCompanyAdmin(BasePermission):
             and request.user.role == User.Role.COMPANY_ADMIN
         )
 
+class IsCompanyUser(BasePermission):
+    """Access for company users (scoped to their organization)."""
+
+    def has_permission(self, request, view):
+        return (
+            request.user
+            and request.user.is_authenticated
+            and request.user.role == User.Role.COMPANY_USER
+        )
 
 class CompanyUserPermission(BasePermission):
     """
