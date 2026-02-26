@@ -29,7 +29,7 @@ class Warehouse(models.Model):
         User,
         related_name='warehouses',
         limit_choices_to=models.Q(organization=models.F('organization')),
-        null=True, blank=True
+        blank=True
     )
 
     class Meta:

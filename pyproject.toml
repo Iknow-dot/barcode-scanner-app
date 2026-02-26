@@ -21,6 +21,7 @@ dependencies = [
     "django-guardian>=3.2.0",
     "djangorestframework>=3.16.1",
     "djangorestframework-stubs>=3.16.8",
+    "drf-spectacular>=0.29.0",
     "filelock==3.16.1",
     "flask==3.0.3",
     "flask-bcrypt==1.0.1",

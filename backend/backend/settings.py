@@ -39,6 +39,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
 
     'rest_framework',
+    'drf_spectacular',
     'guardian',
 
     'core',
@@ -131,3 +132,19 @@ AUTH_USER_MODEL = 'users.User'
 
 # django-guardian settings
 ANONYMOUS_USER_NAME = None  # Disable guardian's anonymous user creation
+
+# Django REST Framework
+REST_FRAMEWORK = {
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.IsAuthenticated',
+    ],
+}
+
+# drf-spectacular settings
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'Barcode Scanner API',
+    'DESCRIPTION': 'API documentation for the Barcode Scanner application',
+    'VERSION': '1.0.0',
+    'SERVE_INCLUDE_SCHEMA': False,
+}

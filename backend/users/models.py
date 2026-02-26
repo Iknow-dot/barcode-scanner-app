@@ -10,7 +10,13 @@ class User(AbstractUser):
         COMPANY_ADMIN = ("company_admin", _("Company Admin"))
         COMPANY_USER = ("company_user", _("Company User"))
 
-    organization = models.ForeignKey('core.Organization', on_delete=models.CASCADE, null=True, blank=True)
+    organization = models.ForeignKey(
+        'core.Organization',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='users'
+    )
     role = models.CharField(max_length=20, choices=Role.choices, default=Role.INTERNAL_ADMIN)
 
     def clean(self) -> None:
