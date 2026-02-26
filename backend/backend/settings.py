@@ -128,3 +128,6 @@ USE_TZ = True
 STATIC_URL = 'static/'
 
 AUTH_USER_MODEL = 'users.User'
+
+# django-guardian settings
+ANONYMOUS_USER_NAME = None  # Disable guardian's anonymous user creation

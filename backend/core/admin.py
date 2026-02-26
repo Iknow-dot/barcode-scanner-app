@@ -1,18 +1,16 @@
 from django.contrib import admin
-from django.contrib.auth import get_user_model
-from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
-
-from users.models import AllowedIP
-
-User = get_user_model()
+from core.models import Organization, Warehouse
 
 
-class AllowedIPInline(admin.TabularInline):
-    model = AllowedIP
+class WarehouseInline(admin.StackedInline):
+    model = Warehouse
+    filter_horizontal = ["users"]
     extra = 1
 
 
-@admin.register(User)
-class UserAdmin(DjangoUserAdmin):
-    inlines = [AllowedIPInline]
+@admin.register(Organization)
+class OrganizationAdmin(admin.ModelAdmin):
+    list_display = ("name", "identification_number", "employees_count")
+    search_fields = ("name", "identification_number")
 
+    inlines = [WarehouseInline]
