@@ -11,6 +11,7 @@ venv/
 # Database files
 *.sqlite
 *.db
+*.sqlite3
 
 # Flask instance folder
 instance/

@@ -16,6 +16,19 @@ class Organization(models.Model):
     web_service_password = models.CharField(max_length=255, null=True, blank=True)
     employees_count = models.PositiveIntegerField()
 
+    @property
+    def non_admin_user_count(self) -> int:
+        """Return the number of non-admin (company_user) users in this organization."""
+        return self.users.filter(role=User.Role.COMPANY_USER).count()
+
+    def has_reached_user_limit(self) -> bool:
+        """Check whether the organization has reached its allowed user limit.
+
+        Only users with the ``company_user`` role count towards the limit;
+        admin users are excluded.
+        """
+        return self.non_admin_user_count >= self.employees_count
+
     def __str__(self):
         return self.name
 
