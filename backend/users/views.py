@@ -1,8 +1,11 @@
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.viewsets import ModelViewSet
 from rest_framework import status
+from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.exceptions import TokenError
 
 from core.permissions import CompanyUserPermission
 from users.models import User
@@ -21,6 +24,35 @@ class GetClientIPAPIView(APIView):
 
         serializer = self.serializer_class({"ip_address": ip})
         return Response(serializer.data)
+
+
+class LogoutAPIView(APIView):
+    """
+    Blacklists the provided refresh token, effectively logging the user out.
+
+    Send a POST request with ``{ "refresh": "<refresh_token>" }``.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request) -> Response:
+        refresh_token = request.data.get('refresh')
+        if not refresh_token:
+            return Response(
+                {'detail': 'Refresh token is required.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            token = RefreshToken(refresh_token)
+            token.blacklist()
+        except TokenError as e:
+            return Response(
+                {'detail': str(e)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return Response(
+            {'detail': 'Successfully logged out.'},
+            status=status.HTTP_200_OK,
+        )
 
 
 class CompanyUserViewSet(ModelViewSet):

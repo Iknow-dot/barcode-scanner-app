@@ -1,5 +1,6 @@
 import base64
 import logging
+from urllib.parse import urlparse, urlunparse
 
 import httpx
 from rest_framework.decorators import action
@@ -9,7 +10,8 @@ from rest_framework.views import APIView
 from rest_framework.viewsets import ModelViewSet
 
 from core.models import Organization, Warehouse
-from core.permissions import OrganizationPermission, WarehousePermission, IsCompanyUser, IsCompanyAdmin
+from core.permissions import OrganizationPermission, WarehousePermission, IsCompanyUser, IsCompanyAdmin, \
+    IsCompanyUserOrAdmin
 from core.serializers import (
     OrganizationSerializer,
     WarehouseSerializer,
@@ -17,6 +19,13 @@ from core.serializers import (
     ProductSearchSerializer,
 )
 from users.models import User
+
+
+def _convert_to_https(url):
+    """Helper function to convert a URL to HTTPS."""
+    parsed_url = urlparse(url)
+    secure_url = parsed_url._replace(scheme='https')
+    return urlunparse(secure_url)
 
 
 class OrganizationViewSet(ModelViewSet):
@@ -60,22 +69,57 @@ class WarehouseViewSet(ModelViewSet):
 
 
 class ProductSearchAPIView(APIView):
-    permission_classes = [IsCompanyUser, IsCompanyAdmin]
+    permission_classes = [IsCompanyUserOrAdmin]
     serializer_class = ProductSearchSerializer
     http_method_names = ["post"]
 
     def post(self, request: Request) -> Response:
-        barcode = request.data.get("barcode")
+        sku = request.data.get("sku")
+        is_barcode = request.data.get("is_barcode")
+        warehouses = request.data.get("warehouses")
+        serializer = self.serializer_class(data={"sku": sku, "warehouses": warehouses, "is_barcode": is_barcode})
+        serializer.is_valid(raise_exception=True)
+        user = self.request.user
 
-        external_service_response = httpx.get(f"{self.request.user.organization.web_service_url}/products/{barcode}")
-        if external_service_response.status_code != 200:
-            return Response(
-                {
-                    "code": "PRODUCT_NOT_FOUND",
-                    "detail": f"Product with barcode {barcode} not found in the organization's web service",
-                    "external_service_status_code": external_service_response.status_code,
+        selected_warehouses = user.warehouses.filter(code__in=warehouses)
+        if not selected_warehouses.exists():
+            selected_warehouses = ""
+        else:
+            selected_warehouses = ",".join(selected_warehouses.values_list('code', flat=True))
+
+        try:
+            url: str = f"{user.organization.web_service_url}"
+            external_service_response = httpx.get(
+                url,
+                auth=(
+                    user.organization.web_service_username,
+                    user.organization.decrypt_password() if user.organization.web_service_password else ''
+                ),
+                headers={
+                    'IsBarcode': 'true' if is_barcode else 'false',
+                    'Warehouse': selected_warehouses,
+                    'Sku': sku,
+                    'Content-Type': 'application/json; charset=utf-8'
                 }
             )
+        except httpx.TimeoutException as e:
+            return Response({
+                "code": "EXTERNAL_SERVICE_TIMEOUT",
+                "detail": f"Timeout while connecting to the organization's web service: {str(e)}",
+            })
+        if external_service_response.status_code == 401:
+            return Response({
+                "code": "EXTERNAL_SERVICE_UNAUTHORIZED",
+                "detail": "Unauthorized access to the organization's web service. Please check the credentials.",
+                "external_service_status_code": external_service_response.status_code,
+            })
+
+        if external_service_response.status_code != 200:
+            return Response({
+                "code": "PRODUCT_NOT_FOUND",
+                "detail": f"Product with sku: {sku} not found in the organization's web service",
+                "external_service_status_code": external_service_response.status_code,
+            })
 
         product_data = external_service_response.json()
 
@@ -84,7 +128,10 @@ class ProductSearchAPIView(APIView):
             base64_images = []
             for url in product_data['img_url']:
                 try:
-                    https_url = url.replace("http://", "https://")
+                    if not url:
+                        logging.warning(f"Empty image URL for product with barcode {sku}")
+                        continue
+                    https_url = _convert_to_https(url)
                     image_response = httpx.get(https_url)
                     if image_response.status_code == 200:
                         base64_string = base64.b64encode(image_response.content).decode('utf-8')
@@ -93,7 +140,8 @@ class ProductSearchAPIView(APIView):
                             "base64": f"data:image/jpeg;base64,{base64_string}"
                         })
                     else:
-                        logging.warning(f"Failed to fetch image from {https_url}: Status code {image_response.status_code}")
+                        logging.warning(
+                            f"Failed to fetch image from {https_url}: Status code {image_response.status_code}")
                 except Exception as e:
                     logging.error(f"Error fetching image from {url}: {e}")
 
@@ -101,8 +149,5 @@ class ProductSearchAPIView(APIView):
             product_data['images'] = base64_images
             del product_data['img_url']
 
-        serializer = self.serializer_class(data={
-            **request.data,
-            **product_data,
-        })
+        serializer = self.serializer_class(product_data)
         return Response(serializer.data)

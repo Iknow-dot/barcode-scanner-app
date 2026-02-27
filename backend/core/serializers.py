@@ -37,13 +37,19 @@ class WarehouseReadOnlySerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 class ProductSearchSerializer(serializers.Serializer):
-    barcode = serializers.CharField(max_length=255)
-    article = serializers.CharField(max_length=255, required=False, read_only=True)
-    price = serializers.DecimalField(max_digits=10, decimal_places=2, required=False, read_only=True)
-    sku = serializers.CharField(max_length=255, read_only=True)
-    sku_name = serializers.CharField(max_length=255, required=False, read_only=True)
-    stock = serializers.IntegerField(required=False, read_only=True)
-    images = serializers.ListField(child=serializers.URLField(), required=False, read_only=True)
+    class StockSerializer(serializers.Serializer):
+        warehouse = serializers.CharField(max_length=255)
+        warehouse_name = serializers.CharField(max_length=255)
+        quantity = serializers.IntegerField()
+
+    is_barcode = serializers.BooleanField(write_only=True)
+    sku = serializers.CharField(max_length=255)
+    warehouses = serializers.ListField(child=serializers.CharField(max_length=255), write_only=True)
+    article = serializers.CharField(max_length=255, read_only=True)
+    price = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
+    sku_name = serializers.CharField(max_length=255, read_only=True)
+    stock = serializers.ListField(read_only=True, child=StockSerializer())
+    images = serializers.ListField(child=serializers.URLField(), read_only=True)
 
     class Meta:
         read_only_fields = [

@@ -8,9 +8,9 @@ class IsInternalAdmin(BasePermission):
 
     def has_permission(self, request, view):
         return (
-            request.user
-            and request.user.is_authenticated
-            and request.user.role == User.Role.INTERNAL_ADMIN
+                request.user
+                and request.user.is_authenticated
+                and request.user.role == User.Role.INTERNAL_ADMIN
         )
 
 
@@ -41,19 +41,36 @@ class IsCompanyAdmin(BasePermission):
 
     def has_permission(self, request, view):
         return (
-            request.user
-            and request.user.is_authenticated
-            and request.user.role == User.Role.COMPANY_ADMIN
+                request.user
+                and request.user.is_authenticated
+                and request.user.role == User.Role.COMPANY_ADMIN
         )
+
 
 class IsCompanyUser(BasePermission):
     """Access for company users (scoped to their organization)."""
 
     def has_permission(self, request, view):
         return (
-            request.user
-            and request.user.is_authenticated
-            and request.user.role == User.Role.COMPANY_USER
+                request.user
+                and request.user.is_authenticated
+                and request.user.role == User.Role.COMPANY_USER
+        )
+
+
+class IsCompanyUserOrAdmin(BasePermission):
+    """
+    Access for company users and admins (scoped to their organization).
+    """
+
+    def has_permission(self, request, view):
+        return (
+                request.user
+                and request.user.is_authenticated
+                and request.user.role in (
+                    User.Role.COMPANY_USER,
+                    User.Role.COMPANY_ADMIN,
+                )
         )
 
 class CompanyUserPermission(BasePermission):
@@ -74,7 +91,6 @@ class CompanyUserPermission(BasePermission):
         if request.user.role == User.Role.INTERNAL_ADMIN:
             return True
         return obj.organization == request.user.organization
-
 
 class WarehousePermission(BasePermission):
     """
