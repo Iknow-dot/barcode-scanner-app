@@ -6,7 +6,11 @@ from rest_framework_simplejwt.views import (
     TokenVerifyView,
 )
 
-from users.views import GetClientIPAPIView, CompanyUserViewSet, LogoutAPIView
+from users.views import (
+    GetClientIPAPIView,
+    CompanyUserViewSet,
+    LogoutAPIView,
+)
 
 router = DefaultRouter()
 router.register(r'company-users', CompanyUserViewSet, basename='company-user')
@@ -18,6 +22,6 @@ urlpatterns = [
     path('auth/verify/', TokenVerifyView.as_view(), name='token_verify'),
     path('auth/logout/', LogoutAPIView.as_view(), name='token_logout'),
 
-    path('client-ip/', GetClientIPAPIView.as_view(), name='client-ip'),
+    path('ip/', GetClientIPAPIView.as_view(), name='client-ip'),
     path('', include(router.urls)),
 ]

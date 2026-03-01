@@ -10,8 +10,11 @@ from rest_framework.views import APIView
 from rest_framework.viewsets import ModelViewSet
 
 from core.models import Organization, Warehouse
-from core.permissions import OrganizationPermission, WarehousePermission, IsCompanyUser, IsCompanyAdmin, \
+from core.permissions import (
+    OrganizationPermission,
+    WarehousePermission,
     IsCompanyUserOrAdmin
+)
 from core.serializers import (
     OrganizationSerializer,
     WarehouseSerializer,
@@ -65,7 +68,11 @@ class WarehouseViewSet(ModelViewSet):
         user = self.request.user
         if user.role == User.Role.INTERNAL_ADMIN:
             return Warehouse.objects.all()
-        return Warehouse.objects.filter(organization=user.organization)
+
+        if user.role == User.Role.COMPANY_ADMIN:
+            return user.organization.warehouses.all()
+
+        return user.warehouses.all()
 
 
 class ProductSearchAPIView(APIView):

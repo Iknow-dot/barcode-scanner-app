@@ -1,7 +1,11 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 
-from core.views import OrganizationViewSet, WarehouseViewSet, ProductSearchAPIView
+from core.views import (
+    OrganizationViewSet,
+    WarehouseViewSet,
+    ProductSearchAPIView,
+)
 
 router = DefaultRouter()
 router.register(r'organizations', OrganizationViewSet, basename='organization')

@@ -1,3 +1,6 @@
+import os
+
+from cryptography.fernet import Fernet
 from django.db import models
 from django.contrib.auth import get_user_model
 
@@ -28,6 +31,22 @@ class Organization(models.Model):
         admin users are excluded.
         """
         return self.non_admin_user_count >= self.employees_count
+
+    def encrypt_password(self, password: str) -> None:
+        """Encrypt and store the web-service password using Fernet symmetric encryption."""
+        key = os.getenv('FERNET_KEY')
+        if not key:
+            raise ValueError("FERNET_KEY is not set or is invalid")
+        cipher_suite = Fernet(key)
+        self.web_service_password = cipher_suite.encrypt(password.encode()).decode()
+
+    def decrypt_password(self) -> str:
+        """Decrypt and return the stored web-service password."""
+        key = os.getenv('FERNET_KEY')
+        if not key:
+            raise ValueError("FERNET_KEY is not set or is invalid")
+        cipher_suite = Fernet(key)
+        return cipher_suite.decrypt(self.web_service_password.encode()).decode()
 
     def __str__(self):
         return self.name

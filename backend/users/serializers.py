@@ -11,6 +11,19 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     Custom JWT token serializer that adds user details (role, email,
     organization) as custom claims in the token and also returns them
     in the response body for convenience.
+
+    The response body is shaped to match the contract expected by the
+    React frontend (previously served by Flask):
+
+        {
+            "access_token": "...",
+            "refresh_token": "...",
+            "role": "company_user",
+            "organization_id": 1,
+            "organization_name": "Acme Corp",
+            "warehouses": ["WH-01", "WH-02"],
+            "user": {"id": 1, "username": "john"}
+        }
     """
 
     @classmethod
@@ -26,13 +39,26 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
 
     def validate(self, attrs):
         data = super().validate(attrs)
-        # Add extra response data (not in the token itself, but in the JSON body)
+
+        # Rename keys to match the frontend expectation
+        data['access_token'] = data.pop('access')
+        data['refresh_token'] = data.pop('refresh')
+
+        # Top-level fields the frontend reads directly
+        data['role'] = self.user.role
+        data['organization_id'] = self.user.organization_id
+        data['organization_name'] = (
+            self.user.organization.name if self.user.organization else None
+        )
+
+        # Warehouse names assigned to this user
+        data['warehouses'] = list(
+            self.user.warehouses.values_list('name', flat=True)
+        )
+
         data['user'] = {
             'id': self.user.id,
             'username': self.user.username,
-            'email': self.user.email,
-            'role': self.user.role,
-            'organization_id': self.user.organization_id,
         }
         return data
 
