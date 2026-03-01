@@ -22,7 +22,7 @@ class GetClientIPAPIView(APIView):
         else:
             ip = request.META.get("REMOTE_ADDR")
 
-        serializer = self.serializer_class({"ip_address": ip})
+        serializer = self.serializer_class({"ip": ip})
         return Response(serializer.data)
 
 
@@ -55,7 +55,7 @@ class LogoutAPIView(APIView):
         )
 
 
-class CompanyUserViewSet(ModelViewSet):
+class UsersViewSet(ModelViewSet):
     """
     ViewSet for company admins to manage users within their organization.
 
@@ -64,12 +64,12 @@ class CompanyUserViewSet(ModelViewSet):
     (admins are excluded).
     """
     serializer_class = CompanyUserSerializer
-    permission_classes = [CompanyUserPermission]
+
 
     def get_queryset(self):
         user = self.request.user
         if user.role == User.Role.INTERNAL_ADMIN:
-            return User.objects.filter(role=User.Role.COMPANY_USER)
+            return User.objects.all()
         # Company admins see only their organization's company users
         return User.objects.filter(
             organization=user.organization,

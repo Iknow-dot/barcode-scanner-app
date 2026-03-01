@@ -8,12 +8,12 @@ from rest_framework_simplejwt.views import (
 
 from users.views import (
     GetClientIPAPIView,
-    CompanyUserViewSet,
+    UsersViewSet,
     LogoutAPIView,
 )
 
 router = DefaultRouter()
-router.register(r'company-users', CompanyUserViewSet, basename='company-user')
+router.register(r'', UsersViewSet, basename='company-user')
 
 urlpatterns = [
     # JWT Authentication endpoints
