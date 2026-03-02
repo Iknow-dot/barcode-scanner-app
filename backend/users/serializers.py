@@ -1,6 +1,8 @@
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+from users.models import AllowedIP
+from core.models import Warehouse
 
 
 User = get_user_model()
@@ -73,12 +75,26 @@ class UserSerializer(serializers.ModelSerializer):
         fields = ['id', 'username', 'email', 'role', 'organization']
 
 
+class AllowedIPAddressSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AllowedIP
+        fields = ["ip_or_network"]
+
+
 class CompanyUserSerializer(serializers.ModelSerializer):
     """
     Serializer used by company admins to manage users in their organization.
     The organization and role are set automatically.
     """
     password = serializers.CharField(write_only=True, required=False, min_length=8)
+    allowed_ips = AllowedIPAddressSerializer(many=True, required=False)
+    warehouse_ids = serializers.PrimaryKeyRelatedField(
+        many=True,
+        queryset=Warehouse.objects.all(),
+        write_only=True,
+        required=False,
+        source='warehouses',
+    )
 
     class Meta:
         model = User
@@ -92,22 +108,42 @@ class CompanyUserSerializer(serializers.ModelSerializer):
             'password',
             'is_active',
             'role',
+            'allowed_ips',
+            'warehouse_ids',
         ]
         read_only_fields = ['id']
 
     def create(self, validated_data):
         password = validated_data.pop('password')
+        warehouses = validated_data.pop('warehouses', [])
+        validated_data.pop('allowed_ips', None)
         validated_data['organization'] = self.context['request'].user.organization
         user = User(**validated_data)
         user.set_password(password)
         user.save()
+        # Assign allowed IPs
+        for ip_data in self.initial_data.get('allowed_ips', []):
+            AllowedIP.objects.get_or_create(user=user, **ip_data)
+        # Assign warehouses
+        if warehouses:
+            user.warehouses.set(warehouses)
         return user
 
     def update(self, instance, validated_data):
         password = validated_data.pop('password', None)
+        warehouses = validated_data.pop('warehouses', None)
+        validated_data.pop('allowed_ips', None)
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         if password:
             instance.set_password(password)
         instance.save()
+        # Update warehouses if provided
+        if warehouses is not None:
+            instance.warehouses.set(warehouses)
+        # Update allowed IPs if provided
+        if 'allowed_ips' in self.initial_data:
+            instance.allowed_ips.all().delete()
+            for ip_data in self.initial_data.get('allowed_ips', []):
+                AllowedIP.objects.get_or_create(user=instance, **ip_data)
         return instance

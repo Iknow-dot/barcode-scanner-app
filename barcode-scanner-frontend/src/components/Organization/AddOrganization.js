@@ -1,8 +1,7 @@
 import React from 'react';
-import api from '../../api';
-import {Button, Divider, Flex, Form, Input, InputNumber, Space} from "antd";
+import {Button, Divider, Flex, Form, Input, InputNumber} from "antd";
 import ModalForm from "../ModalForm";
-import {LockOutlined, UserOutlined} from "@ant-design/icons";  // Import your custom Axios instance
+import {LockOutlined, UserOutlined} from "@ant-design/icons";
 
 const AddOrganization = ({visible, setVisible, onFinish}) => {
     return (
@@ -26,12 +25,12 @@ const AddOrganization = ({visible, setVisible, onFinish}) => {
             </Form.Item>
 
             <Form.Item
-                label="საიდენტიფიკაციო კოდი"
-                name="identification_code"
+                label="საიდენტიფიკაციო ნომერი"
+                name="identification_number"
                 rules={[
                     {
                         required: true,
-                        message: 'შეავსეთ საიდენტიფიკაციო კოდი!',
+                        message: 'შეავსეთ საიდენტიფიკაციო ნომერი!',
                     },
                 ]}
             >
@@ -58,7 +57,7 @@ const AddOrganization = ({visible, setVisible, onFinish}) => {
                 rules={[
                     {
                         required: true,
-                        message: 'შეავსეთ ვებ სერვისის მისამართი!',
+                        message: 'შე���ვსეთ ვებ სერვისის მისამართი!',
                     }
                 ]}
             >
@@ -68,10 +67,10 @@ const AddOrganization = ({visible, setVisible, onFinish}) => {
             <Flex justify="space-between" gap="medium">
                 <Form.Item
                     label="მომხმარებლი"
-                    name="org_username"
+                    name="web_service_username"
                     rules={[
                         {
-                            required: true,
+                            required: false,
                             message: 'შეავსეთ მომხმარელის სახელი!',
                         }
                     ]}
@@ -80,10 +79,10 @@ const AddOrganization = ({visible, setVisible, onFinish}) => {
                 </Form.Item>
                 <Form.Item
                     label="პაროლი"
-                    name="org_password"
+                    name="web_service_password"
                     rules={[
                         {
-                            required: true,
+                            required: false,
                             message: 'შეავსეთ პაროლი!',
                         }
                     ]}

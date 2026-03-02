@@ -1,150 +1,131 @@
 import React, {useEffect, useState} from 'react';
-import api from '../../api';
+import {organizationService} from '../../api';
 import DataTab from "../DataTab";
 import AddOrganization from "../Organization/AddOrganization";
 import EditOrganization from "../Organization/EditOrganization";
-import {notification} from "antd";
 import UsersTab from "./UsersTab";
+import useAppNotification from "../../hooks/useAppNotification";
 
 const OrganizationsTab = () => {
-  const [organizations, setOrganizations] = useState([]);
+    const [organizations, setOrganizations] = useState([]);
+    const {notify, contextHolder} = useAppNotification();
 
-  const [notificationApi, contextHolder] = notification.useNotification();
-  const [notificationData, setNotificationData] = useState({});
+    useEffect(() => {
+        const fetchData = async () => {
+            const result = await organizationService.getOrganizations();
+            if (result.success) {
+                setOrganizations(result.data || []);
+            } else {
+                notify.error(
+                    'შეცდომა ორგანიზაციების მიღებისას, შეამოწმეთ ინტერნეტთან კავშირი',
+                    result.error
+                );
+            }
+        };
+        fetchData();
+    }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const openNotificationWithIcon = (type, message, description) => {
-    notificationApi[type]({
-      message, description, showProgress: true, pauseOnHover: true,
-    });
-  };
+    const handleDelete = async (organization) => {
+        const result = await organizationService.deleteOrganization(organization.id);
 
-  useEffect(() => {
-    if (notificationData.message) {
-      openNotificationWithIcon(
-          notificationData.type,
-          notificationData.message,
-          notificationData.description
-      );
-    }
-  }, [notificationData]);
+        if (result.success) {
+            setOrganizations(organizations.filter(org => org.id !== organization.id));
+            notify.warning('ორგანიზაცია წაიშლა', `ორგანიზაცია: ${organization.name}`);
+        } else {
+            notify.error('შეცდომა ორგანიზაციის წაშლისას:', result.error);
+        }
+    };
 
-  useEffect(() => {
-    const fetchData = async () => {
-      const response = await api.get('/organizations');
-      setOrganizations(response.data);
-    }
-    fetchData();
-  }, []);
+    const handleAddOrganization = async (newOrganizationData) => {
+        const payload = {
+            name: newOrganizationData.name,
+            identification_number: newOrganizationData.identification_number,
+            employees_count: newOrganizationData.employees_count,
+            web_service_url: newOrganizationData.web_service_url,
+            web_service_username: newOrganizationData.web_service_username,
+            web_service_password: newOrganizationData.web_service_password,
+        };
 
-  const handleDelete = async (organization) => {
-    try {
-      await api.delete(`/organizations/${organization.id}`);
-      setOrganizations(organizations.filter(org => org.id !== organization.id));
-      setNotificationData({
-        type: 'warning',
-        message: 'ორგანიზაცია წაიშლა',
-        description: `ორგანიზაცია: ${organization.name}`
-      })
+        const result = await organizationService.createOrganization(payload);
 
-    } catch (error) {
-      setNotificationData({
-        type: 'error',
-        message: 'შეცდომა ორგანიზაციის წაშლისას:',
-        description: error.response?.data?.error || error.message
-      });
-    }
-  };
+        if (result.success) {
+            notify.success('ორგანიზაცია წარმატებით შეიქმნა!', `ორგანიზაცია: ${newOrganizationData.name}`);
+            setOrganizations([...organizations, result.data]);
+            return true;
+        }
 
-  const handleAddOrganization = async (newOrganizationData) => {
-    try {
-      const response = await api.post('/organizations', newOrganizationData);
+        notify.error('შეცდომა ორგანიზაციის შექმნისას:', result.error);
+        return false;
+    };
 
-      if (response.status === 201) {
-        setNotificationData({
-          type: 'success',
-          message: 'ორგანიზაცია წარმატებით შეიქმნა!',
-          description: `ორგანიზაცია: ${newOrganizationData.name}`
-        });
-        setOrganizations([...organizations, newOrganizationData]);
-        return true;
-      }
-    } catch (error) {
-      setNotificationData({
-        type: 'error',
-        message: 'შეცდომა ორგანიზაციის შექმნისას:',
-        description: error.response?.data?.error || error.message
-      });
-      return false;
-    }
-  }
+    const handleEditOrganization = async (updatedOrganizationData, originalOrganization) => {
+        const payload = {
+            ...originalOrganization,
+            ...updatedOrganizationData,
+        };
 
-  const handleEditOrganization = async (updatedOrganizationData, originalOrganization) => {
-    try {
-      const updatedOrgData = {
-        ...originalOrganization,
-        ...updatedOrganizationData
-      }
-      await api.put(`/organizations/${updatedOrgData.id}`, updatedOrgData);
-      const orgRes = await api.get('/organizations');
-      setOrganizations(orgRes.data);
-      setNotificationData({
-        type: 'success',
-        message: 'ორგანიზაცია წარმატებიით შეირედაქტირდა',
-        description: `ორგანიზაცია: ${updatedOrgData.name}`
-      });
-      return true;
-    } catch (error) {
-      setNotificationData({
-        type: 'error',
-        message: 'შეცდომა ორგანიზაციის რედაქტირებისას:',
-        description: error.response?.data?.error || error.message
-      });
-      return false;
-    }
-  }
+        // If password field is empty, remove it so Django doesn't overwrite with empty
+        if (!payload.web_service_password) {
+            delete payload.web_service_password;
+        }
 
-  return (
-      <>
-        {contextHolder}
-        <DataTab
-            objects={organizations}
-            columns={[
-              {key: "name", title: 'ორგანიზაცია', dataIndex: 'name'},
-              {key: "identification_code", title: 'გსნ', dataIndex: 'identification_code'},
-              {key: "employees_count", title: 'თანამშრომელთა რაოდენობა', dataIndex: 'employees_count'},
-            ]}
-            AddModal={AddOrganization}
-            handleAdd={handleAddOrganization}
-            EditModal={EditOrganization}
-            handleEdit={handleEditOrganization}
-            handleDelete={handleDelete}
-             expandedRowRender={(organization) => (
-                <UsersTab
-                  initialUsers={organization.users}
-                  handleEditCallback={(user, modifiedFields, editUser) => {
-                    const organization = organizations.find(org => org.id === user.organization_id);
-                    const updatedUsers = [
-                        ...organization.users.filter(u => u.id !== user.id),
-                        user
-                    ];
+        const result = await organizationService.updateOrganization(originalOrganization.id, payload);
 
+        if (result.success) {
+            // Refresh full list from server to get updated data
+            const refreshResult = await organizationService.getOrganizations();
+            if (refreshResult.success) {
+                setOrganizations(refreshResult.data);
+            }
+            notify.success('ორგანიზაცია წარმატებიით შეირედაქტირდ��', `ორგანიზაცია: ${payload.name}`);
+            return true;
+        }
 
-                    setOrganizations(organizations.map(org => {
-                      if (org.id === user.organization_id) {
-                        return {...org, users: updatedUsers};
-                      }
-                      return org;
-                    }));
-                  }}
-                  addModalExtraProps={{
-                    organization
-                  }}
-                />
-            )}
+        notify.error('შეცდომა ორგანიზაციის რედაქტირებისას:', result.error);
+        return false;
+    };
 
-        />
-      </>
-  );
+    return (
+        <>
+            {contextHolder}
+            <DataTab
+                objects={organizations}
+                columns={[
+                    {key: "name", title: 'ორგანიზაცია', dataIndex: 'name'},
+                    {key: "identification_number", title: 'გსნ', dataIndex: 'identification_number'},
+                    {key: "employees_count", title: 'თანამშრომელთა რაოდენობა', dataIndex: 'employees_count'},
+                ]}
+                AddModal={AddOrganization}
+                handleAdd={handleAddOrganization}
+                EditModal={EditOrganization}
+                handleEdit={handleEditOrganization}
+                handleDelete={handleDelete}
+                expandedRowRender={(organization) => (
+                    <UsersTab
+                        initialUsers={organization.users}
+                        handleEditCallback={(user, modifiedFields, editUser) => {
+                            const org = organizations.find(o => o.id === user.organization);
+                            if (!org) return;
+                            const updatedUsers = [
+                                ...org.users.filter(u => u.id !== user.id),
+                                user
+                            ];
+
+                            setOrganizations(organizations.map(o => {
+                                if (o.id === user.organization) {
+                                    return {...o, users: updatedUsers};
+                                }
+                                return o;
+                            }));
+                        }}
+                        addModalExtraProps={{
+                            organization
+                        }}
+                    />
+                )}
+            />
+        </>
+    );
 };
 
 export default OrganizationsTab;

@@ -1,13 +1,13 @@
 import React from 'react';
 import ModalForm from "../ModalForm";
-import {Button, Divider, Flex, Form, Input, InputNumber, Space, Switch} from "antd";
+import {Button, Divider, Flex, Form, Input, InputNumber, Switch} from "antd";
 import {LockOutlined, UserOutlined} from "@ant-design/icons";
 
 const EditOrganization = ({visible, setVisible, onFinish, object}) => {
     return (
         <ModalForm
             object={object}
-            title="ორგანიზაციის დამატება"
+            title="ორგანიზაციის რედაქტირება"
             visible={visible}
             setVisible={setVisible}
             onFinish={(data) => onFinish(data, object)}
@@ -26,12 +26,12 @@ const EditOrganization = ({visible, setVisible, onFinish, object}) => {
             </Form.Item>
 
             <Form.Item
-                label="საიდენტიფიკაციო კოდი"
-                name="identification_code"
+                label="საიდენტიფიკაციო ნომერი"
+                name="identification_number"
                 rules={[
                     {
                         required: true,
-                        message: 'შეავსეთ საიდენტიფიკაციო კოდი!',
+                        message: 'შეავსეთ საიდენტიფიკაციო ნომერი!',
                     },
                 ]}
             >
@@ -66,10 +66,10 @@ const EditOrganization = ({visible, setVisible, onFinish, object}) => {
             </Form.Item>
             <Form.Item
                 label="სახელი"
-                name="org_username"
+                name="web_service_username"
                 rules={[
                     {
-                        required: true,
+                        required: false,
                         message: 'შეავსეთ მომხმარელის სახელი!',
                     }
                 ]}
@@ -83,7 +83,7 @@ const EditOrganization = ({visible, setVisible, onFinish, object}) => {
                         flex: 1
                     }}
                     label="პაროლი"
-                    name="org_password"
+                    name="web_service_password"
                     rules={[
                         {
                             required: false,

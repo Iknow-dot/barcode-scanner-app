@@ -82,7 +82,7 @@ const MainContentView = ({children}) => {
                     </Link>
                     <Menu theme={isDarkMode ? "dark" : "light"}
                           mode="inline"
-                          defaultSelectedKeys={authData?.role === "system_admin" ? ['1'] : ['2']}
+                          defaultSelectedKeys={authData?.role === "internal_admin" ? ['1'] : ['2']}
                           items={subNav}
                     />
                 </Sider>
@@ -105,7 +105,7 @@ const MainContentView = ({children}) => {
                                 }}
                                 theme={isDarkMode ? "dark" : "light"}
                                 mode="horizontal"
-                                defaultSelectedKeys={authData?.role === "system_admin" ? ['1'] : ['2']}
+                                defaultSelectedKeys={authData?.role === "internal_admin" ? ['1'] : ['2']}
                                 items={subNav}
                             />
                             <Space style={{float: 'right'}}>
@@ -175,7 +175,7 @@ const AppContent = () => {
                     <Route
                         path="/dashboard"
                         element={
-                            <PrivateRoute allowedRoles={['admin', 'user']}>
+                            <PrivateRoute allowedRoles={['company_admin', 'company_user']}>
                                 <MainContentView>
                                     <Dashboard/>
                                 </MainContentView>
@@ -185,7 +185,7 @@ const AppContent = () => {
                     <Route
                         path="/organizations"
                         element={
-                            <PrivateRoute allowedRoles={['admin', 'system_admin']}>
+                            <PrivateRoute allowedRoles={['company_admin', 'internal_admin']}>
                                 <MainContentView>
                                     <Organization/>
                                 </MainContentView>
@@ -195,7 +195,7 @@ const AppContent = () => {
                     <Route
                         path="/warehouses"
                         element={
-                            <PrivateRoute allowedRoles={['admin', 'system_admin']}>
+                            <PrivateRoute allowedRoles={['company_admin', 'internal_admin']}>
                                 <MainContentView>
                                     <Warehouse/>
                                 </MainContentView>
@@ -205,7 +205,7 @@ const AppContent = () => {
                     <Route
                         path="/system-admin-dashboard"
                         element={
-                            <PrivateRoute allowedRoles={['admin', 'system_admin']}>
+                            <PrivateRoute allowedRoles={['company_admin', 'internal_admin']}>
                                 <MainContentView>
                                     <SystemAdminDashboard/>
                                 </MainContentView>
@@ -215,7 +215,7 @@ const AppContent = () => {
                     <Route
                         path="/logout"
                         element={
-                            <PrivateRoute allowedRoles={['admin', 'user', 'system_admin']}>
+                            <PrivateRoute allowedRoles={['company_admin', 'company_user', 'internal_admin']}>
                                 <Logout/>
                             </PrivateRoute>
                         }

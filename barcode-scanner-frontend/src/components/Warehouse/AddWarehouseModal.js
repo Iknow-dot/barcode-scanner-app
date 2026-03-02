@@ -1,7 +1,6 @@
-import React, {useState} from 'react';
-import api from '../../api';
+import React from 'react';
 import ModalForm from "../ModalForm";
-import {Input, Form, Button} from "antd"; // Ensure you have an api setup for handling requests
+import {Input, Form, Button} from "antd";
 
 const AddWarehouseModal = ({visible, setVisible, onFinish}) => {
   return (

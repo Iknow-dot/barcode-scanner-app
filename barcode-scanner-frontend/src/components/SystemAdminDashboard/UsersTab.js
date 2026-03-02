@@ -1,25 +1,25 @@
 import React, {useContext, useEffect, useRef, useState} from 'react';
-import api from '../../api';
-import {notification, Tag, Input, Select, Row, Col, Button} from "antd";
+import {userService, organizationService} from '../../api';
+import {Tag, Input, Select, Row, Col, Button} from "antd";
 import DataTab from "../DataTab";
 import AuthContext from "../Auth/AuthContext";
 import AddUserModal from "../User/AddUserModal";
 import EditUserModal from "../User/EditUser";
-import {CheckOutlined, CloseCircleOutlined, CloseOutlined} from "@ant-design/icons";
+import {CheckOutlined, CloseOutlined} from "@ant-design/icons";
+import useAppNotification from "../../hooks/useAppNotification";
 
 const roleColors = {
-    system_admin: "red",
-    admin: "green",
-    user: "geekblue"
-}
+    internal_admin: "red",
+    company_admin: "green",
+    company_user: "geekblue"
+};
 
 const UsersTab = ({initialUsers, addModalExtraProps, handleEditCallback = null, filtersEnabled = false}) => {
     const {authData} = useContext(AuthContext);
+    const {notify, contextHolder} = useAppNotification();
     const [users, setUsers] = useState(initialUsers || []);
     const [organizations, setOrganizations] = useState({});
     const [orgOptions, setOrgOptions] = useState([]);
-    const [notificationApi, contextHolder] = notification.useNotification();
-    const [notificationData, setNotificationData] = useState({});
     const [query, setQuery] = useState('');
     const [selectedOrg, setSelectedOrg] = useState(null);
     const [selectedRole, setSelectedRole] = useState(null);
@@ -32,46 +32,35 @@ const UsersTab = ({initialUsers, addModalExtraProps, handleEditCallback = null, 
 
     useEffect(() => {
         const fetchOrganizations = async () => {
-            try {
-                const response = await api.get('/organizations');
-                const orgMap = response.data.reduce((acc, org) => {
+            const result = await organizationService.getOrganizations();
+            if (result.success) {
+                const orgMap = result.data.reduce((acc, org) => {
                     acc[org.id] = org.name;
                     return acc;
                 }, {});
                 setOrganizations(orgMap);
-                setOrgOptions(response.data.map(org => ({value: org.id, label: org.name})));
-            } catch (error) {
-                console.error('Error fetching organizations:', error);
+                setOrgOptions(result.data.map(org => ({value: org.id, label: org.name})));
             }
         };
-        fetchOrganizations();
-    }, []);
+        if (authData?.role === 'internal_admin') {
+            fetchOrganizations();
+        }
+    }, [authData]);
 
     useEffect(() => setUsers(initialUsers || []), [initialUsers]);
 
-    useEffect(() => {
-        if (notificationData.message) {
-            notificationApi[notificationData.type]({
-                message: notificationData.message,
-                description: notificationData.description
-            });
-        }
-    }, [notificationData, notificationApi]);
-
     const fetchUsers = async (params = {}) => {
-        try {
-            const res = await api.get('/users', {params});
-            setUsers(res.data);
-        } catch (e) {
-            console.error('Error fetching users', e);
+        const result = await userService.getUsers(params);
+        if (result.success) {
+            setUsers(result.data);
         }
     };
 
     // immediate search trigger
     const handleSearch = () => {
         const params = {};
-        if (query && query.trim() !== '') params.q = query.trim();
-        if (selectedOrg) params.organization_id = selectedOrg;
+        if (query && query.trim() !== '') params.search = query.trim();
+        if (selectedOrg) params.organization = selectedOrg;
         if (selectedRole) params.role = selectedRole;
         fetchUsers(params);
     };
@@ -82,8 +71,8 @@ const UsersTab = ({initialUsers, addModalExtraProps, handleEditCallback = null, 
         if (debounceTimer.current) clearTimeout(debounceTimer.current);
         debounceTimer.current = setTimeout(() => {
             const params = {};
-            if (value && value.trim() !== '') params.q = value.trim();
-            if (selectedOrg) params.organization_id = selectedOrg;
+            if (value && value.trim() !== '') params.search = value.trim();
+            if (selectedOrg) params.organization = selectedOrg;
             if (selectedRole) params.role = selectedRole;
             fetchUsers(params);
         }, DEBOUNCE_MS);
@@ -93,8 +82,8 @@ const UsersTab = ({initialUsers, addModalExtraProps, handleEditCallback = null, 
     const handleOrgChange = (value) => {
         setSelectedOrg(value);
         const params = {};
-        if (query && query.trim() !== '') params.q = query.trim();
-        if (value) params.organization_id = value;
+        if (query && query.trim() !== '') params.search = query.trim();
+        if (value) params.organization = value;
         if (selectedRole) params.role = selectedRole;
         fetchUsers(params);
     };
@@ -102,105 +91,91 @@ const UsersTab = ({initialUsers, addModalExtraProps, handleEditCallback = null, 
     const handleRoleChange = (value) => {
         setSelectedRole(value);
         const params = {};
-        if (query && query.trim() !== '') params.q = query.trim();
-        if (selectedOrg) params.organization_id = selectedOrg;
+        if (query && query.trim() !== '') params.search = query.trim();
+        if (selectedOrg) params.organization = selectedOrg;
         if (value) params.role = value;
         fetchUsers(params);
     };
 
     const handleAdd = async (newUser) => {
-        if (authData?.role === 'admin') {
-            newUser.organization_id = authData.organization_id;
-            newUser.role_name = 'user';
-        }
-        try {
-            if (newUser.ip_address) newUser.ip_address = newUser.ip_address.join(', ');
-            const resp = await api.post('/users', newUser, {headers: {'Content-Type': 'application/json'}});
-            if (resp.status === 201) {
-                newUser.id = resp.data.id;
-                setUsers(prev => [...prev, newUser]);
-                setNotificationData({
-                    type: 'success',
-                    message: 'წარმატება',
-                    description: `მომხმარებელი "${newUser.username}" წარმატებით შეიქმნა`
-                });
-                return true;
-            }
-        } catch (err) {
+        const payload = {
+            username: newUser.username,
+            password: newUser.password,
+            role: newUser.role || 'company_user',
+            email: newUser.email || '',
+            first_name: newUser.first_name || '',
+            last_name: newUser.last_name || '',
+        };
 
-            const message = err.response?.data?.error || err.message;
-
-            if (message.includes('User limit')) {
-                setNotificationData({
-                    type: 'error',
-                    message: 'შეცდომა',
-                    description: "მომხმარებელთა ლიმიტი მიღწეულია. გთხოვთ, დაუკავშირდით ადმინისტრატორს დამატებითი ინფორმაციისთვის.",
-                });
-            } else {
-                setNotificationData({
-                    type: 'error',
-                    message: 'შეცდომა',
-                    description: err.response?.data?.error || err.message
-                });
-            }
-            return false;
+        if (newUser.ip_address && newUser.ip_address.length > 0) {
+            payload.allowed_ips = newUser.ip_address.map(ip => ({ip_or_network: ip}));
         }
+
+        if (newUser.warehouse_ids && newUser.warehouse_ids.length > 0) {
+            payload.warehouse_ids = newUser.warehouse_ids;
+        }
+
+        const result = await userService.createUser(payload);
+
+        if (result.success) {
+            setUsers(prev => [...prev, result.data]);
+            notify.success('წარმატება', `მომხმარებელი "${newUser.username}" წარმატებით შეიქმნა`);
+            return true;
+        }
+
+        if (result.code === 'USER_LIMIT_REACHED') {
+            notify.error('შეცდომა', 'მომხმარებელთა ლიმიტი მიღწეულია. გთხოვთ, დაუკავშირდით ადმინისტრატორს დამატებითი ინფორმაციისთვის.');
+        } else {
+            notify.error('შეცდომა', result.error);
+        }
+        return false;
     };
 
     const handleDelete = async (deleteUser) => {
-        if (deleteUser.id === authData.user.id) {
-            setNotificationData({
-                type: 'error',
-                message: 'შეცდომა',
-                description: 'თქვენ არ შეგიძლიათ თქვენი საკუთარი ანგარიშის წაშლა.'
-            });
+        if (deleteUser.id === authData?.user?.id) {
+            notify.error('შეცდომა', 'თქვენ არ შეგიძლიათ თქვენი საკუთარი ანგარიშის წაშლა.');
             return false;
         }
-        try {
-            await api.delete(`/users/${deleteUser.id}`);
+
+        const result = await userService.deleteUser(deleteUser.id);
+
+        if (result.success) {
             setUsers(prev => prev.filter(u => u.id !== deleteUser.id));
-            setNotificationData({
-                type: 'success',
-                message: 'წარმატება',
-                description: `${deleteUser.username} წარმატებით წაიშალა`
-            });
-        } catch (err) {
-            setNotificationData({
-                type: 'error',
-                message: 'შეცდომა',
-                description: err.response?.data?.error || err.message
-            });
+            notify.success('წარმატება', `${deleteUser.username} წარმატებით წაიშალა`);
+        } else {
+            notify.error('შეცდომა', result.error);
         }
     };
 
     const handleEdit = async (modifiedFields, editUser) => {
-        try {
-            const payload = {...editUser, ...modifiedFields};
-            if (payload.ip_address && Array.isArray(payload.ip_address)) payload.ip_address = payload.ip_address.join(', ');
-            await api.put(`/users/${editUser.id}`, payload);
-            setUsers(prev => prev.map(u => u.id === editUser.id ? payload : u));
-            setNotificationData({
-                type: 'success',
-                message: 'წარმატება',
-                description: `მომხმარებელი "${editUser.username}" წარმატებით განახლდა`
-            });
-            if (handleEditCallback) handleEditCallback(payload, modifiedFields, editUser);
-            return true;
-        } catch (err) {
-            setNotificationData({
-                type: 'error',
-                message: 'შეცდომა',
-                description: err.response?.data?.error || err.message
-            });
-            return false;
+        const payload = {
+            ...editUser,
+            ...modifiedFields,
+        };
+
+        if (!payload.password) {
+            delete payload.password;
         }
+
+        const result = await userService.updateUser(editUser.id, payload);
+
+        if (result.success) {
+            const updatedUser = {...editUser, ...modifiedFields};
+            setUsers(prev => prev.map(u => u.id === editUser.id ? updatedUser : u));
+            notify.success('წარმატება', `მომხმარებელი "${editUser.username}" წარმატებით განახლდა`);
+            if (handleEditCallback) handleEditCallback(updatedUser, modifiedFields, editUser);
+            return true;
+        }
+
+        notify.error('შეცდომა', result.error);
+        return false;
     };
 
     return (
         <>
             {contextHolder}
             <div style={{marginBottom: 16}}>
-                {authData?.role === 'system_admin' && filtersEnabled && (
+                {authData?.role === 'internal_admin' && filtersEnabled && (
                     <Row gutter={8} align="middle">
                         <Col>
                             <Input.Search
@@ -254,22 +229,22 @@ const UsersTab = ({initialUsers, addModalExtraProps, handleEditCallback = null, 
             <DataTab objects={users} columns={[
                 {key: 'username', title: 'სახელი', dataIndex: 'username'},
                 {
-                    key: 'organization_id',
+                    key: 'organization',
                     title: 'ორგანიზაცია',
-                    dataIndex: 'organization_id',
+                    dataIndex: 'organization',
                     render: orgId => organizations[orgId] || 'N/A'
                 },
                 {
-                    key: 'role_name',
+                    key: 'role',
                     title: 'როლი',
-                    dataIndex: 'role_name',
+                    dataIndex: 'role',
                     render: role => <Tag color={roleColors[role]}>{role}</Tag>
                 },
                 {
-                    key: 'ip_address',
-                    title: 'IP Enabled',
-                    dataIndex: 'ip_address',
-                    render: ip => ip ? <CheckOutlined style={{color: 'green'}}/> :
+                    key: 'is_active',
+                    title: 'აქტიური',
+                    dataIndex: 'is_active',
+                    render: active => active ? <CheckOutlined style={{color: 'green'}}/> :
                         <CloseOutlined style={{color: 'red'}}/>
                 }
             ]} AddModal={AddUserModal} handleAdd={handleAdd} addModalExtraProps={addModalExtraProps}

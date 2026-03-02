@@ -1,6 +1,5 @@
 import React, {useRef, useEffect} from 'react';
 import {Html5QrcodeScanner} from 'html5-qrcode';
-import {processBarcode} from '../../api';
 import {QrcodeOutlined, ScanOutlined} from "@ant-design/icons";
 import {Button} from "antd";
 import "./ScanButton.css"
@@ -69,12 +68,6 @@ const ScanButton = ({setScanning, scanning, onScan, disabled, qrRef}) => {
     const ctx = canvas.getContext('2d');
     ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
     canvas.toBlob(async (blob) => {
-      try {
-        const result = await processBarcode(blob);
-        onScan(result.barcodes.join(', ')); // Handle multiple barcodes or adjust based on API response
-      } catch (error) {
-        console.error("Error processing barcode through backend:", error);
-      }
     });
   };
 

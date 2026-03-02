@@ -1,121 +1,64 @@
 import React, {useState, useEffect} from 'react';
-import api from '../../api';
-import {notification} from "antd";
+import {warehouseService} from '../../api';
 import DataTab from "../DataTab";
 import AddWarehouseModal from "../Warehouse/AddWarehouseModal";
 import EditWarehouseModal from "../Warehouse/EditWarehouseModal";
+import useAppNotification from "../../hooks/useAppNotification";
 
-const WarehousesTab = ({}) => {
+const WarehousesTab = () => {
     const [warehouses, setWarehouses] = useState([]);
-    const [organizations, setOrganizations] = useState({});
-    const [notificationApi, contextHolder] = notification.useNotification();
-    const [notificationData, setNotificationData] = useState({});
-
-    const openNotificationWithIcon = (type, message, description) => {
-        notificationApi[type]({
-            message, description, showProgress: true, pauseOnHover: true,
-        });
-    };
-    useEffect(() => {
-        if (notificationData.message) {
-            openNotificationWithIcon(
-                notificationData.type,
-                notificationData.message,
-                notificationData.description
-            );
-        }
-    }, [notificationData]);
-
+    const {notify, contextHolder} = useAppNotification();
 
     useEffect(() => {
-        const fetchOrganizations = async () => {
-            try {
-                const response = await api.get('/organizations');
-                const orgMap = response.data.reduce((acc, org) => {
-                    acc[org.id] = org.name;
-                    return acc;
-                }, {});
-                setOrganizations(orgMap);
-            } catch (error) {
-                console.error('Error fetching organizations:', error);
+        const fetchWarehouses = async () => {
+            const result = await warehouseService.getWarehouses();
+            if (result.success) {
+                setWarehouses(result.data);
             }
         };
-
-        const fetchWarehouses = async () => {
-            const response = await api.get('/warehouses');
-            setWarehouses(response.data);
-        }
-        fetchOrganizations();
         fetchWarehouses();
     }, []);
 
     const handleDelete = async (warehouse) => {
-        try {
-            await api.delete(`/warehouses/${warehouse.id}`);
-            setWarehouses(currentWarehouses => currentWarehouses.filter(wh => wh.id !== warehouse.id));
-            setNotificationData({
-                type: 'success',
-                message: 'საწყობის წაშლა',
-                description: `საწყობი: "${warehouse.name}" წაიშალა`
-            });
-        } catch (error) {
-            setNotificationData({
-                type: 'error',
-                message: 'საწყობის წაშლა',
-                description: error.message
-            });
+        const result = await warehouseService.deleteWarehouse(warehouse.id);
+
+        if (result.success) {
+            setWarehouses(current => current.filter(wh => wh.id !== warehouse.id));
+            notify.success('საწყობის წაშლა', `საწყობი: "${warehouse.name}" წაიშალა`);
+        } else {
+            notify.error('საწყობის წაშლა', result.error);
         }
     };
 
     const handleEditWarehouse = async (updateWarehouse, originalWarehouse) => {
-        try {
-            updateWarehouse = {...originalWarehouse, ...updateWarehouse};
-            await api.put(`/warehouses/${updateWarehouse.id}`, updateWarehouse);
-            setWarehouses((prevWarehouses) => prevWarehouses.map(wh => wh.id === updateWarehouse.id ? updateWarehouse : wh));
-            setNotificationData({
-                type: 'success',
-                message: 'საწყობის შეცვლა',
-                description: `საწყობი: ${updateWarehouse.name} შეცვლილია`
-            });
+        const payload = {...originalWarehouse, ...updateWarehouse};
+        const result = await warehouseService.updateWarehouse(payload.id, payload);
+
+        if (result.success) {
+            setWarehouses(prev => prev.map(wh => wh.id === payload.id ? payload : wh));
+            notify.success('საწყობის შეცვლა', `საწყობი: ${payload.name} შეცვლილია`);
             return true;
-        } catch (error) {
-            setNotificationData({
-                type: 'error',
-                message: 'საწყობის შეცვლა',
-                description: error?.response?.data?.error || error.message
-            })
-            return false;
         }
+
+        notify.error('საწყობის შეცვლა', result.error);
+        return false;
     };
 
     const handleAddWarehouse = async (newWarehouseData) => {
-        try {
-            await api.post('/warehouses', newWarehouseData);
-            const whRes = await api.get('/warehouses');
-            setWarehouses(whRes.data);
-            setNotificationData({
-                type: 'success',
-                message: 'საწყობის დამატება',
-                description: `საწყობი: "${newWarehouseData.name}" დაემატა`
-            });
-            return true;
-        } catch (error) {
-            const response = error?.response;
-            const data = response?.data;
-            let message = "უცნობი შეცდომა.";
-            switch (data.key) {
-                case 'error.warehouse_code_exists':
-                    message = `საწყობი კოდით "${newWarehouseData.code}" უკვე არსებობს სისტემაში.`;
-                    break;
-            }
+        const result = await warehouseService.createWarehouse(newWarehouseData);
 
-            setNotificationData({
-                type: 'error',
-                message: 'საწყობის დამატება',
-                description: message
-            });
-            return false;
+        if (result.success) {
+            // Refresh full list from server
+            const refreshResult = await warehouseService.getWarehouses();
+            if (refreshResult.success) {
+                setWarehouses(refreshResult.data);
+            }
+            notify.success('საწყობის დამატება', `საწყობი: "${newWarehouseData.name}" დაემატა`);
+            return true;
         }
+
+        notify.error('საწყობის დამატება', result.error);
+        return false;
     };
 
     return (
@@ -125,11 +68,7 @@ const WarehousesTab = ({}) => {
                 objects={warehouses}
                 columns={[
                     {key: "name", title: 'სახელი', dataIndex: 'name'},
-                    {
-                        key: "code",
-                        title: 'კოდი',
-                        dataIndex: 'code',
-                    }
+                    {key: "code", title: 'კოდი', dataIndex: 'code'},
                 ]}
                 AddModal={AddWarehouseModal}
                 handleAdd={handleAddWarehouse}

@@ -6,6 +6,7 @@ const AuthContext = createContext();
 export const AuthProvider = ({ children }) => {
   const [authData, setAuthData] = useState(() => {
     const token = localStorage.getItem('token');
+    const refreshToken = localStorage.getItem('refresh_token');
     const role = localStorage.getItem('role');
     const organization_id = localStorage.getItem('organization_id');
     const organization_name = localStorage.getItem('organization_name');
@@ -23,11 +24,12 @@ export const AuthProvider = ({ children }) => {
       });
     }
 
-    return token && role ? { token, role, organization_id, user } : null;
+    return token && role ? { token, refreshToken, role, organization_id, organization_name, warehouses, user } : null;
   });
 
   const logout = () => {
     localStorage.removeItem('token');
+    localStorage.removeItem('refresh_token');
     localStorage.removeItem('role');
     localStorage.removeItem('organization_id');
     localStorage.removeItem('organization_name');
@@ -37,8 +39,9 @@ export const AuthProvider = ({ children }) => {
     setAuthData(null);
   };
 
-  const login = (token, role, organization_id, organization_name, warehouses, user) => {
+  const login = (token, refreshToken, role, organization_id, organization_name, warehouses, user) => {
     localStorage.setItem('token', token);
+    localStorage.setItem('refresh_token', refreshToken);
     localStorage.setItem('role', role);
     localStorage.setItem('organization_id', organization_id);
     localStorage.setItem('organization_name', organization_name);
@@ -53,7 +56,7 @@ export const AuthProvider = ({ children }) => {
       warehouse: warehouses,
     });
 
-    setAuthData({ token, role, organization_id, user });
+    setAuthData({ token, refreshToken, role, organization_id, organization_name, warehouses, user });
   };
 
   return (
