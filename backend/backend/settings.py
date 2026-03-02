@@ -200,10 +200,19 @@ JAZZMIN_SETTINGS = {
     'search_model': ['users.User'],
     'topmenu_links': [
         {'name': 'Home', 'url': 'admin:index', 'permissions': ['auth.view_user']},
+        {'name': 'Analytics', 'url': 'admin:analytics', 'permissions': ['auth.view_user']},
         {'name': 'API Docs', 'url': '/api/docs/', 'new_window': True},
     ],
     'show_sidebar': True,
     'navigation_expanded': True,
+    'custom_links': {
+        'core': [{
+            'name': 'Analytics',
+            'url': 'admin:analytics',
+            'icon': 'fas fa-chart-line',
+            'permissions': ['auth.view_user'],
+        }],
+    },
     'icons': {
         'auth': 'fas fa-users-cog',
         'users.User': 'fas fa-user',
