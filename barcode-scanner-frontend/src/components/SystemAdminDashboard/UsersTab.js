@@ -149,7 +149,6 @@ const UsersTab = ({initialUsers, addModalExtraProps, handleEditCallback = null, 
 
     const handleEdit = async (modifiedFields, editUser) => {
         const payload = {
-            ...editUser,
             ...modifiedFields,
         };
 
@@ -157,10 +156,23 @@ const UsersTab = ({initialUsers, addModalExtraProps, handleEditCallback = null, 
             delete payload.password;
         }
 
+        // Format allowed_ips from the ip_address field (array of strings → array of objects)
+        if (payload.ip_address !== undefined) {
+            payload.allowed_ips = (payload.ip_address || []).map(ip => ({ip_or_network: ip}));
+            delete payload.ip_address;
+        }
+
+        // Ensure warehouse_ids is an array
+        if (payload.warehouse_ids !== undefined) {
+            payload.warehouse_ids = payload.warehouse_ids || [];
+        }
+
         const result = await userService.updateUser(editUser.id, payload);
 
         if (result.success) {
-            const updatedUser = {...editUser, ...modifiedFields};
+            // Use the API response data which has the correct format
+            // (allowed_ips as objects, warehouse_ids_read, etc.)
+            const updatedUser = result.data;
             setUsers(prev => prev.map(u => u.id === editUser.id ? updatedUser : u));
             notify.success('წარმატება', `მომხმარებელი "${editUser.username}" წარმატებით განახლდა`);
             if (handleEditCallback) handleEditCallback(updatedUser, modifiedFields, editUser);
@@ -241,10 +253,10 @@ const UsersTab = ({initialUsers, addModalExtraProps, handleEditCallback = null, 
                     render: role => <Tag color={roleColors[role]}>{role}</Tag>
                 },
                 {
-                    key: 'is_active',
-                    title: 'აქტიური',
-                    dataIndex: 'is_active',
-                    render: active => active ? <CheckOutlined style={{color: 'green'}}/> :
+                    key: 'ip_enabled',
+                    title: 'IP ჩართული',
+                    dataIndex: 'allowed_ips',
+                    render: allowed_ips => (allowed_ips && allowed_ips.length > 0) ? <CheckOutlined style={{color: 'green'}}/> :
                         <CloseOutlined style={{color: 'red'}}/>
                 }
             ]} AddModal={AddUserModal} handleAdd={handleAdd} addModalExtraProps={addModalExtraProps}

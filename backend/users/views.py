@@ -1,3 +1,5 @@
+from django_filters.rest_framework import DjangoFilterBackend
+from rest_framework.filters import SearchFilter
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -5,9 +7,11 @@ from rest_framework.views import APIView
 from rest_framework.viewsets import ModelViewSet
 from rest_framework import status
 from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework_simplejwt.exceptions import TokenError
 
 from core.permissions import CompanyUserPermission
+from users.exceptions import IPNotAllowedError
 from users.models import User
 from users.serializers import ClientIPSerializer, CompanyUserSerializer
 
@@ -24,6 +28,26 @@ class GetClientIPAPIView(APIView):
 
         serializer = self.serializer_class({"ip": ip})
         return Response(serializer.data)
+
+
+class CustomTokenObtainPairView(TokenObtainPairView):
+    """
+    Custom login view that catches IPNotAllowedError raised during
+    token validation and returns a structured JSON error response
+    with a ``code`` field the frontend can use for translation.
+    """
+
+    def post(self, request: Request, *args, **kwargs) -> Response:
+        try:
+            return super().post(request, *args, **kwargs)
+        except IPNotAllowedError as exc:
+            return Response(
+                {
+                    "code": "IP_NOT_ALLOWED",
+                    "detail": "Access denied: your IP address is not allowed.",
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
 
 
 class LogoutAPIView(APIView):
@@ -62,9 +86,16 @@ class UsersViewSet(ModelViewSet):
     The user count is limited by the organization's ``employees_count`` field.
     Only users with the ``company_user`` role count towards this limit
     (admins are excluded).
+
+    Supports query parameters:
+    - search: searches username, email, first_name, last_name
+    - organization: filter by organization ID
+    - role: filter by user role
     """
     serializer_class = CompanyUserSerializer
-
+    filter_backends = [DjangoFilterBackend, SearchFilter]
+    filterset_fields = ['organization', 'role']
+    search_fields = ['username', 'email', 'first_name', 'last_name']
 
     def get_queryset(self):
         user = self.request.user

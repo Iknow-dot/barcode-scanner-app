@@ -9,26 +9,41 @@ const AddUserModal = ({visible, setVisible, onFinish, organization = null}) => {
     const {authData} = useContext(AuthContext);
     const [IPOptions, setIPOptions] = useState([]);
     const [organizations, setOrganizations] = useState([]);
+    const [allWarehouses, setAllWarehouses] = useState([]);
     const [warehouses, setWarehouses] = useState([]);
-    const [isCompanyAdmin, setIsCompanyAdmin] = useState(authData?.role === 'company_admin');
+    const [selectedOrg, setSelectedOrg] = useState(organization ? organization.id : null);
+    const isCompanyAdmin = authData?.role === 'company_admin';
+    const isInternalAdmin = authData?.role === 'internal_admin';
 
     useEffect(() => {
         const fetchData = async () => {
-            if (authData?.role === 'internal_admin') {
-                const result = await organizationService.getOrganizations();
-                if (result.success) {
-                    setOrganizations(result.data || []);
+            if (isInternalAdmin) {
+                const orgResult = await organizationService.getOrganizations();
+                if (orgResult.success) {
+                    setOrganizations(orgResult.data || []);
                 }
-            } else if (authData?.role === 'company_admin') {
+                const whResult = await warehouseService.getWarehouses();
+                if (whResult.success) {
+                    setAllWarehouses(whResult.data || []);
+                }
+            } else if (isCompanyAdmin) {
                 const result = await warehouseService.getWarehouses();
                 if (result.success) {
                     setWarehouses(result.data);
                 }
-                setIsCompanyAdmin(true);
             }
         };
         fetchData();
-    }, [authData]);
+    }, [authData, isInternalAdmin, isCompanyAdmin]);
+
+    // Filter warehouses when organization changes (for internal_admin)
+    useEffect(() => {
+        if (isInternalAdmin && selectedOrg) {
+            setWarehouses(allWarehouses.filter(wh => wh.organization === selectedOrg));
+        } else if (isInternalAdmin) {
+            setWarehouses([]);
+        }
+    }, [selectedOrg, allWarehouses, isInternalAdmin]);
 
     useEffect(() => {
         const fetchIp = async () => {
@@ -65,6 +80,14 @@ const AddUserModal = ({visible, setVisible, onFinish, organization = null}) => {
                 name="email"
                 rules={[{required: false, type: 'email', message: 'გთხოვთ შეიყვანოთ სწორი ელ. ფოსტა!'}]}
             >
+                <Input/>
+            </Form.Item>
+
+            <Form.Item label="სახელი" name="first_name">
+                <Input/>
+            </Form.Item>
+
+            <Form.Item label="გვარი" name="last_name">
                 <Input/>
             </Form.Item>
 
@@ -118,33 +141,7 @@ const AddUserModal = ({visible, setVisible, onFinish, organization = null}) => {
                 />
             </Form.Item>
 
-            {isCompanyAdmin && (
-                <Form.Item
-                    label="საწყობები"
-                    name="warehouse_ids"
-                    rules={[{required: false, message: 'გთხოვთ აირჩიოთ საწყობი!'}]}
-                >
-                    <Select
-                        mode="multiple"
-                        options={warehouses.map(wh => ({
-                            label: `${wh.name} (${wh.code})`,
-                            value: wh.id,
-                            emoji: '🏭',
-                            desc: `${wh.name} (${wh.code})`
-                        }))}
-                        placeholder="აირჩიეთ საწყობები"
-                        optionRender={RenderOption}
-                        tagRender={(props) => (
-                            <Tag color='blue'>{props.label}</Tag>
-                        )}
-                        filterOption={(input, option) =>
-                            option?.label.toLowerCase().includes(input.toLowerCase())
-                        }
-                    />
-                </Form.Item>
-            )}
-
-            {!isCompanyAdmin && authData?.role === 'internal_admin' && (
+            {isInternalAdmin && (
                 <Form.Item
                     label="ორგანიზაცია"
                     name="organization"
@@ -162,6 +159,34 @@ const AddUserModal = ({visible, setVisible, onFinish, organization = null}) => {
                         optionRender={RenderOption}
                         tagRender={(props) => (
                             <Tag color='green'>{props.label}</Tag>
+                        )}
+                        filterOption={(input, option) =>
+                            option?.label.toLowerCase().includes(input.toLowerCase())
+                        }
+                        onChange={(value) => setSelectedOrg(value)}
+                    />
+                </Form.Item>
+            )}
+
+            {(isCompanyAdmin || isInternalAdmin) && (
+                <Form.Item
+                    label="საწყობები"
+                    name="warehouse_ids"
+                    rules={[{required: false, message: 'გთხოვთ აირჩიოთ საწყობი!'}]}
+                >
+                    <Select
+                        mode="multiple"
+                        options={warehouses.map(wh => ({
+                            label: `${wh.name} (${wh.code})`,
+                            value: wh.id,
+                            emoji: '🏭',
+                            desc: `${wh.name} (${wh.code})`
+                        }))}
+                        placeholder={isInternalAdmin && !selectedOrg ? "ჯერ აირჩიეთ ორგანიზაცია" : "აირჩიეთ საწყობები"}
+                        disabled={isInternalAdmin && !selectedOrg}
+                        optionRender={RenderOption}
+                        tagRender={(props) => (
+                            <Tag color='blue'>{props.label}</Tag>
                         )}
                         filterOption={(input, option) =>
                             option?.label.toLowerCase().includes(input.toLowerCase())

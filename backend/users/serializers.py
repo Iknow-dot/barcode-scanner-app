@@ -1,8 +1,13 @@
+import ipaddress
+import logging
+
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from users.models import AllowedIP
 from core.models import Warehouse
+
+logger = logging.getLogger(__name__)
 
 
 User = get_user_model()
@@ -39,8 +44,60 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
             token['organization_id'] = user.organization_id
         return token
 
+    def _get_client_ip(self):
+        """Extract the client IP address from the request."""
+        request = self.context.get('request')
+        if not request:
+            return None
+        xff = request.META.get('HTTP_X_FORWARDED_FOR')
+        if xff:
+            return xff.split(',')[0].strip()
+        return request.META.get('REMOTE_ADDR')
+
+    @staticmethod
+    def _ip_is_allowed(client_ip_str, allowed_ips_qs):
+        """
+        Check whether *client_ip_str* matches at least one entry in
+        *allowed_ips_qs*.  Each entry can be a plain IP (``192.168.1.10``)
+        or a CIDR network (``192.168.1.0/24``).
+        """
+        try:
+            client_ip = ipaddress.ip_address(client_ip_str)
+        except ValueError:
+            logger.warning("Could not parse client IP: %s", client_ip_str)
+            return False
+
+        for entry in allowed_ips_qs:
+            value = entry.ip_or_network.strip()
+            try:
+                # Try as a single IP first
+                if client_ip == ipaddress.ip_address(value):
+                    return True
+            except ValueError:
+                pass
+            try:
+                # Try as a network (CIDR)
+                if client_ip in ipaddress.ip_network(value, strict=False):
+                    return True
+            except ValueError:
+                logger.warning("Invalid allowed IP/network entry: %s", value)
+        return False
+
     def validate(self, attrs):
         data = super().validate(attrs)
+
+        # --- IP allowlist check ---
+        # If the user has allowed IPs configured, verify the client IP.
+        allowed_ips = self.user.allowed_ips.all()
+        if allowed_ips.exists():
+            client_ip = self._get_client_ip()
+            if not client_ip or not self._ip_is_allowed(client_ip, allowed_ips):
+                logger.warning(
+                    "Login denied for user %s: IP %s not in allowlist",
+                    self.user.username, client_ip,
+                )
+                from users.exceptions import IPNotAllowedError
+                raise IPNotAllowedError(client_ip)
 
         # Rename keys to match the frontend expectation
         data['access_token'] = data.pop('access')
@@ -95,6 +152,11 @@ class CompanyUserSerializer(serializers.ModelSerializer):
         required=False,
         source='warehouses',
     )
+    warehouse_ids_read = serializers.PrimaryKeyRelatedField(
+        many=True,
+        read_only=True,
+        source='warehouses',
+    )
 
     class Meta:
         model = User
@@ -107,9 +169,11 @@ class CompanyUserSerializer(serializers.ModelSerializer):
             'last_name',
             'password',
             'is_active',
+            'organization',
             'role',
             'allowed_ips',
             'warehouse_ids',
+            'warehouse_ids_read',
         ]
         read_only_fields = ['id']
 

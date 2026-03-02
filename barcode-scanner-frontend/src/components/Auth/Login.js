@@ -1,6 +1,6 @@
 import React, {useContext, useEffect, useState} from 'react';
 import {useNavigate} from 'react-router-dom';
-import {authService, userService} from '../../api';
+import {authService} from '../../api';
 import AuthContext from '../Auth/AuthContext';
 import {Alert, Button, Flex, Form, Input, Layout, Spin, theme} from "antd";
 import {Content} from "antd/es/layout/layout";
@@ -36,7 +36,13 @@ const Login = () => {
         const result = await authService.login(username, password);
 
         if (!result.success) {
-            setError(result.error || "მომხმარებელი ან პაროლი არასწორია");
+            // Map backend error codes to Georgian user-facing messages
+            const errorMessages = {
+                'IP_NOT_ALLOWED': 'თქვენი IP მისამართი არ არის დაშვებული. გთხოვთ, დაუკავშირდით ადმინისტრატორს.',
+            };
+
+            const errorCode = result.code;
+            setError(errorMessages[errorCode] || result.error || "მომხმარებელი ან პაროლი არასწორია");
             setLoading(false);
             return;
         }
@@ -46,19 +52,8 @@ const Login = () => {
         // Set the token for subsequent requests
         authService.setAuthToken(access_token);
 
-        if (role === 'company_user') {
-            // For company users, check IP allowance
-            const ipResult = await userService.getClientIp();
-            if (ipResult.success) {
-                login(access_token, refresh_token, role, organization_id, organization_name, warehouses, user);
-                navigate('/dashboard');
-            } else {
-                setError("თქვენი IP მისამართი არ არის დაშვებული");
-            }
-        } else {
-            login(access_token, refresh_token, role, organization_id, organization_name, warehouses, user);
-            navigate(role === 'internal_admin' || role === 'company_admin' ? '/system-admin-dashboard' : '/dashboard');
-        }
+        login(access_token, refresh_token, role, organization_id, organization_name, warehouses, user);
+        navigate(role === 'internal_admin' || role === 'company_admin' ? '/system-admin-dashboard' : '/dashboard');
 
         setLoading(false);
     };

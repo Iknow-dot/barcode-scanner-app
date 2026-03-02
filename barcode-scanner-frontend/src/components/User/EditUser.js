@@ -1,36 +1,65 @@
 import React, {useState, useEffect, useContext} from 'react';
-import {organizationService, warehouseService} from '../../api';
+import {userService, organizationService, warehouseService} from '../../api';
 import AuthContext from '../Auth/AuthContext';
-import {Button, Form, Input, Select, Tag} from "antd";
-import ModalForm from "../ModalForm";
+import {Button, Form, Input, Select, Space, Tag} from "antd";
+import ModalForm, {RenderOption} from "../ModalForm";
 
 const EditUser = ({visible, setVisible, onFinish, object}) => {
     const {authData} = useContext(AuthContext);
 
+    const [IPOptions, setIPOptions] = useState([]);
     const [organizations, setOrganizations] = useState([]);
     const [warehouses, setWarehouses] = useState([]);
-    const [isCompanyAdmin, setIsCompanyAdmin] = useState(authData && authData.role === 'company_admin');
+    const isCompanyAdmin = authData?.role === 'company_admin';
+    const isInternalAdmin = authData?.role === 'internal_admin';
 
     useEffect(() => {
         const fetchData = async () => {
-            if (authData?.role === 'internal_admin') {
-                const result = await organizationService.getOrganizations();
-                if (result.success) {
-                    setOrganizations(result.data);
+            if (isInternalAdmin) {
+                const orgResult = await organizationService.getOrganizations();
+                if (orgResult.success) {
+                    setOrganizations(orgResult.data || []);
+                }
+                // Fetch all warehouses, then filter by the edited user's organization
+                const whResult = await warehouseService.getWarehouses();
+                if (whResult.success) {
+                    const filtered = object.organization
+                        ? whResult.data.filter(wh => wh.organization === object.organization)
+                        : whResult.data;
+                    setWarehouses(filtered);
                 }
             }
 
-            if (authData?.role === 'company_admin') {
+            if (isCompanyAdmin) {
                 const result = await warehouseService.getWarehouses();
                 if (result.success) {
                     setWarehouses(result.data);
                 }
-                setIsCompanyAdmin(true);
             }
         };
 
         fetchData();
-    }, [authData, object]);
+    }, [authData, object, isInternalAdmin, isCompanyAdmin]);
+
+    useEffect(() => {
+        const fetchIp = async () => {
+            const result = await userService.getClientIp();
+            if (result.success) {
+                const ip = result.data.ip;
+                setIPOptions((prevState) => [
+                    ...prevState.filter((option) => option.value !== ip),
+                    {label: ip, value: ip, desc: `თქვენი IP მისამართი: ${ip}`, emoji: '🌐'}
+                ]);
+            }
+        };
+        fetchIp();
+    }, []);
+
+    // Extract IP addresses from allowed_ips array of objects
+    const existingIps = (object.allowed_ips || []).map(ip => ip.ip_or_network);
+
+    // Extract warehouse IDs from the user object (API returns warehouse_ids_read for reading)
+    const existingWarehouseIds = (object.warehouse_ids_read || object.warehouse_ids || []);
 
     return (
         <ModalForm
@@ -42,6 +71,8 @@ const EditUser = ({visible, setVisible, onFinish, object}) => {
                 last_name: object.last_name || '',
                 is_active: object.is_active,
                 organization: object.organization,
+                ip_address: existingIps,
+                warehouse_ids: existingWarehouseIds,
             }}
             name="editUser"
             visible={visible}
@@ -49,11 +80,12 @@ const EditUser = ({visible, setVisible, onFinish, object}) => {
             footer={null}
             onFinish={(data) => onFinish(data, object)}
         >
-            {authData?.role === 'internal_admin' && (
+            {isInternalAdmin && (
                 <Tag color='blue' style={{marginBottom: '16px'}}>
                     {organizations.find(org => org.id === object.organization)?.name || 'N/A'}
                 </Tag>
             )}
+
             <Form.Item
                 label="მომხმარებელი"
                 name="username"
@@ -67,6 +99,14 @@ const EditUser = ({visible, setVisible, onFinish, object}) => {
                 name="email"
                 rules={[{required: false, type: 'email', message: 'გთხოვთ შეიყვანოთ სწორი ელ. ფოსტა!'}]}
             >
+                <Input/>
+            </Form.Item>
+
+            <Form.Item label="სახელი" name="first_name">
+                <Input/>
+            </Form.Item>
+
+            <Form.Item label="გვარი" name="last_name">
                 <Input/>
             </Form.Item>
 
@@ -85,18 +125,61 @@ const EditUser = ({visible, setVisible, onFinish, object}) => {
                 rules={[{required: true, message: 'გთხოვთ აირჩიოთ როლი!'}]}
             >
                 <Select>
-                    <Select.Option value="company_user">company_user</Select.Option>
-                    <Select.Option value="company_admin">company_admin</Select.Option>
+                    {isCompanyAdmin ? (
+                        <Select.Option value="company_user">company_user</Select.Option>
+                    ) : (
+                        <>
+                            <Select.Option value="company_admin">company_admin</Select.Option>
+                            <Select.Option value="company_user">company_user</Select.Option>
+                        </>
+                    )}
                 </Select>
             </Form.Item>
 
-            <Form.Item label="სახელი" name="first_name">
-                <Input/>
+            <Form.Item
+                label="IP მისამართი"
+                name="ip_address"
+            >
+                <Select
+                    options={IPOptions}
+                    mode="tags"
+                    placeholder="IP მისამართი"
+                    optionRender={(option) => (
+                        <Space>
+                            <span role="img">{option.data?.emoji}</span>
+                            {option.data?.desc || option.data?.label}
+                        </Space>
+                    )}
+                    tagRender={(props) => (
+                        <Tag color='green'>{props.label}</Tag>
+                    )}
+                />
             </Form.Item>
 
-            <Form.Item label="გვარი" name="last_name">
-                <Input/>
-            </Form.Item>
+            {(isCompanyAdmin || isInternalAdmin) && (
+                <Form.Item
+                    label="საწყობები"
+                    name="warehouse_ids"
+                >
+                    <Select
+                        mode="multiple"
+                        options={warehouses.map(wh => ({
+                            label: `${wh.name} (${wh.code})`,
+                            value: wh.id,
+                            emoji: '🏭',
+                            desc: `${wh.name} (${wh.code})`
+                        }))}
+                        placeholder="აირჩიეთ საწყობები"
+                        optionRender={RenderOption}
+                        tagRender={(props) => (
+                            <Tag color='blue'>{props.label}</Tag>
+                        )}
+                        filterOption={(input, option) =>
+                            option?.label.toLowerCase().includes(input.toLowerCase())
+                        }
+                    />
+                </Form.Item>
+            )}
 
             <Form.Item label={null}>
                 <Button block type="primary" htmlType="submit" variant="solid" color="green">

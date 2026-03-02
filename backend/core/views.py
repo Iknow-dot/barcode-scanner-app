@@ -3,6 +3,7 @@ import logging
 from urllib.parse import urlparse, urlunparse
 
 import httpx
+from rest_framework import status as http_status
 from rest_framework.decorators import action
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -110,23 +111,44 @@ class ProductSearchAPIView(APIView):
                 }
             )
         except httpx.TimeoutException as e:
+            logging.error(f"External service timeout for org {user.organization.id}: {e}")
             return Response({
                 "code": "EXTERNAL_SERVICE_TIMEOUT",
-                "detail": f"Timeout while connecting to the organization's web service: {str(e)}",
-            })
+                "detail": "Timeout while connecting to the organization's web service.",
+            }, status=http_status.HTTP_504_GATEWAY_TIMEOUT)
+        except httpx.ConnectError as e:
+            logging.error(f"External service connection error for org {user.organization.id}: {e}")
+            return Response({
+                "code": "EXTERNAL_SERVICE_UNAVAILABLE",
+                "detail": "Could not connect to the organization's web service.",
+            }, status=http_status.HTTP_502_BAD_GATEWAY)
+        except httpx.RequestError as e:
+            logging.error(f"External service request error for org {user.organization.id}: {e}")
+            return Response({
+                "code": "EXTERNAL_SERVICE_ERROR",
+                "detail": "Communication error with the organization's web service.",
+            }, status=http_status.HTTP_502_BAD_GATEWAY)
+
         if external_service_response.status_code == 401:
+            logging.error(
+                f"External service returned 401 for org {user.organization.id}"
+            )
             return Response({
                 "code": "EXTERNAL_SERVICE_UNAUTHORIZED",
-                "detail": "Unauthorized access to the organization's web service. Please check the credentials.",
+                "detail": "Unauthorized access to the organization's web service. Please check credentials.",
                 "external_service_status_code": external_service_response.status_code,
-            })
+            }, status=http_status.HTTP_502_BAD_GATEWAY)
 
         if external_service_response.status_code != 200:
+            logging.warning(
+                f"External service returned {external_service_response.status_code} "
+                f"for sku={sku}, org={user.organization.id}"
+            )
             return Response({
                 "code": "PRODUCT_NOT_FOUND",
-                "detail": f"Product with sku: {sku} not found in the organization's web service",
+                "detail": f"Product with SKU '{sku}' not found in the organization's web service.",
                 "external_service_status_code": external_service_response.status_code,
-            })
+            }, status=http_status.HTTP_404_NOT_FOUND)
 
         product_data = external_service_response.json()
 

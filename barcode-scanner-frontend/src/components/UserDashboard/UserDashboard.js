@@ -68,14 +68,21 @@ const UserDashboard = () => {
             setProductInfo({sku_name: '', article: '', price: '', images: []});
 
             if (!result.success) {
-                // Map specific error codes to user-friendly messages
+                // Map specific error codes to user-friendly Georgian messages
                 const errorMessages = {
-                    'PRODUCT_NOT_FOUND': 'პროდუქტი ვერ მოიძებნა',
-                    'EXTERNAL_SERVICE_TIMEOUT': 'ვებ სერვისთან კავშირის დრო ამოიწურა',
-                    'EXTERNAL_SERVICE_UNAUTHORIZED': 'ვებ სერვისზე ავტორიზაცია ვერ მოხერხდა',
+                    'PRODUCT_NOT_FOUND': 'პროდუქტი ვერ მოიძებნა ვებ სერვისში',
+                    'EXTERNAL_SERVICE_TIMEOUT': 'ვებ სერვისთან კავშირის დრო ამოიწურა. გთხოვთ, სცადოთ მოგვიანებით.',
+                    'EXTERNAL_SERVICE_UNAVAILABLE': 'ვებ სერვისთან დაკავშირება ვერ მოხერხდა. გთხოვთ, სცადოთ მოგვიანებით.',
+                    'EXTERNAL_SERVICE_ERROR': 'ვებ სერვისთან კომუნიკაციის შეცდომა. გთხოვთ, სცადოთ მოგვიანებით.',
+                    'EXTERNAL_SERVICE_UNAUTHORIZED': 'ვებ სერვისზე ავტორიზაცია ვერ მოხერხდა. გთხოვთ, დაუკავშირდით ადმინისტრატორს.',
                 };
-                const errorMessage = errorMessages[result.code] || result.error || 'პროდუქტი ვერ მოიძებნა';
-                notify.error('შეცდომა', errorMessage);
+
+                const isExternalServiceError = result.code && result.code.startsWith('EXTERNAL_SERVICE_');
+                const title = isExternalServiceError ? 'ვებ სერვისის შეცდომა' : 'შეცდომა';
+                const errorMessage = errorMessages[result.code] || 'პროდუქტის ძიებისას მოხდა შეცდომა';
+                notify.error(title, errorMessage);
+            } else {
+                notify.warning('შედეგი', 'პროდუქტი ვერ მოიძებნა ან ნაშთი არ არსებობს');
             }
         }
 
