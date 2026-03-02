@@ -3,6 +3,7 @@ import logging
 from urllib.parse import urlparse, urlunparse
 
 import httpx
+from drf_spectacular.utils import extend_schema, extend_schema_view
 from rest_framework import status as http_status
 from rest_framework.decorators import action
 from rest_framework.request import Request
@@ -22,7 +23,7 @@ from core.serializers import (
     WarehouseReadOnlySerializer,
     ProductSearchSerializer,
 )
-from users.models import User
+from users.models import User, AllowedIP
 
 
 def _convert_to_https(url):
@@ -32,6 +33,16 @@ def _convert_to_https(url):
     return urlunparse(secure_url)
 
 
+@extend_schema_view(
+    list=extend_schema(tags=['Organizations']),
+    retrieve=extend_schema(tags=['Organizations']),
+    create=extend_schema(tags=['Organizations']),
+    update=extend_schema(tags=['Organizations']),
+    partial_update=extend_schema(tags=['Organizations']),
+    destroy=extend_schema(tags=['Organizations']),
+    get_user_organization=extend_schema(tags=['Organizations']),
+    used_ips=extend_schema(tags=['Organizations']),
+)
 class OrganizationViewSet(ModelViewSet):
     serializer_class = OrganizationSerializer
     permission_classes = [OrganizationPermission]
@@ -56,7 +67,32 @@ class OrganizationViewSet(ModelViewSet):
             status=404,
         )
 
+    @action(detail=True, methods=['get'], url_path='used-ips')
+    def used_ips(self, request: Request, pk=None) -> Response:
+        """
+        Returns all unique IP addresses already used by users
+        within the given organization.
 
+        GET /api/v1/organizations/<pk>/used-ips/
+        """
+        organization = self.get_object()
+        ips = (
+            AllowedIP.objects
+            .filter(user__organization=organization)
+            .values_list('ip_or_network', flat=True)
+            .distinct()
+        )
+        return Response(list(ips))
+
+
+@extend_schema_view(
+    list=extend_schema(tags=['Warehouses']),
+    retrieve=extend_schema(tags=['Warehouses']),
+    create=extend_schema(tags=['Warehouses']),
+    update=extend_schema(tags=['Warehouses']),
+    partial_update=extend_schema(tags=['Warehouses']),
+    destroy=extend_schema(tags=['Warehouses']),
+)
 class WarehouseViewSet(ModelViewSet):
     permission_classes = [WarehousePermission]
 
@@ -76,6 +112,7 @@ class WarehouseViewSet(ModelViewSet):
         return user.warehouses.all()
 
 
+@extend_schema(tags=['Products'])
 class ProductSearchAPIView(APIView):
     permission_classes = [IsCompanyUserOrAdmin]
     serializer_class = ProductSearchSerializer

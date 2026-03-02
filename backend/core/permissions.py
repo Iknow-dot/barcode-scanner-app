@@ -28,7 +28,7 @@ class OrganizationPermission(BasePermission):
             return True
 
         # Non-admin roles: read-only actions only
-        return view.action in ('retrieve', 'list', 'get_user_organization')
+        return view.action in ('retrieve', 'list', 'get_user_organization', 'used_ips')
 
     def has_object_permission(self, request, view, obj):
         if request.user.role == User.Role.INTERNAL_ADMIN:

@@ -42,18 +42,38 @@ const EditUser = ({visible, setVisible, onFinish, object}) => {
     }, [authData, object, isInternalAdmin, isCompanyAdmin]);
 
     useEffect(() => {
-        const fetchIp = async () => {
-            const result = await userService.getClientIp();
-            if (result.success) {
-                const ip = result.data.ip;
-                setIPOptions((prevState) => [
-                    ...prevState.filter((option) => option.value !== ip),
-                    {label: ip, value: ip, desc: `თქვენი IP მისამართი: ${ip}`, emoji: '🌐'}
-                ]);
+        const fetchIpData = async () => {
+            const newOptions = [];
+
+            // Fetch client IP
+            const clientIpResult = await userService.getClientIp();
+            if (clientIpResult.success) {
+                const ip = clientIpResult.data.ip;
+                newOptions.push({label: ip, value: ip, desc: `თქვენი IP მისამართი: ${ip}`, emoji: '🌐'});
             }
+
+            // Fetch organization IPs (use the edited user's organization or the admin's own)
+            const orgId = isInternalAdmin ? object.organization : authData?.organization_id;
+            if (orgId) {
+                const orgIpsResult = await organizationService.getUsedIps(orgId);
+                if (orgIpsResult.success && Array.isArray(orgIpsResult.data)) {
+                    orgIpsResult.data.forEach(ip => {
+                        if (!newOptions.some(opt => opt.value === ip)) {
+                            newOptions.push({
+                                label: ip,
+                                value: ip,
+                                desc: `ორგანიზაციაში გამოყენებული: ${ip}`,
+                                emoji: '🏢'
+                            });
+                        }
+                    });
+                }
+            }
+
+            setIPOptions(newOptions);
         };
-        fetchIp();
-    }, []);
+        fetchIpData();
+    }, [object.organization, isInternalAdmin, authData?.organization_id]);
 
     // Extract IP addresses from allowed_ips array of objects
     const existingIps = (object.allowed_ips || []).map(ip => ip.ip_or_network);

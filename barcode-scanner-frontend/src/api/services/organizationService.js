@@ -41,3 +41,11 @@ export const updateOrganization = (orgId, payload) =>
  */
 export const deleteOrganization = (orgId) =>
     api.delete(API_ENDPOINTS.organization(orgId));
+
+/**
+ * Get all unique IP addresses already used by users within an organization.
+ * @param {number} orgId - Organization ID
+ * @returns {Promise<{success: boolean, data?: string[], error?: string}>}
+ */
+export const getUsedIps = (orgId) =>
+    api.get(API_ENDPOINTS.organization_used_ips(orgId));

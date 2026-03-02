@@ -1,4 +1,5 @@
 from django_filters.rest_framework import DjangoFilterBackend
+from drf_spectacular.utils import extend_schema, extend_schema_view
 from rest_framework.filters import SearchFilter
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
@@ -16,6 +17,7 @@ from users.models import User
 from users.serializers import ClientIPSerializer, CompanyUserSerializer
 
 
+@extend_schema(tags=['Network'])
 class GetClientIPAPIView(APIView):
     serializer_class = ClientIPSerializer
 
@@ -30,6 +32,7 @@ class GetClientIPAPIView(APIView):
         return Response(serializer.data)
 
 
+@extend_schema(tags=['Auth'])
 class CustomTokenObtainPairView(TokenObtainPairView):
     """
     Custom login view that catches IPNotAllowedError raised during
@@ -50,6 +53,7 @@ class CustomTokenObtainPairView(TokenObtainPairView):
             )
 
 
+@extend_schema(tags=['Auth'])
 class LogoutAPIView(APIView):
     """
     Blacklists the provided refresh token, effectively logging the user out.
@@ -79,6 +83,14 @@ class LogoutAPIView(APIView):
         )
 
 
+@extend_schema_view(
+    list=extend_schema(tags=['Users']),
+    retrieve=extend_schema(tags=['Users']),
+    create=extend_schema(tags=['Users']),
+    update=extend_schema(tags=['Users']),
+    partial_update=extend_schema(tags=['Users']),
+    destroy=extend_schema(tags=['Users']),
+)
 class UsersViewSet(ModelViewSet):
     """
     ViewSet for company admins to manage users within their organization.

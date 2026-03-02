@@ -1,4 +1,4 @@
-import React, {useContext, useState} from 'react';
+import React, {useContext, useEffect, useState} from 'react';
 import {BrowserRouter as Router, Routes, Route, Navigate, Link} from 'react-router-dom';
 import AuthContext, {AuthProvider} from './components/Auth/AuthContext';
 import PrivateRoute from './components/PrivateRoute';
@@ -30,11 +30,17 @@ const MainContentView = ({children}) => {
     const screens = useBreakpoint()
     const {authData} = useContext(AuthContext);
     const {subNav} = useContext(SubNavContext);
+    const [siderCollapsed, setSiderCollapsed] = useState(!subNav);
     const {
         token: {colorBgContainer, borderRadiusLG, colorText, colorBgBase},
     } = theme.useToken();
     const isDarkMode = colorBgBase === "#000";
     const {logout} = useContext(AuthContext);
+
+    // Sync collapsed state when subNav changes (e.g. navigating between pages)
+    useEffect(() => {
+        setSiderCollapsed(!subNav);
+    }, [subNav]);
     const userIcon = (
         <Avatar style={{cursor: "pointer", backgroundColor: "#0765c2"}} size="large">
             {authData?.role?.charAt(0).toUpperCase()}
@@ -67,7 +73,8 @@ const MainContentView = ({children}) => {
                     breakpoint="lg"
                     theme={isDarkMode ? "dark" : "light"}
                     collapsible={!!subNav}
-                    collapsed={!subNav}
+                    collapsed={siderCollapsed}
+                    onCollapse={(collapsed) => setSiderCollapsed(collapsed)}
                 >
                     <Link to={window.location.href}>
                         <img
@@ -98,6 +105,21 @@ const MainContentView = ({children}) => {
                                     width="75px"
                                 />
                             </Link>
+                            {authData?.organization_name && (
+                                <span style={{
+                                    fontSize: 14,
+                                    fontWeight: 500,
+                                    color: colorText,
+                                    whiteSpace: 'nowrap',
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis',
+                                    alignSelf: 'center',
+                                    marginLeft: 8,
+                                    maxWidth: 120,
+                                }}>
+                                    {authData.organization_name}
+                                </span>
+                            )}
                             <Menu
                                 style={{
                                     flex: 1,
@@ -116,11 +138,16 @@ const MainContentView = ({children}) => {
                         </Flex>
                     )}
                     {screens.lg && (
-                        <Space style={{float: 'right'}}>
-                            <Dropdown menu={{items}}>
-                                {userIcon}
-                            </Dropdown>
-                        </Space>
+                        <Flex justify="space-between" align="center" style={{height: '100%'}}>
+                            <span style={{fontSize: 16, fontWeight: 500, color: colorText}}>
+                                {authData?.organization_name || ''}
+                            </span>
+                            <Space>
+                                <Dropdown menu={{items}}>
+                                    {userIcon}
+                                </Dropdown>
+                            </Space>
+                        </Flex>
                     )}
                 </Header>
                 <Content style={{margin: '24px 16px 0'}}>

@@ -46,18 +46,38 @@ const AddUserModal = ({visible, setVisible, onFinish, organization = null}) => {
     }, [selectedOrg, allWarehouses, isInternalAdmin]);
 
     useEffect(() => {
-        const fetchIp = async () => {
-            const result = await userService.getClientIp();
-            if (result.success) {
-                const ip = result.data.ip;
-                setIPOptions((prevState) => [
-                    ...prevState.filter((option) => option.value !== ip),
-                    {label: ip, value: ip, desc: `თქვენი IP მისამართი: ${ip}`, emoji: '🌐'}
-                ]);
+        const fetchIpData = async () => {
+            // Fetch client IP
+            const clientIpResult = await userService.getClientIp();
+            const newOptions = [];
+
+            if (clientIpResult.success) {
+                const ip = clientIpResult.data.ip;
+                newOptions.push({label: ip, value: ip, desc: `თქვენი IP მისამართი: ${ip}`, emoji: '🌐'});
             }
+
+            // Fetch organization IPs
+            const orgId = isInternalAdmin ? selectedOrg : authData?.organization_id;
+            if (orgId) {
+                const orgIpsResult = await organizationService.getUsedIps(orgId);
+                if (orgIpsResult.success && Array.isArray(orgIpsResult.data)) {
+                    orgIpsResult.data.forEach(ip => {
+                        if (!newOptions.some(opt => opt.value === ip)) {
+                            newOptions.push({
+                                label: ip,
+                                value: ip,
+                                desc: `ორგანიზაციაში გამოყენებული: ${ip}`,
+                                emoji: '🏢'
+                            });
+                        }
+                    });
+                }
+            }
+
+            setIPOptions(newOptions);
         };
-        fetchIp();
-    }, []);
+        fetchIpData();
+    }, [selectedOrg, isInternalAdmin, authData?.organization_id]);
 
     return (
         <ModalForm

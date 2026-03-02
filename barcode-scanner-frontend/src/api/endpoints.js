@@ -11,6 +11,7 @@ const API_ENDPOINTS = {
     },
     organizations: "api/v1/organizations/",
     organization: orgId => `api/v1/organizations/${orgId}/`,
+    organization_used_ips: orgId => `api/v1/organizations/${orgId}/used-ips/`,
     my_organization: "api/v1/organizations/my-organization/",
     warehouses: "api/v1/warehouses/",
     warehouse: warehouseId => `api/v1/warehouses/${warehouseId}/`,

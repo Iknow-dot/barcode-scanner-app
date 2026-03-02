@@ -180,6 +180,14 @@ SPECTACULAR_SETTINGS = {
     'DESCRIPTION': 'API documentation for the Barcode Scanner application',
     'VERSION': '1.0.0',
     'SERVE_INCLUDE_SCHEMA': False,
+    'TAGS': [
+        {'name': 'Auth', 'description': 'Authentication endpoints (login, logout, token refresh/verify)'},
+        {'name': 'Users', 'description': 'User management endpoints'},
+        {'name': 'Organizations', 'description': 'Organization management endpoints'},
+        {'name': 'Warehouses', 'description': 'Warehouse management endpoints'},
+        {'name': 'Products', 'description': 'Product search endpoints'},
+        {'name': 'Network', 'description': 'Network utility endpoints (IP detection)'},
+    ],
 }
 
 # Jazzmin Admin Theme Settings
