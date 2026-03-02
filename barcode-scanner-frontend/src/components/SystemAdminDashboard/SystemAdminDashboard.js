@@ -6,6 +6,7 @@ import WarehousesTab from './WarehousesTab';
 import UsersTab from './UsersTab';
 import {AppstoreOutlined, BankOutlined, UserOutlined} from "@ant-design/icons";
 import SubNavContext from "../../contexts/SubNavContext";
+import {useLanguage} from '../../i18n/LanguageContext';
 
 
 const SystemAdminDashboard = () => {
@@ -14,30 +15,31 @@ const SystemAdminDashboard = () => {
     const [users, setUsers] = useState([]);
     const userRole = authData?.role;
     const [activeTab, setActiveTab] = useState(userRole === userRoles.internal_admin ? 1 : 2);
+    const {t} = useLanguage();
 
     useEffect(() => {
         setSubNav([
             userRole === userRoles.internal_admin && ({
                 key: '1',
                 icon: <BankOutlined/>,
-                label: "ორგანიზაციები",
+                label: t.organizations,
                 onClick: () => setActiveTab(1)
             }),
             userRole === userRoles.company_admin && ({
                 key: '2',
                 icon: <AppstoreOutlined/>,
-                label: "საწყობები",
+                label: t.warehouses,
                 onClick: () => setActiveTab(2)
             }),
             {
                 key: '3',
                 active: "true",
                 icon: <UserOutlined/>,
-                label: "მომხმარებლები",
+                label: t.users,
                 onClick: () => setActiveTab(3)
             }
         ].filter(Boolean));
-    }, [userRole, setSubNav]);
+    }, [userRole, setSubNav, t]);
 
     useEffect(() => {
         const fetchData = async () => {
@@ -46,11 +48,11 @@ const SystemAdminDashboard = () => {
                 const data = result.data;
                 setUsers(Array.isArray(data) ? data : data.results || []);
             } else {
-                console.error('შეცდომა მონაცემების მიღებისას', result.error);
+                console.error(t.dataFetchError, result.error);
             }
         };
         fetchData();
-    }, []);
+    }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
     let ActiveTabPane = null;
     switch (activeTab) {

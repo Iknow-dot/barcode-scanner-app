@@ -3,6 +3,7 @@ import {warehouseService, productService} from '../../api';
 import ScanButton from './ScanButton';
 import subNavContext from "../../contexts/SubNavContext";
 import useAppNotification from "../../hooks/useAppNotification";
+import {useLanguage} from '../../i18n/LanguageContext';
 import {
     Button,
     Carousel,
@@ -28,6 +29,7 @@ const UserDashboard = () => {
     const [userWarehouses, setUserWarehouses] = useState([]);
     const [productInfo, setProductInfo] = useState({sku_name: '', article: '', price: '', images: []});
     const qrRef = useRef(null);
+    const {t} = useLanguage();
 
     const {notify, contextHolder} = useAppNotification();
 
@@ -68,21 +70,20 @@ const UserDashboard = () => {
             setProductInfo({sku_name: '', article: '', price: '', images: []});
 
             if (!result.success) {
-                // Map specific error codes to user-friendly Georgian messages
                 const errorMessages = {
-                    'PRODUCT_NOT_FOUND': 'პროდუქტი ვერ მოიძებნა ვებ სერვისში',
-                    'EXTERNAL_SERVICE_TIMEOUT': 'ვებ სერვისთან კავშირის დრო ამოიწურა. გთხოვთ, სცადოთ მოგვიანებით.',
-                    'EXTERNAL_SERVICE_UNAVAILABLE': 'ვებ სერვისთან დაკავშირება ვერ მოხერხდა. გთხოვთ, სცადოთ მოგვიანებით.',
-                    'EXTERNAL_SERVICE_ERROR': 'ვებ სერვისთან კომუნიკაციის შეცდომა. გთხოვთ, სცადოთ მოგვიანებით.',
-                    'EXTERNAL_SERVICE_UNAUTHORIZED': 'ვებ სერვისზე ავტორიზაცია ვერ მოხერხდა. გთხოვთ, დაუკავშირდით ადმინისტრატორს.',
+                    'PRODUCT_NOT_FOUND': t.productNotFound,
+                    'EXTERNAL_SERVICE_TIMEOUT': t.externalServiceTimeout,
+                    'EXTERNAL_SERVICE_UNAVAILABLE': t.externalServiceUnavailable,
+                    'EXTERNAL_SERVICE_ERROR': t.externalServiceError,
+                    'EXTERNAL_SERVICE_UNAUTHORIZED': t.externalServiceUnauthorized,
                 };
 
                 const isExternalServiceError = result.code && result.code.startsWith('EXTERNAL_SERVICE_');
-                const title = isExternalServiceError ? 'ვებ სერვისის შეცდომა' : 'შეცდომა';
-                const errorMessage = errorMessages[result.code] || 'პროდუქტის ძიებისას მოხდა შეცდომა';
+                const title = isExternalServiceError ? t.webServiceError : t.error;
+                const errorMessage = errorMessages[result.code] || t.productSearchError;
                 notify.error(title, errorMessage);
             } else {
-                notify.warning('შედეგი', 'პროდუქტი ვერ მოიძებნა ან ნაშთი არ არსებობს');
+                notify.warning(t.result, t.productNotFoundOrNoBalance);
             }
         }
 
@@ -115,11 +116,11 @@ const UserDashboard = () => {
             {(balances.length === 0 || scanning) && (
                 <Result
                     status="info"
-                    title="პროდუქტის ძიება"
-                    subTitle="მოძებნეთ პროდუქტი შტრიხკოდის ან არტიკულის მიხედვით"
+                    title={t.productSearch}
+                    subTitle={t.productSearchSubtitle}
                     extra={<>
                         <Button type="primary" onClick={() => setDrawerVisible(true)}>
-                            ძებნა
+                            {t.search}
                         </Button>
                         <div style={{marginTop: 20}}>
                             <div ref={qrRef} id="qr-reader"/>
@@ -130,7 +131,7 @@ const UserDashboard = () => {
                                     danger
                                     style={{marginTop: 10}}
                                 >
-                                    დახურვა
+                                    {t.close}
                                 </Button>
                             )}
                         </div>
@@ -152,12 +153,12 @@ const UserDashboard = () => {
             </Button>
             <Spin
                 spinning={loading}
-                tip="ვეძებ პროდუქტს..."
+                tip={t.searchingProduct}
                 style={{background: 'rgba(0, 0, 0, 0.1)', borderRadius: 4}}
                 size="large"
             >
                 <Drawer
-                    title="პროდუქტის ძიება"
+                    title={t.productSearch}
                     placement="bottom"
                     closable={true}
                     open={drawerVisible}
@@ -173,12 +174,12 @@ const UserDashboard = () => {
                             <Form.Item
                                 name="searchType"
                                 initialValue="barcode"
-                                rules={[{required: true, message: 'გთხოვთ აირჩიოთ ძიების ტიპი!'}]}
+                                rules={[{required: true, message: t.selectSearchType}]}
                             >
                                 <Select
                                     options={[
-                                        {label: (<><BarcodeOutlined/> შტრიხკოდი</>), value: "barcode"},
-                                        {label: (<><NumberOutlined/> არტიკული</>), value: "article"},
+                                        {label: (<><BarcodeOutlined/> {t.barcode}</>), value: "barcode"},
+                                        {label: (<><NumberOutlined/> {t.article}</>), value: "article"},
                                     ]}
                                     onChange={(value) => {
                                         if (value === 'barcode') {
@@ -192,10 +193,10 @@ const UserDashboard = () => {
                             </Form.Item>
                             <Form.Item
                                 name="search"
-                                rules={[{required: true, message: 'გთხოვთ შეიყვანოთ ძიების ტექსტი!'}]}
+                                rules={[{required: true, message: t.enterSearchText}]}
                             >
                                 <Input.Search
-                                    placeholder="ძიება"
+                                    placeholder={t.searchPlaceholder}
                                     enterButton={<SearchOutlined/>}
                                     onSearch={form.submit}
                                     allowClear
@@ -203,7 +204,7 @@ const UserDashboard = () => {
                             </Form.Item>
                         </Flex>
                         <Flex gap="middle" justify="center">
-                            <Form.Item name="allWarehouses" label="ყველა საწყობი" initialValue={false}>
+                            <Form.Item name="allWarehouses" label={t.allWarehouses} initialValue={false}>
                                 <Switch/>
                             </Form.Item>
                         </Flex>
@@ -223,8 +224,8 @@ const UserDashboard = () => {
             {!scanning && balances.length > 0 && (
                 <>
                     <Descriptions>
-                        <Descriptions.Item label="პროდუქტი">{productInfo.sku_name}</Descriptions.Item>
-                        <Descriptions.Item label="არტიკული">{productInfo.article}</Descriptions.Item>
+                        <Descriptions.Item label={t.product}>{productInfo.sku_name}</Descriptions.Item>
+                        <Descriptions.Item label={t.article}>{productInfo.article}</Descriptions.Item>
                     </Descriptions>
                     {productInfo.images && productInfo.images.length > 0 && (
                         <Carousel
@@ -249,10 +250,10 @@ const UserDashboard = () => {
                             userWarehouses.map(wh => wh.name).includes(record.warehouse_name) ? 'highlight-row' : ''
                         }
                         columns={[
-                            {title: 'საწყობი', dataIndex: 'warehouse_name', key: 'warehouse_name'},
-                            {title: 'ნაშთი', dataIndex: 'quantity', key: 'quantity'},
+                            {title: t.warehouse, dataIndex: 'warehouse_name', key: 'warehouse_name'},
+                            {title: t.balance, dataIndex: 'quantity', key: 'quantity'},
                             {
-                                title: 'ფასი', dataIndex: 'price', key: 'price',
+                                title: t.price, dataIndex: 'price', key: 'price',
                                 render: (price) => <span>{price} ₾</span>
                             },
                         ]}

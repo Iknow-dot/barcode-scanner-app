@@ -1,4 +1,15 @@
 import client from './client';
+import translations from '../i18n/translations';
+
+/**
+ * Get the current language from localStorage (fallback to 'ka').
+ */
+const getCurrentLanguage = () => localStorage.getItem('language') || 'ka';
+
+/**
+ * Get translations for the current language.
+ */
+const getT = () => translations[getCurrentLanguage()] || translations.ka;
 
 /**
  * Extract a human-readable error message from Django DRF error responses.
@@ -13,8 +24,9 @@ import client from './client';
  * @returns {string} Human-readable error message
  */
 export const extractErrorMessage = (error) => {
+    const t = getT();
     const data = error.response?.data;
-    if (!data) return error.message || 'ქსელის შეცდომა';
+    if (!data) return error.message || t.networkError;
 
     // Plain string response
     if (typeof data === 'string') return data;
@@ -32,7 +44,7 @@ export const extractErrorMessage = (error) => {
             .join('; ');
     }
 
-    return error.message || 'უცნობი შეცდომა';
+    return error.message || t.unknownError;
 };
 
 /**

@@ -2,14 +2,16 @@ import React, {useContext, useEffect, useState} from 'react';
 import {useNavigate} from 'react-router-dom';
 import {authService} from '../../api';
 import AuthContext from '../Auth/AuthContext';
-import {Alert, Button, Flex, Form, Input, Layout, Spin, theme} from "antd";
+import {Alert, Button, Dropdown, Flex, Form, Input, Layout, Space, Spin, theme} from "antd";
 import {Content} from "antd/es/layout/layout";
-import {LockOutlined, UserOutlined} from "@ant-design/icons";
+import {GlobalOutlined, LockOutlined, UserOutlined} from "@ant-design/icons";
+import {useLanguage} from '../../i18n/LanguageContext';
 
 const Login = () => {
     const [loading, setLoading] = useState(false);
     const {login, authData} = useContext(AuthContext);
     const navigate = useNavigate();
+    const {t, language, switchLanguage} = useLanguage();
     const {
         token: {colorBgContainer, borderRadiusLG, colorBgBase},
     } = theme.useToken();
@@ -36,13 +38,12 @@ const Login = () => {
         const result = await authService.login(username, password);
 
         if (!result.success) {
-            // Map backend error codes to Georgian user-facing messages
             const errorMessages = {
-                'IP_NOT_ALLOWED': 'თქვენი IP მისამართი არ არის დაშვებული. გთხოვთ, დაუკავშირდით ადმინისტრატორს.',
+                'IP_NOT_ALLOWED': t.ipNotAllowed,
             };
 
             const errorCode = result.code;
-            setError(errorMessages[errorCode] || result.error || "მომხმარებელი ან პაროლი არასწორია");
+            setError(errorMessages[errorCode] || result.error || t.invalidCredentials);
             setLoading(false);
             return;
         }
@@ -58,9 +59,29 @@ const Login = () => {
         setLoading(false);
     };
 
+    const langItems = [
+        {
+            key: 'ka',
+            label: '🇬🇪 ქართული',
+            onClick: () => switchLanguage('ka'),
+        },
+        {
+            key: 'en',
+            label: '🇬🇧 English',
+            onClick: () => switchLanguage('en'),
+        },
+    ];
+
     return (
         <>
             <Layout style={{minHeight: "100vh"}}>
+                <Flex justify="flex-end" style={{padding: '16px 24px 0'}}>
+                    <Dropdown menu={{items: langItems, selectedKeys: [language]}}>
+                        <Button type="text" icon={<GlobalOutlined/>}>
+                            {language === 'ka' ? 'ქარ' : 'EN'}
+                        </Button>
+                    </Dropdown>
+                </Flex>
                 <img
                     src={isDarkMode ? "/logo-dark.png" : "/logo-light.png"}
                     alt="iFlow"
@@ -87,17 +108,17 @@ const Login = () => {
                                 <Alert message={error} type="error" style={{marginBottom: 24}} showIcon/>
                             )}
                             <Form.Item
-                                label="მომხმარებელი სახელი"
+                                label={t.username}
                                 name="username"
-                                rules={[{required: true, message: 'Please input your username!'}]}
+                                rules={[{required: true, message: t.usernameRequired}]}
                             >
                                 <Input prefix={<UserOutlined/>}/>
                             </Form.Item>
 
                             <Form.Item
-                                label="პაროლი"
+                                label={t.password}
                                 name="password"
-                                rules={[{required: true, message: 'Please input your password!'}]}
+                                rules={[{required: true, message: t.passwordRequired}]}
                             >
                                 <Input.Password prefix={<LockOutlined/>}/>
                             </Form.Item>
@@ -105,7 +126,7 @@ const Login = () => {
                             <Spin spinning={loading}>
                                 <Form.Item label={null}>
                                     <Button type="primary" htmlType="submit" style={{width: "100%"}}>
-                                        შესვლა
+                                        {t.login}
                                     </Button>
                                 </Form.Item>
                             </Spin>

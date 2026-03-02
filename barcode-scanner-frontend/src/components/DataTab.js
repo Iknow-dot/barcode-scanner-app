@@ -1,6 +1,7 @@
 import {Button, Popconfirm, Space, Table} from "antd";
 import React, {useState} from "react";
 import {CheckOutlined, DeleteOutlined, EditOutlined, PlusOutlined} from "@ant-design/icons";
+import {useLanguage} from '../i18n/LanguageContext';
 
 export const DataTab = ({
                           objects,
@@ -17,6 +18,7 @@ export const DataTab = ({
   const [addModalVisible, setAddModalVisible] = useState(false);
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [selectedObject, setSelectedObject] = useState({});
+  const {t} = useLanguage();
 
   return (
       <div>
@@ -71,10 +73,10 @@ export const DataTab = ({
                               <EditOutlined/>
                             </Button>
                             <Popconfirm
-                                title={`გსურთ წაშლა?`}
+                                title={t.confirmDelete}
                                 onConfirm={() => handleDelete(object)}
-                                okText="დიახ"
-                                cancelText="არა"
+                                okText={t.yes}
+                                cancelText={t.no}
                                 okButtonProps={{
                                   danger: true
                                 }}

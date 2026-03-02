@@ -8,8 +8,13 @@ export const AuthProvider = ({ children }) => {
     const token = localStorage.getItem('token');
     const refreshToken = localStorage.getItem('refresh_token');
     const role = localStorage.getItem('role');
-    const organization_id = localStorage.getItem('organization_id');
+    const organization_id = localStorage.getItem('organization_id') || null;
     const organization_name = localStorage.getItem('organization_name');
+    // localStorage stores null/undefined as the literal string "null"/"undefined"
+    const sanitizedOrgName = (organization_name && organization_name !== 'null' && organization_name !== 'undefined')
+        ? organization_name : null;
+    const sanitizedOrgId = (organization_id && organization_id !== 'null' && organization_id !== 'undefined')
+        ? organization_id : null;
     const warehouses = localStorage.getItem('warehouses') && JSON.parse(localStorage.getItem('warehouses'));
     const user = localStorage.getItem('user') && JSON.parse(localStorage.getItem('user'));
 
@@ -17,14 +22,14 @@ export const AuthProvider = ({ children }) => {
     if (token && role && user) {
       posthog.identify(user?.username, {
         role: role,
-        organization_id: organization_id,
-        organization_name: organization_name,
+        organization_id: sanitizedOrgId,
+        organization_name: sanitizedOrgName,
         warehouses: warehouses,
         username: user?.username,
       });
     }
 
-    return token && role ? { token, refreshToken, role, organization_id, organization_name, warehouses, user } : null;
+    return token && role ? { token, refreshToken, role, organization_id: sanitizedOrgId, organization_name: sanitizedOrgName, warehouses, user } : null;
   });
 
   const logout = () => {
@@ -40,23 +45,26 @@ export const AuthProvider = ({ children }) => {
   };
 
   const login = (token, refreshToken, role, organization_id, organization_name, warehouses, user) => {
+    const safeOrgId = organization_id || '';
+    const safeOrgName = organization_name || '';
+
     localStorage.setItem('token', token);
     localStorage.setItem('refresh_token', refreshToken);
     localStorage.setItem('role', role);
-    localStorage.setItem('organization_id', organization_id);
-    localStorage.setItem('organization_name', organization_name);
+    localStorage.setItem('organization_id', safeOrgId);
+    localStorage.setItem('organization_name', safeOrgName);
     localStorage.setItem('warehouses', JSON.stringify(warehouses));
     localStorage.setItem('user', JSON.stringify(user));
     // Identify user in PostHog with role and organization
     posthog.identify(user?.username, {
       role: role,
-      organization_id: organization_id,
-      organization_name: organization_name,
+      organization_id: safeOrgId,
+      organization_name: safeOrgName,
       username: user?.username,
       warehouse: warehouses,
     });
 
-    setAuthData({ token, refreshToken, role, organization_id, organization_name, warehouses, user });
+    setAuthData({ token, refreshToken, role, organization_id: safeOrgId || null, organization_name: safeOrgName || null, warehouses, user });
   };
 
   return (

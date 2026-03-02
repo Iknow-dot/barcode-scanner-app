@@ -7,6 +7,7 @@ import AddUserModal from "../User/AddUserModal";
 import EditUserModal from "../User/EditUser";
 import {CheckOutlined, CloseOutlined} from "@ant-design/icons";
 import useAppNotification from "../../hooks/useAppNotification";
+import {useLanguage} from '../../i18n/LanguageContext';
 
 const roleColors = {
     internal_admin: "red",
@@ -17,6 +18,7 @@ const roleColors = {
 const UsersTab = ({initialUsers, addModalExtraProps, handleEditCallback = null, filtersEnabled = false}) => {
     const {authData} = useContext(AuthContext);
     const {notify, contextHolder} = useAppNotification();
+    const {t} = useLanguage();
     const [users, setUsers] = useState(initialUsers || []);
     const [organizations, setOrganizations] = useState({});
     const [orgOptions, setOrgOptions] = useState([]);
@@ -119,21 +121,21 @@ const UsersTab = ({initialUsers, addModalExtraProps, handleEditCallback = null, 
 
         if (result.success) {
             setUsers(prev => [...prev, result.data]);
-            notify.success('წარმატება', `მომხმარებელი "${newUser.username}" წარმატებით შეიქმნა`);
+            notify.success(t.success, t.userCreated(newUser.username));
             return true;
         }
 
         if (result.code === 'USER_LIMIT_REACHED') {
-            notify.error('შეცდომა', 'მომხმარებელთა ლიმიტი მიღწეულია. გთხოვთ, დაუკავშირდით ადმინისტრატორს დამატებითი ინფორმაციისთვის.');
+            notify.error(t.error, t.userLimitReached);
         } else {
-            notify.error('შეცდომა', result.error);
+            notify.error(t.error, result.error);
         }
         return false;
     };
 
     const handleDelete = async (deleteUser) => {
         if (deleteUser.id === authData?.user?.id) {
-            notify.error('შეცდომა', 'თქვენ არ შეგიძლიათ თქვენი საკუთარი ანგარიშის წაშლა.');
+            notify.error(t.error, t.cannotDeleteSelf);
             return false;
         }
 
@@ -141,9 +143,9 @@ const UsersTab = ({initialUsers, addModalExtraProps, handleEditCallback = null, 
 
         if (result.success) {
             setUsers(prev => prev.filter(u => u.id !== deleteUser.id));
-            notify.success('წარმატება', `${deleteUser.username} წარმატებით წაიშალა`);
+            notify.success(t.success, t.userDeleted(deleteUser.username));
         } else {
-            notify.error('შეცდომა', result.error);
+            notify.error(t.error, result.error);
         }
     };
 
@@ -174,12 +176,12 @@ const UsersTab = ({initialUsers, addModalExtraProps, handleEditCallback = null, 
             // (allowed_ips as objects, warehouse_ids_read, etc.)
             const updatedUser = result.data;
             setUsers(prev => prev.map(u => u.id === editUser.id ? updatedUser : u));
-            notify.success('წარმატება', `მომხმარებელი "${editUser.username}" წარმატებით განახლდა`);
+            notify.success(t.success, t.userUpdated(editUser.username));
             if (handleEditCallback) handleEditCallback(updatedUser, modifiedFields, editUser);
             return true;
         }
 
-        notify.error('შეცდომა', result.error);
+        notify.error(t.error, result.error);
         return false;
     };
 
@@ -191,7 +193,7 @@ const UsersTab = ({initialUsers, addModalExtraProps, handleEditCallback = null, 
                     <Row gutter={8} align="middle">
                         <Col>
                             <Input.Search
-                                placeholder="სახელი"
+                                placeholder={t.filterName}
                                 allowClear
                                 onSearch={(v) => {
                                     if (debounceTimer.current) clearTimeout(debounceTimer.current);
@@ -205,7 +207,7 @@ const UsersTab = ({initialUsers, addModalExtraProps, handleEditCallback = null, 
                         <Col>
                             <Select
                                 showSearch
-                                placeholder="ორგანიზაცია"
+                                placeholder={t.filterOrganization}
                                 options={orgOptions}
                                 onChange={handleOrgChange}
                                 allowClear
@@ -215,7 +217,7 @@ const UsersTab = ({initialUsers, addModalExtraProps, handleEditCallback = null, 
                         <Col>
                             <Select
                                 showSearch
-                                placeholder="როლი"
+                                placeholder={t.filterRole}
                                 options={roleOptions}
                                 onChange={handleRoleChange}
                                 allowClear
@@ -226,35 +228,35 @@ const UsersTab = ({initialUsers, addModalExtraProps, handleEditCallback = null, 
                             <Button type="primary" onClick={() => {
                                 if (debounceTimer.current) clearTimeout(debounceTimer.current);
                                 handleSearch();
-                            }}>ძებნა</Button>
+                            }}>{t.search}</Button>
                             <Button style={{marginLeft: 8}} onClick={() => {
                                 setQuery('');
                                 setSelectedOrg(null);
                                 setSelectedRole(null);
                                 fetchUsers();
-                            }}>გასუფთავება</Button>
+                            }}>{t.clear}</Button>
                         </Col>
                     </Row>
                 )}
             </div>
 
             <DataTab objects={users} columns={[
-                {key: 'username', title: 'სახელი', dataIndex: 'username'},
+                {key: 'username', title: t.name, dataIndex: 'username'},
                 {
                     key: 'organization',
-                    title: 'ორგანიზაცია',
+                    title: t.organization,
                     dataIndex: 'organization',
                     render: orgId => organizations[orgId] || 'N/A'
                 },
                 {
                     key: 'role',
-                    title: 'როლი',
+                    title: t.role,
                     dataIndex: 'role',
                     render: role => <Tag color={roleColors[role]}>{role}</Tag>
                 },
                 {
                     key: 'ip_enabled',
-                    title: 'IP ჩართული',
+                    title: t.ipEnabled,
                     dataIndex: 'allowed_ips',
                     render: allowed_ips => (allowed_ips && allowed_ips.length > 0) ? <CheckOutlined style={{color: 'green'}}/> :
                         <CloseOutlined style={{color: 'red'}}/>

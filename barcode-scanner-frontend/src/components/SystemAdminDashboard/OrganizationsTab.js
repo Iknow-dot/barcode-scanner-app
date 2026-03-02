@@ -5,10 +5,12 @@ import AddOrganization from "../Organization/AddOrganization";
 import EditOrganization from "../Organization/EditOrganization";
 import UsersTab from "./UsersTab";
 import useAppNotification from "../../hooks/useAppNotification";
+import {useLanguage} from '../../i18n/LanguageContext';
 
 const OrganizationsTab = () => {
     const [organizations, setOrganizations] = useState([]);
     const {notify, contextHolder} = useAppNotification();
+    const {t} = useLanguage();
 
     useEffect(() => {
         const fetchData = async () => {
@@ -17,7 +19,7 @@ const OrganizationsTab = () => {
                 setOrganizations(result.data || []);
             } else {
                 notify.error(
-                    'შეცდომა ორგანიზაციების მიღებისას, შეამოწმეთ ინტერნეტთან კავშირი',
+                    t.orgFetchError,
                     result.error
                 );
             }
@@ -30,9 +32,9 @@ const OrganizationsTab = () => {
 
         if (result.success) {
             setOrganizations(organizations.filter(org => org.id !== organization.id));
-            notify.warning('ორგანიზაცია წაიშლა', `ორგანიზაცია: ${organization.name}`);
+            notify.warning(t.orgDeleted, t.orgDeletedDesc(organization.name));
         } else {
-            notify.error('შეცდომა ორგანიზაციის წაშლისას:', result.error);
+            notify.error(t.orgDeleteError, result.error);
         }
     };
 
@@ -49,12 +51,12 @@ const OrganizationsTab = () => {
         const result = await organizationService.createOrganization(payload);
 
         if (result.success) {
-            notify.success('ორგანიზაცია წარმატებით შეიქმნა!', `ორგანიზაცია: ${newOrganizationData.name}`);
+            notify.success(t.orgCreated, t.orgCreatedDesc(newOrganizationData.name));
             setOrganizations([...organizations, result.data]);
             return true;
         }
 
-        notify.error('შეცდომა ორგანიზაციის შექმნისას:', result.error);
+        notify.error(t.orgCreateError, result.error);
         return false;
     };
 
@@ -77,11 +79,11 @@ const OrganizationsTab = () => {
             if (refreshResult.success) {
                 setOrganizations(refreshResult.data);
             }
-            notify.success('ორგანიზაცია წარმატებიით შეირედაქტირდ��', `ორგანიზაცია: ${payload.name}`);
+            notify.success(t.orgEdited, t.orgEditedDesc(payload.name));
             return true;
         }
 
-        notify.error('შეცდომა ორგანიზაციის რედაქტირებისას:', result.error);
+        notify.error(t.orgEditError, result.error);
         return false;
     };
 
@@ -91,9 +93,9 @@ const OrganizationsTab = () => {
             <DataTab
                 objects={organizations}
                 columns={[
-                    {key: "name", title: 'ორგანიზაცია', dataIndex: 'name'},
-                    {key: "identification_number", title: 'გსნ', dataIndex: 'identification_number'},
-                    {key: "employees_count", title: 'თანამშრომელთა რაოდენობა', dataIndex: 'employees_count'},
+                    {key: "name", title: t.organization, dataIndex: 'name'},
+                    {key: "identification_number", title: t.idNumberShort, dataIndex: 'identification_number'},
+                    {key: "employees_count", title: t.employeesCountShort, dataIndex: 'employees_count'},
                 ]}
                 AddModal={AddOrganization}
                 handleAdd={handleAddOrganization}

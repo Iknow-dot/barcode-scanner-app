@@ -1,35 +1,38 @@
 import React from 'react';
 import ModalForm from "../ModalForm";
 import {Button, Form, Input} from "antd";
+import {useLanguage} from '../../i18n/LanguageContext';
 
 const EditWarehouseModal = ({ visible, setVisible, onFinish, object }) => {
+  const {t} = useLanguage();
+
   return (
       <ModalForm
           object={object}
           visible={visible}
           setVisible={setVisible}
           onFinish={(data) => onFinish(data, object)}
-          title="საწყობის დამატება"
+          title={t.editWarehouse}
       >
         <Form.Item
-            label="სახელი:"
+            label={t.warehouseName}
             name="name"
             rules={[
               {
                 required: true,
-                message: 'შეავსეთ სახელი!',
+                message: t.nameRequired,
               },
             ]}
         >
             <Input/>
         </Form.Item>
         <Form.Item
-            label="კოდი:"
+            label={t.warehouseCode}
             name="code"
             rules={[
               {
                 required: true,
-                message: 'შეავსეთ კოდი!',
+                message: t.codeRequired,
               },
             ]}
         >
@@ -37,7 +40,7 @@ const EditWarehouseModal = ({ visible, setVisible, onFinish, object }) => {
         </Form.Item>
         <Form.Item>
           <Button block type="primary" htmlType="submit" variant="solid" color="green">
-            შენახვა
+            {t.save}
           </Button>
         </Form.Item>
 

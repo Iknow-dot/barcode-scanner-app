@@ -4,10 +4,12 @@ import DataTab from "../DataTab";
 import AddWarehouseModal from "../Warehouse/AddWarehouseModal";
 import EditWarehouseModal from "../Warehouse/EditWarehouseModal";
 import useAppNotification from "../../hooks/useAppNotification";
+import {useLanguage} from '../../i18n/LanguageContext';
 
 const WarehousesTab = () => {
     const [warehouses, setWarehouses] = useState([]);
     const {notify, contextHolder} = useAppNotification();
+    const {t} = useLanguage();
 
     useEffect(() => {
         const fetchWarehouses = async () => {
@@ -24,9 +26,9 @@ const WarehousesTab = () => {
 
         if (result.success) {
             setWarehouses(current => current.filter(wh => wh.id !== warehouse.id));
-            notify.success('საწყობის წაშლა', `საწყობი: "${warehouse.name}" წაიშალა`);
+            notify.success(t.warehouseDeleted, t.warehouseDeletedDesc(warehouse.name));
         } else {
-            notify.error('საწყობის წაშლა', result.error);
+            notify.error(t.warehouseDeleteError, result.error);
         }
     };
 
@@ -36,11 +38,11 @@ const WarehousesTab = () => {
 
         if (result.success) {
             setWarehouses(prev => prev.map(wh => wh.id === payload.id ? payload : wh));
-            notify.success('საწყობის შეცვლა', `საწყობი: ${payload.name} შეცვლილია`);
+            notify.success(t.warehouseEdited, t.warehouseEditedDesc(payload.name));
             return true;
         }
 
-        notify.error('საწყობის შეცვლა', result.error);
+        notify.error(t.warehouseEditError, result.error);
         return false;
     };
 
@@ -53,11 +55,11 @@ const WarehousesTab = () => {
             if (refreshResult.success) {
                 setWarehouses(refreshResult.data);
             }
-            notify.success('საწყობის დამატება', `საწყობი: "${newWarehouseData.name}" დაემატა`);
+            notify.success(t.warehouseAdded, t.warehouseAddedDesc(newWarehouseData.name));
             return true;
         }
 
-        notify.error('საწყობის დამატება', result.error);
+        notify.error(t.warehouseAddError, result.error);
         return false;
     };
 
@@ -67,8 +69,8 @@ const WarehousesTab = () => {
             <DataTab
                 objects={warehouses}
                 columns={[
-                    {key: "name", title: 'სახელი', dataIndex: 'name'},
-                    {key: "code", title: 'კოდი', dataIndex: 'code'},
+                    {key: "name", title: t.name, dataIndex: 'name'},
+                    {key: "code", title: t.code, dataIndex: 'code'},
                 ]}
                 AddModal={AddWarehouseModal}
                 handleAdd={handleAddWarehouse}

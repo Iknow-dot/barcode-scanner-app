@@ -2,22 +2,25 @@ import React from 'react';
 import {Button, Divider, Flex, Form, Input, InputNumber} from "antd";
 import ModalForm from "../ModalForm";
 import {LockOutlined, UserOutlined} from "@ant-design/icons";
+import {useLanguage} from '../../i18n/LanguageContext';
 
 const AddOrganization = ({visible, setVisible, onFinish}) => {
+    const {t} = useLanguage();
+
     return (
         <ModalForm
             visible={visible}
             setVisible={setVisible}
             onFinish={onFinish}
-            title="ორგანიზაციის დამატება"
+            title={t.addOrganization}
         >
             <Form.Item
-                label="ორგანიზაციის სახელი:"
+                label={t.organizationName}
                 name="name"
                 rules={[
                     {
                         required: true,
-                        message: 'შეავსეთ ორგანიზაციის სახელი!',
+                        message: t.orgNameRequired,
                     },
                 ]}
             >
@@ -25,12 +28,12 @@ const AddOrganization = ({visible, setVisible, onFinish}) => {
             </Form.Item>
 
             <Form.Item
-                label="საიდენტიფიკაციო ნომერი"
+                label={t.identificationNumber}
                 name="identification_number"
                 rules={[
                     {
                         required: true,
-                        message: 'შეავსეთ საიდენტიფიკაციო ნომერი!',
+                        message: t.idNumberRequired,
                     },
                 ]}
             >
@@ -38,26 +41,26 @@ const AddOrganization = ({visible, setVisible, onFinish}) => {
             </Form.Item>
 
             <Form.Item
-                label="თანამშრომლების რაოდენობა"
+                label={t.employeesCount}
                 name="employees_count"
                 rules={[
                     {
                         required: true,
-                        message: 'შეავსეთ თანამშრომლების რაოდენობა!',
+                        message: t.employeesCountRequired,
                     }
                 ]}
             >
                 <InputNumber/>
             </Form.Item>
-            <Divider>ვებ სერვისი</Divider>
+            <Divider>{t.webService}</Divider>
 
             <Form.Item
-                label="მისამართი"
+                label={t.address}
                 name="web_service_url"
                 rules={[
                     {
                         required: true,
-                        message: 'შე���ვსეთ ვებ სერვისის მისამართი!',
+                        message: t.webServiceUrlRequired,
                     }
                 ]}
             >
@@ -66,24 +69,24 @@ const AddOrganization = ({visible, setVisible, onFinish}) => {
 
             <Flex justify="space-between" gap="medium">
                 <Form.Item
-                    label="მომხმარებლი"
+                    label={t.user}
                     name="web_service_username"
                     rules={[
                         {
                             required: false,
-                            message: 'შეავსეთ მომხმარელის სახელი!',
+                            message: t.webServiceUsernameHint,
                         }
                     ]}
                 >
                     <Input autoComplete="off" prefix={<UserOutlined/>}/>
                 </Form.Item>
                 <Form.Item
-                    label="პაროლი"
+                    label={t.password}
                     name="web_service_password"
                     rules={[
                         {
                             required: false,
-                            message: 'შეავსეთ პაროლი!',
+                            message: t.webServicePasswordHint,
                         }
                     ]}
                 >
@@ -92,7 +95,7 @@ const AddOrganization = ({visible, setVisible, onFinish}) => {
             </Flex>
             <Form.Item label={null}>
                 <Button block type="primary" htmlType="submit" variant="solid" color="green">
-                    დამატება
+                    {t.add}
                 </Button>
             </Form.Item>
         </ModalForm>

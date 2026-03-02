@@ -2,6 +2,7 @@ import React, {useRef, useEffect} from 'react';
 import {Html5QrcodeScanner} from 'html5-qrcode';
 import {QrcodeOutlined, ScanOutlined} from "@ant-design/icons";
 import {Button} from "antd";
+import {useLanguage} from '../../i18n/LanguageContext';
 import "./ScanButton.css"
 
 const buttonStyle = {
@@ -15,6 +16,8 @@ const buttonStyle = {
 };
 
 const ScanButton = ({setScanning, scanning, onScan, disabled, qrRef}) => {
+  const {t} = useLanguage();
+
   const handleScanClick = () => {
     if (!disabled) {
       setScanning(true);
@@ -83,7 +86,7 @@ const ScanButton = ({setScanning, scanning, onScan, disabled, qrRef}) => {
                 disabled={disabled}
                 style={buttonStyle}
             >
-              <QrcodeOutlined/> დასკანერება
+              <QrcodeOutlined/> {t.scan}
             </Button>
         ) : (
             <Button
@@ -92,7 +95,7 @@ const ScanButton = ({setScanning, scanning, onScan, disabled, qrRef}) => {
                 danger
                 style={buttonStyle}
             >
-              დახურვა
+              {t.close}
             </Button>
         )}
       </>

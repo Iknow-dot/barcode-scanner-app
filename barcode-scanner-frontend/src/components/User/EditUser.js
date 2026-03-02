@@ -3,9 +3,11 @@ import {userService, organizationService, warehouseService} from '../../api';
 import AuthContext from '../Auth/AuthContext';
 import {Button, Form, Input, Select, Space, Tag} from "antd";
 import ModalForm, {RenderOption} from "../ModalForm";
+import {useLanguage} from '../../i18n/LanguageContext';
 
 const EditUser = ({visible, setVisible, onFinish, object}) => {
     const {authData} = useContext(AuthContext);
+    const {t} = useLanguage();
 
     const [IPOptions, setIPOptions] = useState([]);
     const [organizations, setOrganizations] = useState([]);
@@ -49,7 +51,7 @@ const EditUser = ({visible, setVisible, onFinish, object}) => {
             const clientIpResult = await userService.getClientIp();
             if (clientIpResult.success) {
                 const ip = clientIpResult.data.ip;
-                newOptions.push({label: ip, value: ip, desc: `თქვენი IP მისამართი: ${ip}`, emoji: '🌐'});
+                newOptions.push({label: ip, value: ip, desc: t.yourIp(ip), emoji: '🌐'});
             }
 
             // Fetch organization IPs (use the edited user's organization or the admin's own)
@@ -62,7 +64,7 @@ const EditUser = ({visible, setVisible, onFinish, object}) => {
                             newOptions.push({
                                 label: ip,
                                 value: ip,
-                                desc: `ორგანიზაციაში გამოყენებული: ${ip}`,
+                                desc: t.orgUsedIp(ip),
                                 emoji: '🏢'
                             });
                         }
@@ -73,7 +75,7 @@ const EditUser = ({visible, setVisible, onFinish, object}) => {
             setIPOptions(newOptions);
         };
         fetchIpData();
-    }, [object.organization, isInternalAdmin, authData?.organization_id]);
+    }, [object.organization, isInternalAdmin, authData?.organization_id, t]);
 
     // Extract IP addresses from allowed_ips array of objects
     const existingIps = (object.allowed_ips || []).map(ip => ip.ip_or_network);
@@ -107,42 +109,42 @@ const EditUser = ({visible, setVisible, onFinish, object}) => {
             )}
 
             <Form.Item
-                label="მომხმარებელი"
+                label={t.user}
                 name="username"
-                rules={[{required: true, message: 'გთხოვთ შეიყვანოთ მომხმარებელი!'}]}
+                rules={[{required: true, message: t.usernameFieldRequired}]}
             >
                 <Input/>
             </Form.Item>
 
             <Form.Item
-                label="ელ. ფოსტა"
+                label={t.email}
                 name="email"
-                rules={[{required: false, type: 'email', message: 'გთხოვთ შეიყვანოთ სწორი ელ. ფოსტა!'}]}
+                rules={[{required: false, type: 'email', message: t.emailInvalid}]}
             >
                 <Input/>
             </Form.Item>
 
-            <Form.Item label="სახელი" name="first_name">
+            <Form.Item label={t.firstName} name="first_name">
                 <Input/>
             </Form.Item>
 
-            <Form.Item label="გვარი" name="last_name">
+            <Form.Item label={t.lastName} name="last_name">
                 <Input/>
             </Form.Item>
 
             <Form.Item
-                label="პაროლი"
+                label={t.password}
                 name="password"
-                rules={[{required: false, min: 8, message: 'პაროლი უნდა იყოს მინიმუმ 8 სიმბოლო!'}]}
-                extra="თუ არ გსურთ პაროლის შეცვლა, დატოვეთ ცარიელი"
+                rules={[{required: false, min: 8, message: t.passwordMinLength}]}
+                extra={t.passwordLeaveEmpty}
             >
                 <Input.Password/>
             </Form.Item>
 
             <Form.Item
-                label="როლი"
+                label={t.role}
                 name="role"
-                rules={[{required: true, message: 'გთხოვთ აირჩიოთ როლი!'}]}
+                rules={[{required: true, message: t.roleRequired}]}
             >
                 <Select>
                     {isCompanyAdmin ? (
@@ -157,13 +159,13 @@ const EditUser = ({visible, setVisible, onFinish, object}) => {
             </Form.Item>
 
             <Form.Item
-                label="IP მისამართი"
+                label={t.ipAddress}
                 name="ip_address"
             >
                 <Select
                     options={IPOptions}
                     mode="tags"
-                    placeholder="IP მისამართი"
+                    placeholder={t.ipAddress}
                     optionRender={(option) => (
                         <Space>
                             <span role="img">{option.data?.emoji}</span>
@@ -178,7 +180,7 @@ const EditUser = ({visible, setVisible, onFinish, object}) => {
 
             {(isCompanyAdmin || isInternalAdmin) && (
                 <Form.Item
-                    label="საწყობები"
+                    label={t.warehouses}
                     name="warehouse_ids"
                 >
                     <Select
@@ -189,7 +191,7 @@ const EditUser = ({visible, setVisible, onFinish, object}) => {
                             emoji: '🏭',
                             desc: `${wh.name} (${wh.code})`
                         }))}
-                        placeholder="აირჩიეთ საწყობები"
+                        placeholder={t.selectWarehouses}
                         optionRender={RenderOption}
                         tagRender={(props) => (
                             <Tag color='blue'>{props.label}</Tag>
@@ -203,7 +205,7 @@ const EditUser = ({visible, setVisible, onFinish, object}) => {
 
             <Form.Item label={null}>
                 <Button block type="primary" htmlType="submit" variant="solid" color="green">
-                    შენახვა
+                    {t.save}
                 </Button>
             </Form.Item>
         </ModalForm>

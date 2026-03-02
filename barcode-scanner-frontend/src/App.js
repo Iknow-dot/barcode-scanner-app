@@ -16,21 +16,48 @@ import {
     theme,
     App as AntdApp,
     Space,
-    Dropdown, Grid, Flex, Avatar
+    Dropdown, Grid, Flex, Avatar, Button
 } from "antd";
 import {Content, Header, Footer} from "antd/es/layout/layout";
 import Sider from "antd/es/layout/Sider";
-import {LogoutOutlined, MoonOutlined, UserOutlined} from "@ant-design/icons";
+import {GlobalOutlined, LogoutOutlined, MoonOutlined, UserOutlined} from "@ant-design/icons";
 import SubNavContext, {SubNavProvider} from "./contexts/SubNavContext";
+import {LanguageProvider, useLanguage} from "./i18n/LanguageContext";
 import "antd/dist/reset.css";
 
 const {useBreakpoint} = Grid;
+
+const LanguageSwitcher = () => {
+    const {language, switchLanguage, t} = useLanguage();
+
+    const items = [
+        {
+            key: 'ka',
+            label: '🇬🇪 ქართული',
+            onClick: () => switchLanguage('ka'),
+        },
+        {
+            key: 'en',
+            label: '🇬🇧 English',
+            onClick: () => switchLanguage('en'),
+        },
+    ];
+
+    return (
+        <Dropdown menu={{items, selectedKeys: [language]}}>
+            <Button type="text" icon={<GlobalOutlined/>} size="small">
+                {language === 'ka' ? 'ქარ' : 'EN'}
+            </Button>
+        </Dropdown>
+    );
+};
 
 const MainContentView = ({children}) => {
     const screens = useBreakpoint()
     const {authData} = useContext(AuthContext);
     const {subNav} = useContext(SubNavContext);
     const [siderCollapsed, setSiderCollapsed] = useState(!subNav);
+    const {t} = useLanguage();
     const {
         token: {colorBgContainer, borderRadiusLG, colorText, colorBgBase},
     } = theme.useToken();
@@ -41,9 +68,10 @@ const MainContentView = ({children}) => {
     useEffect(() => {
         setSiderCollapsed(!subNav);
     }, [subNav]);
+    const username = authData?.user?.username || '';
     const userIcon = (
         <Avatar style={{cursor: "pointer", backgroundColor: "#0765c2"}} size="large">
-            {authData?.role?.charAt(0).toUpperCase()}
+            {username.charAt(0).toUpperCase()}
         </Avatar>
     );
 
@@ -52,15 +80,15 @@ const MainContentView = ({children}) => {
             key: '0',
             icon: (
                 <Avatar style={{backgroundColor: "#0765c2"}} size="large">
-                    {authData?.role?.charAt(0).toUpperCase()}
+                    {username.charAt(0).toUpperCase()}
                 </Avatar>
             ),
-            label: authData?.role,
+            label: username,
         },
         {
             key: '1',
             icon: <LogoutOutlined/>,
-            label: "გასვლა",
+            label: t.logout,
             danger: true,
             onClick: logout
         }
@@ -131,6 +159,7 @@ const MainContentView = ({children}) => {
                                 items={subNav}
                             />
                             <Space style={{float: 'right'}}>
+                                <LanguageSwitcher/>
                                 <Dropdown menu={{items}}>
                                     {userIcon}
                                 </Dropdown>
@@ -143,6 +172,7 @@ const MainContentView = ({children}) => {
                                 {authData?.organization_name || ''}
                             </span>
                             <Space>
+                                <LanguageSwitcher/>
                                 <Dropdown menu={{items}}>
                                     {userIcon}
                                 </Dropdown>
@@ -163,7 +193,7 @@ const MainContentView = ({children}) => {
                     </div>
                 </Content>
                 <Footer style={{textAlign: 'center'}}>
-                    <p>© 2024 iFlow.ge Powered by IKnow LTD. All rights reserved.</p>
+                    <p>{t.footer}</p>
                 </Footer>
             </Layout>
 
@@ -258,13 +288,15 @@ const AppContent = () => {
 
 const App = () => {
     return (
-        <AuthProvider>
-            <SubNavProvider>
-                <Router>
-                    <AppContent/>
-                </Router>
-            </SubNavProvider>
-        </AuthProvider>
+        <LanguageProvider>
+            <AuthProvider>
+                <SubNavProvider>
+                    <Router>
+                        <AppContent/>
+                    </Router>
+                </SubNavProvider>
+            </AuthProvider>
+        </LanguageProvider>
     );
 };
 

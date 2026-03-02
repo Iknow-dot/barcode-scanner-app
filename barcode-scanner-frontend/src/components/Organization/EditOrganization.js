@@ -2,23 +2,26 @@ import React from 'react';
 import ModalForm from "../ModalForm";
 import {Button, Divider, Flex, Form, Input, InputNumber, Switch} from "antd";
 import {LockOutlined, UserOutlined} from "@ant-design/icons";
+import {useLanguage} from '../../i18n/LanguageContext';
 
 const EditOrganization = ({visible, setVisible, onFinish, object}) => {
+    const {t} = useLanguage();
+
     return (
         <ModalForm
             object={object}
-            title="ორგანიზაციის რედაქტირება"
+            title={t.editOrganization}
             visible={visible}
             setVisible={setVisible}
             onFinish={(data) => onFinish(data, object)}
         >
             <Form.Item
-                label="ორგანიზაციის სახელი:"
+                label={t.organizationName}
                 name="name"
                 rules={[
                     {
                         required: true,
-                        message: 'შეავსეთ ორგანიზაციის სახელი!',
+                        message: t.orgNameRequired,
                     },
                 ]}
             >
@@ -26,12 +29,12 @@ const EditOrganization = ({visible, setVisible, onFinish, object}) => {
             </Form.Item>
 
             <Form.Item
-                label="საიდენტიფიკაციო ნომერი"
+                label={t.identificationNumber}
                 name="identification_number"
                 rules={[
                     {
                         required: true,
-                        message: 'შეავსეთ საიდენტიფიკაციო ნომერი!',
+                        message: t.idNumberRequired,
                     },
                 ]}
             >
@@ -39,38 +42,38 @@ const EditOrganization = ({visible, setVisible, onFinish, object}) => {
             </Form.Item>
 
             <Form.Item
-                label="თანამშრომლების რაოდენობა"
+                label={t.employeesCount}
                 name="employees_count"
                 rules={[
                     {
                         required: true,
-                        message: 'შეავსეთ თანამშრომლების რაოდენობა!',
+                        message: t.employeesCountRequired,
                     }
                 ]}
             >
                 <InputNumber/>
             </Form.Item>
-            <Divider>ვებ სერვისი</Divider>
+            <Divider>{t.webService}</Divider>
 
             <Form.Item
-                label="მისამართი"
+                label={t.address}
                 name="web_service_url"
                 rules={[
                     {
                         required: true,
-                        message: 'შეავსეთ ვებ სერვისის მისამართი!',
+                        message: t.webServiceUrlRequired,
                     }
                 ]}
             >
                 <Input/>
             </Form.Item>
             <Form.Item
-                label="სახელი"
+                label={t.name}
                 name="web_service_username"
                 rules={[
                     {
                         required: false,
-                        message: 'შეავსეთ მომხმარელის სახელი!',
+                        message: t.webServiceUsernameHint,
                     }
                 ]}
             >
@@ -82,20 +85,20 @@ const EditOrganization = ({visible, setVisible, onFinish, object}) => {
                     style={{
                         flex: 1
                     }}
-                    label="პაროლი"
+                    label={t.password}
                     name="web_service_password"
                     rules={[
                         {
                             required: false,
-                            message: 'შეავსეთ პაროლი!',
+                            message: t.webServicePasswordHint,
                         }
                     ]}
-                    extra="Leave empty if you don't want to change the password"
+                    extra={t.leaveEmptyPassword}
                 >
                     <Input.Password prefix={<LockOutlined/>} autoComplete="new-password"/>
                 </Form.Item>
                 <Form.Item
-                    label="წაშლა"
+                    label={t.clearPassword}
                     name="clear_password"
                 >
                     <Switch/>
@@ -104,7 +107,7 @@ const EditOrganization = ({visible, setVisible, onFinish, object}) => {
 
             <Form.Item label={null}>
                 <Button block type="primary" htmlType="submit" variant="solid" color="green">
-                    შენახვა
+                    {t.save}
                 </Button>
             </Form.Item>
         </ModalForm>

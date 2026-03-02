@@ -3,10 +3,12 @@ import {userService, organizationService, warehouseService} from '../../api';
 import AuthContext from '../Auth/AuthContext';
 import {Button, Form, Input, Select, Space, Tag} from "antd";
 import ModalForm, {RenderOption} from "../ModalForm";
+import {useLanguage} from '../../i18n/LanguageContext';
 
 
 const AddUserModal = ({visible, setVisible, onFinish, organization = null}) => {
     const {authData} = useContext(AuthContext);
+    const {t} = useLanguage();
     const [IPOptions, setIPOptions] = useState([]);
     const [organizations, setOrganizations] = useState([]);
     const [allWarehouses, setAllWarehouses] = useState([]);
@@ -53,7 +55,7 @@ const AddUserModal = ({visible, setVisible, onFinish, organization = null}) => {
 
             if (clientIpResult.success) {
                 const ip = clientIpResult.data.ip;
-                newOptions.push({label: ip, value: ip, desc: `თქვენი IP მისამართი: ${ip}`, emoji: '🌐'});
+                newOptions.push({label: ip, value: ip, desc: t.yourIp(ip), emoji: '🌐'});
             }
 
             // Fetch organization IPs
@@ -66,7 +68,7 @@ const AddUserModal = ({visible, setVisible, onFinish, organization = null}) => {
                             newOptions.push({
                                 label: ip,
                                 value: ip,
-                                desc: `ორგანიზაციაში გამოყენებული: ${ip}`,
+                                desc: t.orgUsedIp(ip),
                                 emoji: '🏢'
                             });
                         }
@@ -77,55 +79,55 @@ const AddUserModal = ({visible, setVisible, onFinish, organization = null}) => {
             setIPOptions(newOptions);
         };
         fetchIpData();
-    }, [selectedOrg, isInternalAdmin, authData?.organization_id]);
+    }, [selectedOrg, isInternalAdmin, authData?.organization_id, t]);
 
     return (
         <ModalForm
             visible={visible}
             setVisible={setVisible}
             onFinish={onFinish}
-            title="მომხმარებლის დამატება"
+            title={t.addUser}
             name="addUser"
         >
             <Form.Item
-                label="მომხმარებელი"
+                label={t.user}
                 name="username"
-                rules={[{required: true, message: 'გთხოვთ შეიყვანოთ მომხმარებელი!'}]}
+                rules={[{required: true, message: t.usernameFieldRequired}]}
             >
                 <Input/>
             </Form.Item>
 
             <Form.Item
-                label="ელ. ფოსტა"
+                label={t.email}
                 name="email"
-                rules={[{required: false, type: 'email', message: 'გთხოვთ შეიყვანოთ სწორი ელ. ფოსტა!'}]}
+                rules={[{required: false, type: 'email', message: t.emailInvalid}]}
             >
                 <Input/>
             </Form.Item>
 
-            <Form.Item label="სახელი" name="first_name">
+            <Form.Item label={t.firstName} name="first_name">
                 <Input/>
             </Form.Item>
 
-            <Form.Item label="გვარი" name="last_name">
+            <Form.Item label={t.lastName} name="last_name">
                 <Input/>
             </Form.Item>
 
             <Form.Item
-                label="პაროლი"
+                label={t.password}
                 name="password"
                 rules={[
-                    {required: true, message: 'გთხოვთ შეიყვანოთ პაროლი!'},
-                    {min: 8, message: 'პაროლი უნდა იყოს მინიმუმ 8 სიმბოლო!'},
+                    {required: true, message: t.passwordFieldRequired},
+                    {min: 8, message: t.passwordMinLength},
                 ]}
             >
                 <Input.Password/>
             </Form.Item>
 
             <Form.Item
-                label="როლი"
+                label={t.role}
                 name="role"
-                rules={[{required: true, message: 'გთხოვთ აირჩიოთ როლი!'}]}
+                rules={[{required: true, message: t.roleRequired}]}
                 initialValue={isCompanyAdmin ? 'company_user' : 'company_admin'}
             >
                 <Select>
@@ -141,14 +143,14 @@ const AddUserModal = ({visible, setVisible, onFinish, organization = null}) => {
             </Form.Item>
 
             <Form.Item
-                label="IP მისამართი"
+                label={t.ipAddress}
                 name="ip_address"
-                rules={[{required: false, message: 'გთხოვთ შეიყვანოთ IP მისამართი!'}]}
+                rules={[{required: false, message: t.ipAddressHint}]}
             >
                 <Select
                     options={IPOptions}
                     mode="tags"
-                    placeholder="IP მისამართი"
+                    placeholder={t.ipAddress}
                     optionRender={(option) => (
                         <Space>
                             <span role="img">{option.data?.emoji}</span>
@@ -163,9 +165,9 @@ const AddUserModal = ({visible, setVisible, onFinish, organization = null}) => {
 
             {isInternalAdmin && (
                 <Form.Item
-                    label="ორგანიზაცია"
+                    label={t.organization}
                     name="organization"
-                    rules={[{required: true, message: 'გთხოვთ აირჩიოთ ორგანიზაცია!'}]}
+                    rules={[{required: true, message: t.orgRequired}]}
                     initialValue={organization ? organization.id : null}
                 >
                     <Select
@@ -175,7 +177,7 @@ const AddUserModal = ({visible, setVisible, onFinish, organization = null}) => {
                             emoji: '🏢',
                             desc: org.name
                         }))}
-                        placeholder="აირჩიეთ ორგანიზაცია"
+                        placeholder={t.selectOrganization}
                         optionRender={RenderOption}
                         tagRender={(props) => (
                             <Tag color='green'>{props.label}</Tag>
@@ -190,9 +192,9 @@ const AddUserModal = ({visible, setVisible, onFinish, organization = null}) => {
 
             {(isCompanyAdmin || isInternalAdmin) && (
                 <Form.Item
-                    label="საწყობები"
+                    label={t.warehouses}
                     name="warehouse_ids"
-                    rules={[{required: false, message: 'გთხოვთ აირჩიოთ საწყობი!'}]}
+                    rules={[{required: false, message: t.warehouseHint}]}
                 >
                     <Select
                         mode="multiple"
@@ -202,7 +204,7 @@ const AddUserModal = ({visible, setVisible, onFinish, organization = null}) => {
                             emoji: '🏭',
                             desc: `${wh.name} (${wh.code})`
                         }))}
-                        placeholder={isInternalAdmin && !selectedOrg ? "ჯერ აირჩიეთ ორგანიზაცია" : "აირჩიეთ საწყობები"}
+                        placeholder={isInternalAdmin && !selectedOrg ? t.selectOrgFirst : t.selectWarehouses}
                         disabled={isInternalAdmin && !selectedOrg}
                         optionRender={RenderOption}
                         tagRender={(props) => (
@@ -217,7 +219,7 @@ const AddUserModal = ({visible, setVisible, onFinish, organization = null}) => {
 
             <Form.Item label={null}>
                 <Button block type="primary" htmlType="submit" variant="solid" color="green">
-                    დამატება
+                    {t.add}
                 </Button>
             </Form.Item>
         </ModalForm>
