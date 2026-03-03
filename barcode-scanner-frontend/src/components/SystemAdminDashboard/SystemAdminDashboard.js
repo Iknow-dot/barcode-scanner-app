@@ -21,6 +21,7 @@ const SystemAdminDashboard = () => {
     const {setSubNav} = useContext(SubNavContext);
     const {authData} = useContext(AuthContext);
     const [users, setUsers] = useState([]);
+    const [usersLoading, setUsersLoading] = useState(true);
     const userRole = authData?.role;
     const [activeTab, setActiveTab] = useState(userRole === userRoles.internal_admin ? 1 : 2);
     const {t} = useLanguage();
@@ -51,12 +52,17 @@ const SystemAdminDashboard = () => {
 
     useEffect(() => {
         const fetchData = async () => {
-            const result = await userService.getUsers();
-            if (result.success) {
-                const data = result.data;
-                setUsers(Array.isArray(data) ? data : data.results || []);
-            } else {
-                console.error(t.dataFetchError, result.error);
+            setUsersLoading(true);
+            try {
+                const result = await userService.getUsers();
+                if (result.success) {
+                    const data = result.data;
+                    setUsers(Array.isArray(data) ? data : data.results || []);
+                } else {
+                    console.error(t.dataFetchError, result.error);
+                }
+            } finally {
+                setUsersLoading(false);
             }
         };
         fetchData();
@@ -73,7 +79,7 @@ const SystemAdminDashboard = () => {
             ActiveTabPane = <WarehousesTab/>;
             break;
         case 3:
-            ActiveTabPane = <UsersTab initialUsers={users} filtersEnabled={true}/>;
+            ActiveTabPane = <UsersTab initialUsers={users} initialLoading={usersLoading} filtersEnabled={true}/>;
             break;
         default:
             ActiveTabPane = null;

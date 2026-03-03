@@ -12,12 +12,14 @@ export const DataTab = ({
                           EditModal,
                           handleEdit,
                           handleDelete,
+                          loading = false,
                           ...props
                         }) => {
   const [editable, setEditable] = useState(false);
   const [addModalVisible, setAddModalVisible] = useState(false);
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [selectedObject, setSelectedObject] = useState({});
+  const [deletingId, setDeletingId] = useState(null);
   const {t} = useLanguage();
 
   return (
@@ -70,6 +72,7 @@ export const DataTab = ({
 
         <Table
             {...props}
+            loading={loading}
             scroll={{x: "max-content"}}
             dataSource={objects.map(object => ({...object, key: object.id}))}
             size="middle"
@@ -102,7 +105,14 @@ export const DataTab = ({
                       </Tooltip>
                       <Popconfirm
                           title={t.confirmDelete}
-                          onConfirm={() => handleDelete(object)}
+                          onConfirm={async () => {
+                            setDeletingId(object.id);
+                            try {
+                              await handleDelete(object);
+                            } finally {
+                              setDeletingId(null);
+                            }
+                          }}
                           okText={t.yes}
                           cancelText={t.no}
                           okButtonProps={{danger: true}}
@@ -113,6 +123,7 @@ export const DataTab = ({
                               type="text"
                               size="small"
                               danger
+                              loading={deletingId === object.id}
                               icon={<DeleteOutlined/>}
                               className="action-btn"
                           />

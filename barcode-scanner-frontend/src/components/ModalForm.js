@@ -1,22 +1,33 @@
 import {Form, Modal, Select, Space, Tag} from "antd";
-import React, {useCallback, useEffect} from "react";
+import React, {createContext, useContext, useEffect, useState} from "react";
+
+const ModalFormContext = createContext({loading: false});
+
+export const useModalFormLoading = () => useContext(ModalFormContext);
 
 export const ModalForm = ({visible, setVisible, onFinish, title, name, object = null, children}) => {
   const [form] = Form.useForm();
+  const [loading, setLoading] = useState(false);
+
   useEffect(() => {
-    if (object && form) {
+    if (visible && object && form) {
       form.resetFields();
       form.setFieldsValue(object);
     }
-  }, [form, object]);
+  }, [form, object, visible]);
+
   return (
       <Modal
           open={visible}
           title={title}
-          onCancel={() => setVisible(false)}
+          onCancel={() => {
+            if (!loading) setVisible(false);
+          }}
           footer={null}
-          destroyOnClose
+          destroyOnHidden
           centered
+          closable={!loading}
+          maskClosable={!loading}
           styles={{
             header: {
               paddingBottom: 12,
@@ -28,25 +39,32 @@ export const ModalForm = ({visible, setVisible, onFinish, title, name, object = 
             },
           }}
       >
-        <Form
-            form={form}
-            name={name}
-            layout="vertical"
-            style={{
-              maxWidth: "none",
-              width: "100%"
-            }}
-            size="large"
-            onFinish={async (data) => {
-              const ok = await onFinish(data)
-              if (ok) {
-                form.resetFields();
-                setVisible(false);
-              }
-            }}
-        >
-          {children}
-        </Form>
+        <ModalFormContext.Provider value={{loading}}>
+          <Form
+              form={form}
+              name={name}
+              layout="vertical"
+              style={{
+                maxWidth: "none",
+                width: "100%"
+              }}
+              size="large"
+              onFinish={async (data) => {
+                setLoading(true);
+                try {
+                  const ok = await onFinish(data);
+                  if (ok) {
+                    form.resetFields();
+                    setVisible(false);
+                  }
+                } finally {
+                  setLoading(false);
+                }
+              }}
+          >
+            {children}
+          </Form>
+        </ModalFormContext.Provider>
       </Modal>
   );
 };

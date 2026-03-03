@@ -8,14 +8,20 @@ import {useLanguage} from '../../i18n/LanguageContext';
 
 const WarehousesTab = () => {
     const [warehouses, setWarehouses] = useState([]);
+    const [loading, setLoading] = useState(true);
     const {notify, contextHolder} = useAppNotification();
     const {t} = useLanguage();
 
     useEffect(() => {
         const fetchWarehouses = async () => {
-            const result = await warehouseService.getWarehouses();
-            if (result.success) {
-                setWarehouses(result.data);
+            setLoading(true);
+            try {
+                const result = await warehouseService.getWarehouses();
+                if (result.success) {
+                    setWarehouses(result.data);
+                }
+            } finally {
+                setLoading(false);
             }
         };
         fetchWarehouses();
@@ -67,6 +73,7 @@ const WarehousesTab = () => {
         <>
             {contextHolder}
             <DataTab
+                loading={loading}
                 objects={warehouses}
                 columns={[
                     {key: "name", title: t.name, dataIndex: 'name'},

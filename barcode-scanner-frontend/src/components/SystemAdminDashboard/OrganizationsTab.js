@@ -9,19 +9,25 @@ import {useLanguage} from '../../i18n/LanguageContext';
 
 const OrganizationsTab = () => {
     const [organizations, setOrganizations] = useState([]);
+    const [loading, setLoading] = useState(true);
     const {notify, contextHolder} = useAppNotification();
     const {t} = useLanguage();
 
     useEffect(() => {
         const fetchData = async () => {
-            const result = await organizationService.getOrganizations();
-            if (result.success) {
-                setOrganizations(result.data || []);
-            } else {
-                notify.error(
-                    t.orgFetchError,
-                    result.error
-                );
+            setLoading(true);
+            try {
+                const result = await organizationService.getOrganizations();
+                if (result.success) {
+                    setOrganizations(result.data || []);
+                } else {
+                    notify.error(
+                        t.orgFetchError,
+                        result.error
+                    );
+                }
+            } finally {
+                setLoading(false);
             }
         };
         fetchData();
@@ -91,6 +97,7 @@ const OrganizationsTab = () => {
         <>
             {contextHolder}
             <DataTab
+                loading={loading}
                 objects={organizations}
                 columns={[
                     {key: "name", title: t.organization, dataIndex: 'name'},

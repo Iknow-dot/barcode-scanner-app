@@ -21,11 +21,12 @@ const roleLabels = {
     company_user: "User"
 };
 
-const UsersTab = ({initialUsers, addModalExtraProps, handleEditCallback = null, filtersEnabled = false}) => {
+const UsersTab = ({initialUsers, initialLoading = false, addModalExtraProps, handleEditCallback = null, filtersEnabled = false}) => {
     const {authData} = useContext(AuthContext);
     const {notify, contextHolder} = useAppNotification();
     const {t} = useLanguage();
     const [users, setUsers] = useState(initialUsers || []);
+    const [loading, setLoading] = useState(initialLoading);
     const [organizations, setOrganizations] = useState({});
     const [orgOptions, setOrgOptions] = useState([]);
     const [query, setQuery] = useState('');
@@ -63,11 +64,17 @@ const UsersTab = ({initialUsers, addModalExtraProps, handleEditCallback = null, 
     }, [authData]);
 
     useEffect(() => setUsers(initialUsers || []), [initialUsers]);
+    useEffect(() => setLoading(initialLoading), [initialLoading]);
 
     const fetchUsers = async (params = {}) => {
-        const result = await userService.getUsers(params);
-        if (result.success) {
-            setUsers(result.data);
+        setLoading(true);
+        try {
+            const result = await userService.getUsers(params);
+            if (result.success) {
+                setUsers(result.data);
+            }
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -281,7 +288,7 @@ const UsersTab = ({initialUsers, addModalExtraProps, handleEditCallback = null, 
                 </div>
             )}
 
-            <DataTab objects={users} columns={[
+            <DataTab loading={loading} objects={users} columns={[
                 {key: 'username', title: t.name, dataIndex: 'username'},
                 {
                     key: 'organization',

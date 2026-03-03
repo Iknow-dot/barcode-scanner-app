@@ -9,7 +9,7 @@ import {PostHogProvider} from 'posthog-js/react';
 
 
 posthog.init(process.env.REACT_APP_PUBLIC_POSTHOG_KEY, {
-  // api_host: process.env.REACT_APP_PUBLIC_POSTHOG_HOST,
+  api_host: process.env.REACT_APP_PUBLIC_POSTHOG_HOST,
   defaults: '2025-12-24',
 });
 

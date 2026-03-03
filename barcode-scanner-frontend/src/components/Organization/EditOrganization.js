@@ -1,20 +1,15 @@
 import React from 'react';
-import ModalForm from "../ModalForm";
+import ModalForm, {useModalFormLoading} from "../ModalForm";
 import {Button, Divider, Flex, Form, Input, InputNumber, Switch} from "antd";
 import {LockOutlined, UserOutlined, SaveOutlined, GlobalOutlined} from "@ant-design/icons";
 import {useLanguage} from '../../i18n/LanguageContext';
 
-const EditOrganization = ({visible, setVisible, onFinish, object}) => {
+const EditOrganizationForm = () => {
     const {t} = useLanguage();
+    const {loading} = useModalFormLoading();
 
     return (
-        <ModalForm
-            object={object}
-            title={t.editOrganization}
-            visible={visible}
-            setVisible={setVisible}
-            onFinish={(data) => onFinish(data, object)}
-        >
+        <>
             <Form.Item
                 label={t.organizationName}
                 name="name"
@@ -118,12 +113,29 @@ const EditOrganization = ({visible, setVisible, onFinish, object}) => {
                     block
                     type="primary"
                     htmlType="submit"
+                    loading={loading}
                     icon={<SaveOutlined/>}
                     style={{height: 44, fontWeight: 600}}
                 >
                     {t.save}
                 </Button>
             </Form.Item>
+        </>
+    );
+};
+
+const EditOrganization = ({visible, setVisible, onFinish, object}) => {
+    const {t} = useLanguage();
+
+    return (
+        <ModalForm
+            object={object}
+            title={t.editOrganization}
+            visible={visible}
+            setVisible={setVisible}
+            onFinish={(data) => onFinish(data, object)}
+        >
+            <EditOrganizationForm/>
         </ModalForm>
     );
 };

@@ -1,20 +1,15 @@
 import React from 'react';
-import ModalForm from "../ModalForm";
+import ModalForm, {useModalFormLoading} from "../ModalForm";
 import {Button, Flex, Form, Input} from "antd";
 import {SaveOutlined} from "@ant-design/icons";
 import {useLanguage} from '../../i18n/LanguageContext';
 
-const EditWarehouseModal = ({ visible, setVisible, onFinish, object }) => {
+const EditWarehouseForm = () => {
   const {t} = useLanguage();
+  const {loading} = useModalFormLoading();
 
   return (
-      <ModalForm
-          object={object}
-          visible={visible}
-          setVisible={setVisible}
-          onFinish={(data) => onFinish(data, object)}
-          title={t.editWarehouse}
-      >
+      <>
         <Flex gap={16}>
           <Form.Item
               label={t.warehouseName}
@@ -48,12 +43,29 @@ const EditWarehouseModal = ({ visible, setVisible, onFinish, object }) => {
               block
               type="primary"
               htmlType="submit"
+              loading={loading}
               icon={<SaveOutlined/>}
               style={{height: 44, fontWeight: 600}}
           >
             {t.save}
           </Button>
         </Form.Item>
+      </>
+  );
+};
+
+const EditWarehouseModal = ({ visible, setVisible, onFinish, object }) => {
+  const {t} = useLanguage();
+
+  return (
+      <ModalForm
+          object={object}
+          visible={visible}
+          setVisible={setVisible}
+          onFinish={(data) => onFinish(data, object)}
+          title={t.editWarehouse}
+      >
+        <EditWarehouseForm/>
       </ModalForm>
   );
 };

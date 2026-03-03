@@ -2,14 +2,15 @@ import React, {useState, useEffect, useContext} from 'react';
 import {userService, organizationService, warehouseService} from '../../api';
 import AuthContext from '../Auth/AuthContext';
 import {Button, Divider, Flex, Form, Input, Select, Space, Tag} from "antd";
-import ModalForm, {RenderOption} from "../ModalForm";
+import ModalForm, {RenderOption, useModalFormLoading} from "../ModalForm";
 import {PlusOutlined, UserOutlined, LockOutlined, MailOutlined} from "@ant-design/icons";
 import {useLanguage} from '../../i18n/LanguageContext';
 
 
-const AddUserModal = ({visible, setVisible, onFinish, organization = null}) => {
+const AddUserForm = ({organization = null}) => {
     const {authData} = useContext(AuthContext);
     const {t} = useLanguage();
+    const {loading} = useModalFormLoading();
     const [IPOptions, setIPOptions] = useState([]);
     const [organizations, setOrganizations] = useState([]);
     const [allWarehouses, setAllWarehouses] = useState([]);
@@ -83,13 +84,7 @@ const AddUserModal = ({visible, setVisible, onFinish, organization = null}) => {
     }, [selectedOrg, isInternalAdmin, authData?.organization_id, t]);
 
     return (
-        <ModalForm
-            visible={visible}
-            setVisible={setVisible}
-            onFinish={onFinish}
-            title={t.addUser}
-            name="addUser"
-        >
+        <>
             <Flex gap={16}>
                 <Form.Item
                     label={t.user}
@@ -236,12 +231,29 @@ const AddUserModal = ({visible, setVisible, onFinish, organization = null}) => {
                     block
                     type="primary"
                     htmlType="submit"
+                    loading={loading}
                     icon={<PlusOutlined/>}
                     style={{height: 44, fontWeight: 600}}
                 >
                     {t.add}
                 </Button>
             </Form.Item>
+        </>
+    );
+};
+
+const AddUserModal = ({visible, setVisible, onFinish, organization = null}) => {
+    const {t} = useLanguage();
+
+    return (
+        <ModalForm
+            visible={visible}
+            setVisible={setVisible}
+            onFinish={onFinish}
+            title={t.addUser}
+            name="addUser"
+        >
+            <AddUserForm organization={organization}/>
         </ModalForm>
     );
 };

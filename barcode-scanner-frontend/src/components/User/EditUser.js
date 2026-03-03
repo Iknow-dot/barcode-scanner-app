@@ -2,13 +2,14 @@ import React, {useState, useEffect, useContext} from 'react';
 import {userService, organizationService, warehouseService} from '../../api';
 import AuthContext from '../Auth/AuthContext';
 import {Button, Divider, Flex, Form, Input, Select, Space, Tag} from "antd";
-import ModalForm, {RenderOption} from "../ModalForm";
+import ModalForm, {RenderOption, useModalFormLoading} from "../ModalForm";
 import {SaveOutlined, UserOutlined, LockOutlined, MailOutlined} from "@ant-design/icons";
 import {useLanguage} from '../../i18n/LanguageContext';
 
-const EditUser = ({visible, setVisible, onFinish, object}) => {
+const EditUserForm = ({object}) => {
     const {authData} = useContext(AuthContext);
     const {t} = useLanguage();
+    const {loading} = useModalFormLoading();
 
     const [IPOptions, setIPOptions] = useState([]);
     const [organizations, setOrganizations] = useState([]);
@@ -78,31 +79,8 @@ const EditUser = ({visible, setVisible, onFinish, object}) => {
         fetchIpData();
     }, [object.organization, isInternalAdmin, authData?.organization_id, t]);
 
-    // Extract IP addresses from allowed_ips array of objects
-    const existingIps = (object.allowed_ips || []).map(ip => ip.ip_or_network);
-
-    // Extract warehouse IDs from the user object (API returns warehouse_ids_read for reading)
-    const existingWarehouseIds = (object.warehouse_ids_read || object.warehouse_ids || []);
-
     return (
-        <ModalForm
-            object={{
-                username: object.username,
-                email: object.email || '',
-                role: object.role,
-                first_name: object.first_name || '',
-                last_name: object.last_name || '',
-                is_active: object.is_active,
-                organization: object.organization,
-                ip_address: existingIps,
-                warehouse_ids: existingWarehouseIds,
-            }}
-            name="editUser"
-            visible={visible}
-            setVisible={setVisible}
-            footer={null}
-            onFinish={(data) => onFinish(data, object)}
-        >
+        <>
             {isInternalAdmin && (
                 <Tag color='blue' style={{marginBottom: 16, padding: '4px 12px', fontSize: 13}}>
                     🏢 {organizations.find(org => org.id === object.organization)?.name || 'N/A'}
@@ -221,12 +199,44 @@ const EditUser = ({visible, setVisible, onFinish, object}) => {
                     block
                     type="primary"
                     htmlType="submit"
+                    loading={loading}
                     icon={<SaveOutlined/>}
                     style={{height: 44, fontWeight: 600}}
                 >
                     {t.save}
                 </Button>
             </Form.Item>
+        </>
+    );
+};
+
+const EditUser = ({visible, setVisible, onFinish, object}) => {
+    // Extract IP addresses from allowed_ips array of objects
+    const existingIps = (object.allowed_ips || []).map(ip => ip.ip_or_network);
+
+    // Extract warehouse IDs from the user object (API returns warehouse_ids_read for reading)
+    const existingWarehouseIds = (object.warehouse_ids_read || object.warehouse_ids || []);
+
+    return (
+        <ModalForm
+            object={{
+                username: object.username,
+                email: object.email || '',
+                role: object.role,
+                first_name: object.first_name || '',
+                last_name: object.last_name || '',
+                is_active: object.is_active,
+                organization: object.organization,
+                ip_address: existingIps,
+                warehouse_ids: existingWarehouseIds,
+            }}
+            name="editUser"
+            visible={visible}
+            setVisible={setVisible}
+            footer={null}
+            onFinish={(data) => onFinish(data, object)}
+        >
+            <EditUserForm object={object}/>
         </ModalForm>
     );
 };

@@ -1,19 +1,15 @@
 import React from 'react';
 import {Button, Divider, Flex, Form, Input, InputNumber} from "antd";
-import ModalForm from "../ModalForm";
+import ModalForm, {useModalFormLoading} from "../ModalForm";
 import {LockOutlined, UserOutlined, PlusOutlined, GlobalOutlined} from "@ant-design/icons";
 import {useLanguage} from '../../i18n/LanguageContext';
 
-const AddOrganization = ({visible, setVisible, onFinish}) => {
+const AddOrganizationForm = () => {
     const {t} = useLanguage();
+    const {loading} = useModalFormLoading();
 
     return (
-        <ModalForm
-            visible={visible}
-            setVisible={setVisible}
-            onFinish={onFinish}
-            title={t.addOrganization}
-        >
+        <>
             <Form.Item
                 label={t.organizationName}
                 name="name"
@@ -111,12 +107,28 @@ const AddOrganization = ({visible, setVisible, onFinish}) => {
                     block
                     type="primary"
                     htmlType="submit"
+                    loading={loading}
                     icon={<PlusOutlined/>}
                     style={{height: 44, fontWeight: 600}}
                 >
                     {t.add}
                 </Button>
             </Form.Item>
+        </>
+    );
+};
+
+const AddOrganization = ({visible, setVisible, onFinish}) => {
+    const {t} = useLanguage();
+
+    return (
+        <ModalForm
+            visible={visible}
+            setVisible={setVisible}
+            onFinish={onFinish}
+            title={t.addOrganization}
+        >
+            <AddOrganizationForm/>
         </ModalForm>
     );
 };
