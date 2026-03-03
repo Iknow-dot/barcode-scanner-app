@@ -1,6 +1,6 @@
 import React, {useEffect, useRef, useState, useCallback} from 'react';
 import {Html5Qrcode} from 'html5-qrcode';
-import {Button, Flex, Typography, Space} from 'antd';
+import {Button, Typography, Space} from 'antd';
 import {
     CloseOutlined,
     BulbOutlined,
@@ -18,12 +18,21 @@ const BarcodeScanner = ({open, onScan, onClose}) => {
     const {t} = useLanguage();
     const scannerRef = useRef(null);
     const hasScannedRef = useRef(false);
+    const isStartingRef = useRef(false);
     const [torchOn, setTorchOn] = useState(false);
     const [torchAvailable, setTorchAvailable] = useState(false);
     const [facingMode, setFacingMode] = useState('environment');
     const [cameraError, setCameraError] = useState(null);
 
+    // Store onScan in a ref so the scanner callback never goes stale
+    // and never causes dependency-chain re-renders
+    const onScanRef = useRef(onScan);
+    useEffect(() => {
+        onScanRef.current = onScan;
+    }, [onScan]);
+
     const stopScanner = useCallback(async () => {
+        isStartingRef.current = false;
         if (scannerRef.current) {
             try {
                 const state = scannerRef.current.getState();
@@ -42,23 +51,41 @@ const BarcodeScanner = ({open, onScan, onClose}) => {
         hasScannedRef.current = false;
     }, []);
 
-    const startScanner = useCallback(async () => {
+    const startScanner = useCallback(async (facing) => {
+        // Prevent concurrent start attempts
+        if (isStartingRef.current) return;
+        isStartingRef.current = true;
+
         // Ensure any previous instance is cleaned up
-        await stopScanner();
+        if (scannerRef.current) {
+            try {
+                const state = scannerRef.current.getState();
+                if (state === 2 || state === 3) {
+                    await scannerRef.current.stop();
+                }
+            } catch (e) {
+                // ignore
+            }
+            scannerRef.current = null;
+        }
+
+        hasScannedRef.current = false;
 
         // Small delay to ensure DOM element is ready
-        await new Promise(resolve => setTimeout(resolve, 50));
+        await new Promise(resolve => setTimeout(resolve, 100));
 
         const element = document.getElementById(SCANNER_ELEMENT_ID);
-        if (!element) return;
+        if (!element) {
+            isStartingRef.current = false;
+            return;
+        }
 
         const scanner = new Html5Qrcode(SCANNER_ELEMENT_ID);
         scannerRef.current = scanner;
-        hasScannedRef.current = false;
 
         try {
             await scanner.start(
-                {facingMode},
+                {facingMode: facing},
                 {
                     fps: 15,
                     qrbox: (viewfinderWidth, viewfinderHeight) => {
@@ -68,7 +95,7 @@ const BarcodeScanner = ({open, onScan, onClose}) => {
                     },
                     aspectRatio: window.innerWidth > window.innerHeight ? 16 / 9 : 9 / 16,
                     videoConstraints: {
-                        facingMode,
+                        facingMode: facing,
                         width: {ideal: 1920},
                         height: {ideal: 1080},
                     },
@@ -76,7 +103,8 @@ const BarcodeScanner = ({open, onScan, onClose}) => {
                 (decodedText) => {
                     if (!hasScannedRef.current) {
                         hasScannedRef.current = true;
-                        onScan(decodedText);
+                        // Use the ref so this callback never goes stale
+                        onScanRef.current(decodedText);
                     }
                 },
                 () => {
@@ -91,22 +119,24 @@ const BarcodeScanner = ({open, onScan, onClose}) => {
                     setTorchAvailable(true);
                 }
             } catch {
-                // Torch not available
+                setTorchAvailable(false);
             }
 
             setCameraError(null);
         } catch (err) {
             console.error('Camera start error:', err);
             setCameraError(
-                typeof err === 'string' ? err : err?.message || t.cameraError || 'Camera error'
+                typeof err === 'string' ? err : err?.message || 'Camera error'
             );
+        } finally {
+            isStartingRef.current = false;
         }
-    }, [facingMode, onScan, stopScanner, t]);
+    }, []); // No dependencies — uses refs for callbacks, takes facing as parameter
 
-    // Start/stop scanner when open changes
+    // Single effect: start/stop scanner when `open` or `facingMode` changes
     useEffect(() => {
         if (open) {
-            startScanner();
+            startScanner(facingMode);
         } else {
             stopScanner();
         }
@@ -114,7 +144,7 @@ const BarcodeScanner = ({open, onScan, onClose}) => {
         return () => {
             stopScanner();
         };
-    }, [open, startScanner, stopScanner]);
+    }, [open, facingMode, startScanner, stopScanner]);
 
     // Toggle torch
     const handleToggleTorch = useCallback(async () => {
@@ -135,18 +165,9 @@ const BarcodeScanner = ({open, onScan, onClose}) => {
     }, [torchOn]);
 
     // Flip camera
-    const handleFlipCamera = useCallback(async () => {
+    const handleFlipCamera = useCallback(() => {
         setFacingMode(prev => prev === 'environment' ? 'user' : 'environment');
-        // The useEffect on `open` + `startScanner` (which depends on facingMode) will restart
     }, []);
-
-    // Restart scanner when facingMode changes while open
-    useEffect(() => {
-        if (open) {
-            startScanner();
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [facingMode]);
 
     if (!open) return null;
 

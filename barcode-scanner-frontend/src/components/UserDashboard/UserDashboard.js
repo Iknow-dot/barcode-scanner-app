@@ -1,6 +1,5 @@
-import React, {useState, useEffect, useContext} from 'react';
+import React, {useState, useEffect, useContext, useCallback, useRef} from 'react';
 import {warehouseService, productService} from '../../api';
-import ScanButton from './ScanButton';
 import BarcodeScanner from './BarcodeScanner';
 import subNavContext from "../../contexts/SubNavContext";
 import useAppNotification from "../../hooks/useAppNotification";
@@ -26,14 +25,15 @@ import {
     NumberOutlined,
     SearchOutlined,
     ShoppingOutlined,
-    UpOutlined,
-    InboxOutlined
+    InboxOutlined,
+    QrcodeOutlined,
+    EditOutlined
 } from "@ant-design/icons";
 
 const {Title, Text} = Typography;
 
 const UserDashboard = () => {
-    const [drawerVisible, setDrawerVisible] = useState(true);
+    const [drawerVisible, setDrawerVisible] = useState(false);
     const [form] = Form.useForm();
     const [loading, setLoading] = useState(false);
     const [disableScan, setDisableScan] = useState(false);
@@ -60,66 +60,79 @@ const UserDashboard = () => {
         fetchWarehouses();
     }, [setSubNav]);
 
-    const handleSearch = async ({search, searchType, allWarehouses}) => {
+    // Guard against concurrent search calls
+    const isSearchingRef = useRef(false);
+
+    const handleSearch = useCallback(async ({search, searchType, allWarehouses}) => {
+        // Prevent concurrent/duplicate calls
+        if (isSearchingRef.current) return;
+        isSearchingRef.current = true;
         setLoading(true);
 
-        const warehouseCodes = allWarehouses
-            ? []
-            : userWarehouses.map(warehouse => warehouse.code);
+        try {
+            const warehouseCodes = allWarehouses
+                ? []
+                : userWarehouses.map(warehouse => warehouse.code);
 
-        const result = await productService.searchProduct(search, searchType, warehouseCodes);
+            const result = await productService.searchProduct(search, searchType, warehouseCodes);
 
-        if (result.success && result.data?.stock) {
-            setBalances(result.data.stock);
-            setProductInfo({
-                sku_name: result.data.sku_name,
-                article: result.data.article,
-                price: result.data.price,
-                images: result.data.images || []
-            });
-            setDrawerVisible(false);
-        } else {
-            setBalances([]);
-            setProductInfo({sku_name: '', article: '', price: '', images: []});
-
-            if (!result.success) {
-                const errorMessages = {
-                    'PRODUCT_NOT_FOUND': t.productNotFound,
-                    'EXTERNAL_SERVICE_TIMEOUT': t.externalServiceTimeout,
-                    'EXTERNAL_SERVICE_UNAVAILABLE': t.externalServiceUnavailable,
-                    'EXTERNAL_SERVICE_ERROR': t.externalServiceError,
-                    'EXTERNAL_SERVICE_UNAUTHORIZED': t.externalServiceUnauthorized,
-                };
-
-                const isExternalServiceError = result.code && result.code.startsWith('EXTERNAL_SERVICE_');
-                const title = isExternalServiceError ? t.webServiceError : t.error;
-                const errorMessage = errorMessages[result.code] || t.productSearchError;
-                notify.error(title, errorMessage);
+            if (result.success && result.data?.stock) {
+                setBalances(result.data.stock);
+                setProductInfo({
+                    sku_name: result.data.sku_name,
+                    article: result.data.article,
+                    price: result.data.price,
+                    images: result.data.images || []
+                });
+                setDrawerVisible(false);
             } else {
-                notify.warning(t.result, t.productNotFoundOrNoBalance);
+                setBalances([]);
+                setProductInfo({sku_name: '', article: '', price: '', images: []});
+
+                if (!result.success) {
+                    const errorMessages = {
+                        'PRODUCT_NOT_FOUND': t.productNotFound,
+                        'EXTERNAL_SERVICE_TIMEOUT': t.externalServiceTimeout,
+                        'EXTERNAL_SERVICE_UNAVAILABLE': t.externalServiceUnavailable,
+                        'EXTERNAL_SERVICE_ERROR': t.externalServiceError,
+                        'EXTERNAL_SERVICE_UNAUTHORIZED': t.externalServiceUnauthorized,
+                    };
+
+                    const isExternalServiceError = result.code && result.code.startsWith('EXTERNAL_SERVICE_');
+                    const title = isExternalServiceError ? t.webServiceError : t.error;
+                    const errorMessage = errorMessages[result.code] || t.productSearchError;
+                    notify.error(title, errorMessage);
+                } else {
+                    notify.warning(t.result, t.productNotFoundOrNoBalance);
+                }
             }
+        } finally {
+            setLoading(false);
+            isSearchingRef.current = false;
         }
+    }, [userWarehouses, t, notify]);
 
-        setLoading(false);
-    };
-
-    const handleScanResult = (decodedText) => {
+    const handleScanResult = useCallback((decodedText) => {
         setScannerOpen(false);
         handleSearch({
             search: decodedText,
             searchType: 'barcode',
             allWarehouses: form.getFieldValue('allWarehouses')
         });
-    };
+    }, [handleSearch, form]);
 
     const handleOpenScanner = () => {
         setDrawerVisible(false);
         setScannerOpen(true);
     };
 
+    const handleOpenSearch = () => {
+        setScannerOpen(false);
+        setDrawerVisible(true);
+    };
+
     /**
      * Get the image source from Django's image response format.
-     * Django returns images as { original_url, base64 } objects.
      */
     const getImageSrc = (img) => {
         if (typeof img === 'string') return img;
@@ -127,6 +140,9 @@ const UserDashboard = () => {
         if (img.original_url) return img.original_url;
         return '';
     };
+
+    const hasResults = balances.length > 0;
+    const showEmptyState = !hasResults && !scannerOpen;
 
     return (
         <>
@@ -139,8 +155,8 @@ const UserDashboard = () => {
                 onClose={() => setScannerOpen(false)}
             />
 
-            {/* Empty State - when no results yet */}
-            {balances.length === 0 && !scannerOpen && (
+            {/* Empty State — first visit or no results */}
+            {showEmptyState && (
                 <div className="empty-state">
                     <Result
                         icon={<ShoppingOutlined style={{color: '#1677ff', fontSize: 64}}/>}
@@ -151,32 +167,28 @@ const UserDashboard = () => {
                             </span>
                         }
                         extra={
-                            <Button
-                                type="primary"
-                                size="large"
-                                icon={<SearchOutlined/>}
-                                onClick={() => setDrawerVisible(true)}
-                                style={{borderRadius: 10, height: 44, paddingInline: 28}}
-                            >
-                                {t.search}
-                            </Button>
+                            <Flex gap={12} justify="center" wrap="wrap">
+                                <Button
+                                    type="primary"
+                                    size="large"
+                                    icon={<QrcodeOutlined/>}
+                                    onClick={handleOpenScanner}
+                                    style={{borderRadius: 10, height: 48, paddingInline: 28, fontWeight: 600}}
+                                >
+                                    {t.scan}
+                                </Button>
+                                <Button
+                                    size="large"
+                                    icon={<EditOutlined/>}
+                                    onClick={handleOpenSearch}
+                                    style={{borderRadius: 10, height: 48, paddingInline: 28}}
+                                >
+                                    {t.manualSearch || t.search}
+                                </Button>
+                            </Flex>
                         }
                     />
                 </div>
-            )}
-
-            {/* Toggle Search Drawer Button */}
-            {!scannerOpen && balances.length > 0 && (
-                <Button
-                    type="primary"
-                    shape="circle"
-                    className="toggle-search-btn"
-                    onClick={() => setDrawerVisible(prev => !prev)}
-                    icon={<UpOutlined style={{
-                        transition: 'transform 0.3s ease',
-                        transform: drawerVisible ? 'rotate(180deg)' : 'rotate(0deg)',
-                    }}/>}
-                />
             )}
 
             {/* Loading Overlay */}
@@ -201,7 +213,7 @@ const UserDashboard = () => {
                     className="search-drawer"
                     height="auto"
                     styles={{
-                        body: {paddingTop: 16, paddingBottom: 80},
+                        body: {paddingTop: 16, paddingBottom: 24},
                     }}
                 >
                     <Form
@@ -239,7 +251,6 @@ const UserDashboard = () => {
                                 ]}
                                 onChange={(value) => {
                                     if (value === 'barcode') {
-                                        setBalances([]);
                                         setDisableScan(false);
                                     } else {
                                         setDisableScan(true);
@@ -278,18 +289,26 @@ const UserDashboard = () => {
                         </Flex>
                     </Form>
 
-                    <Flex justify="center" style={{marginTop: 8}}>
-                        <ScanButton
-                            onPress={handleOpenScanner}
-                            disabled={disableScan}
-                        />
-                    </Flex>
+                    {/* Scan button inside drawer as alternative */}
+                    {!disableScan && (
+                        <Flex justify="center" style={{marginTop: 8}}>
+                            <Button
+                                type="default"
+                                size="large"
+                                icon={<QrcodeOutlined/>}
+                                onClick={handleOpenScanner}
+                                style={{borderRadius: 10, height: 44}}
+                            >
+                                {t.scanInstead || t.scan}
+                            </Button>
+                        </Flex>
+                    )}
                 </Drawer>
             </Spin>
 
             {/* Product Results */}
-            {!scannerOpen && balances.length > 0 && (
-                <div style={{animation: 'loginCardSlideUp 0.4s ease-out'}}>
+            {!scannerOpen && hasResults && (
+                <div style={{paddingBottom: 80}}>
                     {/* Product Info Card */}
                     <Card
                         className="product-result-card"
@@ -400,6 +419,29 @@ const UserDashboard = () => {
                             ]}
                         />
                     </Card>
+                </div>
+            )}
+
+            {/* ===== Floating Action Bar — always visible when results are shown ===== */}
+            {!scannerOpen && hasResults && !drawerVisible && (
+                <div className="floating-action-bar">
+                    <Button
+                        type="primary"
+                        size="large"
+                        icon={<QrcodeOutlined style={{fontSize: 20}}/>}
+                        onClick={handleOpenScanner}
+                        className="fab-scan-btn"
+                    >
+                        {t.scanAgain || t.scan}
+                    </Button>
+                    <Button
+                        size="large"
+                        icon={<SearchOutlined style={{fontSize: 18}}/>}
+                        onClick={handleOpenSearch}
+                        className="fab-search-btn"
+                    >
+                        {t.search}
+                    </Button>
                 </div>
             )}
         </>
