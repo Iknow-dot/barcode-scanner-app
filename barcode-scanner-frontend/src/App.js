@@ -16,11 +16,11 @@ import {
     theme,
     App as AntdApp,
     Space,
-    Dropdown, Grid, Flex, Avatar, Button
+    Dropdown, Grid, Flex, Avatar, Button, Tooltip
 } from "antd";
 import {Content, Header, Footer} from "antd/es/layout/layout";
 import Sider from "antd/es/layout/Sider";
-import {GlobalOutlined, LogoutOutlined, MoonOutlined, UserOutlined} from "@ant-design/icons";
+import {GlobalOutlined, LogoutOutlined, MoonOutlined, SunOutlined, UserOutlined} from "@ant-design/icons";
 import SubNavContext, {SubNavProvider} from "./contexts/SubNavContext";
 import {LanguageProvider, useLanguage} from "./i18n/LanguageContext";
 import "antd/dist/reset.css";
@@ -45,7 +45,8 @@ const LanguageSwitcher = () => {
 
     return (
         <Dropdown menu={{items, selectedKeys: [language]}}>
-            <Button type="text" icon={<GlobalOutlined/>} size="small">
+            <Button type="text" icon={<GlobalOutlined/>} size="small"
+                    style={{borderRadius: 8, fontWeight: 500}}>
                 {language === 'ka' ? 'ქარ' : 'EN'}
             </Button>
         </Dropdown>
@@ -59,7 +60,7 @@ const MainContentView = ({children}) => {
     const [siderCollapsed, setSiderCollapsed] = useState(!subNav);
     const {t} = useLanguage();
     const {
-        token: {colorBgContainer, borderRadiusLG, colorText, colorBgBase},
+        token: {colorBgContainer, borderRadiusLG, colorText, colorBgBase, colorBorderSecondary},
     } = theme.useToken();
     const isDarkMode = colorBgBase === "#000";
     const {logout} = useContext(AuthContext);
@@ -70,7 +71,15 @@ const MainContentView = ({children}) => {
     }, [subNav]);
     const username = authData?.user?.username || '';
     const userIcon = (
-        <Avatar style={{cursor: "pointer", backgroundColor: "#0765c2"}} size="large">
+        <Avatar
+            style={{
+                cursor: "pointer",
+                backgroundColor: "#0765c2",
+                boxShadow: '0 2px 8px rgba(7, 101, 194, 0.3)',
+                transition: 'all 0.2s ease',
+            }}
+            size="large"
+        >
             {username.charAt(0).toUpperCase()}
         </Avatar>
     );
@@ -83,8 +92,12 @@ const MainContentView = ({children}) => {
                     {username.charAt(0).toUpperCase()}
                 </Avatar>
             ),
-            label: username,
+            label: (
+                <span style={{fontWeight: 500}}>{username}</span>
+            ),
+            disabled: true,
         },
+        {type: 'divider'},
         {
             key: '1',
             icon: <LogoutOutlined/>,
@@ -103,47 +116,52 @@ const MainContentView = ({children}) => {
                     collapsible={!!subNav}
                     collapsed={siderCollapsed}
                     onCollapse={(collapsed) => setSiderCollapsed(collapsed)}
+                    style={{
+                        borderRight: `1px solid ${colorBorderSecondary}`,
+                        boxShadow: isDarkMode ? 'none' : '2px 0 8px rgba(0, 0, 0, 0.03)',
+                    }}
                 >
                     <Link to={window.location.href}>
                         <img
                             src={isDarkMode ? "logo-dark.png" : "logo-light.png"}
                             alt="Logo"
                             width="75%"
-                            style={{
-                                margin: "16px auto",
-                                display: "block",
-                            }}
+                            className="sidebar-logo"
                         />
                     </Link>
                     <Menu theme={isDarkMode ? "dark" : "light"}
                           mode="inline"
                           defaultSelectedKeys={authData?.role === "internal_admin" ? ['1'] : ['2']}
                           items={subNav}
+                          style={{
+                              borderRight: 'none',
+                              fontWeight: 500,
+                          }}
                     />
                 </Sider>
             )}
             <Layout>
-                <Header style={{padding: "0 24px", background: colorBgContainer}}>
+                <Header className="app-header" style={{
+                    background: colorBgContainer,
+                    borderBottom: `1px solid ${colorBorderSecondary}`,
+                    height: 64,
+                    lineHeight: '64px',
+                }}>
                     {!screens.lg && (
-                        <Flex>
+                        <Flex align="center" style={{width: '100%', height: '100%'}}>
                             <Link to={window.location.href}>
                                 <img
                                     src={isDarkMode ? "logo-dark.png" : "logo-light.png"}
                                     alt="Logo"
-                                    width="75px"
+                                    width="65px"
+                                    style={{marginRight: 8}}
                                 />
                             </Link>
                             {authData?.organization_name && (
-                                <span style={{
-                                    fontSize: 14,
-                                    fontWeight: 500,
+                                <span className="org-name-badge" style={{
                                     color: colorText,
-                                    whiteSpace: 'nowrap',
-                                    overflow: 'hidden',
-                                    textOverflow: 'ellipsis',
-                                    alignSelf: 'center',
-                                    marginLeft: 8,
-                                    maxWidth: 120,
+                                    maxWidth: 100,
+                                    marginRight: 4,
                                 }}>
                                     {authData.organization_name}
                                 </span>
@@ -152,48 +170,50 @@ const MainContentView = ({children}) => {
                                 style={{
                                     flex: 1,
                                     background: "transparent",
+                                    borderBottom: 'none',
                                 }}
                                 theme={isDarkMode ? "dark" : "light"}
                                 mode="horizontal"
                                 defaultSelectedKeys={authData?.role === "internal_admin" ? ['1'] : ['2']}
                                 items={subNav}
                             />
-                            <Space style={{float: 'right'}}>
+                            <Space size={4}>
                                 <LanguageSwitcher/>
-                                <Dropdown menu={{items}}>
+                                <Dropdown menu={{items}} trigger={['click']}>
                                     {userIcon}
                                 </Dropdown>
                             </Space>
                         </Flex>
                     )}
                     {screens.lg && (
-                        <Flex justify="space-between" align="center" style={{height: '100%'}}>
-                            <span style={{fontSize: 16, fontWeight: 500, color: colorText}}>
+                        <Flex justify="space-between" align="center" style={{height: '100%', width: '100%'}}>
+                            <span className="org-name-badge" style={{color: colorText, fontSize: 16}}>
                                 {authData?.organization_name || ''}
                             </span>
-                            <Space>
+                            <Space size={12}>
                                 <LanguageSwitcher/>
-                                <Dropdown menu={{items}}>
+                                <Dropdown menu={{items}} trigger={['click']}>
                                     {userIcon}
                                 </Dropdown>
                             </Space>
                         </Flex>
                     )}
                 </Header>
-                <Content style={{margin: '24px 16px 0'}}>
+                <Content style={{margin: '20px 16px 0'}}>
                     <div
+                        className="main-content-card"
                         style={{
-                            padding: 24,
-                            minHeight: 360,
                             background: colorBgContainer,
-                            borderRadius: borderRadiusLG,
+                            borderRadius: 12,
+                            border: `1px solid ${colorBorderSecondary}`,
+                            boxShadow: isDarkMode ? 'none' : '0 1px 4px rgba(0, 0, 0, 0.04)',
                         }}
                     >
                         {children}
                     </div>
                 </Content>
-                <Footer style={{textAlign: 'center'}}>
-                    <p>{t.footer}</p>
+                <Footer style={{textAlign: 'center', padding: '16px 50px', opacity: 0.5, fontSize: 12}}>
+                    <p style={{margin: 0}}>{t.footer}</p>
                 </Footer>
             </Layout>
 
@@ -205,25 +225,42 @@ const MainContentView = ({children}) => {
 const AppContent = () => {
     const [isDark, setIsDark] = useState(localStorage.getItem("theme") === "dark");
     const toggleTheme = () => {
-        document.body.classList.add("theme-transition"); // Add transition class
+        document.body.classList.add("theme-transition");
         const newTheme = !isDark;
         setIsDark(!isDark);
         localStorage.setItem("theme", newTheme ? "dark" : "light");
         setTimeout(() => {
-            document.body.classList.remove("theme-transition"); // Remove after animation
-        }, 1000); // Match CSS animation duration
+            document.body.classList.remove("theme-transition");
+        }, 1000);
     };
     return (
         <ConfigProvider theme={{
-            algorithm: isDark ? theme.darkAlgorithm : theme.defaultAlgorithm
+            algorithm: isDark ? theme.darkAlgorithm : theme.defaultAlgorithm,
+            token: {
+                borderRadius: 8,
+                fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+            },
+            components: {
+                Table: {
+                    headerBorderRadius: 10,
+                },
+                Card: {
+                    borderRadiusLG: 12,
+                },
+                Modal: {
+                    borderRadiusLG: 16,
+                },
+            }
         }}>
             <AntdApp>
-                <FloatButton
-                    onClick={toggleTheme}
-                    shape="circle"
-                    style={{insetInlineEnd: 24}}
-                    icon={<MoonOutlined/>}
-                />
+                <Tooltip title={isDark ? 'Light mode' : 'Dark mode'} placement="left">
+                    <FloatButton
+                        onClick={toggleTheme}
+                        shape="circle"
+                        style={{insetInlineEnd: 24}}
+                        icon={isDark ? <SunOutlined/> : <MoonOutlined/>}
+                    />
+                </Tooltip>
                 <Routes>
                     {/* Public route */}
                     <Route path="/login" element={<Login/>}/>

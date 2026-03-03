@@ -1,7 +1,7 @@
 import React from 'react';
 import {Button, Divider, Flex, Form, Input, InputNumber} from "antd";
 import ModalForm from "../ModalForm";
-import {LockOutlined, UserOutlined} from "@ant-design/icons";
+import {LockOutlined, UserOutlined, PlusOutlined, GlobalOutlined} from "@ant-design/icons";
 import {useLanguage} from '../../i18n/LanguageContext';
 
 const AddOrganization = ({visible, setVisible, onFinish}) => {
@@ -24,35 +24,45 @@ const AddOrganization = ({visible, setVisible, onFinish}) => {
                     },
                 ]}
             >
-                <Input/>
+                <Input placeholder={t.organizationName}/>
             </Form.Item>
 
-            <Form.Item
-                label={t.identificationNumber}
-                name="identification_number"
-                rules={[
-                    {
-                        required: true,
-                        message: t.idNumberRequired,
-                    },
-                ]}
-            >
-                <Input/>
-            </Form.Item>
+            <Flex gap={16}>
+                <Form.Item
+                    label={t.identificationNumber}
+                    name="identification_number"
+                    style={{flex: 1}}
+                    rules={[
+                        {
+                            required: true,
+                            message: t.idNumberRequired,
+                        },
+                    ]}
+                >
+                    <Input placeholder={t.identificationNumber}/>
+                </Form.Item>
 
-            <Form.Item
-                label={t.employeesCount}
-                name="employees_count"
-                rules={[
-                    {
-                        required: true,
-                        message: t.employeesCountRequired,
-                    }
-                ]}
-            >
-                <InputNumber/>
-            </Form.Item>
-            <Divider>{t.webService}</Divider>
+                <Form.Item
+                    label={t.employeesCount}
+                    name="employees_count"
+                    style={{flex: 1}}
+                    rules={[
+                        {
+                            required: true,
+                            message: t.employeesCountRequired,
+                        }
+                    ]}
+                >
+                    <InputNumber style={{width: '100%'}} min={1} placeholder="0"/>
+                </Form.Item>
+            </Flex>
+
+            <Divider style={{margin: '8px 0 16px'}}>
+                <Flex align="center" gap={6} style={{opacity: 0.7, fontSize: 13}}>
+                    <GlobalOutlined/>
+                    {t.webService}
+                </Flex>
+            </Divider>
 
             <Form.Item
                 label={t.address}
@@ -64,13 +74,14 @@ const AddOrganization = ({visible, setVisible, onFinish}) => {
                     }
                 ]}
             >
-                <Input/>
+                <Input placeholder="https://"/>
             </Form.Item>
 
-            <Flex justify="space-between" gap="medium">
+            <Flex gap={16}>
                 <Form.Item
                     label={t.user}
                     name="web_service_username"
+                    style={{flex: 1}}
                     rules={[
                         {
                             required: false,
@@ -78,11 +89,12 @@ const AddOrganization = ({visible, setVisible, onFinish}) => {
                         }
                     ]}
                 >
-                    <Input autoComplete="off" prefix={<UserOutlined/>}/>
+                    <Input autoComplete="off" prefix={<UserOutlined style={{opacity: 0.4}}/>}/>
                 </Form.Item>
                 <Form.Item
                     label={t.password}
                     name="web_service_password"
+                    style={{flex: 1}}
                     rules={[
                         {
                             required: false,
@@ -90,11 +102,18 @@ const AddOrganization = ({visible, setVisible, onFinish}) => {
                         }
                     ]}
                 >
-                    <Input.Password autoComplete="new-password" prefix={<LockOutlined/>}/>
+                    <Input.Password autoComplete="new-password" prefix={<LockOutlined style={{opacity: 0.4}}/>}/>
                 </Form.Item>
             </Flex>
-            <Form.Item label={null}>
-                <Button block type="primary" htmlType="submit" variant="solid" color="green">
+
+            <Form.Item label={null} style={{marginTop: 8, marginBottom: 0}}>
+                <Button
+                    block
+                    type="primary"
+                    htmlType="submit"
+                    icon={<PlusOutlined/>}
+                    style={{height: 44, fontWeight: 600}}
+                >
                     {t.add}
                 </Button>
             </Form.Item>

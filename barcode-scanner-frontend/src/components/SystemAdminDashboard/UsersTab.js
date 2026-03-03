@@ -1,11 +1,11 @@
 import React, {useContext, useEffect, useRef, useState} from 'react';
 import {userService, organizationService} from '../../api';
-import {Tag, Input, Select, Row, Col, Button} from "antd";
+import {Tag, Input, Select, Row, Col, Button, Flex, Space} from "antd";
 import DataTab from "../DataTab";
 import AuthContext from "../Auth/AuthContext";
 import AddUserModal from "../User/AddUserModal";
 import EditUserModal from "../User/EditUser";
-import {CheckOutlined, CloseOutlined} from "@ant-design/icons";
+import {CheckOutlined, CloseOutlined, ClearOutlined, SearchOutlined} from "@ant-design/icons";
 import useAppNotification from "../../hooks/useAppNotification";
 import {useLanguage} from '../../i18n/LanguageContext';
 
@@ -13,6 +13,12 @@ const roleColors = {
     internal_admin: "red",
     company_admin: "green",
     company_user: "geekblue"
+};
+
+const roleLabels = {
+    internal_admin: "Admin",
+    company_admin: "Company Admin",
+    company_user: "User"
 };
 
 const UsersTab = ({initialUsers, addModalExtraProps, handleEditCallback = null, filtersEnabled = false}) => {
@@ -26,7 +32,14 @@ const UsersTab = ({initialUsers, addModalExtraProps, handleEditCallback = null, 
     const [selectedOrg, setSelectedOrg] = useState(null);
     const [selectedRole, setSelectedRole] = useState(null);
 
-    const roleOptions = Object.keys(roleColors).map(r => ({value: r, label: r}));
+    const roleOptions = Object.keys(roleColors).map(r => ({
+        value: r,
+        label: (
+            <Flex align="center" gap={6}>
+                <Tag color={roleColors[r]} style={{margin: 0}}>{roleLabels[r] || r}</Tag>
+            </Flex>
+        ),
+    }));
 
     // debounce timer ref
     const debounceTimer = useRef(null);
@@ -98,6 +111,15 @@ const UsersTab = ({initialUsers, addModalExtraProps, handleEditCallback = null, 
         if (value) params.role = value;
         fetchUsers(params);
     };
+
+    const handleClearFilters = () => {
+        setQuery('');
+        setSelectedOrg(null);
+        setSelectedRole(null);
+        fetchUsers();
+    };
+
+    const hasActiveFilters = query || selectedOrg || selectedRole;
 
     const handleAdd = async (newUser) => {
         const payload = {
@@ -172,8 +194,6 @@ const UsersTab = ({initialUsers, addModalExtraProps, handleEditCallback = null, 
         const result = await userService.updateUser(editUser.id, payload);
 
         if (result.success) {
-            // Use the API response data which has the correct format
-            // (allowed_ips as objects, warehouse_ids_read, etc.)
             const updatedUser = result.data;
             setUsers(prev => prev.map(u => u.id === editUser.id ? updatedUser : u));
             notify.success(t.success, t.userUpdated(editUser.username));
@@ -188,57 +208,74 @@ const UsersTab = ({initialUsers, addModalExtraProps, handleEditCallback = null, 
     return (
         <>
             {contextHolder}
-            <div style={{marginBottom: 16}}>
-                {authData?.role === 'internal_admin' && filtersEnabled && (
-                    <Row gutter={8} align="middle">
-                        <Col>
+
+            {authData?.role === 'internal_admin' && filtersEnabled && (
+                <div className="filter-bar">
+                    <Row gutter={[12, 12]} align="middle">
+                        <Col xs={24} sm={24} md={8}>
                             <Input.Search
                                 placeholder={t.filterName}
                                 allowClear
+                                value={query}
                                 onSearch={(v) => {
                                     if (debounceTimer.current) clearTimeout(debounceTimer.current);
                                     setQuery(v);
                                     handleSearch();
                                 }}
                                 onChange={e => handleQueryChange(e.target.value)}
-                                style={{width: 300}}
+                                prefix={<SearchOutlined style={{opacity: 0.4}}/>}
                             />
                         </Col>
-                        <Col>
+                        <Col xs={24} sm={12} md={6}>
                             <Select
                                 showSearch
                                 placeholder={t.filterOrganization}
                                 options={orgOptions}
                                 onChange={handleOrgChange}
+                                value={selectedOrg}
                                 allowClear
-                                style={{width: 240}}
+                                style={{width: '100%'}}
+                                filterOption={(input, option) =>
+                                    option?.label?.toLowerCase().includes(input.toLowerCase())
+                                }
                             />
                         </Col>
-                        <Col>
+                        <Col xs={24} sm={12} md={5}>
                             <Select
                                 showSearch
                                 placeholder={t.filterRole}
                                 options={roleOptions}
                                 onChange={handleRoleChange}
+                                value={selectedRole}
                                 allowClear
-                                style={{width: 200}}
+                                style={{width: '100%'}}
                             />
                         </Col>
-                        <Col>
-                            <Button type="primary" onClick={() => {
-                                if (debounceTimer.current) clearTimeout(debounceTimer.current);
-                                handleSearch();
-                            }}>{t.search}</Button>
-                            <Button style={{marginLeft: 8}} onClick={() => {
-                                setQuery('');
-                                setSelectedOrg(null);
-                                setSelectedRole(null);
-                                fetchUsers();
-                            }}>{t.clear}</Button>
+                        <Col xs={24} sm={24} md={5}>
+                            <Space>
+                                <Button
+                                    type="primary"
+                                    icon={<SearchOutlined/>}
+                                    onClick={() => {
+                                        if (debounceTimer.current) clearTimeout(debounceTimer.current);
+                                        handleSearch();
+                                    }}
+                                >
+                                    {t.search}
+                                </Button>
+                                {hasActiveFilters && (
+                                    <Button
+                                        icon={<ClearOutlined/>}
+                                        onClick={handleClearFilters}
+                                    >
+                                        {t.clear}
+                                    </Button>
+                                )}
+                            </Space>
                         </Col>
                     </Row>
-                )}
-            </div>
+                </div>
+            )}
 
             <DataTab objects={users} columns={[
                 {key: 'username', title: t.name, dataIndex: 'username'},
@@ -246,20 +283,26 @@ const UsersTab = ({initialUsers, addModalExtraProps, handleEditCallback = null, 
                     key: 'organization',
                     title: t.organization,
                     dataIndex: 'organization',
-                    render: orgId => organizations[orgId] || 'N/A'
+                    render: orgId => organizations[orgId] || <span style={{opacity: 0.4}}>N/A</span>
                 },
                 {
                     key: 'role',
                     title: t.role,
                     dataIndex: 'role',
-                    render: role => <Tag color={roleColors[role]}>{role}</Tag>
+                    render: role => (
+                        <Tag color={roleColors[role]} style={{fontWeight: 500}}>
+                            {roleLabels[role] || role}
+                        </Tag>
+                    )
                 },
                 {
                     key: 'ip_enabled',
                     title: t.ipEnabled,
                     dataIndex: 'allowed_ips',
-                    render: allowed_ips => (allowed_ips && allowed_ips.length > 0) ? <CheckOutlined style={{color: 'green'}}/> :
-                        <CloseOutlined style={{color: 'red'}}/>
+                    align: 'center',
+                    render: allowed_ips => (allowed_ips && allowed_ips.length > 0)
+                        ? <CheckOutlined style={{color: '#52c41a', fontSize: 16}}/>
+                        : <CloseOutlined style={{color: '#ff4d4f', fontSize: 14, opacity: 0.5}}/>
                 }
             ]} AddModal={AddUserModal} handleAdd={handleAdd} addModalExtraProps={addModalExtraProps}
                      EditModal={EditUserModal} handleEdit={handleEdit} handleDelete={handleDelete}/>

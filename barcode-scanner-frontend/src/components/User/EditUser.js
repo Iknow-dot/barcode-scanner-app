@@ -1,8 +1,9 @@
 import React, {useState, useEffect, useContext} from 'react';
 import {userService, organizationService, warehouseService} from '../../api';
 import AuthContext from '../Auth/AuthContext';
-import {Button, Form, Input, Select, Space, Tag} from "antd";
+import {Button, Divider, Flex, Form, Input, Select, Space, Tag} from "antd";
 import ModalForm, {RenderOption} from "../ModalForm";
+import {SaveOutlined, UserOutlined, LockOutlined, MailOutlined} from "@ant-design/icons";
 import {useLanguage} from '../../i18n/LanguageContext';
 
 const EditUser = ({visible, setVisible, onFinish, object}) => {
@@ -103,60 +104,72 @@ const EditUser = ({visible, setVisible, onFinish, object}) => {
             onFinish={(data) => onFinish(data, object)}
         >
             {isInternalAdmin && (
-                <Tag color='blue' style={{marginBottom: '16px'}}>
-                    {organizations.find(org => org.id === object.organization)?.name || 'N/A'}
+                <Tag color='blue' style={{marginBottom: 16, padding: '4px 12px', fontSize: 13}}>
+                    🏢 {organizations.find(org => org.id === object.organization)?.name || 'N/A'}
                 </Tag>
             )}
 
-            <Form.Item
-                label={t.user}
-                name="username"
-                rules={[{required: true, message: t.usernameFieldRequired}]}
-            >
-                <Input/>
-            </Form.Item>
+            <Flex gap={16}>
+                <Form.Item
+                    label={t.user}
+                    name="username"
+                    style={{flex: 1}}
+                    rules={[{required: true, message: t.usernameFieldRequired}]}
+                >
+                    <Input prefix={<UserOutlined style={{opacity: 0.4}}/>}/>
+                </Form.Item>
 
-            <Form.Item
-                label={t.email}
-                name="email"
-                rules={[{required: false, type: 'email', message: t.emailInvalid}]}
-            >
-                <Input/>
-            </Form.Item>
+                <Form.Item
+                    label={t.email}
+                    name="email"
+                    style={{flex: 1}}
+                    rules={[{required: false, type: 'email', message: t.emailInvalid}]}
+                >
+                    <Input prefix={<MailOutlined style={{opacity: 0.4}}/>}/>
+                </Form.Item>
+            </Flex>
 
-            <Form.Item label={t.firstName} name="first_name">
-                <Input/>
-            </Form.Item>
+            <Flex gap={16}>
+                <Form.Item label={t.firstName} name="first_name" style={{flex: 1}}>
+                    <Input/>
+                </Form.Item>
 
-            <Form.Item label={t.lastName} name="last_name">
-                <Input/>
-            </Form.Item>
+                <Form.Item label={t.lastName} name="last_name" style={{flex: 1}}>
+                    <Input/>
+                </Form.Item>
+            </Flex>
 
-            <Form.Item
-                label={t.password}
-                name="password"
-                rules={[{required: false, min: 8, message: t.passwordMinLength}]}
-                extra={t.passwordLeaveEmpty}
-            >
-                <Input.Password/>
-            </Form.Item>
+            <Flex gap={16}>
+                <Form.Item
+                    label={t.password}
+                    name="password"
+                    style={{flex: 1}}
+                    rules={[{required: false, min: 8, message: t.passwordMinLength}]}
+                    extra={<span style={{fontSize: 12, opacity: 0.5}}>{t.passwordLeaveEmpty}</span>}
+                >
+                    <Input.Password prefix={<LockOutlined style={{opacity: 0.4}}/>}/>
+                </Form.Item>
 
-            <Form.Item
-                label={t.role}
-                name="role"
-                rules={[{required: true, message: t.roleRequired}]}
-            >
-                <Select>
-                    {isCompanyAdmin ? (
-                        <Select.Option value="company_user">company_user</Select.Option>
-                    ) : (
-                        <>
-                            <Select.Option value="company_admin">company_admin</Select.Option>
+                <Form.Item
+                    label={t.role}
+                    name="role"
+                    style={{flex: 1}}
+                    rules={[{required: true, message: t.roleRequired}]}
+                >
+                    <Select>
+                        {isCompanyAdmin ? (
                             <Select.Option value="company_user">company_user</Select.Option>
-                        </>
-                    )}
-                </Select>
-            </Form.Item>
+                        ) : (
+                            <>
+                                <Select.Option value="company_admin">company_admin</Select.Option>
+                                <Select.Option value="company_user">company_user</Select.Option>
+                            </>
+                        )}
+                    </Select>
+                </Form.Item>
+            </Flex>
+
+            <Divider style={{margin: '4px 0 16px'}} dashed/>
 
             <Form.Item
                 label={t.ipAddress}
@@ -203,8 +216,14 @@ const EditUser = ({visible, setVisible, onFinish, object}) => {
                 </Form.Item>
             )}
 
-            <Form.Item label={null}>
-                <Button block type="primary" htmlType="submit" variant="solid" color="green">
+            <Form.Item label={null} style={{marginTop: 8, marginBottom: 0}}>
+                <Button
+                    block
+                    type="primary"
+                    htmlType="submit"
+                    icon={<SaveOutlined/>}
+                    style={{height: 44, fontWeight: 600}}
+                >
                     {t.save}
                 </Button>
             </Form.Item>

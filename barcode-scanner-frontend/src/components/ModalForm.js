@@ -10,7 +10,24 @@ export const ModalForm = ({visible, setVisible, onFinish, title, name, object = 
     }
   }, [form, object]);
   return (
-      <Modal open={visible} title={title} onCancel={() => setVisible(false)} footer={null}>
+      <Modal
+          open={visible}
+          title={title}
+          onCancel={() => setVisible(false)}
+          footer={null}
+          destroyOnClose
+          centered
+          styles={{
+            header: {
+              paddingBottom: 12,
+              borderBottom: '1px solid rgba(0, 0, 0, 0.06)',
+              marginBottom: 0,
+            },
+            body: {
+              paddingTop: 20,
+            },
+          }}
+      >
         <Form
             form={form}
             name={name}
@@ -19,6 +36,7 @@ export const ModalForm = ({visible, setVisible, onFinish, title, name, object = 
               maxWidth: "none",
               width: "100%"
             }}
+            size="large"
             onFinish={async (data) => {
               const ok = await onFinish(data)
               if (ok) {

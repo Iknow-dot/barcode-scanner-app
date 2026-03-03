@@ -4,9 +4,9 @@
     color: #fff;
     box-shadow: 0 2px 0 rgba(5, 145, 255, 0.1);
     font-size: 14px;
-    height: 32px;
-    padding: 0 15px;
-    border-radius: 6px;
+    height: 36px;
+    padding: 0 16px;
+    border-radius: 8px;
     border: 1px solid transparent;
     cursor: pointer;
     transition: all 0.2s cubic-bezier(0.645, 0.045, 0.355, 1);
@@ -14,11 +14,20 @@
     touch-action: manipulation;
 }
 
+#qr-reader button:hover {
+    background: #1677ff;
+}
+
 #qr-reader video {
     width: 100%;
     height: 100%;
+    border-radius: 12px;
 }
 
+#qr-reader {
+    border-radius: 12px;
+    overflow: hidden;
+}
 
 @media(min-width: 768px) {
     .scanner-container {

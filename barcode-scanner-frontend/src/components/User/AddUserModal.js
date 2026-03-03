@@ -1,8 +1,9 @@
 import React, {useState, useEffect, useContext} from 'react';
 import {userService, organizationService, warehouseService} from '../../api';
 import AuthContext from '../Auth/AuthContext';
-import {Button, Form, Input, Select, Space, Tag} from "antd";
+import {Button, Divider, Flex, Form, Input, Select, Space, Tag} from "antd";
 import ModalForm, {RenderOption} from "../ModalForm";
+import {PlusOutlined, UserOutlined, LockOutlined, MailOutlined} from "@ant-design/icons";
 import {useLanguage} from '../../i18n/LanguageContext';
 
 
@@ -89,58 +90,70 @@ const AddUserModal = ({visible, setVisible, onFinish, organization = null}) => {
             title={t.addUser}
             name="addUser"
         >
-            <Form.Item
-                label={t.user}
-                name="username"
-                rules={[{required: true, message: t.usernameFieldRequired}]}
-            >
-                <Input/>
-            </Form.Item>
+            <Flex gap={16}>
+                <Form.Item
+                    label={t.user}
+                    name="username"
+                    style={{flex: 1}}
+                    rules={[{required: true, message: t.usernameFieldRequired}]}
+                >
+                    <Input prefix={<UserOutlined style={{opacity: 0.4}}/>} placeholder={t.user}/>
+                </Form.Item>
 
-            <Form.Item
-                label={t.email}
-                name="email"
-                rules={[{required: false, type: 'email', message: t.emailInvalid}]}
-            >
-                <Input/>
-            </Form.Item>
+                <Form.Item
+                    label={t.email}
+                    name="email"
+                    style={{flex: 1}}
+                    rules={[{required: false, type: 'email', message: t.emailInvalid}]}
+                >
+                    <Input prefix={<MailOutlined style={{opacity: 0.4}}/>} placeholder={t.email}/>
+                </Form.Item>
+            </Flex>
 
-            <Form.Item label={t.firstName} name="first_name">
-                <Input/>
-            </Form.Item>
+            <Flex gap={16}>
+                <Form.Item label={t.firstName} name="first_name" style={{flex: 1}}>
+                    <Input placeholder={t.firstName}/>
+                </Form.Item>
 
-            <Form.Item label={t.lastName} name="last_name">
-                <Input/>
-            </Form.Item>
+                <Form.Item label={t.lastName} name="last_name" style={{flex: 1}}>
+                    <Input placeholder={t.lastName}/>
+                </Form.Item>
+            </Flex>
 
-            <Form.Item
-                label={t.password}
-                name="password"
-                rules={[
-                    {required: true, message: t.passwordFieldRequired},
-                    {min: 8, message: t.passwordMinLength},
-                ]}
-            >
-                <Input.Password/>
-            </Form.Item>
+            <Flex gap={16}>
+                <Form.Item
+                    label={t.password}
+                    name="password"
+                    style={{flex: 1}}
+                    rules={[
+                        {required: true, message: t.passwordFieldRequired},
+                        {min: 8, message: t.passwordMinLength},
+                    ]}
+                >
+                    <Input.Password prefix={<LockOutlined style={{opacity: 0.4}}/>}/>
+                </Form.Item>
 
-            <Form.Item
-                label={t.role}
-                name="role"
-                rules={[{required: true, message: t.roleRequired}]}
-                initialValue={isCompanyAdmin ? 'company_user' : 'company_admin'}
-            >
-                <Select>
-                    {isCompanyAdmin ? (
-                        <Select.Option value="company_user">company_user</Select.Option>
-                    ) : (
-                        <>
-                            <Select.Option value="company_admin">company_admin</Select.Option>
+                <Form.Item
+                    label={t.role}
+                    name="role"
+                    style={{flex: 1}}
+                    rules={[{required: true, message: t.roleRequired}]}
+                    initialValue={isCompanyAdmin ? 'company_user' : 'company_admin'}
+                >
+                    <Select>
+                        {isCompanyAdmin ? (
                             <Select.Option value="company_user">company_user</Select.Option>
-                        </>
-                    )}
-                </Select>
-            </Form.Item>
+                        ) : (
+                            <>
+                                <Select.Option value="company_admin">company_admin</Select.Option>
+                                <Select.Option value="company_user">company_user</Select.Option>
+                            </>
+                        )}
+                    </Select>
+                </Form.Item>
+            </Flex>
+
+            <Divider style={{margin: '4px 0 16px'}} dashed/>
 
             <Form.Item
                 label={t.ipAddress}
@@ -185,6 +198,7 @@ const AddUserModal = ({visible, setVisible, onFinish, organization = null}) => {
                         filterOption={(input, option) =>
                             option?.label.toLowerCase().includes(input.toLowerCase())
                         }
+                        showSearch
                         onChange={(value) => setSelectedOrg(value)}
                     />
                 </Form.Item>
@@ -217,8 +231,14 @@ const AddUserModal = ({visible, setVisible, onFinish, organization = null}) => {
                 </Form.Item>
             )}
 
-            <Form.Item label={null}>
-                <Button block type="primary" htmlType="submit" variant="solid" color="green">
+            <Form.Item label={null} style={{marginTop: 8, marginBottom: 0}}>
+                <Button
+                    block
+                    type="primary"
+                    htmlType="submit"
+                    icon={<PlusOutlined/>}
+                    style={{height: 44, fontWeight: 600}}
+                >
                     {t.add}
                 </Button>
             </Form.Item>

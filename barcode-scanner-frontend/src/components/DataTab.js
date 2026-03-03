@@ -1,6 +1,6 @@
-import {Button, Popconfirm, Space, Table} from "antd";
+import {Button, Flex, Popconfirm, Space, Table, Tooltip} from "antd";
 import React, {useState} from "react";
-import {CheckOutlined, DeleteOutlined, EditOutlined, PlusOutlined} from "@ant-design/icons";
+import {CheckOutlined, CloseOutlined, DeleteOutlined, EditOutlined, PlusOutlined} from "@ant-design/icons";
 import {useLanguage} from '../i18n/LanguageContext';
 
 export const DataTab = ({
@@ -21,7 +21,7 @@ export const DataTab = ({
   const {t} = useLanguage();
 
   return (
-      <div>
+      <div className="data-tab-wrapper">
         {<AddModal
             visible={addModalVisible}
             setVisible={setAddModalVisible}
@@ -35,64 +35,92 @@ export const DataTab = ({
             onFinish={handleEdit}
         />}
 
+        <Flex justify="flex-end" style={{marginBottom: 16}} gap={8}>
+          {editable ? (
+              <>
+                <Tooltip title={t.add}>
+                  <Button
+                      type="primary"
+                      icon={<PlusOutlined/>}
+                      onClick={() => setAddModalVisible(true)}
+                      className="action-btn"
+                  >
+                    {t.add}
+                  </Button>
+                </Tooltip>
+                <Tooltip title={t.close}>
+                  <Button
+                      icon={<CheckOutlined/>}
+                      onClick={() => setEditable(false)}
+                      className="action-btn"
+                  />
+                </Tooltip>
+              </>
+          ) : (
+              <Tooltip title={t.editMode || 'Edit'}>
+                <Button
+                    type="default"
+                    icon={<EditOutlined/>}
+                    onClick={() => setEditable(true)}
+                    className="action-btn"
+                />
+              </Tooltip>
+          )}
+        </Flex>
+
         <Table
             {...props}
             scroll={{x: "max-content"}}
             dataSource={objects.map(object => ({...object, key: object.id}))}
+            size="middle"
+            pagination={{
+              size: 'default',
+              showSizeChanger: objects.length > 10,
+              showTotal: (total, range) => `${range[0]}-${range[1]} / ${total}`,
+            }}
             columns={[
               ...columns,
-              {
-                key: "x",
-                title: (
-                    <>
-                      {editable ? (
-                          <Space>
-                            <Button variant="outlined" color="green" onClick={() => setAddModalVisible(true)}>
-                              <PlusOutlined/>
-                            </Button>
-                            <Button variant="outlined" color="primary" onClick={() => setEditable(false)}>
-                              <CheckOutlined/>
-                            </Button>
-                          </Space>
-                      ) : (
-                          <Button variant="outlined" color="primary" onClick={() => setEditable(true)}>
-                            <EditOutlined/>
-                          </Button>
-                      )}
-                    </>
-                ),
+              ...(editable ? [{
+                key: "actions",
+                title: '',
+                width: 100,
                 align: "right",
                 render: (_, object) => (
-                    <>
-                      {editable && (
-                          <Space>
-                            <Button variant="outlined" color="primary" onClick={() => {
+                    <Space size={4}>
+                      <Tooltip title={t.editMode || 'Edit'}>
+                        <Button
+                            type="text"
+                            size="small"
+                            icon={<EditOutlined/>}
+                            onClick={() => {
                               setSelectedObject(object);
                               setEditModalVisible(true);
-                            }}>
-                              <EditOutlined/>
-                            </Button>
-                            <Popconfirm
-                                title={t.confirmDelete}
-                                onConfirm={() => handleDelete(object)}
-                                okText={t.yes}
-                                cancelText={t.no}
-                                okButtonProps={{
-                                  danger: true
-                                }}
-                                cancelButtonProps={{
-                                  type: 'primary'
-                                }}
-                            >
-                              <Button danger>
-                                <DeleteOutlined/>
-                              </Button>
-                            </Popconfirm>
-                          </Space>
-                      )}
-                    </>
+                            }}
+                            className="action-btn"
+                            style={{color: '#1677ff'}}
+                        />
+                      </Tooltip>
+                      <Popconfirm
+                          title={t.confirmDelete}
+                          onConfirm={() => handleDelete(object)}
+                          okText={t.yes}
+                          cancelText={t.no}
+                          okButtonProps={{danger: true}}
+                          cancelButtonProps={{type: 'primary'}}
+                      >
+                        <Tooltip title={t.delete}>
+                          <Button
+                              type="text"
+                              size="small"
+                              danger
+                              icon={<DeleteOutlined/>}
+                              className="action-btn"
+                          />
+                        </Tooltip>
+                      </Popconfirm>
+                    </Space>
                 ),
-              },
+              }] : []),
             ]}
         />
       </div>

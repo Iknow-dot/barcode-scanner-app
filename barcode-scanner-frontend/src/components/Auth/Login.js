@@ -2,10 +2,12 @@ import React, {useContext, useEffect, useState} from 'react';
 import {useNavigate} from 'react-router-dom';
 import {authService} from '../../api';
 import AuthContext from '../Auth/AuthContext';
-import {Alert, Button, Dropdown, Flex, Form, Input, Layout, Space, Spin, theme} from "antd";
+import {Alert, Button, Card, Dropdown, Flex, Form, Input, Layout, Space, Spin, theme, Typography} from "antd";
 import {Content} from "antd/es/layout/layout";
-import {GlobalOutlined, LockOutlined, UserOutlined} from "@ant-design/icons";
+import {GlobalOutlined, LockOutlined, LoginOutlined, UserOutlined} from "@ant-design/icons";
 import {useLanguage} from '../../i18n/LanguageContext';
+
+const {Title, Text} = Typography;
 
 const Login = () => {
     const [loading, setLoading] = useState(false);
@@ -13,7 +15,7 @@ const Login = () => {
     const navigate = useNavigate();
     const {t, language, switchLanguage} = useLanguage();
     const {
-        token: {colorBgContainer, borderRadiusLG, colorBgBase},
+        token: {colorBgContainer, borderRadiusLG, colorBgBase, colorBgElevated, colorBorderSecondary},
     } = theme.useToken();
     const isDarkMode = colorBgBase === "#000";
     const [error, setError] = React.useState(null);
@@ -73,68 +75,107 @@ const Login = () => {
     ];
 
     return (
-        <>
-            <Layout style={{minHeight: "100vh"}}>
-                <Flex justify="flex-end" style={{padding: '16px 24px 0'}}>
-                    <Dropdown menu={{items: langItems, selectedKeys: [language]}}>
-                        <Button type="text" icon={<GlobalOutlined/>}>
-                            {language === 'ka' ? 'ქარ' : 'EN'}
-                        </Button>
-                    </Dropdown>
-                </Flex>
+        <Layout className="login-page" style={{
+            background: isDarkMode
+                ? 'linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 50%, #0a0a0a 100%)'
+                : 'linear-gradient(135deg, #f0f5ff 0%, #e6f0ff 50%, #f5f5f5 100%)',
+        }}>
+            <Flex justify="flex-end" style={{padding: '16px 24px 0'}}>
+                <Dropdown menu={{items: langItems, selectedKeys: [language]}}>
+                    <Button type="text" icon={<GlobalOutlined/>} size="small"
+                            style={{opacity: 0.7}}>
+                        {language === 'ka' ? 'ქარ' : 'EN'}
+                    </Button>
+                </Dropdown>
+            </Flex>
+
+            <Flex vertical align="center" justify="center" style={{flex: 1, padding: '0 16px'}}>
                 <img
                     src={isDarkMode ? "/logo-dark.png" : "/logo-light.png"}
                     alt="iFlow"
-                    style={{display: "block", width: "200px", margin: "auto"}}
+                    className="login-logo"
                 />
-                <Layout>
-                    <Content
-                        style={{
-                            flex: "none",
-                            padding: 24,
-                            margin: "0 auto",
-                            width: "350px",
-                            background: colorBgContainer,
-                            borderRadius: borderRadiusLG,
-                        }}
+
+                <Card
+                    className="login-card"
+                    style={{
+                        width: '100%',
+                        maxWidth: 400,
+                        borderRadius: 16,
+                        border: `1px solid ${colorBorderSecondary}`,
+                        boxShadow: isDarkMode
+                            ? '0 8px 32px rgba(0, 0, 0, 0.4)'
+                            : '0 8px 32px rgba(0, 0, 0, 0.08)',
+                    }}
+                    styles={{body: {padding: '32px 28px'}}}
+                >
+                    <div className="login-title">{t.login}</div>
+                    <div className="login-subtitle">{t.loginSubtitle || (language === 'ka' ? 'შეიყვანეთ თქვენი მონაცემები' : 'Enter your credentials to continue')}</div>
+
+                    <Form
+                        layout="vertical"
+                        initialValues={{remember: true}}
+                        autoComplete="on"
+                        onFinish={handleSubmit}
+                        size="large"
                     >
-                        <Form
-                            layout="vertical"
-                            initialValues={{remember: true}}
-                            autoComplete="on"
-                            onFinish={handleSubmit}
+                        {error && (
+                            <Alert
+                                message={error}
+                                type="error"
+                                style={{marginBottom: 20, borderRadius: 10}}
+                                showIcon
+                                closable
+                                onClose={() => setError(null)}
+                            />
+                        )}
+                        <Form.Item
+                            name="username"
+                            rules={[{required: true, message: t.usernameRequired}]}
                         >
-                            {error && (
-                                <Alert message={error} type="error" style={{marginBottom: 24}} showIcon/>
-                            )}
-                            <Form.Item
-                                label={t.username}
-                                name="username"
-                                rules={[{required: true, message: t.usernameRequired}]}
-                            >
-                                <Input prefix={<UserOutlined/>}/>
-                            </Form.Item>
+                            <Input
+                                prefix={<UserOutlined style={{opacity: 0.45}}/>}
+                                placeholder={t.username}
+                                style={{height: 48, borderRadius: 10}}
+                            />
+                        </Form.Item>
 
-                            <Form.Item
-                                label={t.password}
-                                name="password"
-                                rules={[{required: true, message: t.passwordRequired}]}
-                            >
-                                <Input.Password prefix={<LockOutlined/>}/>
-                            </Form.Item>
+                        <Form.Item
+                            name="password"
+                            rules={[{required: true, message: t.passwordRequired}]}
+                        >
+                            <Input.Password
+                                prefix={<LockOutlined style={{opacity: 0.45}}/>}
+                                placeholder={t.password}
+                                style={{height: 48, borderRadius: 10}}
+                            />
+                        </Form.Item>
 
-                            <Spin spinning={loading}>
-                                <Form.Item label={null}>
-                                    <Button type="primary" htmlType="submit" style={{width: "100%"}}>
-                                        {t.login}
-                                    </Button>
-                                </Form.Item>
-                            </Spin>
-                        </Form>
-                    </Content>
-                </Layout>
-            </Layout>
-        </>
+                        <Form.Item style={{marginBottom: 0, marginTop: 8}}>
+                            <Button
+                                type="primary"
+                                htmlType="submit"
+                                loading={loading}
+                                icon={<LoginOutlined/>}
+                                style={{
+                                    width: "100%",
+                                    height: 48,
+                                    borderRadius: 10,
+                                    fontSize: 16,
+                                    fontWeight: 600,
+                                }}
+                            >
+                                {t.login}
+                            </Button>
+                        </Form.Item>
+                    </Form>
+                </Card>
+            </Flex>
+
+            <Flex justify="center" style={{padding: '24px 0', opacity: 0.4}}>
+                <Text style={{fontSize: 12}}>{t.footer}</Text>
+            </Flex>
+        </Layout>
     );
 };
 

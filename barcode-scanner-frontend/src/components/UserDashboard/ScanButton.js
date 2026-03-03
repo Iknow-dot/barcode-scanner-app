@@ -1,19 +1,9 @@
 import React, {useRef, useEffect} from 'react';
 import {Html5QrcodeScanner} from 'html5-qrcode';
-import {QrcodeOutlined, ScanOutlined} from "@ant-design/icons";
+import {QrcodeOutlined, CloseOutlined} from "@ant-design/icons";
 import {Button} from "antd";
 import {useLanguage} from '../../i18n/LanguageContext';
 import "./ScanButton.css"
-
-const buttonStyle = {
-  position: 'fixed',
-  bottom: 48,
-  right: "50%",
-  zIndex: 1001,
-  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.2)',
-  translate: '50% 0',
-  transform: "scale(1.3)",
-};
 
 const ScanButton = ({setScanning, scanning, onScan, disabled, qrRef}) => {
   const {t} = useLanguage();
@@ -25,7 +15,6 @@ const ScanButton = ({setScanning, scanning, onScan, disabled, qrRef}) => {
   };
 
   // Effect to initialize and clean up Html5QrcodeScanner
-
   useEffect(() => {
     let html5QrcodeScanner;
     if (scanning && qrRef.current && !disabled) {
@@ -38,7 +27,7 @@ const ScanButton = ({setScanning, scanning, onScan, disabled, qrRef}) => {
             facingMode: "environment",
             width: {ideal: 4096},
             height: {ideal: 2160},
-            advanced: [{zoom: 1.5}] // Attempt to set zoom to 2x, adjust this value as needed
+            advanced: [{zoom: 1.5}]
           },
           disableFlip: false
         });
@@ -79,21 +68,24 @@ const ScanButton = ({setScanning, scanning, onScan, disabled, qrRef}) => {
         {!scanning ? (
             <Button
                 type="primary"
-                variant="outlined"
+                size="large"
                 onClick={() => {
                   if (!disabled) setScanning(true);
                 }}
                 disabled={disabled}
-                style={buttonStyle}
+                className="scan-fab"
+                icon={<QrcodeOutlined style={{fontSize: 20}}/>}
             >
-              <QrcodeOutlined/> {t.scan}
+              {t.scan}
             </Button>
         ) : (
             <Button
-                variant="outlined"
+                size="large"
                 onClick={() => setScanning(false)}
                 danger
-                style={buttonStyle}
+                type="primary"
+                className="scan-fab scan-fab-danger"
+                icon={<CloseOutlined style={{fontSize: 18}}/>}
             >
               {t.close}
             </Button>

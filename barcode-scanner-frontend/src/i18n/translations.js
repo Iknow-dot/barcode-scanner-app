@@ -23,6 +23,7 @@ const translations = {
         username: 'მომხმარებელი სახელი',
         password: 'პაროლი',
         login: 'შესვლა',
+        loginSubtitle: 'შეიყვანეთ თქვენი მონაცემები',
         usernameRequired: 'გთხოვთ შეიყვანოთ მომხმარებლის სახელი!',
         passwordRequired: 'გთხოვთ შეიყვანოთ პაროლი!',
         invalidCredentials: 'მომხმარებელი ან პაროლი არასწორია',
@@ -60,6 +61,10 @@ const translations = {
         organizations: 'ორგანიზაციები',
         warehouses: 'საწყობები',
         users: 'მომხმარებლები',
+        orgTabSubtitle: 'ორგანიზაციების მართვა და კონფიგურაცია',
+        warehouseTabSubtitle: 'საწყობების მართვა',
+        userTabSubtitle: 'მომხმარებლების მართვა და უფლებების კონფიგურაცია',
+        editMode: 'რედაქტირება',
 
         // ===== Organizations =====
         organization: 'ორგანიზაცია',
@@ -190,6 +195,7 @@ const translations = {
         username: 'Username',
         password: 'Password',
         login: 'Login',
+        loginSubtitle: 'Enter your credentials to continue',
         usernameRequired: 'Please enter your username!',
         passwordRequired: 'Please enter your password!',
         invalidCredentials: 'Invalid username or password',
@@ -227,6 +233,10 @@ const translations = {
         organizations: 'Organizations',
         warehouses: 'Warehouses',
         users: 'Users',
+        orgTabSubtitle: 'Manage and configure organizations',
+        warehouseTabSubtitle: 'Manage warehouses',
+        userTabSubtitle: 'Manage users and configure permissions',
+        editMode: 'Edit',
 
         // ===== Organizations =====
         organization: 'Organization',

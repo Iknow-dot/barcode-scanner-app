@@ -7,7 +7,15 @@ import UsersTab from './UsersTab';
 import {AppstoreOutlined, BankOutlined, UserOutlined} from "@ant-design/icons";
 import SubNavContext from "../../contexts/SubNavContext";
 import {useLanguage} from '../../i18n/LanguageContext';
+import {Typography} from "antd";
 
+const {Title, Text} = Typography;
+
+const tabMeta = (t) => ({
+    1: {title: t.organizations, subtitle: t.orgTabSubtitle || '', icon: <BankOutlined style={{color: '#1677ff', fontSize: 22}}/>},
+    2: {title: t.warehouses, subtitle: t.warehouseTabSubtitle || '', icon: <AppstoreOutlined style={{color: '#1677ff', fontSize: 22}}/>},
+    3: {title: t.users, subtitle: t.userTabSubtitle || '', icon: <UserOutlined style={{color: '#1677ff', fontSize: 22}}/>},
+});
 
 const SystemAdminDashboard = () => {
     const {setSubNav} = useContext(SubNavContext);
@@ -54,6 +62,8 @@ const SystemAdminDashboard = () => {
         fetchData();
     }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+    const meta = tabMeta(t)[activeTab];
+
     let ActiveTabPane = null;
     switch (activeTab) {
         case 1:
@@ -71,6 +81,19 @@ const SystemAdminDashboard = () => {
 
     return (
         <>
+            {meta && (
+                <div className="page-header">
+                    <Title level={4} style={{margin: 0, display: 'flex', alignItems: 'center', gap: 10}}>
+                        {meta.icon}
+                        {meta.title}
+                    </Title>
+                    {meta.subtitle && (
+                        <Text type="secondary" style={{fontSize: 13, marginTop: 2, display: 'block'}}>
+                            {meta.subtitle}
+                        </Text>
+                    )}
+                </div>
+            )}
             {ActiveTabPane}
         </>
     );

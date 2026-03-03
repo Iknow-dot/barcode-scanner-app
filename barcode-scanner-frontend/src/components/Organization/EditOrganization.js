@@ -1,7 +1,7 @@
 import React from 'react';
 import ModalForm from "../ModalForm";
 import {Button, Divider, Flex, Form, Input, InputNumber, Switch} from "antd";
-import {LockOutlined, UserOutlined} from "@ant-design/icons";
+import {LockOutlined, UserOutlined, SaveOutlined, GlobalOutlined} from "@ant-design/icons";
 import {useLanguage} from '../../i18n/LanguageContext';
 
 const EditOrganization = ({visible, setVisible, onFinish, object}) => {
@@ -28,32 +28,42 @@ const EditOrganization = ({visible, setVisible, onFinish, object}) => {
                 <Input/>
             </Form.Item>
 
-            <Form.Item
-                label={t.identificationNumber}
-                name="identification_number"
-                rules={[
-                    {
-                        required: true,
-                        message: t.idNumberRequired,
-                    },
-                ]}
-            >
-                <Input/>
-            </Form.Item>
+            <Flex gap={16}>
+                <Form.Item
+                    label={t.identificationNumber}
+                    name="identification_number"
+                    style={{flex: 1}}
+                    rules={[
+                        {
+                            required: true,
+                            message: t.idNumberRequired,
+                        },
+                    ]}
+                >
+                    <Input/>
+                </Form.Item>
 
-            <Form.Item
-                label={t.employeesCount}
-                name="employees_count"
-                rules={[
-                    {
-                        required: true,
-                        message: t.employeesCountRequired,
-                    }
-                ]}
-            >
-                <InputNumber/>
-            </Form.Item>
-            <Divider>{t.webService}</Divider>
+                <Form.Item
+                    label={t.employeesCount}
+                    name="employees_count"
+                    style={{flex: 1}}
+                    rules={[
+                        {
+                            required: true,
+                            message: t.employeesCountRequired,
+                        }
+                    ]}
+                >
+                    <InputNumber style={{width: '100%'}} min={1}/>
+                </Form.Item>
+            </Flex>
+
+            <Divider style={{margin: '8px 0 16px'}}>
+                <Flex align="center" gap={6} style={{opacity: 0.7, fontSize: 13}}>
+                    <GlobalOutlined/>
+                    {t.webService}
+                </Flex>
+            </Divider>
 
             <Form.Item
                 label={t.address}
@@ -77,14 +87,12 @@ const EditOrganization = ({visible, setVisible, onFinish, object}) => {
                     }
                 ]}
             >
-                <Input prefix={<UserOutlined/>}/>
+                <Input prefix={<UserOutlined style={{opacity: 0.4}}/>}/>
             </Form.Item>
 
-            <Flex gap="small">
+            <Flex gap={16} align="flex-start">
                 <Form.Item
-                    style={{
-                        flex: 1
-                    }}
+                    style={{flex: 1}}
                     label={t.password}
                     name="web_service_password"
                     rules={[
@@ -93,9 +101,9 @@ const EditOrganization = ({visible, setVisible, onFinish, object}) => {
                             message: t.webServicePasswordHint,
                         }
                     ]}
-                    extra={t.leaveEmptyPassword}
+                    extra={<span style={{fontSize: 12, opacity: 0.5}}>{t.leaveEmptyPassword}</span>}
                 >
-                    <Input.Password prefix={<LockOutlined/>} autoComplete="new-password"/>
+                    <Input.Password prefix={<LockOutlined style={{opacity: 0.4}}/>} autoComplete="new-password"/>
                 </Form.Item>
                 <Form.Item
                     label={t.clearPassword}
@@ -105,8 +113,14 @@ const EditOrganization = ({visible, setVisible, onFinish, object}) => {
                 </Form.Item>
             </Flex>
 
-            <Form.Item label={null}>
-                <Button block type="primary" htmlType="submit" variant="solid" color="green">
+            <Form.Item label={null} style={{marginTop: 8, marginBottom: 0}}>
+                <Button
+                    block
+                    type="primary"
+                    htmlType="submit"
+                    icon={<SaveOutlined/>}
+                    style={{height: 44, fontWeight: 600}}
+                >
                     {t.save}
                 </Button>
             </Form.Item>

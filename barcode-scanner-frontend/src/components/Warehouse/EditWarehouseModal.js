@@ -1,6 +1,7 @@
 import React from 'react';
 import ModalForm from "../ModalForm";
-import {Button, Form, Input} from "antd";
+import {Button, Flex, Form, Input} from "antd";
+import {SaveOutlined} from "@ant-design/icons";
 import {useLanguage} from '../../i18n/LanguageContext';
 
 const EditWarehouseModal = ({ visible, setVisible, onFinish, object }) => {
@@ -14,36 +15,45 @@ const EditWarehouseModal = ({ visible, setVisible, onFinish, object }) => {
           onFinish={(data) => onFinish(data, object)}
           title={t.editWarehouse}
       >
-        <Form.Item
-            label={t.warehouseName}
-            name="name"
-            rules={[
-              {
-                required: true,
-                message: t.nameRequired,
-              },
-            ]}
-        >
-            <Input/>
-        </Form.Item>
-        <Form.Item
-            label={t.warehouseCode}
-            name="code"
-            rules={[
-              {
-                required: true,
-                message: t.codeRequired,
-              },
-            ]}
-        >
-            <Input/>
-        </Form.Item>
-        <Form.Item>
-          <Button block type="primary" htmlType="submit" variant="solid" color="green">
+        <Flex gap={16}>
+          <Form.Item
+              label={t.warehouseName}
+              name="name"
+              style={{flex: 1}}
+              rules={[
+                {
+                  required: true,
+                  message: t.nameRequired,
+                },
+              ]}
+          >
+              <Input/>
+          </Form.Item>
+          <Form.Item
+              label={t.warehouseCode}
+              name="code"
+              style={{flex: 1}}
+              rules={[
+                {
+                  required: true,
+                  message: t.codeRequired,
+                },
+              ]}
+          >
+              <Input/>
+          </Form.Item>
+        </Flex>
+        <Form.Item style={{marginBottom: 0}}>
+          <Button
+              block
+              type="primary"
+              htmlType="submit"
+              icon={<SaveOutlined/>}
+              style={{height: 44, fontWeight: 600}}
+          >
             {t.save}
           </Button>
         </Form.Item>
-
       </ModalForm>
   );
 };
