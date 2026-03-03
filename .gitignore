@@ -5,16 +5,13 @@ __pycache__/
 *.pyd
 
 # Virtual environment
+.venv/
 venv/
 .env
 
 # Database files
-*.sqlite
-*.db
 *.sqlite3
-
-# Flask instance folder
-instance/
+*.db
 
 # IDE and editor files
 .vscode/
@@ -24,10 +21,12 @@ instance/
 .DS_Store
 Thumbs.db
 
+# Django
+backend/staticfiles/
+backend/db.sqlite3
 
-# Exclude migration directories
-/venv
-/__pycache__
-app/__pycache__
-app/views/__pycache__
+# Node
 **/node_modules/
+
+# uv lock (regenerate with `uv lock`)
+uv.lock

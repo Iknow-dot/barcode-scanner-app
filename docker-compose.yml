@@ -1,21 +1,24 @@
 services:
-  web:
-    build: .
-    command: python -m flask run --host=0.0.0.0 --port=8080 --reload
+  backend:
+    build:
+      context: ./backend
+    command: >
+      sh -c "python manage.py migrate --noinput &&
+             python manage.py collectstatic --noinput &&
+             python manage.py runserver 0.0.0.0:8080"
     ports:
       - "8080:8080"
     depends_on:
       - db
     volumes:
-      - .:/app
+      - ./backend:/app
     environment:
-      - SECRET_KEY=42p58769vyh24uyg02nv804895y7@^DBN$#*(
-      - JWT_SECRET_KEY=1c90n34857t#$t3976r^%&47x6
-      - FLASK_ENV=development
-      - DATABASE_URL=postgresql://postgres:postgres@db:5432/postgres
+      - DJANGO_SECRET_KEY=dev-secret-key-change-in-production
+      - DATABASE_URL=postgres://postgres:postgres@db:5432/postgres
       - DEBUG=True
-      - FLASK_APP=run.py
-      - FERNET_KEY=MO69AxjxiFlmlCCZiZ1Bm3gOnlAa8iVKgnc67BV0jPA=
+      - ALLOWED_HOSTS=localhost,127.0.0.1
+      - CORS_ALLOWED_ORIGINS=http://localhost:3000
+      - FERNET_KEY=MO69AxjxiFlmlCCZiZ1Bm3gOnlAa9iVKgnc67BV0jPA=
 
   db:
     image: postgres:17
@@ -38,7 +41,7 @@ services:
       - "3000:3000"
     environment:
       - NODE_ENV=development
-      - REACT_APP_API_BASE_URL=http://localhost:8000
+      - REACT_APP_API_BASE_URL=http://localhost:8080
       - CHOKIDAR_USEPOLLING=true
       - WATCHPACK_POLLING=true
       - REACT_APP_PUBLIC_POSTHOG_KEY=phc_yg5k071dOq3uRdhBL0rSMh6SXjsuE6WkEq6Et5A7bYP

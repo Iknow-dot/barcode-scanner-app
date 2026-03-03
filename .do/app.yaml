@@ -1,0 +1,56 @@
+name: barcode-scanner-app
+
+services:
+  - name: backend
+    dockerfile_path: backend/Dockerfile
+    source_dir: backend
+    http_port: 8080
+    instance_count: 1
+    instance_size_slug: basic-xxs
+    routes:
+      - path: /api
+      - path: /admin
+    envs:
+      - key: DJANGO_SECRET_KEY
+        scope: RUN_TIME
+        type: SECRET
+      - key: DATABASE_URL
+        scope: RUN_TIME
+        type: SECRET
+      - key: ALLOWED_HOSTS
+        scope: RUN_TIME
+        value: ${APP_DOMAIN}
+      - key: CORS_ALLOWED_ORIGINS
+        scope: RUN_TIME
+        value: https://${APP_DOMAIN}
+      - key: DEBUG
+        scope: RUN_TIME
+        value: "False"
+      - key: FERNET_KEY
+        scope: RUN_TIME
+        type: SECRET
+    run_command: |
+      python manage.py migrate --noinput &&
+      python manage.py collectstatic --noinput &&
+      gunicorn --bind 0.0.0.0:8080 --workers 2 --threads 4 --timeout 120 backend.wsgi:application
+
+  - name: frontend
+    dockerfile_path: barcode-scanner-frontend/Dockerfile
+    source_dir: barcode-scanner-frontend
+    http_port: 3000
+    instance_count: 1
+    instance_size_slug: basic-xxs
+    routes:
+      - path: /
+    envs:
+      - key: REACT_APP_API_BASE_URL
+        scope: BUILD_TIME
+        value: https://${APP_DOMAIN}
+
+databases:
+  - name: db
+    engine: PG
+    production: false
+    cluster_name: barcode-scanner-db
+    db_name: barcode_scanner
+    db_user: barcode_scanner
