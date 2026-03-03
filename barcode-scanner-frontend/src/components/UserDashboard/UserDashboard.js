@@ -1,6 +1,7 @@
-import React, {useState, useEffect, useContext, useRef} from 'react';
+import React, {useState, useEffect, useContext} from 'react';
 import {warehouseService, productService} from '../../api';
 import ScanButton from './ScanButton';
+import BarcodeScanner from './BarcodeScanner';
 import subNavContext from "../../contexts/SubNavContext";
 import useAppNotification from "../../hooks/useAppNotification";
 import {useLanguage} from '../../i18n/LanguageContext';
@@ -8,10 +9,7 @@ import {
     Button,
     Card,
     Carousel,
-    Descriptions,
-    Divider,
     Drawer,
-    Empty,
     Flex,
     Form,
     Input,
@@ -40,11 +38,10 @@ const UserDashboard = () => {
     const [loading, setLoading] = useState(false);
     const [disableScan, setDisableScan] = useState(false);
     const {setSubNav} = useContext(subNavContext);
-    const [scanning, setScanning] = useState(false);
+    const [scannerOpen, setScannerOpen] = useState(false);
     const [balances, setBalances] = useState([]);
     const [userWarehouses, setUserWarehouses] = useState([]);
     const [productInfo, setProductInfo] = useState({sku_name: '', article: '', price: '', images: []});
-    const qrRef = useRef(null);
     const {t} = useLanguage();
 
     const {notify, contextHolder} = useAppNotification();
@@ -107,12 +104,17 @@ const UserDashboard = () => {
     };
 
     const handleScanResult = (decodedText) => {
-        setScanning(false);
+        setScannerOpen(false);
         handleSearch({
             search: decodedText,
             searchType: 'barcode',
             allWarehouses: form.getFieldValue('allWarehouses')
         });
+    };
+
+    const handleOpenScanner = () => {
+        setDrawerVisible(false);
+        setScannerOpen(true);
     };
 
     /**
@@ -130,8 +132,15 @@ const UserDashboard = () => {
         <>
             {contextHolder}
 
+            {/* Barcode Scanner (fullscreen overlay) */}
+            <BarcodeScanner
+                open={scannerOpen}
+                onScan={handleScanResult}
+                onClose={() => setScannerOpen(false)}
+            />
+
             {/* Empty State - when no results yet */}
-            {(balances.length === 0 || scanning) && (
+            {balances.length === 0 && !scannerOpen && (
                 <div className="empty-state">
                     <Result
                         icon={<ShoppingOutlined style={{color: '#1677ff', fontSize: 64}}/>}
@@ -142,37 +151,22 @@ const UserDashboard = () => {
                             </span>
                         }
                         extra={
-                            <>
-                                <Button
-                                    type="primary"
-                                    size="large"
-                                    icon={<SearchOutlined/>}
-                                    onClick={() => setDrawerVisible(true)}
-                                    style={{borderRadius: 10, height: 44, paddingInline: 28}}
-                                >
-                                    {t.search}
-                                </Button>
-                                <div style={{marginTop: 24}}>
-                                    <div ref={qrRef} id="qr-reader"/>
-                                    {scanning && (
-                                        <Button
-                                            variant="outlined"
-                                            onClick={() => setScanning(false)}
-                                            danger
-                                            style={{marginTop: 12, borderRadius: 10}}
-                                        >
-                                            {t.close}
-                                        </Button>
-                                    )}
-                                </div>
-                            </>
+                            <Button
+                                type="primary"
+                                size="large"
+                                icon={<SearchOutlined/>}
+                                onClick={() => setDrawerVisible(true)}
+                                style={{borderRadius: 10, height: 44, paddingInline: 28}}
+                            >
+                                {t.search}
+                            </Button>
                         }
                     />
                 </div>
             )}
 
             {/* Toggle Search Drawer Button */}
-            {!scanning && balances.length > 0 && (
+            {!scannerOpen && balances.length > 0 && (
                 <Button
                     type="primary"
                     shape="circle"
@@ -219,7 +213,6 @@ const UserDashboard = () => {
                     >
                         <Form.Item
                             name="searchType"
-                            label={t.selectSearchType ? undefined : undefined}
                             initialValue="barcode"
                             rules={[{required: true, message: t.selectSearchType}]}
                         >
@@ -287,21 +280,15 @@ const UserDashboard = () => {
 
                     <Flex justify="center" style={{marginTop: 8}}>
                         <ScanButton
-                            setScanning={() => {
-                                setScanning(prev => !prev);
-                                setDrawerVisible(false);
-                            }}
-                            scanning={scanning}
-                            onScan={handleScanResult}
+                            onPress={handleOpenScanner}
                             disabled={disableScan}
-                            qrRef={qrRef}
                         />
                     </Flex>
                 </Drawer>
             </Spin>
 
             {/* Product Results */}
-            {!scanning && balances.length > 0 && (
+            {!scannerOpen && balances.length > 0 && (
                 <div style={{animation: 'loginCardSlideUp 0.4s ease-out'}}>
                     {/* Product Info Card */}
                     <Card
