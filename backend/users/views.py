@@ -11,10 +11,11 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework_simplejwt.exceptions import TokenError
 
+from core.models import Organization
 from core.permissions import CompanyUserPermission
 from users.exceptions import IPNotAllowedError
 from users.models import User
-from users.serializers import ClientIPSerializer, CompanyUserSerializer
+from users.serializers import ClientIPSerializer, CompanyUserSerializer, InternalAdminUserSerializer
 
 
 @extend_schema(tags=['Network'])
@@ -109,6 +110,11 @@ class UsersViewSet(ModelViewSet):
     filterset_fields = ['organization', 'role']
     search_fields = ['username', 'email', 'first_name', 'last_name']
 
+    def get_serializer_class(self):
+        if self.request.user.role == User.Role.INTERNAL_ADMIN:
+            return InternalAdminUserSerializer
+        return CompanyUserSerializer
+
     def get_queryset(self):
         user = self.request.user
         if user.role == User.Role.INTERNAL_ADMIN:
@@ -120,7 +126,23 @@ class UsersViewSet(ModelViewSet):
         )
 
     def create(self, request, *args, **kwargs):
-        organization = request.user.organization
+        # Internal admins don't belong to an organization; resolve it from the request data.
+        if request.user.role == User.Role.INTERNAL_ADMIN:
+            org_id = request.data.get('organization')
+            if not org_id:
+                return Response(
+                    {"detail": "Organization is required."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            try:
+                organization = Organization.objects.get(pk=org_id)
+            except Organization.DoesNotExist:
+                return Response(
+                    {"detail": "Organization not found."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+        else:
+            organization = request.user.organization
 
         if organization.has_reached_user_limit():
             return Response(

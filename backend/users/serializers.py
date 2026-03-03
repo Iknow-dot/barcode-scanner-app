@@ -138,10 +138,10 @@ class AllowedIPAddressSerializer(serializers.ModelSerializer):
         fields = ["ip_or_network"]
 
 
-class CompanyUserSerializer(serializers.ModelSerializer):
+class _BaseUserSerializer(serializers.ModelSerializer):
     """
-    Serializer used by company admins to manage users in their organization.
-    The organization and role are set automatically.
+    Shared base for user serializers.  Subclasses control which fields
+    are read-only (e.g. ``organization``).
     """
     password = serializers.CharField(write_only=True, required=False, min_length=8)
     allowed_ips = AllowedIPAddressSerializer(many=True, required=False)
@@ -170,25 +170,23 @@ class CompanyUserSerializer(serializers.ModelSerializer):
             'password',
             'is_active',
             'organization',
-            'role',
             'allowed_ips',
             'warehouse_ids',
             'warehouse_ids_read',
         ]
         read_only_fields = ['id']
 
-    def create(self, validated_data):
+    # -- helpers shared by both serializers --
+
+    def _create_user(self, validated_data):
         password = validated_data.pop('password')
         warehouses = validated_data.pop('warehouses', [])
         validated_data.pop('allowed_ips', None)
-        validated_data['organization'] = self.context['request'].user.organization
         user = User(**validated_data)
         user.set_password(password)
         user.save()
-        # Assign allowed IPs
         for ip_data in self.initial_data.get('allowed_ips', []):
             AllowedIP.objects.get_or_create(user=user, **ip_data)
-        # Assign warehouses
         if warehouses:
             user.warehouses.set(warehouses)
         return user
@@ -202,12 +200,40 @@ class CompanyUserSerializer(serializers.ModelSerializer):
         if password:
             instance.set_password(password)
         instance.save()
-        # Update warehouses if provided
         if warehouses is not None:
             instance.warehouses.set(warehouses)
-        # Update allowed IPs if provided
         if 'allowed_ips' in self.initial_data:
             instance.allowed_ips.all().delete()
             for ip_data in self.initial_data.get('allowed_ips', []):
                 AllowedIP.objects.get_or_create(user=instance, **ip_data)
         return instance
+
+
+class CompanyUserSerializer(_BaseUserSerializer):
+    """
+    Serializer used by **company admins**.
+    ``organization`` is read-only — it is always set to the requesting
+    admin's own organization so company admins cannot assign users to
+    arbitrary organizations.
+    """
+
+    class Meta(_BaseUserSerializer.Meta):
+        read_only_fields = ['id', 'organization']
+
+    def create(self, validated_data):
+        validated_data['organization'] = self.context['request'].user.organization
+        return self._create_user(validated_data)
+
+
+class InternalAdminUserSerializer(_BaseUserSerializer):
+    """
+    Serializer used by **internal admins** (superadmins).
+    ``organization`` is writable — internal admins can assign users to
+    any organization.
+    """
+
+    class Meta(_BaseUserSerializer.Meta):
+        read_only_fields = ['id']
+
+    def create(self, validated_data):
+        return self._create_user(validated_data)

@@ -131,6 +131,10 @@ const UsersTab = ({initialUsers, addModalExtraProps, handleEditCallback = null, 
             last_name: newUser.last_name || '',
         };
 
+        if (newUser.organization) {
+            payload.organization = newUser.organization;
+        }
+
         if (newUser.ip_address && newUser.ip_address.length > 0) {
             payload.allowed_ips = newUser.ip_address.map(ip => ({ip_or_network: ip}));
         }

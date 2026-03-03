@@ -99,7 +99,7 @@ const translations = {
         orgDeleted: 'ორგანიზაცია წაიშლა',
         orgDeletedDesc: (name) => `ორგანიზაცია: ${name}`,
         orgDeleteError: 'შეცდომა ორგანიზაციის წაშლისას:',
-        orgCreated: 'ორგანიზაც���ა წარმატებით შეიქმნა!',
+        orgCreated: 'ორგანიზაცია წარმატებით შეიქმნა!',
         orgCreatedDesc: (name) => `ორგანიზაცია: ${name}`,
         orgCreateError: 'შეცდომა ორგანიზაციის შექმნისას:',
         orgEdited: 'ორგანიზაცია წარმატებიით შეირედაქტირდა',
@@ -141,7 +141,7 @@ const translations = {
         selectOrgFirst: 'ჯერ აირჩიეთ ორგანიზაცია',
 
         // User form validations
-        usernameFieldRequired: 'გთხოვთ შეიყვანო�� მომხმარებელი!',
+        usernameFieldRequired: 'გთხოვთ შეიყვანოთ მომხმარებელი!',
         emailInvalid: 'გთხოვთ შეიყვანოთ სწორი ელ. ფოსტა!',
         passwordFieldRequired: 'გთხოვთ შეიყვანოთ პაროლი!',
         passwordMinLength: 'პაროლი უნდა იყოს მინიმუმ 8 სიმბოლო!',
