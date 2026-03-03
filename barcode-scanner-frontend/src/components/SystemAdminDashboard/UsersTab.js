@@ -224,17 +224,17 @@ const UsersTab = ({initialUsers, initialLoading = false, addModalExtraProps, han
                 <div className="filter-bar">
                     <Row gutter={[12, 12]} align="middle">
                         <Col xs={24} sm={24} md={8}>
-                            <Input.Search
+                            <Input
                                 placeholder={t.filterName}
                                 allowClear
                                 value={query}
-                                onSearch={(v) => {
+                                onChange={e => handleQueryChange(e.target.value)}
+                                onPressEnter={() => {
                                     if (debounceTimer.current) clearTimeout(debounceTimer.current);
-                                    setQuery(v);
                                     handleSearch();
                                 }}
-                                onChange={e => handleQueryChange(e.target.value)}
                                 prefix={<SearchOutlined style={{opacity: 0.4}}/>}
+                                style={{height: 32}}
                             />
                         </Col>
                         <Col xs={24} sm={12} md={6}>
