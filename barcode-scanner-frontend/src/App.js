@@ -238,7 +238,7 @@ const AppContent = () => {
             algorithm: isDark ? theme.darkAlgorithm : theme.defaultAlgorithm,
             token: {
                 borderRadius: 8,
-                fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+                fontFamily: '"Noto Sans Georgian", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
             },
             components: {
                 Table: {
