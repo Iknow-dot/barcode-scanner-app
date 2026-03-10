@@ -3,6 +3,7 @@ import os
 from cryptography.fernet import Fernet
 from django.db import models
 from django.contrib.auth import get_user_model
+from django.utils import timezone
 
 
 
@@ -69,4 +70,93 @@ class Warehouse(models.Model):
 
     def __str__(self):
         return f"{self.name} ({self.code}) - {self.organization.name}"
+
+
+class Customer(models.Model):
+    """A customer attached to an organization, used for purchase orders."""
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name='customers',
+    )
+    first_name = models.CharField(max_length=255)
+    last_name = models.CharField(max_length=255)
+    phone = models.CharField(max_length=50, blank=True, default='')
+    email = models.EmailField(blank=True, default='')
+    identification_number = models.CharField(max_length=50, blank=True, default='')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.first_name} {self.last_name}"
+
+
+class PurchaseOrder(models.Model):
+    """A purchase order created by a company user, linked to a customer."""
+
+    class Status(models.TextChoices):
+        DRAFT = 'draft', 'Draft'
+        CONFIRMED = 'confirmed', 'Confirmed'
+        CANCELLED = 'cancelled', 'Cancelled'
+
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name='purchase_orders',
+    )
+    customer = models.ForeignKey(
+        Customer,
+        on_delete=models.CASCADE,
+        related_name='purchase_orders',
+    )
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='created_orders',
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.DRAFT,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Order #{self.pk} — {self.customer} ({self.status})"
+
+    @property
+    def total(self):
+        return sum(item.line_total for item in self.items.all())
+
+
+class PurchaseOrderItem(models.Model):
+    """A line item in a purchase order, representing a scanned product."""
+    order = models.ForeignKey(
+        PurchaseOrder,
+        on_delete=models.CASCADE,
+        related_name='items',
+    )
+    sku = models.CharField(max_length=255)
+    sku_name = models.CharField(max_length=255, blank=True, default='')
+    article = models.CharField(max_length=255, blank=True, default='')
+    price = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    quantity = models.PositiveIntegerField(default=1)
+    added_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['added_at']
+
+    def __str__(self):
+        return f"{self.sku_name or self.sku} x{self.quantity}"
+
+    @property
+    def line_total(self):
+        return self.price * self.quantity
 

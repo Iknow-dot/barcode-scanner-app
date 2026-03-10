@@ -141,7 +141,56 @@
   border: 1px solid rgba(0, 0, 0, 0.06);
 }
 
-/* ===== User Dashboard ===== */
+/* ===== User Dashboard: Two-Column Layout ===== */
+.dashboard-layout {
+  display: flex;
+  gap: 20px;
+  padding: 0;
+  min-height: calc(100vh - 200px);
+}
+
+.dashboard-left-col {
+  width: 380px;
+  min-width: 320px;
+  flex-shrink: 0;
+}
+
+.dashboard-right-col {
+  flex: 1;
+  min-width: 0;
+}
+
+.dashboard-order-panel {
+  position: sticky;
+  top: 16px;
+}
+
+/* ===== Incomplete Order Rows (clickable) ===== */
+.incomplete-order-row {
+  transition: background-color 0.2s ease;
+}
+
+.incomplete-order-row:hover {
+  background-color: rgba(22, 119, 255, 0.04);
+}
+
+/* Responsive: stack on mobile */
+@media (max-width: 900px) {
+  .dashboard-layout {
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .dashboard-left-col {
+    width: 100%;
+    min-width: unset;
+  }
+
+  .dashboard-order-panel {
+    position: static;
+  }
+}
+
 .product-result-card {
   border-radius: 12px;
   overflow: hidden;
