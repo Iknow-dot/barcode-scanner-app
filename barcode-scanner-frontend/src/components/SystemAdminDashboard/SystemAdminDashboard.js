@@ -50,23 +50,25 @@ const SystemAdminDashboard = () => {
         ].filter(Boolean));
     }, [userRole, setSubNav, t]);
 
-    useEffect(() => {
-        const fetchData = async () => {
-            setUsersLoading(true);
-            try {
-                const result = await userService.getUsers();
-                if (result.success) {
-                    const data = result.data;
-                    setUsers(Array.isArray(data) ? data : data.results || []);
-                } else {
-                    console.error(t.dataFetchError, result.error);
-                }
-            } finally {
-                setUsersLoading(false);
+    const fetchUsers = async () => {
+        setUsersLoading(true);
+        try {
+            const result = await userService.getUsers();
+            if (result.success) {
+                const data = result.data;
+                setUsers(Array.isArray(data) ? data : data.results || []);
+            } else {
+                console.error(t.dataFetchError, result.error);
             }
-        };
-        fetchData();
-    }, []); // eslint-disable-line react-hooks/exhaustive-deps
+        } finally {
+            setUsersLoading(false);
+        }
+    };
+
+    // Fetch users on mount and whenever the Users tab becomes active
+    useEffect(() => {
+        fetchUsers();
+    }, [activeTab]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const meta = tabMeta(t)[activeTab];
 

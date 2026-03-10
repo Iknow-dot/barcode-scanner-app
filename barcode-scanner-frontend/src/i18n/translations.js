@@ -138,6 +138,7 @@ const translations = {
         ipEnabled: 'IP ჩართული',
         selectOrganization: 'აირჩიეთ ორგანიზაცია',
         selectWarehouses: 'აირჩიეთ საწყობები',
+        selectUsers: 'აირჩიეთ მომხმარებლები',
         selectOrgFirst: 'ჯერ აირჩიეთ ორგანიზაცია',
 
         // User form validations
@@ -315,6 +316,7 @@ const translations = {
         ipEnabled: 'IP Enabled',
         selectOrganization: 'Select Organization',
         selectWarehouses: 'Select Warehouses',
+        selectUsers: 'Select Users',
         selectOrgFirst: 'Select an organization first',
 
         // User form validations

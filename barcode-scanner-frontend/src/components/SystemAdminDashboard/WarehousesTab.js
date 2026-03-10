@@ -43,7 +43,13 @@ const WarehousesTab = () => {
         const result = await warehouseService.updateWarehouse(payload.id, payload);
 
         if (result.success) {
-            setWarehouses(prev => prev.map(wh => wh.id === payload.id ? payload : wh));
+            // Refresh full list from server to get updated user_ids_read
+            const refreshResult = await warehouseService.getWarehouses();
+            if (refreshResult.success) {
+                setWarehouses(refreshResult.data);
+            } else {
+                setWarehouses(prev => prev.map(wh => wh.id === payload.id ? result.data : wh));
+            }
             notify.success(t.warehouseEdited, t.warehouseEditedDesc(payload.name));
             return true;
         }

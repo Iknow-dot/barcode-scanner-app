@@ -54,7 +54,6 @@
     "nth-check": ">=2.0.1",
     "postcss": ">=8.4.31",
     "serialize-javascript": ">=7.0.3",
-    "webpack-dev-server": ">=5.2.1",
     "svgo": ">=2.0.0",
     "underscore": ">=1.13.8",
     "bfj": {

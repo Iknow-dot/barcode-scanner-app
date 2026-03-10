@@ -290,12 +290,12 @@ const UsersTab = ({initialUsers, initialLoading = false, addModalExtraProps, han
 
             <DataTab loading={loading} objects={users} columns={[
                 {key: 'username', title: t.name, dataIndex: 'username'},
-                {
+                ...(authData?.role === 'internal_admin' ? [{
                     key: 'organization',
                     title: t.organization,
                     dataIndex: 'organization',
                     render: orgId => organizations[orgId] || <span style={{opacity: 0.4}}>N/A</span>
-                },
+                }] : []),
                 {
                     key: 'role',
                     title: t.role,
