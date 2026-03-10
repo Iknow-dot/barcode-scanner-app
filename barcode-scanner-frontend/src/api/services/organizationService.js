@@ -49,3 +49,16 @@ export const deleteOrganization = (orgId) =>
  */
 export const getUsedIps = (orgId) =>
     api.get(API_ENDPOINTS.organization_used_ips(orgId));
+
+/**
+ * Fetch the current user's organization external service details.
+ */
+export const getExternalService = () =>
+    api.get(API_ENDPOINTS.my_organization_external_service);
+
+/**
+ * Update the current user's organization external service details.
+ * @param {Object} payload - { web_service_url, web_service_username, web_service_password, clear_password }
+ */
+export const updateExternalService = (payload) =>
+    api.patch(API_ENDPOINTS.my_organization_external_service, payload);

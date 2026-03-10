@@ -4,7 +4,8 @@ import AuthContext from '../Auth/AuthContext';
 import OrganizationsTab from './OrganizationsTab';
 import WarehousesTab from './WarehousesTab';
 import UsersTab from './UsersTab';
-import {AppstoreOutlined, BankOutlined, UserOutlined} from "@ant-design/icons";
+import ExternalServiceSettings from '../Organization/ExternalServiceSettings';
+import {AppstoreOutlined, BankOutlined, GlobalOutlined, UserOutlined} from "@ant-design/icons";
 import SubNavContext from "../../contexts/SubNavContext";
 import {useLanguage} from '../../i18n/LanguageContext';
 import {Typography} from "antd";
@@ -15,6 +16,7 @@ const tabMeta = (t) => ({
     1: {title: t.organizations, subtitle: t.orgTabSubtitle || '', icon: <BankOutlined style={{color: '#1677ff', fontSize: 22}}/>},
     2: {title: t.warehouses, subtitle: t.warehouseTabSubtitle || '', icon: <AppstoreOutlined style={{color: '#1677ff', fontSize: 22}}/>},
     3: {title: t.users, subtitle: t.userTabSubtitle || '', icon: <UserOutlined style={{color: '#1677ff', fontSize: 22}}/>},
+    4: {title: t.externalServiceSettings, subtitle: t.externalServiceSubtitle || '', icon: <GlobalOutlined style={{color: '#1677ff', fontSize: 22}}/>},
 });
 
 const SystemAdminDashboard = () => {
@@ -46,7 +48,13 @@ const SystemAdminDashboard = () => {
                 icon: <UserOutlined/>,
                 label: t.users,
                 onClick: () => setActiveTab(3)
-            }
+            },
+            userRole === userRoles.company_admin && ({
+                key: '4',
+                icon: <GlobalOutlined/>,
+                label: t.externalServiceSettings,
+                onClick: () => setActiveTab(4)
+            }),
         ].filter(Boolean));
     }, [userRole, setSubNav, t]);
 
@@ -82,6 +90,9 @@ const SystemAdminDashboard = () => {
             break;
         case 3:
             ActiveTabPane = <UsersTab initialUsers={users} initialLoading={usersLoading} filtersEnabled={true}/>;
+            break;
+        case 4:
+            ActiveTabPane = <ExternalServiceSettings/>;
             break;
         default:
             ActiveTabPane = null;

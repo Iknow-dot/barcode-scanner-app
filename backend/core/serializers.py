@@ -19,6 +19,35 @@ class OrganizationSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 
+class OrganizationExternalServiceSerializer(serializers.ModelSerializer):
+    """Serializer for company admins to update their organization's external service details."""
+    clear_password = serializers.BooleanField(write_only=True, required=False, default=False)
+
+    class Meta:
+        model = Organization
+        fields = ['web_service_url', 'web_service_username', 'web_service_password', 'clear_password']
+        extra_kwargs = {
+            'web_service_password': {'write_only': True, 'required': False},
+        }
+
+    def update(self, instance, validated_data):
+        clear_password = validated_data.pop('clear_password', False)
+
+        if clear_password:
+            instance.web_service_password = None
+            instance.web_service_username = validated_data.get('web_service_username', instance.web_service_username)
+            instance.web_service_url = validated_data.get('web_service_url', instance.web_service_url)
+        else:
+            password = validated_data.pop('web_service_password', None)
+            for attr, value in validated_data.items():
+                setattr(instance, attr, value)
+            if password:
+                instance.encrypt_password(password)
+
+        instance.save()
+        return instance
+
+
 # ---------------------------------------------------------------------------
 # Warehouse �� full access (internal_admin, company_admin)
 # ---------------------------------------------------------------------------

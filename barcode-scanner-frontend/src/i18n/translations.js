@@ -94,6 +94,19 @@ const translations = {
         webServiceUsernameHint: 'შეავსეთ მომხმარელის სახელი!',
         webServicePasswordHint: 'შეავსეთ პაროლი!',
 
+        // External Service Settings
+        externalServiceSettings: 'გარე სერვისის პარამეტრები',
+        externalServiceSubtitle: 'თქვენი ორგანიზაციის გარე ვებ სერვისის კავშირის პარამეტრები',
+        externalServiceUrl: 'სერვისის URL',
+        externalServiceUsername: 'მომხმარებლის სახელი',
+        externalServicePassword: 'პაროლი',
+        externalServiceUrlRequired: 'გთხოვთ შეიყვანოთ სერვისის URL!',
+        externalServiceUpdated: 'გარე სერვისის პარამეტრები წარმატებით განახლდა',
+        externalServiceUpdateError: 'შეცდომა გარე სერვისის პარამეტრების განახლებისას',
+        externalServiceFetchError: 'შეცდომა გარე სერვისის პარამეტრების მიღებისას',
+        passwordIsSet: 'პაროლი დაყენებულია',
+        passwordNotSet: 'პაროლი არ არის დაყენებული',
+
         // Organization notifications
         orgFetchError: 'შეცდომა ორგანიზაციების მიღებისას, შეამოწმეთ ინტერნეტთან კავშირი',
         orgDeleted: 'ორგანიზაცია წაიშლა',
@@ -271,6 +284,19 @@ const translations = {
         webServiceUrlRequired: 'Please enter the web service URL!',
         webServiceUsernameHint: 'Please enter the username!',
         webServicePasswordHint: 'Please enter the password!',
+
+        // External Service Settings
+        externalServiceSettings: 'External Service Settings',
+        externalServiceSubtitle: 'Manage your organization\'s external web service connection details',
+        externalServiceUrl: 'Service URL',
+        externalServiceUsername: 'Username',
+        externalServicePassword: 'Password',
+        externalServiceUrlRequired: 'Please enter the service URL!',
+        externalServiceUpdated: 'External service settings updated successfully',
+        externalServiceUpdateError: 'Error updating external service settings',
+        externalServiceFetchError: 'Error fetching external service settings',
+        passwordIsSet: 'Password is set',
+        passwordNotSet: 'Password is not set',
 
         // Organization notifications
         orgFetchError: 'Error fetching organizations, check your internet connection',

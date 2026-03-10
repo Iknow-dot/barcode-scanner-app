@@ -19,6 +19,7 @@ from core.permissions import (
 )
 from core.serializers import (
     OrganizationSerializer,
+    OrganizationExternalServiceSerializer,
     WarehouseSerializer,
     WarehouseReadOnlySerializer,
     ProductSearchSerializer,
@@ -41,6 +42,7 @@ def _convert_to_https(url):
     partial_update=extend_schema(tags=['Organizations']),
     destroy=extend_schema(tags=['Organizations']),
     get_user_organization=extend_schema(tags=['Organizations']),
+    external_service=extend_schema(tags=['Organizations']),
     used_ips=extend_schema(tags=['Organizations']),
 )
 class OrganizationViewSet(ModelViewSet):
@@ -66,6 +68,47 @@ class OrganizationViewSet(ModelViewSet):
             },
             status=404,
         )
+
+    @action(detail=False, methods=['get', 'patch'], url_path='my-organization/external-service')
+    def external_service(self, request: Request) -> Response:
+        """
+        GET: Retrieve the current user's organization external service details.
+        PATCH: Update the current user's organization external service details.
+
+        Only accessible by company admins.
+        """
+        user = request.user
+        if user.role != User.Role.COMPANY_ADMIN:
+            return Response(
+                {"detail": "Only company admins can manage external service settings."},
+                status=http_status.HTTP_403_FORBIDDEN,
+            )
+        if not user.organization:
+            return Response(
+                {"code": "NO_ORGANIZATION", "detail": "User does not belong to any organization."},
+                status=http_status.HTTP_404_NOT_FOUND,
+            )
+
+        organization = user.organization
+
+        if request.method == 'GET':
+            data = {
+                'web_service_url': organization.web_service_url,
+                'web_service_username': organization.web_service_username,
+                'has_password': bool(organization.web_service_password),
+            }
+            return Response(data)
+
+        # PATCH
+        serializer = OrganizationExternalServiceSerializer(organization, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        data = {
+            'web_service_url': organization.web_service_url,
+            'web_service_username': organization.web_service_username,
+            'has_password': bool(organization.web_service_password),
+        }
+        return Response(data)
 
     @action(detail=True, methods=['get'], url_path='used-ips')
     def used_ips(self, request: Request, pk=None) -> Response:
