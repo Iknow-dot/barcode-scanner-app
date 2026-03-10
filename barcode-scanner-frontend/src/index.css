@@ -440,6 +440,15 @@
   border-radius: 12px;
 }
 
+/* Prevent badge clipping in card headers */
+.ant-card-head {
+  overflow: visible !important;
+}
+
+.ant-card-head-title {
+  overflow: visible !important;
+}
+
 /* ===== Float Button (Theme Toggle) ===== */
 .ant-float-btn {
   transition: all 0.3s ease;

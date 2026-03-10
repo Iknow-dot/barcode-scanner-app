@@ -3,9 +3,11 @@ import API_ENDPOINTS from '../endpoints';
 
 /**
  * Get all purchase orders for the current user's organization.
+ * @param {object} [params] - Optional query params for filtering
+ *   { status, customer, customer_search, order_number, date_from, date_to, created_by }
  */
-export const getOrders = () => {
-    return api.get(API_ENDPOINTS.orders);
+export const getOrders = (params) => {
+    return api.get(API_ENDPOINTS.orders, { params });
 };
 
 /**
@@ -18,14 +20,14 @@ export const getOrder = (orderId) => {
 
 /**
  * Create a new purchase order.
- * @param {object} data - { customer: <customerId> }
+ * @param {object} data - { customer: <customerId>, delivery_type?, notes? }
  */
 export const createOrder = (data) => {
     return api.post(API_ENDPOINTS.orders, data);
 };
 
 /**
- * Update an order (e.g. change status).
+ * Update an order (e.g. change status, delivery info, notes).
  * @param {number} orderId
  * @param {object} data
  */
@@ -44,7 +46,7 @@ export const deleteOrder = (orderId) => {
 /**
  * Add a product item to an order.
  * @param {number} orderId
- * @param {object} data - { sku, sku_name?, article?, price?, quantity? }
+ * @param {object} data - { sku, sku_name?, article?, price?, quantity?, warehouse_code?, warehouse_name?, unit?, discount_percent?, discounted_price? }
  */
 export const addOrderItem = (orderId, data) => {
     return api.post(API_ENDPOINTS.order_items(orderId), data);
@@ -60,7 +62,7 @@ export const removeOrderItem = (orderId, itemId) => {
 };
 
 /**
- * Update an item in an order (e.g. change quantity).
+ * Update an item in an order (e.g. change quantity, discount, unit).
  * @param {number} orderId
  * @param {number} itemId
  * @param {object} data

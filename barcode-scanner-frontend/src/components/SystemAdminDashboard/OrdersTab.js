@@ -12,15 +12,31 @@ import {
     Popconfirm,
     Empty,
     Space,
+    Input,
+    DatePicker,
+    Card,
+    Descriptions,
+    Divider,
+    Modal,
 } from 'antd';
 import {
     DeleteOutlined,
     ReloadOutlined,
     UserOutlined,
     ShoppingCartOutlined,
+    SearchOutlined,
+    EyeOutlined,
+    CarOutlined,
+    ShopOutlined,
+    EnvironmentOutlined,
+    CalendarOutlined,
+    ClockCircleOutlined,
+    CommentOutlined,
+    FilterOutlined,
 } from '@ant-design/icons';
 
-const {Text} = Typography;
+const {Text, Title} = Typography;
+const {RangePicker} = DatePicker;
 
 const STATUS_COLOR_MAP = {
     draft: 'orange',
@@ -28,17 +44,43 @@ const STATUS_COLOR_MAP = {
     cancelled: 'red',
 };
 
+const DELIVERY_TYPE_ICON = {
+    pickup: <ShopOutlined/>,
+    delivery: <CarOutlined/>,
+};
+
 const OrdersTab = () => {
     const {t} = useLanguage();
     const {notify, contextHolder} = useAppNotification();
     const [orders, setOrders] = useState([]);
     const [loading, setLoading] = useState(true);
+
+    // Filters
     const [statusFilter, setStatusFilter] = useState(null);
+    const [customerSearch, setCustomerSearch] = useState('');
+    const [orderNumberSearch, setOrderNumberSearch] = useState('');
+    const [dateRange, setDateRange] = useState(null);
+
+    // Detail modal
+    const [detailModalOpen, setDetailModalOpen] = useState(false);
+    const [selectedOrder, setSelectedOrder] = useState(null);
+    const [detailLoading, setDetailLoading] = useState(false);
+
+    const buildParams = useCallback(() => {
+        const params = {};
+        if (statusFilter) params.status = statusFilter;
+        if (customerSearch) params.customer_search = customerSearch;
+        if (orderNumberSearch) params.order_number = orderNumberSearch;
+        if (dateRange && dateRange[0]) params.date_from = dateRange[0].format('YYYY-MM-DD');
+        if (dateRange && dateRange[1]) params.date_to = dateRange[1].format('YYYY-MM-DD');
+        return params;
+    }, [statusFilter, customerSearch, orderNumberSearch, dateRange]);
 
     const fetchOrders = useCallback(async () => {
         setLoading(true);
         try {
-            const result = await orderService.getOrders();
+            const params = buildParams();
+            const result = await orderService.getOrders(params);
             if (result.success) {
                 setOrders(Array.isArray(result.data) ? result.data : result.data?.results || []);
             } else {
@@ -50,11 +92,15 @@ const OrdersTab = () => {
         } finally {
             setLoading(false);
         }
-    }, [t, notify]);
+    }, [t, notify, buildParams]);
 
     useEffect(() => {
         fetchOrders();
     }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+    const handleSearch = () => {
+        fetchOrders();
+    };
 
     const handleDeleteOrder = async (orderId) => {
         const result = await orderService.deleteOrder(orderId);
@@ -63,6 +109,23 @@ const OrdersTab = () => {
             setOrders((prev) => prev.filter((o) => o.id !== orderId));
         } else {
             notify.error(t.orderError, result.error);
+        }
+    };
+
+    const handleViewDetails = async (orderId) => {
+        setDetailLoading(true);
+        setDetailModalOpen(true);
+        try {
+            const result = await orderService.getOrder(orderId);
+            if (result.success) {
+                setSelectedOrder(result.data);
+            } else {
+                notify.error(t.error, t.dataFetchError);
+            }
+        } catch (err) {
+            console.error('Failed to fetch order details:', err);
+        } finally {
+            setDetailLoading(false);
         }
     };
 
@@ -75,9 +138,13 @@ const OrdersTab = () => {
         return map[status] || status;
     };
 
-    const filteredOrders = statusFilter
-        ? orders.filter((o) => o.status === statusFilter)
-        : orders;
+    const getDeliveryLabel = (type) => {
+        const map = {
+            pickup: t.pickup,
+            delivery: t.delivery,
+        };
+        return map[type] || type;
+    };
 
     const columns = [
         {
@@ -113,6 +180,17 @@ const OrdersTab = () => {
             render: (status) => (
                 <Tag color={STATUS_COLOR_MAP[status] || 'default'}>
                     {getStatusLabel(status)}
+                </Tag>
+            ),
+        },
+        {
+            title: t.deliveryType,
+            dataIndex: 'delivery_type',
+            key: 'delivery_type',
+            width: 120,
+            render: (type) => (
+                <Tag icon={DELIVERY_TYPE_ICON[type]} color={type === 'delivery' ? 'blue' : 'default'}>
+                    {getDeliveryLabel(type)}
                 </Tag>
             ),
         },
@@ -167,23 +245,111 @@ const OrdersTab = () => {
         {
             title: '',
             key: 'actions',
-            width: 50,
+            width: 80,
             align: 'center',
             render: (_, record) => (
-                <Popconfirm
-                    title={t.confirmDelete}
-                    onConfirm={() => handleDeleteOrder(record.id)}
-                    okText={t.yes}
-                    cancelText={t.no}
-                >
+                <Space size={4}>
                     <Button
                         type="text"
-                        danger
                         size="small"
-                        icon={<DeleteOutlined/>}
+                        icon={<EyeOutlined/>}
+                        onClick={() => handleViewDetails(record.id)}
+                        title={t.viewDetails}
                     />
-                </Popconfirm>
+                    <Popconfirm
+                        title={t.confirmDelete}
+                        onConfirm={() => handleDeleteOrder(record.id)}
+                        okText={t.yes}
+                        cancelText={t.no}
+                    >
+                        <Button
+                            type="text"
+                            danger
+                            size="small"
+                            icon={<DeleteOutlined/>}
+                        />
+                    </Popconfirm>
+                </Space>
             ),
+        },
+    ];
+
+    // Item columns for the detail modal
+    const itemColumns = [
+        {
+            title: t.product,
+            dataIndex: 'sku_name',
+            key: 'sku_name',
+            render: (name, record) => (
+                <div>
+                    <Text strong style={{fontSize: 13}}>{name || record.sku}</Text>
+                    {record.article && (
+                        <div>
+                            <Text type="secondary" style={{fontSize: 11}}>
+                                {t.article}: {record.article}
+                            </Text>
+                        </div>
+                    )}
+                </div>
+            ),
+        },
+        {
+            title: t.warehouseSource,
+            dataIndex: 'warehouse_name',
+            key: 'warehouse_name',
+            width: 120,
+            render: (name) => name ? <Tag color="blue">{name}</Tag> : <Text type="secondary">—</Text>,
+        },
+        {
+            title: t.unitOfMeasure,
+            dataIndex: 'unit',
+            key: 'unit',
+            width: 80,
+            render: (unit) => unit || '—',
+        },
+        {
+            title: t.originalPrice,
+            dataIndex: 'price',
+            key: 'price',
+            align: 'right',
+            width: 100,
+            render: (price) => <Text>{price} ₾</Text>,
+        },
+        {
+            title: t.discountPercent,
+            dataIndex: 'discount_percent',
+            key: 'discount_percent',
+            align: 'center',
+            width: 80,
+            render: (pct) => pct > 0 ? <Tag color="red">-{pct}%</Tag> : <Text type="secondary">—</Text>,
+        },
+        {
+            title: t.effectivePrice,
+            dataIndex: 'effective_price',
+            key: 'effective_price',
+            align: 'right',
+            width: 100,
+            render: (price, record) => {
+                const hasDiscount = parseFloat(record.effective_price) !== parseFloat(record.price);
+                return hasDiscount
+                    ? <Text strong style={{color: '#52c41a'}}>{price} ₾</Text>
+                    : <Text>{price} ₾</Text>;
+            },
+        },
+        {
+            title: t.quantity,
+            dataIndex: 'quantity',
+            key: 'quantity',
+            align: 'center',
+            width: 80,
+        },
+        {
+            title: t.lineTotal,
+            dataIndex: 'line_total',
+            key: 'line_total',
+            align: 'right',
+            width: 100,
+            render: (total) => <Text strong style={{color: '#52c41a'}}>{total} ₾</Text>,
         },
     ];
 
@@ -191,34 +357,87 @@ const OrdersTab = () => {
         <>
             {contextHolder}
 
-            {/* Toolbar */}
-            <Flex justify="space-between" align="center" wrap="wrap" gap={12} style={{marginBottom: 16}}>
-                <Space size={12}>
-                    <Select
-                        placeholder={t.allStatuses}
-                        allowClear
-                        value={statusFilter}
-                        onChange={setStatusFilter}
-                        style={{width: 160}}
-                        options={[
-                            {label: t.orderDraft, value: 'draft'},
-                            {label: t.orderConfirmed, value: 'confirmed'},
-                            {label: t.orderCancelled, value: 'cancelled'},
-                        ]}
-                    />
-                </Space>
-                <Button
-                    icon={<ReloadOutlined/>}
-                    onClick={fetchOrders}
-                    loading={loading}
-                >
-                    {t.loading.replace('...', '')}
-                </Button>
-            </Flex>
+            {/* Search / Filter Toolbar */}
+            <Card size="small" style={{marginBottom: 16}}>
+                <Flex align="center" gap={8} style={{marginBottom: 8}}>
+                    <FilterOutlined style={{color: '#1677ff'}}/>
+                    <Text strong>{t.searchOrders}</Text>
+                </Flex>
+                <Flex wrap="wrap" gap={12} align="end">
+                    <Space direction="vertical" size={4}>
+                        <Text type="secondary" style={{fontSize: 11}}>{t.orderStatus}</Text>
+                        <Select
+                            placeholder={t.allStatuses}
+                            allowClear
+                            value={statusFilter}
+                            onChange={setStatusFilter}
+                            style={{width: 150}}
+                            options={[
+                                {label: t.orderDraft, value: 'draft'},
+                                {label: t.orderConfirmed, value: 'confirmed'},
+                                {label: t.orderCancelled, value: 'cancelled'},
+                            ]}
+                        />
+                    </Space>
+                    <Space direction="vertical" size={4}>
+                        <Text type="secondary" style={{fontSize: 11}}>{t.searchByCustomer}</Text>
+                        <Input
+                            placeholder={t.searchByCustomer}
+                            value={customerSearch}
+                            onChange={(e) => setCustomerSearch(e.target.value)}
+                            style={{width: 200}}
+                            prefix={<UserOutlined style={{opacity: 0.4}}/>}
+                            allowClear
+                            onPressEnter={handleSearch}
+                        />
+                    </Space>
+                    <Space direction="vertical" size={4}>
+                        <Text type="secondary" style={{fontSize: 11}}>{t.searchByOrderNumber}</Text>
+                        <Input
+                            placeholder={t.orderNumber}
+                            value={orderNumberSearch}
+                            onChange={(e) => setOrderNumberSearch(e.target.value)}
+                            style={{width: 140}}
+                            prefix={<ShoppingCartOutlined style={{opacity: 0.4}}/>}
+                            allowClear
+                            onPressEnter={handleSearch}
+                        />
+                    </Space>
+                    <Space direction="vertical" size={4}>
+                        <Text type="secondary" style={{fontSize: 11}}>{t.dateFrom} — {t.dateTo}</Text>
+                        <RangePicker
+                            value={dateRange}
+                            onChange={setDateRange}
+                            style={{width: 240}}
+                        />
+                    </Space>
+                    <Button
+                        type="primary"
+                        icon={<SearchOutlined/>}
+                        onClick={handleSearch}
+                        loading={loading}
+                    >
+                        {t.search}
+                    </Button>
+                    <Button
+                        icon={<ReloadOutlined/>}
+                        onClick={() => {
+                            setStatusFilter(null);
+                            setCustomerSearch('');
+                            setOrderNumberSearch('');
+                            setDateRange(null);
+                            // Fetch all after clearing
+                            setTimeout(fetchOrders, 0);
+                        }}
+                    >
+                        {t.clear}
+                    </Button>
+                </Flex>
+            </Card>
 
             {/* Orders Table */}
             <Table
-                dataSource={filteredOrders.map((o) => ({...o, key: o.id}))}
+                dataSource={orders.map((o) => ({...o, key: o.id}))}
                 columns={columns}
                 loading={loading}
                 size="middle"
@@ -232,6 +451,150 @@ const OrdersTab = () => {
                     ),
                 }}
             />
+
+            {/* Order Detail Modal */}
+            <Modal
+                title={
+                    <Flex align="center" gap={8}>
+                        <ShoppingCartOutlined style={{fontSize: 18, color: '#1677ff'}}/>
+                        <span style={{fontWeight: 600}}>
+                            {t.orderDetails} {selectedOrder ? `#${selectedOrder.id}` : ''}
+                        </span>
+                        {selectedOrder && (
+                            <Tag color={STATUS_COLOR_MAP[selectedOrder.status] || 'default'}>
+                                {getStatusLabel(selectedOrder.status)}
+                            </Tag>
+                        )}
+                    </Flex>
+                }
+                open={detailModalOpen}
+                onCancel={() => {
+                    setDetailModalOpen(false);
+                    setSelectedOrder(null);
+                }}
+                footer={null}
+                width={900}
+                loading={detailLoading}
+                styles={{body: {maxHeight: '75vh', overflowY: 'auto'}}}
+            >
+                {selectedOrder && (
+                    <>
+                        {/* Order Summary */}
+                        <Descriptions
+                            bordered
+                            size="small"
+                            column={{xs: 1, sm: 2}}
+                            style={{marginBottom: 16}}
+                        >
+                            <Descriptions.Item label={t.customer}>
+                                <Flex align="center" gap={6}>
+                                    <UserOutlined style={{opacity: 0.4}}/>
+                                    <Text strong>{selectedOrder.customer_name}</Text>
+                                </Flex>
+                            </Descriptions.Item>
+                            <Descriptions.Item label={t.createdBy}>
+                                {selectedOrder.created_by_username}
+                            </Descriptions.Item>
+                            <Descriptions.Item label={t.orderDate}>
+                                <Flex align="center" gap={4}>
+                                    <CalendarOutlined style={{opacity: 0.4}}/>
+                                    {new Date(selectedOrder.created_at).toLocaleDateString()}{' '}
+                                    {new Date(selectedOrder.created_at).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}
+                                </Flex>
+                            </Descriptions.Item>
+                            <Descriptions.Item label={t.orderTotal}>
+                                <Title level={5} style={{margin: 0, color: '#52c41a'}}>
+                                    {selectedOrder.total} ₾
+                                </Title>
+                            </Descriptions.Item>
+                        </Descriptions>
+
+                        {/* Delivery Info */}
+                        <Card
+                            size="small"
+                            title={
+                                <Flex align="center" gap={6}>
+                                    {selectedOrder.delivery_type === 'delivery' ? <CarOutlined style={{color: '#1677ff'}}/> : <ShopOutlined style={{color: '#1677ff'}}/>}
+                                    <Text strong>{t.deliveryInfo}</Text>
+                                    <Tag color={selectedOrder.delivery_type === 'delivery' ? 'blue' : 'default'}>
+                                        {getDeliveryLabel(selectedOrder.delivery_type)}
+                                    </Tag>
+                                </Flex>
+                            }
+                            style={{marginBottom: 16}}
+                        >
+                            {selectedOrder.delivery_type === 'delivery' ? (
+                                <Descriptions size="small" column={1}>
+                                    {selectedOrder.delivery_address && (
+                                        <Descriptions.Item label={<><EnvironmentOutlined/> {t.deliveryAddress}</>}>
+                                            {selectedOrder.delivery_address}
+                                        </Descriptions.Item>
+                                    )}
+                                    {selectedOrder.delivery_date && (
+                                        <Descriptions.Item label={<><CalendarOutlined/> {t.deliveryDate}</>}>
+                                            {selectedOrder.delivery_date}
+                                        </Descriptions.Item>
+                                    )}
+                                    {(selectedOrder.delivery_time_from || selectedOrder.delivery_time_to) && (
+                                        <Descriptions.Item label={<><ClockCircleOutlined/> {t.deliveryTime}</>}>
+                                            {selectedOrder.delivery_time_from || '—'} — {selectedOrder.delivery_time_to || '—'}
+                                        </Descriptions.Item>
+                                    )}
+                                    {selectedOrder.delivery_notes && (
+                                        <Descriptions.Item label={<><CommentOutlined/> {t.deliveryNotes}</>}>
+                                            {selectedOrder.delivery_notes}
+                                        </Descriptions.Item>
+                                    )}
+                                    {!selectedOrder.delivery_address && !selectedOrder.delivery_date && !selectedOrder.delivery_notes && (
+                                        <Text type="secondary">{t.noDeliveryInfo}</Text>
+                                    )}
+                                </Descriptions>
+                            ) : (
+                                <Text type="secondary">{t.pickup}</Text>
+                            )}
+                        </Card>
+
+                        {/* Notes */}
+                        {selectedOrder.notes && (
+                            <Card
+                                size="small"
+                                title={
+                                    <Flex align="center" gap={6}>
+                                        <CommentOutlined style={{color: '#1677ff'}}/>
+                                        <Text strong>{t.orderNotes}</Text>
+                                    </Flex>
+                                }
+                                style={{marginBottom: 16}}
+                            >
+                                <Text>{selectedOrder.notes}</Text>
+                            </Card>
+                        )}
+
+                        {/* Items Table */}
+                        <Divider style={{margin: '8px 0'}}/>
+                        <Flex align="center" gap={8} style={{marginBottom: 8}}>
+                            <ShoppingCartOutlined style={{color: '#1677ff'}}/>
+                            <Text strong>{t.orderItems}</Text>
+                            <Tag>{selectedOrder.items?.length || 0}</Tag>
+                        </Flex>
+                        <Table
+                            dataSource={(selectedOrder.items || []).map((item) => ({...item, key: item.id}))}
+                            columns={itemColumns}
+                            size="small"
+                            pagination={false}
+                            scroll={{x: 'max-content'}}
+                        />
+                        <Flex justify="end" style={{padding: '12px 0'}}>
+                            <Space size={8}>
+                                <Text style={{fontSize: 16}}>{t.orderTotal}:</Text>
+                                <Title level={4} style={{margin: 0, color: '#52c41a'}}>
+                                    {selectedOrder.total} ₾
+                                </Title>
+                            </Space>
+                        </Flex>
+                    </>
+                )}
+            </Modal>
         </>
     );
 };

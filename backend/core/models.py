@@ -101,6 +101,10 @@ class PurchaseOrder(models.Model):
         CONFIRMED = 'confirmed', 'Confirmed'
         CANCELLED = 'cancelled', 'Cancelled'
 
+    class DeliveryType(models.TextChoices):
+        PICKUP = 'pickup', 'Pickup'
+        DELIVERY = 'delivery', 'Delivery'
+
     organization = models.ForeignKey(
         Organization,
         on_delete=models.CASCADE,
@@ -122,6 +126,22 @@ class PurchaseOrder(models.Model):
         choices=Status.choices,
         default=Status.DRAFT,
     )
+
+    # Delivery conditions
+    delivery_type = models.CharField(
+        max_length=20,
+        choices=DeliveryType.choices,
+        default=DeliveryType.PICKUP,
+    )
+    delivery_address = models.CharField(max_length=500, blank=True, default='')
+    delivery_date = models.DateField(null=True, blank=True)
+    delivery_time_from = models.TimeField(null=True, blank=True)
+    delivery_time_to = models.TimeField(null=True, blank=True)
+    delivery_notes = models.TextField(blank=True, default='')
+
+    # General notes / comments
+    notes = models.TextField(blank=True, default='')
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -148,6 +168,18 @@ class PurchaseOrderItem(models.Model):
     article = models.CharField(max_length=255, blank=True, default='')
     price = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     quantity = models.PositiveIntegerField(default=1)
+
+    # Warehouse from which the product is sourced
+    warehouse_code = models.CharField(max_length=255, blank=True, default='')
+    warehouse_name = models.CharField(max_length=255, blank=True, default='')
+
+    # Unit of measure (e.g. piece, box, pallet)
+    unit = models.CharField(max_length=50, blank=True, default='')
+
+    # Discount
+    discount_percent = models.DecimalField(max_digits=5, decimal_places=2, default=0)
+    discounted_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+
     added_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -157,6 +189,16 @@ class PurchaseOrderItem(models.Model):
         return f"{self.sku_name or self.sku} x{self.quantity}"
 
     @property
+    def effective_price(self):
+        """Return the discounted price if set, otherwise calculate from discount_percent."""
+        if self.discounted_price is not None:
+            return self.discounted_price
+        if self.discount_percent and self.discount_percent > 0:
+            from decimal import Decimal
+            return self.price * (Decimal('1') - self.discount_percent / Decimal('100'))
+        return self.price
+
+    @property
     def line_total(self):
-        return self.price * self.quantity
+        return self.effective_price * self.quantity
 

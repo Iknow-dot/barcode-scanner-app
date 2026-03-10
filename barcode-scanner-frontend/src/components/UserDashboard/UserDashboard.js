@@ -281,6 +281,8 @@ const UserDashboard = () => {
             article: productInfo.article || '',
             price: warehouseRecord.price || 0,
             quantity: 1,
+            warehouse_code: warehouseRecord.warehouse || '',
+            warehouse_name: warehouseRecord.warehouse_name || '',
         });
         if (addResult.success) {
             setActiveOrder(addResult.data);

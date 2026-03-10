@@ -325,9 +325,54 @@ class PurchaseOrderViewSet(ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
-        return PurchaseOrder.objects.filter(
+        qs = PurchaseOrder.objects.filter(
             organization=user.organization
         ).select_related('customer', 'created_by').prefetch_related('items')
+
+        # --- Filtering support for order history search ---
+        # Status filter
+        status = self.request.query_params.get('status')
+        if status:
+            qs = qs.filter(status=status)
+
+        # Customer filter
+        customer_id = self.request.query_params.get('customer')
+        if customer_id:
+            qs = qs.filter(customer_id=customer_id)
+
+        # Customer search (name, phone, identification_number)
+        customer_search = self.request.query_params.get('customer_search')
+        if customer_search:
+            qs = qs.filter(
+                models.Q(customer__first_name__icontains=customer_search)
+                | models.Q(customer__last_name__icontains=customer_search)
+                | models.Q(customer__phone__icontains=customer_search)
+                | models.Q(customer__identification_number__icontains=customer_search)
+            )
+
+        # Order number search
+        order_number = self.request.query_params.get('order_number')
+        if order_number:
+            try:
+                qs = qs.filter(pk=int(order_number))
+            except (ValueError, TypeError):
+                pass
+
+        # Date range filter
+        date_from = self.request.query_params.get('date_from')
+        if date_from:
+            qs = qs.filter(created_at__date__gte=date_from)
+
+        date_to = self.request.query_params.get('date_to')
+        if date_to:
+            qs = qs.filter(created_at__date__lte=date_to)
+
+        # Created by filter (for admin to filter by consultant)
+        created_by = self.request.query_params.get('created_by')
+        if created_by:
+            qs = qs.filter(created_by_id=created_by)
+
+        return qs
 
     @action(detail=True, methods=['post'], url_path='items')
     def add_item(self, request, pk=None):
@@ -337,8 +382,12 @@ class PurchaseOrderViewSet(ModelViewSet):
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
 
-        # Check if the same SKU already exists — if so, increment quantity
-        existing_item = order.items.filter(sku=data['sku']).first()
+        # Check if the same SKU + warehouse already exists — if so, increment quantity
+        filter_kwargs = {'sku': data['sku']}
+        if data.get('warehouse_code'):
+            filter_kwargs['warehouse_code'] = data['warehouse_code']
+        existing_item = order.items.filter(**filter_kwargs).first()
+
         if existing_item:
             existing_item.quantity += data.get('quantity', 1)
             # Update price/name if provided (latest scan wins)
@@ -348,11 +397,25 @@ class PurchaseOrderViewSet(ModelViewSet):
                 existing_item.sku_name = data['sku_name']
             if data.get('article'):
                 existing_item.article = data['article']
+            if data.get('warehouse_name'):
+                existing_item.warehouse_name = data['warehouse_name']
+            if data.get('unit'):
+                existing_item.unit = data['unit']
+            if data.get('discount_percent'):
+                existing_item.discount_percent = data['discount_percent']
+            if data.get('discounted_price') is not None:
+                existing_item.discounted_price = data['discounted_price']
             existing_item.save()
-            item_serializer = PurchaseOrderItemSerializer(existing_item)
         else:
-            item = PurchaseOrderItem.objects.create(order=order, **data)
-            item_serializer = PurchaseOrderItemSerializer(item)
+            PurchaseOrderItem.objects.create(order=order, **data)
+
+        # Refresh the order to clear cached/prefetched items
+        order.refresh_from_db()
+        # Clear the prefetched items cache so the serializer fetches fresh data
+        try:
+            del order._prefetched_objects_cache
+        except AttributeError:
+            pass
 
         # Return the full updated order
         order_serializer = PurchaseOrderSerializer(order)
@@ -370,6 +433,12 @@ class PurchaseOrderViewSet(ModelViewSet):
                 status=http_status.HTTP_404_NOT_FOUND,
             )
         item.delete()
+        # Refresh to clear cached/prefetched items
+        order.refresh_from_db()
+        try:
+            del order._prefetched_objects_cache
+        except AttributeError:
+            pass
         order_serializer = PurchaseOrderSerializer(order)
         return Response(order_serializer.data)
 
@@ -387,5 +456,11 @@ class PurchaseOrderViewSet(ModelViewSet):
         serializer = PurchaseOrderItemSerializer(item, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         serializer.save()
+        # Refresh to clear cached/prefetched items
+        order.refresh_from_db()
+        try:
+            del order._prefetched_objects_cache
+        except AttributeError:
+            pass
         order_serializer = PurchaseOrderSerializer(order)
         return Response(order_serializer.data)
