@@ -456,40 +456,51 @@ const UserDashboard = () => {
         <div className="dashboard-product-panel">
             {/* Empty product state */}
             {showEmptyProductState && (
-                <Result
-                    icon={<ShoppingOutlined style={{color: '#1677ff', fontSize: 48}}/>}
-                    title={<span style={{fontSize: 18, fontWeight: 600}}>{t.productSearch}</span>}
-                    subTitle={
-                        <span style={{fontSize: 13, opacity: 0.6}}>
-                            {t.productSearchSubtitle}
-                        </span>
-                    }
-                    extra={
-                        <Flex gap={12} justify="center" wrap="wrap">
-                            <Button
-                                type="primary"
-                                size="large"
-                                icon={<QrcodeOutlined/>}
-                                onClick={handleOpenScanner}
-                                style={{borderRadius: 10, height: 48, paddingInline: 28, fontWeight: 600}}
-                            >
-                                {t.scan}
-                            </Button>
-                            <Button
-                                size="large"
-                                icon={<EditOutlined/>}
-                                onClick={handleOpenSearch}
-                                style={{borderRadius: 10, height: 48, paddingInline: 28}}
-                            >
-                                {t.manualSearch || t.search}
-                            </Button>
-                        </Flex>
-                    }
-                />
+                <Spin
+                    spinning={loading}
+                    tip={t.searchingProduct}
+                    size="large"
+                >
+                    <Result
+                        icon={<ShoppingOutlined style={{color: '#1677ff', fontSize: 48}}/>}
+                        title={<span style={{fontSize: 18, fontWeight: 600}}>{t.productSearch}</span>}
+                        subTitle={
+                            <span style={{fontSize: 13, opacity: 0.6}}>
+                                {t.productSearchSubtitle}
+                            </span>
+                        }
+                        extra={
+                            <Flex gap={12} justify="center" wrap="wrap">
+                                <Button
+                                    type="primary"
+                                    size="large"
+                                    icon={<QrcodeOutlined/>}
+                                    onClick={handleOpenScanner}
+                                    style={{borderRadius: 10, height: 48, paddingInline: 28, fontWeight: 600}}
+                                >
+                                    {t.scan}
+                                </Button>
+                                <Button
+                                    size="large"
+                                    icon={<EditOutlined/>}
+                                    onClick={handleOpenSearch}
+                                    style={{borderRadius: 10, height: 48, paddingInline: 28}}
+                                >
+                                    {t.manualSearch || t.search}
+                                </Button>
+                            </Flex>
+                        }
+                    />
+                </Spin>
             )}
 
             {/* Product Results */}
             {!scannerOpen && hasResults && (
+                <Spin
+                    spinning={loading}
+                    tip={t.searchingProduct}
+                    size="large"
+                >
                 <div style={{paddingBottom: 80}}>
                     {/* Product Info Card */}
                     <Card
@@ -620,6 +631,7 @@ const UserDashboard = () => {
                         />
                     </Card>
                 </div>
+                </Spin>
             )}
         </div>
     );
@@ -642,125 +654,117 @@ const UserDashboard = () => {
                 onClose={() => setScannerOpen(false)}
             />
 
-            {/* Loading Overlay */}
-            <Spin
-                spinning={loading}
-                tip={t.searchingProduct}
-                style={{background: 'rgba(0, 0, 0, 0.05)', borderRadius: 12}}
-                size="large"
+            {/* Search Drawer */}
+            <Drawer
+                title={
+                    <Flex align="center" gap={8}>
+                        <SearchOutlined style={{fontSize: 18, color: '#1677ff'}}/>
+                        <span style={{fontWeight: 600}}>{t.productSearch}</span>
+                        {orderMode && (
+                            <Tag color="blue" style={{marginLeft: 8}}>
+                                <ShoppingCartOutlined/> {t.orderMode}
+                            </Tag>
+                        )}
+                    </Flex>
+                }
+                placement="bottom"
+                closable={true}
+                open={drawerVisible}
+                onClose={() => setDrawerVisible(false)}
+                className="search-drawer"
+                height="auto"
+                styles={{
+                    body: {paddingTop: 16, paddingBottom: 24},
+                }}
             >
-                {/* Search Drawer */}
-                <Drawer
-                    title={
-                        <Flex align="center" gap={8}>
-                            <SearchOutlined style={{fontSize: 18, color: '#1677ff'}}/>
-                            <span style={{fontWeight: 600}}>{t.productSearch}</span>
-                            {orderMode && (
-                                <Tag color="blue" style={{marginLeft: 8}}>
-                                    <ShoppingCartOutlined/> {t.orderMode}
-                                </Tag>
-                            )}
-                        </Flex>
-                    }
-                    placement="bottom"
-                    closable={true}
-                    open={drawerVisible}
-                    onClose={() => setDrawerVisible(false)}
-                    className="search-drawer"
-                    height="auto"
-                    styles={{
-                        body: {paddingTop: 16, paddingBottom: 24},
-                    }}
+                <Form
+                    form={form}
+                    onFinish={handleSearch}
+                    initialValues={{searchType: 'barcode'}}
+                    layout="vertical"
+                    style={{maxWidth: 500, margin: '0 auto'}}
                 >
-                    <Form
-                        form={form}
-                        onFinish={handleSearch}
-                        initialValues={{searchType: 'barcode'}}
-                        layout="vertical"
-                        style={{maxWidth: 500, margin: '0 auto'}}
+                    <Form.Item
+                        name="searchType"
+                        initialValue="barcode"
+                        rules={[{required: true, message: t.selectSearchType}]}
                     >
-                        <Form.Item
-                            name="searchType"
-                            initialValue="barcode"
-                            rules={[{required: true, message: t.selectSearchType}]}
-                        >
-                            <Select
-                                size="large"
-                                style={{borderRadius: 10}}
-                                options={[
-                                    {
-                                        label: (
-                                            <Flex align="center" gap={8}>
-                                                <BarcodeOutlined/> {t.barcode}
-                                            </Flex>
-                                        ),
-                                        value: "barcode"
-                                    },
-                                    {
-                                        label: (
-                                            <Flex align="center" gap={8}>
-                                                <NumberOutlined/> {t.article}
-                                            </Flex>
-                                        ),
-                                        value: "article"
-                                    },
-                                ]}
-                                onChange={(value) => {
-                                    if (value === 'barcode') {
-                                        setDisableScan(false);
-                                    } else {
-                                        setDisableScan(true);
-                                    }
-                                }}
-                            />
-                        </Form.Item>
-
-                        <Form.Item
-                            name="search"
-                            rules={[{required: true, message: t.enterSearchText}]}
-                        >
-                            <Input.Search
-                                size="large"
-                                placeholder={t.searchPlaceholder}
-                                enterButton={
-                                    <Button type="primary" icon={<SearchOutlined/>}>
-                                        {t.search}
-                                    </Button>
+                        <Select
+                            size="large"
+                            style={{borderRadius: 10}}
+                            options={[
+                                {
+                                    label: (
+                                        <Flex align="center" gap={8}>
+                                            <BarcodeOutlined/> {t.barcode}
+                                        </Flex>
+                                    ),
+                                    value: "barcode"
+                                },
+                                {
+                                    label: (
+                                        <Flex align="center" gap={8}>
+                                            <NumberOutlined/> {t.article}
+                                        </Flex>
+                                    ),
+                                    value: "article"
+                                },
+                            ]}
+                            onChange={(value) => {
+                                if (value === 'barcode') {
+                                    setDisableScan(false);
+                                } else {
+                                    setDisableScan(true);
                                 }
-                                onSearch={form.submit}
-                                allowClear
-                                style={{borderRadius: 10}}
-                            />
+                            }}
+                        />
+                    </Form.Item>
+
+                    <Form.Item
+                        name="search"
+                        rules={[{required: true, message: t.enterSearchText}]}
+                    >
+                        <Input.Search
+                            size="large"
+                            placeholder={t.searchPlaceholder}
+                            enterButton={
+                                <Button type="primary" icon={<SearchOutlined/>}>
+                                    {t.search}
+                                </Button>
+                            }
+                            onSearch={form.submit}
+                            allowClear
+                            style={{borderRadius: 10}}
+                        />
+                    </Form.Item>
+
+                    <Flex justify="center" style={{marginTop: 4}}>
+                        <Form.Item
+                            name="allWarehouses"
+                            label={t.allWarehouses}
+                            initialValue={false}
+                            valuePropName="checked"
+                        >
+                            <Switch/>
                         </Form.Item>
+                    </Flex>
+                </Form>
 
-                        <Flex justify="center" style={{marginTop: 4}}>
-                            <Form.Item
-                                name="allWarehouses"
-                                label={t.allWarehouses}
-                                initialValue={false}
-                                valuePropName="checked"
-                            >
-                                <Switch/>
-                            </Form.Item>
-                        </Flex>
-                    </Form>
-
-                    {/* Scan button inside drawer as alternative */}
-                    {!disableScan && (
-                        <Flex justify="center" style={{marginTop: 8}}>
-                            <Button
-                                type="default"
-                                size="large"
-                                icon={<QrcodeOutlined/>}
-                                onClick={handleOpenScanner}
-                                style={{borderRadius: 10, height: 44}}
-                            >
-                                {t.scanInstead || t.scan}
-                            </Button>
-                        </Flex>
-                    )}
-                </Drawer>
-            </Spin>
+                {/* Scan button inside drawer as alternative */}
+                {!disableScan && (
+                    <Flex justify="center" style={{marginTop: 8}}>
+                        <Button
+                            type="default"
+                            size="large"
+                            icon={<QrcodeOutlined/>}
+                            onClick={handleOpenScanner}
+                            style={{borderRadius: 10, height: 44}}
+                        >
+                            {t.scanInstead || t.scan}
+                        </Button>
+                    </Flex>
+                )}
+            </Drawer>
 
             {/* ===== Two-Column Layout ===== */}
             <div className="dashboard-layout">
