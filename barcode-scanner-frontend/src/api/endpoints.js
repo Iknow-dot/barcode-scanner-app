@@ -17,6 +17,17 @@ const API_ENDPOINTS = {
     warehouses: "api/v1/warehouses/",
     warehouse: warehouseId => `api/v1/warehouses/${warehouseId}/`,
     product_search: "api/v1/product/search/",
+
+    // Customers
+    customers: "api/v1/customers/",
+    customer: customerId => `api/v1/customers/${customerId}/`,
+
+    // Purchase Orders
+    orders: "api/v1/orders/",
+    order: orderId => `api/v1/orders/${orderId}/`,
+    order_items: orderId => `api/v1/orders/${orderId}/items/`,
+    order_item: (orderId, itemId) => `api/v1/orders/${orderId}/items/${itemId}/`,
+    order_item_update: (orderId, itemId) => `api/v1/orders/${orderId}/items/${itemId}/update/`,
 };
 
 export default API_ENDPOINTS;

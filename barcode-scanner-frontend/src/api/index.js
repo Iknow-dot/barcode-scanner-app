@@ -25,6 +25,8 @@ export {
     warehouseService,
     productService,
     authService,
+    customerService,
+    orderService,
 } from './services';
 
 // Role constants

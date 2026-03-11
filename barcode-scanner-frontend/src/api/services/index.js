@@ -3,3 +3,5 @@ export * as organizationService from './organizationService';
 export * as warehouseService from './warehouseService';
 export * as productService from './productService';
 export * as authService from './authService';
+export * as customerService from './customerService';
+export * as orderService from './orderService';

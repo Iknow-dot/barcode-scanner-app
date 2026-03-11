@@ -4,19 +4,29 @@ import AuthContext from '../Auth/AuthContext';
 import OrganizationsTab from './OrganizationsTab';
 import WarehousesTab from './WarehousesTab';
 import UsersTab from './UsersTab';
+import OrdersTab from './OrdersTab';
+import CustomersTab from './CustomersTab';
 import ExternalServiceSettings from '../Organization/ExternalServiceSettings';
-import {AppstoreOutlined, BankOutlined, GlobalOutlined, UserOutlined} from "@ant-design/icons";
+import {AppstoreOutlined, BankOutlined, GlobalOutlined, ShoppingOutlined, TeamOutlined, UserOutlined} from "@ant-design/icons";
 import SubNavContext from "../../contexts/SubNavContext";
 import {useLanguage} from '../../i18n/LanguageContext';
 import {Typography} from "antd";
 
 const {Title, Text} = Typography;
 
-const tabMeta = (t) => ({
+const tabMeta = (t, role) => ({
     1: {title: t.organizations, subtitle: t.orgTabSubtitle || '', icon: <BankOutlined style={{color: '#1677ff', fontSize: 22}}/>},
     2: {title: t.warehouses, subtitle: t.warehouseTabSubtitle || '', icon: <AppstoreOutlined style={{color: '#1677ff', fontSize: 22}}/>},
-    3: {title: t.users, subtitle: t.userTabSubtitle || '', icon: <UserOutlined style={{color: '#1677ff', fontSize: 22}}/>},
+    3: {
+        title: role === userRoles.company_admin ? t.employees : t.users,
+        subtitle: role === userRoles.company_admin ? t.employeesTabSubtitle : (t.userTabSubtitle || ''),
+        icon: role === userRoles.company_admin
+            ? <TeamOutlined style={{color: '#1677ff', fontSize: 22}}/>
+            : <UserOutlined style={{color: '#1677ff', fontSize: 22}}/>,
+    },
     4: {title: t.externalServiceSettings, subtitle: t.externalServiceSubtitle || '', icon: <GlobalOutlined style={{color: '#1677ff', fontSize: 22}}/>},
+    5: {title: t.purchaseOrders, subtitle: t.ordersTabSubtitle || '', icon: <ShoppingOutlined style={{color: '#1677ff', fontSize: 22}}/>},
+    6: {title: t.customers, subtitle: t.customersTabSubtitle || '', icon: <UserOutlined style={{color: '#1677ff', fontSize: 22}}/>},
 });
 
 const SystemAdminDashboard = () => {
@@ -45,10 +55,22 @@ const SystemAdminDashboard = () => {
             {
                 key: '3',
                 active: "true",
-                icon: <UserOutlined/>,
-                label: t.users,
+                icon: userRole === userRoles.company_admin ? <TeamOutlined/> : <UserOutlined/>,
+                label: userRole === userRoles.company_admin ? t.employees : t.users,
                 onClick: () => setActiveTab(3)
             },
+            userRole === userRoles.company_admin && ({
+                key: '6',
+                icon: <UserOutlined/>,
+                label: t.customers,
+                onClick: () => setActiveTab(6)
+            }),
+            userRole === userRoles.company_admin && ({
+                key: '5',
+                icon: <ShoppingOutlined/>,
+                label: t.purchaseOrders,
+                onClick: () => setActiveTab(5)
+            }),
             userRole === userRoles.company_admin && ({
                 key: '4',
                 icon: <GlobalOutlined/>,
@@ -78,7 +100,7 @@ const SystemAdminDashboard = () => {
         fetchUsers();
     }, [activeTab]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    const meta = tabMeta(t)[activeTab];
+    const meta = tabMeta(t, userRole)[activeTab];
 
     let ActiveTabPane = null;
     switch (activeTab) {
@@ -93,6 +115,12 @@ const SystemAdminDashboard = () => {
             break;
         case 4:
             ActiveTabPane = <ExternalServiceSettings/>;
+            break;
+        case 5:
+            ActiveTabPane = <OrdersTab/>;
+            break;
+        case 6:
+            ActiveTabPane = <CustomersTab/>;
             break;
         default:
             ActiveTabPane = null;

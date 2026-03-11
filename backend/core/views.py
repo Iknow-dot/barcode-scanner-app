@@ -11,7 +11,9 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.viewsets import ModelViewSet
 
-from core.models import Organization, Warehouse
+from django.db import models
+
+from core.models import Organization, Warehouse, Customer, PurchaseOrder, PurchaseOrderItem
 from core.permissions import (
     OrganizationPermission,
     WarehousePermission,
@@ -23,6 +25,11 @@ from core.serializers import (
     WarehouseSerializer,
     WarehouseReadOnlySerializer,
     ProductSearchSerializer,
+    CustomerSerializer,
+    PurchaseOrderSerializer,
+    PurchaseOrderListSerializer,
+    PurchaseOrderItemSerializer,
+    AddOrderItemSerializer,
 )
 from users.models import User, AllowedIP
 
@@ -260,3 +267,200 @@ class ProductSearchAPIView(APIView):
 
         serializer = self.serializer_class(product_data)
         return Response(serializer.data)
+
+
+# ---------------------------------------------------------------------------
+# Customer
+# ---------------------------------------------------------------------------
+
+@extend_schema_view(
+    list=extend_schema(tags=['Customers']),
+    retrieve=extend_schema(tags=['Customers']),
+    create=extend_schema(tags=['Customers']),
+    update=extend_schema(tags=['Customers']),
+    partial_update=extend_schema(tags=['Customers']),
+    destroy=extend_schema(tags=['Customers']),
+)
+class CustomerViewSet(ModelViewSet):
+    serializer_class = CustomerSerializer
+    permission_classes = [IsCompanyUserOrAdmin]
+
+    def get_queryset(self):
+        user = self.request.user
+        qs = Customer.objects.filter(organization=user.organization)
+        # Allow searching by name or identification number
+        search = self.request.query_params.get('search')
+        if search:
+            qs = qs.filter(
+                models.Q(first_name__icontains=search)
+                | models.Q(last_name__icontains=search)
+                | models.Q(identification_number__icontains=search)
+                | models.Q(phone__icontains=search)
+            )
+        return qs
+
+
+# ---------------------------------------------------------------------------
+# Purchase Order
+# ---------------------------------------------------------------------------
+
+@extend_schema_view(
+    list=extend_schema(tags=['Purchase Orders']),
+    retrieve=extend_schema(tags=['Purchase Orders']),
+    create=extend_schema(tags=['Purchase Orders']),
+    update=extend_schema(tags=['Purchase Orders']),
+    partial_update=extend_schema(tags=['Purchase Orders']),
+    destroy=extend_schema(tags=['Purchase Orders']),
+    add_item=extend_schema(tags=['Purchase Orders']),
+    remove_item=extend_schema(tags=['Purchase Orders']),
+    update_item=extend_schema(tags=['Purchase Orders']),
+)
+class PurchaseOrderViewSet(ModelViewSet):
+    permission_classes = [IsCompanyUserOrAdmin]
+
+    def get_serializer_class(self):
+        if self.action == 'list':
+            return PurchaseOrderListSerializer
+        return PurchaseOrderSerializer
+
+    def get_queryset(self):
+        user = self.request.user
+        qs = PurchaseOrder.objects.filter(
+            organization=user.organization
+        ).select_related('customer', 'created_by').prefetch_related('items')
+
+        # --- Filtering support for order history search ---
+        # Status filter
+        status = self.request.query_params.get('status')
+        if status:
+            qs = qs.filter(status=status)
+
+        # Customer filter
+        customer_id = self.request.query_params.get('customer')
+        if customer_id:
+            qs = qs.filter(customer_id=customer_id)
+
+        # Customer search (name, phone, identification_number)
+        customer_search = self.request.query_params.get('customer_search')
+        if customer_search:
+            qs = qs.filter(
+                models.Q(customer__first_name__icontains=customer_search)
+                | models.Q(customer__last_name__icontains=customer_search)
+                | models.Q(customer__phone__icontains=customer_search)
+                | models.Q(customer__identification_number__icontains=customer_search)
+            )
+
+        # Order number search
+        order_number = self.request.query_params.get('order_number')
+        if order_number:
+            try:
+                qs = qs.filter(pk=int(order_number))
+            except (ValueError, TypeError):
+                pass
+
+        # Date range filter
+        date_from = self.request.query_params.get('date_from')
+        if date_from:
+            qs = qs.filter(created_at__date__gte=date_from)
+
+        date_to = self.request.query_params.get('date_to')
+        if date_to:
+            qs = qs.filter(created_at__date__lte=date_to)
+
+        # Created by filter (for admin to filter by consultant)
+        created_by = self.request.query_params.get('created_by')
+        if created_by:
+            qs = qs.filter(created_by_id=created_by)
+
+        return qs
+
+    @action(detail=True, methods=['post'], url_path='items')
+    def add_item(self, request, pk=None):
+        """Add a product line item to the order."""
+        order = self.get_object()
+        serializer = AddOrderItemSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        # Check if the same SKU + warehouse already exists — if so, increment quantity
+        filter_kwargs = {'sku': data['sku']}
+        if data.get('warehouse_code'):
+            filter_kwargs['warehouse_code'] = data['warehouse_code']
+        existing_item = order.items.filter(**filter_kwargs).first()
+
+        if existing_item:
+            existing_item.quantity += data.get('quantity', 1)
+            # Update price/name if provided (latest scan wins)
+            if data.get('price'):
+                existing_item.price = data['price']
+            if data.get('sku_name'):
+                existing_item.sku_name = data['sku_name']
+            if data.get('article'):
+                existing_item.article = data['article']
+            if data.get('warehouse_name'):
+                existing_item.warehouse_name = data['warehouse_name']
+            if data.get('unit'):
+                existing_item.unit = data['unit']
+            if data.get('discount_percent'):
+                existing_item.discount_percent = data['discount_percent']
+            if data.get('discounted_price') is not None:
+                existing_item.discounted_price = data['discounted_price']
+            existing_item.save()
+        else:
+            PurchaseOrderItem.objects.create(order=order, **data)
+
+        # Refresh the order to clear cached/prefetched items
+        order.refresh_from_db()
+        # Clear the prefetched items cache so the serializer fetches fresh data
+        try:
+            del order._prefetched_objects_cache
+        except AttributeError:
+            pass
+
+        # Return the full updated order
+        order_serializer = PurchaseOrderSerializer(order)
+        return Response(order_serializer.data, status=http_status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['delete'], url_path=r'items/(?P<item_id>\d+)')
+    def remove_item(self, request, pk=None, item_id=None):
+        """Remove a line item from the order."""
+        order = self.get_object()
+        try:
+            item = order.items.get(pk=item_id)
+        except PurchaseOrderItem.DoesNotExist:
+            return Response(
+                {'detail': 'Item not found.'},
+                status=http_status.HTTP_404_NOT_FOUND,
+            )
+        item.delete()
+        # Refresh to clear cached/prefetched items
+        order.refresh_from_db()
+        try:
+            del order._prefetched_objects_cache
+        except AttributeError:
+            pass
+        order_serializer = PurchaseOrderSerializer(order)
+        return Response(order_serializer.data)
+
+    @action(detail=True, methods=['patch'], url_path=r'items/(?P<item_id>\d+)/update')
+    def update_item(self, request, pk=None, item_id=None):
+        """Update quantity or other fields of a line item."""
+        order = self.get_object()
+        try:
+            item = order.items.get(pk=item_id)
+        except PurchaseOrderItem.DoesNotExist:
+            return Response(
+                {'detail': 'Item not found.'},
+                status=http_status.HTTP_404_NOT_FOUND,
+            )
+        serializer = PurchaseOrderItemSerializer(item, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        # Refresh to clear cached/prefetched items
+        order.refresh_from_db()
+        try:
+            del order._prefetched_objects_cache
+        except AttributeError:
+            pass
+        order_serializer = PurchaseOrderSerializer(order)
+        return Response(order_serializer.data)
