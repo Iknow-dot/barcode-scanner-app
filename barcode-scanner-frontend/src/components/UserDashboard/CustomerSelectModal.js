@@ -66,7 +66,7 @@ const CustomerSelectModal = ({open, onSelect, onClose}) => {
     const handleRsGeLookup = async () => {
         const idNumber = form.getFieldValue('identification_number')?.trim();
         if (!idNumber) {
-            message.warning(t.idNumberRequired);
+            message.warning(t.customerIdNumberRequired);
             return;
         }
 
@@ -240,7 +240,7 @@ const CustomerSelectModal = ({open, onSelect, onClose}) => {
                     <Form.Item
                         name="identification_number"
                         label={t.customerIdNumber}
-                        rules={[{required: true, message: t.idNumberRequired}]}
+                        rules={[{required: true, message: t.customerIdNumberRequired}]}
                     >
                         <Input
                             size="large"
