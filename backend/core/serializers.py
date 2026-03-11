@@ -68,10 +68,7 @@ class WarehouseSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Warehouse
-        fields = ['id', 'name', 'code', 'organization', 'user_ids', 'user_ids_read']
-        extra_kwargs = {
-            'organization': {'required': False},
-        }
+        fields = ['id', 'name', 'code', 'user_ids', 'user_ids_read']
 
 
     def validate(self, attrs):
