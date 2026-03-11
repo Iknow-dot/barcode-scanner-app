@@ -42,3 +42,13 @@ export const updateCustomer = (customerId, data) => {
 export const deleteCustomer = (customerId) => {
     return api.delete(API_ENDPOINTS.customer(customerId));
 };
+
+/**
+ * Look up a taxpayer's name from RS.ge by identification number.
+ * @param {string} identificationNumber
+ */
+export const lookupRsGe = (identificationNumber) => {
+    return api.get(API_ENDPOINTS.rs_ge_lookup, {
+        params: { identification_number: identificationNumber },
+    });
+};

@@ -14,6 +14,7 @@ import {
     Spin,
     Space,
     Tag,
+    message,
 } from 'antd';
 import {
     UserAddOutlined,
@@ -21,6 +22,7 @@ import {
     UserOutlined,
     PhoneOutlined,
     IdcardOutlined,
+    CloudDownloadOutlined,
 } from '@ant-design/icons';
 
 const {Text} = Typography;
@@ -32,6 +34,7 @@ const CustomerSelectModal = ({open, onSelect, onClose}) => {
     const [searchQuery, setSearchQuery] = useState('');
     const [showCreateForm, setShowCreateForm] = useState(false);
     const [createLoading, setCreateLoading] = useState(false);
+    const [rsGeLookupLoading, setRsGeLookupLoading] = useState(false);
     const [form] = Form.useForm();
 
     const fetchCustomers = useCallback(async (search) => {
@@ -58,6 +61,40 @@ const CustomerSelectModal = ({open, onSelect, onClose}) => {
     const handleSearch = (value) => {
         setSearchQuery(value);
         fetchCustomers(value);
+    };
+
+    const handleRsGeLookup = async () => {
+        const idNumber = form.getFieldValue('identification_number')?.trim();
+        if (!idNumber) {
+            message.warning(t.idNumberRequired);
+            return;
+        }
+
+        setRsGeLookupLoading(true);
+        try {
+            const result = await customerService.lookupRsGe(idNumber);
+            if (result.success && result.data) {
+                const {first_name, last_name} = result.data;
+                form.setFieldsValue({
+                    first_name: first_name || form.getFieldValue('first_name') || '',
+                    last_name: last_name || form.getFieldValue('last_name') || '',
+                });
+                message.success(t.rsGeFound);
+            } else {
+                const errorCode = result.code;
+                if (errorCode === 'RS_GE_NOT_FOUND' || result.status === 404) {
+                    message.warning(t.rsGeNotFound);
+                } else if (errorCode === 'RS_GE_TIMEOUT' || result.status === 504) {
+                    message.error(t.rsGeTimeout);
+                } else {
+                    message.error(t.rsGeError);
+                }
+            }
+        } catch (err) {
+            message.error(t.rsGeError);
+        } finally {
+            setRsGeLookupLoading(false);
+        }
     };
 
     const handleCreateCustomer = async (values) => {
@@ -199,6 +236,30 @@ const CustomerSelectModal = ({open, onSelect, onClose}) => {
                     onFinish={handleCreateCustomer}
                     style={{marginTop: 8}}
                 >
+                    {/* ID Number with RS.ge lookup - placed first */}
+                    <Form.Item
+                        name="identification_number"
+                        label={t.customerIdNumber}
+                        rules={[{required: true, message: t.idNumberRequired}]}
+                    >
+                        <Input
+                            size="large"
+                            placeholder={t.customerIdNumber}
+                            prefix={<IdcardOutlined style={{opacity: 0.4}}/>}
+                            suffix={
+                                <Button
+                                    type="link"
+                                    size="small"
+                                    icon={<CloudDownloadOutlined/>}
+                                    loading={rsGeLookupLoading}
+                                    onClick={handleRsGeLookup}
+                                    style={{padding: '0 4px', fontSize: 12}}
+                                >
+                                    {rsGeLookupLoading ? t.lookingUpRsGe : t.lookupFromRsGe}
+                                </Button>
+                            }
+                        />
+                    </Form.Item>
                     <Flex gap={12}>
                         <Form.Item
                             name="first_name"
@@ -226,16 +287,13 @@ const CustomerSelectModal = ({open, onSelect, onClose}) => {
                             <Input size="large" placeholder={t.customerPhone}/>
                         </Form.Item>
                         <Form.Item
-                            name="identification_number"
-                            label={t.customerIdNumber}
+                            name="email"
+                            label={t.customerEmail}
                             style={{flex: 1}}
                         >
-                            <Input size="large" placeholder={t.customerIdNumber}/>
+                            <Input size="large" placeholder={t.customerEmail}/>
                         </Form.Item>
                     </Flex>
-                    <Form.Item name="email" label={t.customerEmail}>
-                        <Input size="large" placeholder={t.customerEmail}/>
-                    </Form.Item>
                     <Flex gap={8} justify="end">
                         <Button onClick={() => {
                             setShowCreateForm(false);

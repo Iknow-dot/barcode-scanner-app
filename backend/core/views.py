@@ -270,6 +270,116 @@ class ProductSearchAPIView(APIView):
 
 
 # ---------------------------------------------------------------------------
+# RS.ge Taxpayer Lookup
+# ---------------------------------------------------------------------------
+
+@extend_schema(tags=['Customers'])
+class RSGeLookupAPIView(APIView):
+    """Look up a taxpayer's name from RS.ge by identification number."""
+    permission_classes = [IsCompanyUserOrAdmin]
+    http_method_names = ["get"]
+
+    RS_GE_API_URL = "https://tax.gov.ge/tax-info/tax-payers"
+
+    def get(self, request: Request) -> Response:
+        identification_number = request.query_params.get('identification_number', '').strip()
+        if not identification_number:
+            return Response(
+                {"code": "MISSING_PARAM", "detail": "identification_number query parameter is required."},
+                status=http_status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            rs_response = httpx.get(
+                self.RS_GE_API_URL,
+                params={"tax_code": identification_number, "limit": 1},
+                headers={"Accept": "application/json"},
+                timeout=10.0,
+            )
+        except httpx.TimeoutException:
+            logging.error(f"RS.ge lookup timeout for ID {identification_number}")
+            return Response(
+                {"code": "RS_GE_TIMEOUT", "detail": "Timeout while connecting to RS.ge."},
+                status=http_status.HTTP_504_GATEWAY_TIMEOUT,
+            )
+        except httpx.RequestError as e:
+            logging.error(f"RS.ge lookup error for ID {identification_number}: {e}")
+            return Response(
+                {"code": "RS_GE_ERROR", "detail": "Could not connect to RS.ge."},
+                status=http_status.HTTP_502_BAD_GATEWAY,
+            )
+
+        if rs_response.status_code != 200:
+            logging.warning(
+                f"RS.ge returned {rs_response.status_code} for ID {identification_number}"
+            )
+            return Response(
+                {"code": "RS_GE_NOT_FOUND", "detail": "Taxpayer not found on RS.ge."},
+                status=http_status.HTTP_404_NOT_FOUND,
+            )
+
+        try:
+            data = rs_response.json()
+        except Exception:
+            return Response(
+                {"code": "RS_GE_PARSE_ERROR", "detail": "Could not parse RS.ge response."},
+                status=http_status.HTTP_502_BAD_GATEWAY,
+            )
+
+        # RS.ge returns a list of results or a paginated structure
+        # Try to extract the taxpayer info from the response
+        taxpayer = None
+        if isinstance(data, list) and len(data) > 0:
+            taxpayer = data[0]
+        elif isinstance(data, dict):
+            # Could be paginated: { results: [...], ... } or direct object
+            results = data.get('data') or data.get('results') or data.get('items')
+            if isinstance(results, list) and len(results) > 0:
+                taxpayer = results[0]
+            elif 'name' in data or 'first_name' in data or 'taxpayer_name' in data:
+                taxpayer = data
+
+        if not taxpayer:
+            return Response(
+                {"code": "RS_GE_NOT_FOUND", "detail": "Taxpayer not found on RS.ge."},
+                status=http_status.HTTP_404_NOT_FOUND,
+            )
+
+        # Extract name fields — RS.ge may return different field names
+        # Common patterns: name, first_name/last_name, taxpayer_name
+        first_name = ''
+        last_name = ''
+
+        if 'first_name' in taxpayer and 'last_name' in taxpayer:
+            first_name = taxpayer['first_name']
+            last_name = taxpayer['last_name']
+        elif 'name' in taxpayer:
+            # Try to split "LAST_NAME FIRST_NAME" or "FIRST_NAME LAST_NAME"
+            full_name = taxpayer['name'].strip()
+            parts = full_name.split(None, 1)
+            if len(parts) == 2:
+                first_name = parts[0]
+                last_name = parts[1]
+            else:
+                first_name = full_name
+        elif 'taxpayer_name' in taxpayer:
+            full_name = taxpayer['taxpayer_name'].strip()
+            parts = full_name.split(None, 1)
+            if len(parts) == 2:
+                first_name = parts[0]
+                last_name = parts[1]
+            else:
+                first_name = full_name
+
+        return Response({
+            "identification_number": identification_number,
+            "first_name": first_name,
+            "last_name": last_name,
+            "raw": taxpayer,
+        })
+
+
+# ---------------------------------------------------------------------------
 # Customer
 # ---------------------------------------------------------------------------
 

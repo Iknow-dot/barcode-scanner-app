@@ -13,6 +13,7 @@ import {
     Space,
     Modal,
     Form,
+    message,
 } from 'antd';
 import {
     DeleteOutlined,
@@ -24,6 +25,7 @@ import {
     PhoneOutlined,
     MailOutlined,
     IdcardOutlined,
+    CloudDownloadOutlined,
 } from '@ant-design/icons';
 
 const {Text} = Typography;
@@ -37,6 +39,7 @@ const CustomersTab = () => {
     const [modalOpen, setModalOpen] = useState(false);
     const [editingCustomer, setEditingCustomer] = useState(null);
     const [modalLoading, setModalLoading] = useState(false);
+    const [rsGeLookupLoading, setRsGeLookupLoading] = useState(false);
     const [form] = Form.useForm();
 
     const fetchCustomers = useCallback(async (search) => {
@@ -84,13 +87,47 @@ const CustomersTab = () => {
     const handleOpenEditModal = (customer) => {
         setEditingCustomer(customer);
         form.setFieldsValue({
+            identification_number: customer.identification_number || '',
             first_name: customer.first_name,
             last_name: customer.last_name,
             phone: customer.phone || '',
             email: customer.email || '',
-            identification_number: customer.identification_number || '',
         });
         setModalOpen(true);
+    };
+
+    const handleRsGeLookup = async () => {
+        const idNumber = form.getFieldValue('identification_number')?.trim();
+        if (!idNumber) {
+            message.warning(t.idNumberRequired);
+            return;
+        }
+
+        setRsGeLookupLoading(true);
+        try {
+            const result = await customerService.lookupRsGe(idNumber);
+            if (result.success && result.data) {
+                const {first_name, last_name} = result.data;
+                form.setFieldsValue({
+                    first_name: first_name || form.getFieldValue('first_name') || '',
+                    last_name: last_name || form.getFieldValue('last_name') || '',
+                });
+                message.success(t.rsGeFound);
+            } else {
+                const errorCode = result.code;
+                if (errorCode === 'RS_GE_NOT_FOUND' || result.status === 404) {
+                    message.warning(t.rsGeNotFound);
+                } else if (errorCode === 'RS_GE_TIMEOUT' || result.status === 504) {
+                    message.error(t.rsGeTimeout);
+                } else {
+                    message.error(t.rsGeError);
+                }
+            }
+        } catch (err) {
+            message.error(t.rsGeError);
+        } finally {
+            setRsGeLookupLoading(false);
+        }
     };
 
     const handleModalSubmit = async () => {
@@ -122,6 +159,18 @@ const CustomersTab = () => {
     };
 
     const columns = [
+        {
+            title: t.customerIdNumber,
+            dataIndex: 'identification_number',
+            key: 'identification_number',
+            width: 160,
+            render: (idNum) => idNum ? (
+                <Flex align="center" gap={6}>
+                    <IdcardOutlined style={{opacity: 0.4, fontSize: 13}}/>
+                    <Text strong>{idNum}</Text>
+                </Flex>
+            ) : <Text type="secondary">—</Text>,
+        },
         {
             title: t.firstName,
             dataIndex: 'first_name',
@@ -162,18 +211,6 @@ const CustomersTab = () => {
                 <Flex align="center" gap={6}>
                     <MailOutlined style={{opacity: 0.4, fontSize: 13}}/>
                     <Text>{email}</Text>
-                </Flex>
-            ) : <Text type="secondary">—</Text>,
-        },
-        {
-            title: t.customerIdNumber,
-            dataIndex: 'identification_number',
-            key: 'identification_number',
-            width: 160,
-            render: (idNum) => idNum ? (
-                <Flex align="center" gap={6}>
-                    <IdcardOutlined style={{opacity: 0.4, fontSize: 13}}/>
-                    <Text>{idNum}</Text>
                 </Flex>
             ) : <Text type="secondary">—</Text>,
         },
@@ -289,6 +326,28 @@ const CustomersTab = () => {
                     layout="vertical"
                     style={{marginTop: 16}}
                 >
+                    {/* ID Number with RS.ge lookup - placed first */}
+                    <Form.Item
+                        name="identification_number"
+                        label={t.customerIdNumber}
+                        rules={[{required: true, message: t.idNumberRequired}]}
+                    >
+                        <Input
+                            prefix={<IdcardOutlined style={{opacity: 0.4}}/>}
+                            suffix={
+                                <Button
+                                    type="link"
+                                    size="small"
+                                    icon={<CloudDownloadOutlined/>}
+                                    loading={rsGeLookupLoading}
+                                    onClick={handleRsGeLookup}
+                                    style={{padding: '0 4px', fontSize: 12}}
+                                >
+                                    {rsGeLookupLoading ? t.lookingUpRsGe : t.lookupFromRsGe}
+                                </Button>
+                            }
+                        />
+                    </Form.Item>
                     <Form.Item
                         name="first_name"
                         label={t.firstName}
@@ -315,12 +374,6 @@ const CustomersTab = () => {
                         rules={[{type: 'email', message: t.emailInvalid}]}
                     >
                         <Input prefix={<MailOutlined style={{opacity: 0.4}}/>}/>
-                    </Form.Item>
-                    <Form.Item
-                        name="identification_number"
-                        label={t.customerIdNumber}
-                    >
-                        <Input prefix={<IdcardOutlined style={{opacity: 0.4}}/>}/>
                     </Form.Item>
                 </Form>
             </Modal>
