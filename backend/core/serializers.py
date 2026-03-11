@@ -262,6 +262,19 @@ class PurchaseOrderListSerializer(serializers.ModelSerializer):
 
 
 # ---------------------------------------------------------------------------
+# RS.ge Lookup
+# ---------------------------------------------------------------------------
+
+class RSGeLookupSerializer(serializers.Serializer):
+    identification_number = serializers.CharField(
+        max_length=50,
+        required=True,
+        allow_blank=False,
+        help_text="Taxpayer identification number to look up on RS.ge.",
+    )
+
+
+# ---------------------------------------------------------------------------
 # Product Search
 # ---------------------------------------------------------------------------
 

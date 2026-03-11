@@ -30,6 +30,7 @@ from core.serializers import (
     PurchaseOrderListSerializer,
     PurchaseOrderItemSerializer,
     AddOrderItemSerializer,
+    RSGeLookupSerializer,
 )
 from users.models import User, AllowedIP
 
@@ -276,23 +277,21 @@ class ProductSearchAPIView(APIView):
 @extend_schema(tags=['Customers'])
 class RSGeLookupAPIView(APIView):
     """Look up a taxpayer's name from RS.ge by identification number."""
-    permission_classes = [IsCompanyUserOrAdmin]
-    http_method_names = ["get"]
+    permission_classes = []
+    serializer_class = RSGeLookupSerializer
+    http_method_names = ["post"]
 
-    RS_GE_API_URL = "https://tax.gov.ge/tax-info/tax-payers"
+    RS_GE_API_URL = "https://xdata.rs.ge/TaxPayer/RSPublicInfo"
 
-    def get(self, request: Request) -> Response:
-        identification_number = request.query_params.get('identification_number', '').strip()
-        if not identification_number:
-            return Response(
-                {"code": "MISSING_PARAM", "detail": "identification_number query parameter is required."},
-                status=http_status.HTTP_400_BAD_REQUEST,
-            )
+    def post(self, request: Request) -> Response:
+        serializer = self.serializer_class(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        identification_number = serializer.validated_data['identification_number'].strip()
 
         try:
-            rs_response = httpx.get(
+            rs_response = httpx.post(
                 self.RS_GE_API_URL,
-                params={"tax_code": identification_number, "limit": 1},
+                json={"IdentCode": identification_number},
                 headers={"Accept": "application/json"},
                 timeout=10.0,
             )
@@ -347,29 +346,11 @@ class RSGeLookupAPIView(APIView):
 
         # Extract name fields — RS.ge may return different field names
         # Common patterns: name, first_name/last_name, taxpayer_name
-        first_name = ''
-        last_name = ''
 
-        if 'first_name' in taxpayer and 'last_name' in taxpayer:
-            first_name = taxpayer['first_name']
-            last_name = taxpayer['last_name']
-        elif 'name' in taxpayer:
-            # Try to split "LAST_NAME FIRST_NAME" or "FIRST_NAME LAST_NAME"
-            full_name = taxpayer['name'].strip()
-            parts = full_name.split(None, 1)
-            if len(parts) == 2:
-                first_name = parts[0]
-                last_name = parts[1]
-            else:
-                first_name = full_name
-        elif 'taxpayer_name' in taxpayer:
-            full_name = taxpayer['taxpayer_name'].strip()
-            parts = full_name.split(None, 1)
-            if len(parts) == 2:
-                first_name = parts[0]
-                last_name = parts[1]
-            else:
-                first_name = full_name
+        full_name = taxpayer['FullName'].strip()
+        parts = full_name.split(None, 1)
+        first_name = parts[0]
+        last_name = parts[1]
 
         return Response({
             "identification_number": identification_number,

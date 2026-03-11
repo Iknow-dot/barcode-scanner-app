@@ -48,7 +48,7 @@ export const deleteCustomer = (customerId) => {
  * @param {string} identificationNumber
  */
 export const lookupRsGe = (identificationNumber) => {
-    return api.get(API_ENDPOINTS.rs_ge_lookup, {
-        params: { identification_number: identificationNumber },
+    return api.post(API_ENDPOINTS.rs_ge_lookup, {
+        identification_number: identificationNumber,
     });
 };
