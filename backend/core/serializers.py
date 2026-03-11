@@ -1,7 +1,7 @@
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
 
-from core.models import Organization, Warehouse, Customer, PurchaseOrder, PurchaseOrderItem
+from core.models import Organization, Warehouse, Customer, CustomerPhone, PurchaseOrder, PurchaseOrderItem
 from users.serializers import UserSerializer
 
 User = get_user_model()
@@ -142,16 +142,32 @@ class WarehouseReadOnlySerializer(serializers.ModelSerializer):
 # Customer
 # ---------------------------------------------------------------------------
 
+class CustomerPhoneSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CustomerPhone
+        fields = ['id', 'country_code', 'phone', 'label']
+        read_only_fields = ['id']
+
+
 class CustomerSerializer(serializers.ModelSerializer):
+    phone_numbers = CustomerPhoneSerializer(many=True, required=False)
+
     class Meta:
         model = Customer
         fields = [
-            'id', 'first_name', 'last_name', 'phone',
-            'email', 'identification_number', 'created_at',
+            'id', 'first_name', 'last_name', 'phone', 'phone_numbers',
+            'email', 'identification_number',
+            'country', 'city', 'district', 'address',
+            'created_at',
         ]
         read_only_fields = ['id', 'created_at']
         extra_kwargs = {
             'identification_number': {'required': True, 'allow_blank': False},
+            'phone': {'required': False, 'allow_blank': True},
+            'country': {'required': False, 'allow_blank': True},
+            'city': {'required': False, 'allow_blank': True},
+            'district': {'required': False, 'allow_blank': True},
+            'address': {'required': False, 'allow_blank': True},
         }
 
     def validate(self, attrs):
@@ -161,7 +177,25 @@ class CustomerSerializer(serializers.ModelSerializer):
         return attrs
 
     def create(self, validated_data):
-        return Customer.objects.create(**validated_data)
+        phone_numbers_data = validated_data.pop('phone_numbers', [])
+        customer = Customer.objects.create(**validated_data)
+        for phone_data in phone_numbers_data:
+            CustomerPhone.objects.create(customer=customer, **phone_data)
+        return customer
+
+    def update(self, instance, validated_data):
+        phone_numbers_data = validated_data.pop('phone_numbers', None)
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+
+        if phone_numbers_data is not None:
+            # Replace all phone numbers with the new set
+            instance.phone_numbers.all().delete()
+            for phone_data in phone_numbers_data:
+                CustomerPhone.objects.create(customer=instance, **phone_data)
+
+        return instance
 
 
 # ---------------------------------------------------------------------------

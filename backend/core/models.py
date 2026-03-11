@@ -84,6 +84,13 @@ class Customer(models.Model):
     phone = models.CharField(max_length=50, blank=True, default='')
     email = models.EmailField(blank=True, default='')
     identification_number = models.CharField(max_length=50, blank=True, default='')
+
+    # Address fields
+    country = models.CharField(max_length=100, blank=True, default='')
+    city = models.CharField(max_length=100, blank=True, default='')
+    district = models.CharField(max_length=100, blank=True, default='')
+    address = models.CharField(max_length=500, blank=True, default='')
+
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -91,6 +98,35 @@ class Customer(models.Model):
 
     def __str__(self):
         return f"{self.first_name} {self.last_name}"
+
+
+class CustomerPhone(models.Model):
+    """A phone number attached to a customer. Supports multiple phones per customer."""
+    customer = models.ForeignKey(
+        Customer,
+        on_delete=models.CASCADE,
+        related_name='phone_numbers',
+    )
+    country_code = models.CharField(
+        max_length=10,
+        blank=True,
+        default='+995',
+        help_text='Country calling code, e.g. "+995" for Georgia.',
+    )
+    phone = models.CharField(max_length=50)
+    label = models.CharField(
+        max_length=50,
+        blank=True,
+        default='',
+        help_text='Optional label, e.g. "mobile", "work", "home".',
+    )
+
+    class Meta:
+        ordering = ['id']
+
+    def __str__(self):
+        label_str = f" ({self.label})" if self.label else ""
+        return f"{self.country_code} {self.phone}{label_str}"
 
 
 class PurchaseOrder(models.Model):

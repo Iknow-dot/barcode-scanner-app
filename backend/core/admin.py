@@ -4,7 +4,7 @@ from django.contrib import admin
 from django.template.response import TemplateResponse
 from django.urls import path
 
-from core.models import Organization, Warehouse, Customer, PurchaseOrder, PurchaseOrderItem
+from core.models import Organization, Warehouse, Customer, CustomerPhone, PurchaseOrder, PurchaseOrderItem
 
 
 class WarehouseInline(admin.StackedInline):
@@ -21,11 +21,17 @@ class OrganizationAdmin(admin.ModelAdmin):
     inlines = [WarehouseInline]
 
 
+class CustomerPhoneInline(admin.TabularInline):
+    model = CustomerPhone
+    extra = 1
+
+
 @admin.register(Customer)
 class CustomerAdmin(admin.ModelAdmin):
-    list_display = ("first_name", "last_name", "phone", "organization", "created_at")
-    search_fields = ("first_name", "last_name", "identification_number", "phone")
-    list_filter = ("organization",)
+    list_display = ("first_name", "last_name", "phone", "country", "city", "organization", "created_at")
+    search_fields = ("first_name", "last_name", "identification_number", "phone", "phone_numbers__phone", "city", "address")
+    list_filter = ("organization", "country", "city")
+    inlines = [CustomerPhoneInline]
 
 
 class PurchaseOrderItemInline(admin.TabularInline):

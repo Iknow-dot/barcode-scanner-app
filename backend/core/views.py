@@ -378,8 +378,10 @@ class CustomerViewSet(ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
-        qs = Customer.objects.filter(organization=user.organization)
-        # Allow searching by name or identification number
+        qs = Customer.objects.filter(
+            organization=user.organization
+        ).prefetch_related('phone_numbers')
+        # Allow searching by name, identification number, or phone numbers
         search = self.request.query_params.get('search')
         if search:
             qs = qs.filter(
@@ -387,7 +389,8 @@ class CustomerViewSet(ModelViewSet):
                 | models.Q(last_name__icontains=search)
                 | models.Q(identification_number__icontains=search)
                 | models.Q(phone__icontains=search)
-            )
+                | models.Q(phone_numbers__phone__icontains=search)
+            ).distinct()
         return qs
 
 
@@ -438,8 +441,9 @@ class PurchaseOrderViewSet(ModelViewSet):
                 models.Q(customer__first_name__icontains=customer_search)
                 | models.Q(customer__last_name__icontains=customer_search)
                 | models.Q(customer__phone__icontains=customer_search)
+                | models.Q(customer__phone_numbers__phone__icontains=customer_search)
                 | models.Q(customer__identification_number__icontains=customer_search)
-            )
+            ).distinct()
 
         # Order number search
         order_number = self.request.query_params.get('order_number')
