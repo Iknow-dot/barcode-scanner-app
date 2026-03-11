@@ -21,6 +21,7 @@ const API_ENDPOINTS = {
     // Customers
     customers: "api/v1/customers/",
     customer: customerId => `api/v1/customers/${customerId}/`,
+    rs_ge_lookup: "api/v1/customers/rs-ge-lookup/",
 
     // Purchase Orders
     orders: "api/v1/orders/",

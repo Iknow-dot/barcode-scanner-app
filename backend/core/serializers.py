@@ -150,6 +150,9 @@ class CustomerSerializer(serializers.ModelSerializer):
             'email', 'identification_number', 'created_at',
         ]
         read_only_fields = ['id', 'created_at']
+        extra_kwargs = {
+            'identification_number': {'required': True, 'allow_blank': False},
+        }
 
     def validate(self, attrs):
         request = self.context.get('request')

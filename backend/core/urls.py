@@ -7,6 +7,7 @@ from core.views import (
     ProductSearchAPIView,
     CustomerViewSet,
     PurchaseOrderViewSet,
+    RSGeLookupAPIView,
 )
 
 router = DefaultRouter()
@@ -16,6 +17,7 @@ router.register(r'customers', CustomerViewSet, basename='customer')
 router.register(r'orders', PurchaseOrderViewSet, basename='order')
 
 urlpatterns = [
-    path('', include(router.urls)),
+    path('customers/rs-ge-lookup/', RSGeLookupAPIView.as_view(), name='rs-ge-lookup'),
     path('product/search/', ProductSearchAPIView.as_view(), name='product-search'),
+    path('', include(router.urls)),
 ]
