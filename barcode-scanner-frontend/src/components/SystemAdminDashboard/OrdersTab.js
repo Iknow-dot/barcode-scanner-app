@@ -305,7 +305,11 @@ const OrdersTab = () => {
             dataIndex: 'unit',
             key: 'unit',
             width: 80,
-            render: (unit) => unit || '—',
+            render: (unit) => {
+                if (!unit) return '—';
+                const unitOption = (t.unitOptions || []).find(opt => opt.value === unit);
+                return unitOption ? unitOption.label : unit;
+            },
         },
         {
             title: t.originalPrice,

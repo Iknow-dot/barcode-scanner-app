@@ -19,6 +19,7 @@ import {
     TimePicker,
     Divider,
     Collapse,
+    Select,
 } from 'antd';
 import {
     ShoppingCartOutlined,
@@ -35,6 +36,16 @@ import {
 const {Text, Title} = Typography;
 const {TextArea} = Input;
 
+const UNIT_OPTIONS = [
+    {label: 'ცალი / pc', value: 'piece'},
+    {label: 'ყუთი / box', value: 'box'},
+    {label: 'კგ / kg', value: 'kg'},
+    {label: 'ლიტრი / L', value: 'liter'},
+    {label: 'მეტრი / m', value: 'meter'},
+    {label: 'შეკვრა / pack', value: 'pack'},
+    {label: 'პალეტი / pallet', value: 'pallet'},
+];
+
 const OrderPanel = ({order, onSaveForLater, onProceedToPayment, onDeleteOrder, onOrderUpdate, notify}) => {
     const {t} = useLanguage();
     const [deliveryExpanded, setDeliveryExpanded] = useState(
@@ -48,6 +59,15 @@ const OrderPanel = ({order, onSaveForLater, onProceedToPayment, onDeleteOrder, o
     const handleQuantityChange = async (itemId, newQuantity) => {
         if (newQuantity < 1) return;
         const result = await orderService.updateOrderItem(order.id, itemId, {quantity: newQuantity});
+        if (result.success) {
+            onOrderUpdate(result.data);
+        } else {
+            notify.error(t.orderError, result.error);
+        }
+    };
+
+    const handleUnitChange = async (itemId, newUnit) => {
+        const result = await orderService.updateOrderItem(order.id, itemId, {unit: newUnit || ''});
         if (result.success) {
             onOrderUpdate(result.data);
         } else {
@@ -112,6 +132,8 @@ const OrderPanel = ({order, onSaveForLater, onProceedToPayment, onDeleteOrder, o
         }
     };
 
+    const unitOptions = t.unitOptions || UNIT_OPTIONS;
+
     const columns = [
         {
             title: t.product,
@@ -134,11 +156,6 @@ const OrderPanel = ({order, onSaveForLater, onProceedToPayment, onDeleteOrder, o
                             </Tag>
                         </div>
                     )}
-                    {record.unit && (
-                        <Text type="secondary" style={{fontSize: 10}}>
-                            {t.unitOfMeasure}: {record.unit}
-                        </Text>
-                    )}
                 </div>
             ),
         },
@@ -160,6 +177,25 @@ const OrderPanel = ({order, onSaveForLater, onProceedToPayment, onDeleteOrder, o
                         <Text style={{fontWeight: 500}}>{price} ₾</Text>
                     )}
                 </div>
+            ),
+        },
+        {
+            title: t.unit,
+            dataIndex: 'unit',
+            key: 'unit',
+            align: 'center',
+            width: 110,
+            render: (unit, record) => (
+                <Select
+                    value={unit || undefined}
+                    size="small"
+                    allowClear
+                    showSearch
+                    placeholder={t.unit}
+                    onChange={(val) => handleUnitChange(record.id, val)}
+                    style={{width: 95}}
+                    options={unitOptions}
+                />
             ),
         },
         {
