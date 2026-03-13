@@ -10,13 +10,12 @@ import Logout from './components/Auth/Logout';
 import SystemAdminDashboard from './components/SystemAdminDashboard/SystemAdminDashboard';
 import {
     ConfigProvider,
-    FloatButton,
     Layout,
     Menu,
     theme,
     App as AntdApp,
     Space,
-    Dropdown, Grid, Flex, Avatar, Button, Tooltip
+    Dropdown, Grid, Flex, Avatar, Button
 } from "antd";
 import {Content, Header, Footer} from "antd/es/layout/layout";
 import Sider from "antd/es/layout/Sider";
@@ -53,7 +52,7 @@ const LanguageSwitcher = () => {
     );
 };
 
-const MainContentView = ({children}) => {
+const MainContentView = ({children, isDark, toggleTheme}) => {
     const screens = useBreakpoint()
     const {authData} = useContext(AuthContext);
     const {subNav} = useContext(SubNavContext);
@@ -96,6 +95,13 @@ const MainContentView = ({children}) => {
                 <span style={{fontWeight: 500}}>{username}</span>
             ),
             disabled: true,
+        },
+        {type: 'divider'},
+        {
+            key: 'theme',
+            icon: isDark ? <SunOutlined/> : <MoonOutlined/>,
+            label: isDark ? (t.lightMode || 'Light mode') : (t.darkMode || 'Dark mode'),
+            onClick: toggleTheme,
         },
         {type: 'divider'},
         {
@@ -253,14 +259,6 @@ const AppContent = () => {
             }
         }}>
             <AntdApp>
-                <Tooltip title={isDark ? 'Light mode' : 'Dark mode'} placement="left">
-                    <FloatButton
-                        onClick={toggleTheme}
-                        shape="circle"
-                        style={{insetInlineEnd: 24}}
-                        icon={isDark ? <SunOutlined/> : <MoonOutlined/>}
-                    />
-                </Tooltip>
                 <Routes>
                     {/* Public route */}
                     <Route path="/login" element={<Login/>}/>
@@ -270,7 +268,7 @@ const AppContent = () => {
                         path="/dashboard"
                         element={
                             <PrivateRoute allowedRoles={['company_admin', 'company_user']}>
-                                <MainContentView>
+                                <MainContentView isDark={isDark} toggleTheme={toggleTheme}>
                                     <Dashboard/>
                                 </MainContentView>
                             </PrivateRoute>
@@ -280,7 +278,7 @@ const AppContent = () => {
                         path="/organizations"
                         element={
                             <PrivateRoute allowedRoles={['company_admin', 'internal_admin']}>
-                                <MainContentView>
+                                <MainContentView isDark={isDark} toggleTheme={toggleTheme}>
                                     <Organization/>
                                 </MainContentView>
                             </PrivateRoute>
@@ -290,7 +288,7 @@ const AppContent = () => {
                         path="/warehouses"
                         element={
                             <PrivateRoute allowedRoles={['company_admin', 'internal_admin']}>
-                                <MainContentView>
+                                <MainContentView isDark={isDark} toggleTheme={toggleTheme}>
                                     <Warehouse/>
                                 </MainContentView>
                             </PrivateRoute>
@@ -300,7 +298,7 @@ const AppContent = () => {
                         path="/system-admin-dashboard"
                         element={
                             <PrivateRoute allowedRoles={['company_admin', 'internal_admin']}>
-                                <MainContentView>
+                                <MainContentView isDark={isDark} toggleTheme={toggleTheme}>
                                     <SystemAdminDashboard/>
                                 </MainContentView>
                             </PrivateRoute>

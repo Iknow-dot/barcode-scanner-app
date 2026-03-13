@@ -18,6 +18,8 @@ const translations = {
         language: 'ენა',
         georgian: 'ქართული',
         english: 'English',
+        darkMode: 'მუქი რეჟიმი',
+        lightMode: 'ნათელი რეჟიმი',
 
         // ===== Login =====
         username: 'მომხმარებელი სახელი',
@@ -119,7 +121,7 @@ const translations = {
         orgCreated: 'ორგანიზაცია წარმატებით შეიქმნა!',
         orgCreatedDesc: (name) => `ორგანიზაცია: ${name}`,
         orgCreateError: 'შეცდომა ორგანიზაციის შექმნისას:',
-        orgEdited: 'ორგანიზაცია წარმატებიით შეირედაქტირდა',
+        orgEdited: 'ორგანიზაცია წარმატებიით დარედაქტირდა',
         orgEditedDesc: (name) => `ორგანიზაცია: ${name}`,
         orgEditError: 'შეცდომა ორგანიზაციის რედაქტირებისას:',
 
@@ -352,6 +354,8 @@ const translations = {
         language: 'Language',
         georgian: 'ქართული',
         english: 'English',
+        darkMode: 'Dark mode',
+        lightMode: 'Light mode',
 
         // ===== Login =====
         username: 'Username',

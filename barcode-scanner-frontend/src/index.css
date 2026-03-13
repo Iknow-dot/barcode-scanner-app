@@ -514,28 +514,6 @@
   padding: 12px 0 0;
 }
 
-.m-order-actions > .ant-flex {
-  flex-direction: column;
-}
-
-.m-order-actions .ant-popover-open,
-.m-order-actions > .ant-flex > .ant-popconfirm-open,
-.m-order-actions > .ant-flex > span {
-  width: 100%;
-}
-
-/* Payment button Popconfirm wrapper — must be full width */
-.m-order-actions > .ant-flex > span:first-child {
-  display: block;
-  width: 100%;
-}
-
-.m-order-actions-secondary {
-  display: flex;
-  gap: 8px;
-  width: 100%;
-}
-
 .m-order-action-btn {
   border-radius: 12px !important;
   height: 46px !important;
@@ -823,11 +801,4 @@
   overflow: visible !important;
 }
 
-/* ===== Float Button (Theme Toggle) ===== */
-.ant-float-btn {
-  transition: all 0.3s ease;
-}
-
-.ant-float-btn:hover {
-  transform: scale(1.1);
-}
+/* (Theme toggle moved to user dropdown) */
