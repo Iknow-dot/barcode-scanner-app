@@ -582,7 +582,7 @@ const UserDashboard = () => {
                                                                         {order.customer_name}
                                                                     </Text>
                                                                 </Flex>
-                                                                <Flex align="center" gap={4}>
+                                                                <Flex align="center" gap={4} wrap="wrap">
                                                                     <CalendarOutlined
                                                                         style={{fontSize: 11, opacity: 0.5}}/>
                                                                     <Text type="secondary" style={{fontSize: 12}}>
@@ -594,6 +594,11 @@ const UserDashboard = () => {
                                                                         </Tag>
                                                                     )}
                                                                 </Flex>
+                                                                {order.total != null && (
+                                                                    <Text strong style={{fontSize: 13, color: '#52c41a'}}>
+                                                                        {t.orderTotal}: {order.total} ₾
+                                                                    </Text>
+                                                                )}
                                                             </Flex>
                                                         }
                                                     />
