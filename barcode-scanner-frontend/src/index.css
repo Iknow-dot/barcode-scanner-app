@@ -618,43 +618,41 @@
   }
 }
 
-/* ===== Dark mode support ===== */
-@media (prefers-color-scheme: dark) {
-  .m-bottom-bar {
-    background: rgba(20, 20, 20, 0.96);
-    border-top-color: rgba(255, 255, 255, 0.08);
-  }
+/* ===== Dark mode support (class-based, not OS preference) ===== */
+.dark-theme .m-bottom-bar {
+  background: rgba(20, 20, 20, 0.96);
+  border-top-color: rgba(255, 255, 255, 0.08);
+}
 
-  .m-tab-item {
-    color: rgba(255, 255, 255, 0.4);
-  }
+.dark-theme .m-tab-item {
+  color: rgba(255, 255, 255, 0.4);
+}
 
-  .m-tab-active {
-    color: #4096ff;
-  }
+.dark-theme .m-tab-active {
+  color: #4096ff;
+}
 
-  .m-balance-card {
-    background: rgba(255, 255, 255, 0.04);
-    border-color: rgba(255, 255, 255, 0.08);
-  }
+.dark-theme .m-balance-card {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.08);
+}
 
-  .m-balance-card-highlight {
-    background: rgba(22, 119, 255, 0.1);
-    border-color: rgba(22, 119, 255, 0.3);
-  }
+.dark-theme .m-balance-card-highlight {
+  background: rgba(22, 119, 255, 0.1);
+  border-color: rgba(22, 119, 255, 0.3);
+}
 
-  .m-order-item-card {
-    background: rgba(255, 255, 255, 0.04);
-    border-color: rgba(255, 255, 255, 0.08);
-  }
+.dark-theme .m-order-item-card {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.08);
+}
 
-  .m-product-image {
-    background: #1a1a1a;
-  }
+.dark-theme .m-product-image {
+  background: #1a1a1a;
+}
 
-  .m-empty-icon {
-    background: linear-gradient(135deg, rgba(22, 119, 255, 0.15) 0%, rgba(22, 119, 255, 0.08) 100%);
-  }
+.dark-theme .m-empty-icon {
+  background: linear-gradient(135deg, rgba(22, 119, 255, 0.15) 0%, rgba(22, 119, 255, 0.08) 100%);
 }
 
 /* ===== Empty State ===== */

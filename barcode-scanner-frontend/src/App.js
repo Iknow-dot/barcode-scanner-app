@@ -230,6 +230,16 @@ const MainContentView = ({children, isDark, toggleTheme}) => {
 
 const AppContent = () => {
     const [isDark, setIsDark] = useState(localStorage.getItem("theme") === "dark");
+
+    // Sync dark-theme class on body for CSS-based dark mode styling
+    useEffect(() => {
+        if (isDark) {
+            document.body.classList.add("dark-theme");
+        } else {
+            document.body.classList.remove("dark-theme");
+        }
+    }, [isDark]);
+
     const toggleTheme = () => {
         document.body.classList.add("theme-transition");
         const newTheme = !isDark;
