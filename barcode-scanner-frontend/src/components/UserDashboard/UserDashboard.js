@@ -24,7 +24,8 @@ import {
     Spin,
     Switch,
     Tag,
-    Typography
+    Typography,
+    theme
 } from "antd";
 import {
     BarcodeOutlined,
@@ -74,6 +75,11 @@ const UserDashboard = () => {
 
     // Order drawer for mobile (shows active order)
     const [orderDrawerVisible, setOrderDrawerVisible] = useState(false);
+
+    const {
+        token: {colorBgContainer, colorBgBase, colorTextSecondary, colorBorderSecondary},
+    } = theme.useToken();
+    const isDarkMode = colorBgBase === "#000";
 
     const {notify, contextHolder} = useAppNotification();
 
@@ -794,7 +800,10 @@ const UserDashboard = () => {
 
                 {/* ===== Bottom Navigation / Action Bar ===== */}
                 {!scannerOpen && !drawerVisible && (
-                    <div className="m-bottom-bar">
+                    <div className="m-bottom-bar" style={{
+                        background: isDarkMode ? 'rgba(20, 20, 20, 0.96)' : 'rgba(255, 255, 255, 0.96)',
+                        borderTopColor: isDarkMode ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.06)',
+                    }}>
                         {/* Primary actions row */}
                         <div className="m-action-row">
                             <Button
@@ -817,10 +826,13 @@ const UserDashboard = () => {
                         </div>
 
                         {/* Tab navigation row */}
-                        <div className="m-tab-bar">
+                        <div className="m-tab-bar" style={{
+                            borderTopColor: isDarkMode ? 'rgba(255, 255, 255, 0.06)' : 'rgba(0, 0, 0, 0.04)',
+                        }}>
                             <button
                                 className={`m-tab-item ${activeTab === 'scan' ? 'm-tab-active' : ''}`}
                                 onClick={() => setActiveTab('scan')}
+                                style={activeTab !== 'scan' ? {color: isDarkMode ? 'rgba(255, 255, 255, 0.4)' : undefined} : undefined}
                             >
                                 <AppstoreOutlined style={{fontSize: 20}}/>
                                 <span>{t.product}</span>
@@ -828,9 +840,10 @@ const UserDashboard = () => {
                             <button
                                 className={`m-tab-item ${activeTab === 'orders' ? 'm-tab-active' : ''}`}
                                 onClick={() => setActiveTab('orders')}
+                                style={activeTab !== 'orders' ? {color: isDarkMode ? 'rgba(255, 255, 255, 0.4)' : undefined} : undefined}
                             >
                                 <Badge count={showOrderPanel ? (activeOrder?.items?.length || 0) : 0} size="small" offset={[4, -2]}>
-                                    <ShoppingCartOutlined style={{fontSize: 20}}/>
+                                    <ShoppingCartOutlined style={{fontSize: 20, color: 'inherit'}}/>
                                 </Badge>
                                 <span>{t.purchaseOrders}</span>
                             </button>

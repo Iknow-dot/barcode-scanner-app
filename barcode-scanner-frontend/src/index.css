@@ -256,6 +256,11 @@
 
 .m-tab-item .anticon {
   font-size: 20px;
+  color: inherit;
+}
+
+.m-tab-item .ant-badge {
+  color: inherit;
 }
 
 .m-tab-active {
