@@ -7,6 +7,7 @@ import subNavContext from "../../contexts/SubNavContext";
 import useAppNotification from "../../hooks/useAppNotification";
 import {useLanguage} from '../../i18n/LanguageContext';
 import {
+    Badge,
     Button,
     Card,
     Carousel,
@@ -22,7 +23,6 @@ import {
     Select,
     Spin,
     Switch,
-    Table,
     Tag,
     Typography
 } from "antd";
@@ -42,6 +42,7 @@ import {
     UserOutlined,
     CalendarOutlined,
     RightOutlined,
+    AppstoreOutlined,
 } from "@ant-design/icons";
 
 const {Title, Text} = Typography;
@@ -68,6 +69,12 @@ const UserDashboard = () => {
     const [incompleteOrdersLoading, setIncompleteOrdersLoading] = useState(false);
     const [showIncompleteOrders, setShowIncompleteOrders] = useState(false);
 
+    // Mobile tab state: 'scan' or 'orders'
+    const [activeTab, setActiveTab] = useState('scan');
+
+    // Order drawer for mobile (shows active order)
+    const [orderDrawerVisible, setOrderDrawerVisible] = useState(false);
+
     const {notify, contextHolder} = useAppNotification();
 
     useEffect(() => {
@@ -90,7 +97,6 @@ const UserDashboard = () => {
         try {
             const result = await orderService.getOrders();
             if (result.success) {
-                // Filter only draft orders, exclude the currently active order
                 const drafts = (result.data || []).filter(
                     (o) => o.status === 'draft' && (!activeOrder || o.id !== activeOrder.id)
                 );
@@ -103,18 +109,23 @@ const UserDashboard = () => {
         }
     }, [activeOrder]);
 
-    // Fetch incomplete orders when the section is opened or when active order changes
     useEffect(() => {
         if (showIncompleteOrders) {
             fetchIncompleteOrders();
         }
     }, [showIncompleteOrders, fetchIncompleteOrders]);
 
-    // Guard against concurrent search calls
+    // Also fetch when switching to orders tab
+    useEffect(() => {
+        if (activeTab === 'orders') {
+            fetchIncompleteOrders();
+            setShowIncompleteOrders(true);
+        }
+    }, [activeTab, fetchIncompleteOrders]);
+
     const isSearchingRef = useRef(false);
 
     const handleSearch = useCallback(async ({search, searchType, allWarehouses}) => {
-        // Prevent concurrent/duplicate calls
         if (isSearchingRef.current) return;
         isSearchingRef.current = true;
         setLoading(true);
@@ -136,6 +147,8 @@ const UserDashboard = () => {
                     images: result.data.images || []
                 });
                 setDrawerVisible(false);
+                // Switch to scan tab to show results
+                setActiveTab('scan');
             } else {
                 setBalances([]);
                 setProductInfo({sku_name: '', article: '', price: '', images: []});
@@ -190,7 +203,6 @@ const UserDashboard = () => {
 
     const handleCustomerSelected = async (customer) => {
         setCustomerModalOpen(false);
-        // Create a new order with this customer
         const result = await orderService.createOrder({customer: customer.id});
         if (result.success) {
             setActiveOrder(result.data);
@@ -202,11 +214,10 @@ const UserDashboard = () => {
     };
 
     const handleSaveForLater = () => {
-        // Order is already saved as draft on the backend, just deactivate it locally
         notify.success(t.success, t.orderSavedForLater);
         setOrderMode(false);
         setActiveOrder(null);
-        // Refresh incomplete orders if the section is open
+        setOrderDrawerVisible(false);
         if (showIncompleteOrders) {
             fetchIncompleteOrders();
         }
@@ -214,13 +225,12 @@ const UserDashboard = () => {
 
     const handleProceedToPayment = async () => {
         if (!activeOrder) return;
-        // Confirm the order by changing its status to 'confirmed'
         const result = await orderService.updateOrder(activeOrder.id, {status: 'confirmed'});
         if (result.success) {
             notify.success(t.success, t.orderConfirmedSuccess);
             setOrderMode(false);
             setActiveOrder(null);
-            // Refresh incomplete orders if the section is open
+            setOrderDrawerVisible(false);
             if (showIncompleteOrders) {
                 fetchIncompleteOrders();
             }
@@ -236,6 +246,7 @@ const UserDashboard = () => {
             notify.success(t.success, t.orderDeleted);
             setOrderMode(false);
             setActiveOrder(null);
+            setOrderDrawerVisible(false);
             if (showIncompleteOrders) {
                 fetchIncompleteOrders();
             }
@@ -249,24 +260,23 @@ const UserDashboard = () => {
     };
 
     const handleContinueOrder = async (orderId) => {
-        // Fetch the full order details and set it as active
         const result = await orderService.getOrder(orderId);
         if (result.success) {
             setActiveOrder(result.data);
             setOrderMode(true);
             setShowIncompleteOrders(false);
+            // Switch to scan tab so user can start scanning
+            setActiveTab('scan');
         } else {
             notify.error(t.orderError, result.error);
         }
     };
 
     const handleDeleteIncompleteOrder = async (e, orderId) => {
-        // Stop propagation so the row click (continue) doesn't fire
         e.stopPropagation();
         const result = await orderService.deleteOrder(orderId);
         if (result.success) {
             notify.success(t.success, t.orderDeleted);
-            // Remove from local state immediately
             setIncompleteOrders((prev) => prev.filter((o) => o.id !== orderId));
         } else {
             notify.error(t.orderError, result.error);
@@ -292,9 +302,6 @@ const UserDashboard = () => {
         }
     };
 
-    /**
-     * Get the image source from Django's image response format.
-     */
     const getImageSrc = (img) => {
         if (typeof img === 'string') return img;
         if (img.base64) return img.base64;
@@ -306,9 +313,178 @@ const UserDashboard = () => {
     const showEmptyProductState = !hasResults && !scannerOpen;
     const showOrderPanel = orderMode && activeOrder;
 
-    // ===== Left Panel: Order Section =====
-    const renderOrderPanel = () => (
-        <div className="dashboard-order-panel">
+    // ===== Scan/Product Tab Content =====
+    const renderScanTab = () => (
+        <div className="m-tab-content">
+            {/* Active order indicator bar */}
+            {showOrderPanel && (
+                <div
+                    className="m-order-indicator"
+                    onClick={() => setOrderDrawerVisible(true)}
+                >
+                    <Flex align="center" gap={8} style={{flex: 1, minWidth: 0}}>
+                        <Badge count={activeOrder.items?.length || 0} size="small" overflowCount={99}>
+                            <ShoppingCartOutlined style={{fontSize: 18, color: '#fff'}}/>
+                        </Badge>
+                        <Text className="m-order-indicator-text" ellipsis>
+                            {t.activeOrder} #{activeOrder.id} · {activeOrder.customer_name}
+                        </Text>
+                    </Flex>
+                    <Flex align="center" gap={4}>
+                        <Text className="m-order-indicator-total">
+                            {activeOrder.total} ₾
+                        </Text>
+                        <RightOutlined style={{color: '#fff', fontSize: 12}}/>
+                    </Flex>
+                </div>
+            )}
+
+            {/* Empty product state */}
+            {showEmptyProductState && (
+                <Spin spinning={loading} tip={t.searchingProduct} size="large">
+                    <div className="m-empty-state">
+                        <div className="m-empty-icon">
+                            <QrcodeOutlined/>
+                        </div>
+                        <Title level={4} style={{margin: '16px 0 8px', fontWeight: 700}}>
+                            {t.productSearch}
+                        </Title>
+                        <Text type="secondary" style={{fontSize: 14, display: 'block', marginBottom: 28}}>
+                            {t.productSearchSubtitle}
+                        </Text>
+                        <Flex vertical gap={12} style={{width: '100%', maxWidth: 320, margin: '0 auto'}}>
+                            <Button
+                                type="primary"
+                                size="large"
+                                icon={<QrcodeOutlined style={{fontSize: 20}}/>}
+                                onClick={handleOpenScanner}
+                                className="m-scan-btn-primary"
+                                block
+                            >
+                                {t.scan}
+                            </Button>
+                            <Button
+                                size="large"
+                                icon={<EditOutlined/>}
+                                onClick={handleOpenSearch}
+                                className="m-search-btn"
+                                block
+                            >
+                                {t.manualSearch || t.search}
+                            </Button>
+                        </Flex>
+                    </div>
+                </Spin>
+            )}
+
+            {/* Product Results */}
+            {!scannerOpen && hasResults && (
+                <Spin spinning={loading} tip={t.searchingProduct} size="large">
+                    <div className="m-product-results">
+                        {/* Product Info Card */}
+                        <Card className="m-product-card" bordered={false}>
+                            {/* Product Images */}
+                            {productInfo.images && productInfo.images.length > 0 && (
+                                <div className="m-product-carousel">
+                                    <Carousel
+                                        arrows
+                                        infinite
+                                        autoplay
+                                        autoplaySpeed={4000}
+                                    >
+                                        {productInfo.images.map((img, index) => (
+                                            <div key={index}>
+                                                <img
+                                                    src={getImageSrc(img)}
+                                                    alt={`Product ${index + 1}`}
+                                                    className="m-product-image"
+                                                />
+                                            </div>
+                                        ))}
+                                    </Carousel>
+                                </div>
+                            )}
+
+                            {/* Product Details */}
+                            <div className="m-product-info">
+                                <Title level={4} style={{margin: '0 0 8px 0', fontSize: 17}}>
+                                    {productInfo.sku_name}
+                                </Title>
+                                <Flex gap={8} wrap="wrap">
+                                    <Tag color="blue" className="m-product-tag">
+                                        {t.article}: {productInfo.article}
+                                    </Tag>
+                                    {productInfo.price && (
+                                        <Tag color="green" className="m-product-tag">
+                                            {productInfo.price} ₾
+                                        </Tag>
+                                    )}
+                                </Flex>
+                            </div>
+                        </Card>
+
+                        {/* Balance Cards (mobile-friendly list) */}
+                        <div className="m-balance-section">
+                            <Flex align="center" gap={8} className="m-section-header">
+                                <InboxOutlined style={{color: '#1677ff', fontSize: 16}}/>
+                                <Text strong style={{fontSize: 15}}>{t.balance}</Text>
+                                <Tag style={{marginLeft: 4}}>{balances.length}</Tag>
+                            </Flex>
+
+                            <div className="m-balance-list">
+                                {balances.map((item, idx) => {
+                                    const isUserWarehouse = userWarehouses.map(wh => wh.name).includes(item.warehouse_name);
+                                    return (
+                                        <div
+                                            key={idx}
+                                            className={`m-balance-card ${isUserWarehouse ? 'm-balance-card-highlight' : ''}`}
+                                        >
+                                            <Flex justify="space-between" align="start">
+                                                <div style={{flex: 1, minWidth: 0}}>
+                                                    <Text
+                                                        strong={isUserWarehouse}
+                                                        style={{fontSize: 14, display: 'block'}}
+                                                        ellipsis
+                                                    >
+                                                        {item.warehouse_name}
+                                                    </Text>
+                                                    <Text type="secondary" style={{fontSize: 12}}>
+                                                        {t.price}: {item.price} ₾
+                                                    </Text>
+                                                </div>
+                                                <Flex align="center" gap={8}>
+                                                    <Tag
+                                                        color={item.quantity > 0 ? 'green' : 'default'}
+                                                        className="m-balance-qty"
+                                                    >
+                                                        {item.quantity}
+                                                    </Tag>
+                                                    {showOrderPanel && (
+                                                        <Button
+                                                            type="primary"
+                                                            size="middle"
+                                                            icon={<PlusCircleOutlined/>}
+                                                            onClick={() => handleAddToOrderFromWarehouse(item)}
+                                                            disabled={item.quantity <= 0}
+                                                            className="m-add-to-order-btn"
+                                                        />
+                                                    )}
+                                                </Flex>
+                                            </Flex>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    </div>
+                </Spin>
+            )}
+        </div>
+    );
+
+    // ===== Orders Tab Content =====
+    const renderOrdersTab = () => (
+        <div className="m-tab-content">
             {/* New Order Button */}
             {!showOrderPanel && (
                 <Button
@@ -317,12 +493,7 @@ const UserDashboard = () => {
                     icon={<PlusOutlined/>}
                     onClick={handleStartOrderMode}
                     block
-                    style={{
-                        borderRadius: 10,
-                        height: 48,
-                        fontWeight: 600,
-                        marginBottom: 12,
-                    }}
+                    className="m-new-order-btn"
                 >
                     {t.newOrder}
                 </Button>
@@ -343,7 +514,7 @@ const UserDashboard = () => {
             {/* Incomplete Orders Section */}
             <Card
                 size="small"
-                style={{marginTop: showOrderPanel ? 12 : 0}}
+                className="m-incomplete-orders-card"
                 styles={{body: {padding: 0}}}
             >
                 <Collapse
@@ -383,14 +554,13 @@ const UserDashboard = () => {
                                             dataSource={incompleteOrders}
                                             renderItem={(order) => (
                                                 <List.Item
-                                                    className="incomplete-order-row"
+                                                    className="m-incomplete-order-row"
                                                     onClick={() => handleContinueOrder(order.id)}
-                                                    style={{padding: '8px 8px', cursor: 'pointer', borderRadius: 8}}
                                                 >
                                                     <List.Item.Meta
                                                         title={
                                                             <Flex align="center" gap={6}>
-                                                                <Text strong style={{fontSize: 13}}>
+                                                                <Text strong style={{fontSize: 14}}>
                                                                     #{order.id}
                                                                 </Text>
                                                                 <Tag color="blue" style={{fontSize: 11}}>
@@ -402,13 +572,14 @@ const UserDashboard = () => {
                                                             <Flex vertical gap={2}>
                                                                 <Flex align="center" gap={4}>
                                                                     <UserOutlined style={{fontSize: 11, opacity: 0.5}}/>
-                                                                    <Text type="secondary" style={{fontSize: 12}}>
+                                                                    <Text type="secondary" style={{fontSize: 13}}>
                                                                         {order.customer_name}
                                                                     </Text>
                                                                 </Flex>
                                                                 <Flex align="center" gap={4}>
-                                                                    <CalendarOutlined style={{fontSize: 11, opacity: 0.5}}/>
-                                                                    <Text type="secondary" style={{fontSize: 11}}>
+                                                                    <CalendarOutlined
+                                                                        style={{fontSize: 11, opacity: 0.5}}/>
+                                                                    <Text type="secondary" style={{fontSize: 12}}>
                                                                         {new Date(order.created_at).toLocaleDateString()}
                                                                     </Text>
                                                                     {order.items_count > 0 && (
@@ -448,191 +619,6 @@ const UserDashboard = () => {
                     ]}
                 />
             </Card>
-        </div>
-    );
-
-    // ===== Right Panel: Product Search =====
-    const renderProductPanel = () => (
-        <div className="dashboard-product-panel">
-            {/* Empty product state */}
-            {showEmptyProductState && (
-                <Spin
-                    spinning={loading}
-                    tip={t.searchingProduct}
-                    size="large"
-                >
-                    <Result
-                        icon={<ShoppingOutlined style={{color: '#1677ff', fontSize: 48}}/>}
-                        title={<span style={{fontSize: 18, fontWeight: 600}}>{t.productSearch}</span>}
-                        subTitle={
-                            <span style={{fontSize: 13, opacity: 0.6}}>
-                                {t.productSearchSubtitle}
-                            </span>
-                        }
-                        extra={
-                            <Flex gap={12} justify="center" wrap="wrap">
-                                <Button
-                                    type="primary"
-                                    size="large"
-                                    icon={<QrcodeOutlined/>}
-                                    onClick={handleOpenScanner}
-                                    style={{borderRadius: 10, height: 48, paddingInline: 28, fontWeight: 600}}
-                                >
-                                    {t.scan}
-                                </Button>
-                                <Button
-                                    size="large"
-                                    icon={<EditOutlined/>}
-                                    onClick={handleOpenSearch}
-                                    style={{borderRadius: 10, height: 48, paddingInline: 28}}
-                                >
-                                    {t.manualSearch || t.search}
-                                </Button>
-                            </Flex>
-                        }
-                    />
-                </Spin>
-            )}
-
-            {/* Product Results */}
-            {!scannerOpen && hasResults && (
-                <Spin
-                    spinning={loading}
-                    tip={t.searchingProduct}
-                    size="large"
-                >
-                <div style={{paddingBottom: 80}}>
-                    {/* Product Info Card */}
-                    <Card
-                        className="product-result-card"
-                        size="small"
-                        style={{marginBottom: 16}}
-                    >
-                        <Flex align="center" gap={16} wrap="wrap">
-                            {/* Product Images */}
-                            {productInfo.images && productInfo.images.length > 0 && (
-                                <div className="product-carousel">
-                                    <Carousel
-                                        arrows
-                                        infinite
-                                        autoplay
-                                        autoplaySpeed={4000}
-                                        style={{width: 200}}
-                                    >
-                                        {productInfo.images.map((img, index) => (
-                                            <div key={index}>
-                                                <img
-                                                    src={getImageSrc(img)}
-                                                    alt={`Product ${index + 1}`}
-                                                    style={{
-                                                        width: '100%',
-                                                        maxHeight: 200,
-                                                        objectFit: 'contain',
-                                                        borderRadius: 8,
-                                                    }}
-                                                />
-                                            </div>
-                                        ))}
-                                    </Carousel>
-                                </div>
-                            )}
-
-                            {/* Product Details */}
-                            <div style={{flex: 1, minWidth: 200}}>
-                                <Title level={4} style={{margin: '0 0 4px 0'}}>
-                                    {productInfo.sku_name}
-                                </Title>
-                                <Flex gap={8} wrap="wrap" style={{marginTop: 8}}>
-                                    <Tag color="blue" style={{fontSize: 13, padding: '2px 10px'}}>
-                                        {t.article}: {productInfo.article}
-                                    </Tag>
-                                    {productInfo.price && (
-                                        <Tag color="green" style={{fontSize: 13, padding: '2px 10px'}}>
-                                            {productInfo.price} ₾
-                                        </Tag>
-                                    )}
-                                </Flex>
-                            </div>
-                        </Flex>
-                    </Card>
-
-                    {/* Balance Table */}
-                    <Card
-                        className="balance-table"
-                        size="small"
-                        title={
-                            <Flex align="center" gap={8}>
-                                <InboxOutlined style={{color: '#1677ff'}}/>
-                                <span style={{fontWeight: 600}}>{t.balance}</span>
-                                <Tag style={{marginLeft: 4}}>{balances.length}</Tag>
-                            </Flex>
-                        }
-                    >
-                        <Table
-                            dataSource={balances.map((item, idx) => ({...item, key: idx}))}
-                            rowClassName={(record) =>
-                                userWarehouses.map(wh => wh.name).includes(record.warehouse_name) ? 'highlight-row' : ''
-                            }
-                            size="middle"
-                            pagination={balances.length > 10 ? {pageSize: 10} : false}
-                            columns={[
-                                {
-                                    title: t.warehouse,
-                                    dataIndex: 'warehouse_name',
-                                    key: 'warehouse_name',
-                                    render: (name) => (
-                                        <Text strong={userWarehouses.map(wh => wh.name).includes(name)}>
-                                            {name}
-                                        </Text>
-                                    ),
-                                },
-                                {
-                                    title: t.balance,
-                                    dataIndex: 'quantity',
-                                    key: 'quantity',
-                                    align: 'right',
-                                    render: (qty) => (
-                                        <Tag color={qty > 0 ? 'green' : 'default'}
-                                             style={{fontWeight: 600, fontSize: 13}}>
-                                            {qty}
-                                        </Tag>
-                                    ),
-                                },
-                                {
-                                    title: t.price,
-                                    dataIndex: 'price',
-                                    key: 'price',
-                                    align: 'right',
-                                    render: (price) => (
-                                        <Text style={{fontWeight: 500}}>
-                                            {price} ₾
-                                        </Text>
-                                    ),
-                                },
-                                // "Add to Order" column — only when there's an active order
-                                ...(showOrderPanel ? [{
-                                    title: '',
-                                    key: 'add_to_order',
-                                    width: 50,
-                                    align: 'center',
-                                    render: (_, record) => (
-                                        <Button
-                                            type="primary"
-                                            size="small"
-                                            icon={<PlusCircleOutlined/>}
-                                            onClick={() => handleAddToOrderFromWarehouse(record)}
-                                            disabled={record.quantity <= 0}
-                                            title={t.addToOrder}
-                                            style={{borderRadius: 6}}
-                                        />
-                                    ),
-                                }] : []),
-                            ]}
-                        />
-                    </Card>
-                </div>
-                </Spin>
-            )}
         </div>
     );
 
@@ -750,7 +736,6 @@ const UserDashboard = () => {
                     </Flex>
                 </Form>
 
-                {/* Scan button inside drawer as alternative */}
                 {!disableScan && (
                     <Flex justify="center" style={{marginTop: 8}}>
                         <Button
@@ -766,41 +751,93 @@ const UserDashboard = () => {
                 )}
             </Drawer>
 
-            {/* ===== Two-Column Layout ===== */}
-            <div className="dashboard-layout">
-                {/* Left Column: Orders */}
-                <div className="dashboard-left-col">
-                    {renderOrderPanel()}
+            {/* Order Drawer (mobile - shows active order details) */}
+            <Drawer
+                title={
+                    <Flex align="center" gap={8}>
+                        <Badge count={activeOrder?.items?.length || 0} size="small" overflowCount={99}>
+                            <ShoppingCartOutlined style={{fontSize: 18, color: '#1677ff'}}/>
+                        </Badge>
+                        <span style={{fontWeight: 600}}>{t.activeOrder} #{activeOrder?.id}</span>
+                    </Flex>
+                }
+                placement="bottom"
+                closable={true}
+                open={orderDrawerVisible && showOrderPanel}
+                onClose={() => setOrderDrawerVisible(false)}
+                height="85vh"
+                className="m-order-drawer"
+                styles={{
+                    body: {padding: '12px 16px', paddingBottom: 24},
+                }}
+            >
+                {showOrderPanel && (
+                    <OrderPanel
+                        order={activeOrder}
+                        onOrderUpdate={handleOrderUpdate}
+                        onSaveForLater={handleSaveForLater}
+                        onProceedToPayment={handleProceedToPayment}
+                        onDeleteOrder={handleDeleteActiveOrder}
+                        notify={notify}
+                        isMobileDrawer={true}
+                    />
+                )}
+            </Drawer>
+
+            {/* ===== Mobile-First Layout ===== */}
+            <div className="m-dashboard">
+                {/* Tab Content */}
+                <div className="m-dashboard-body">
+                    {activeTab === 'scan' && renderScanTab()}
+                    {activeTab === 'orders' && renderOrdersTab()}
                 </div>
 
-                {/* Right Column: Product Search */}
-                <div className="dashboard-right-col">
-                    {renderProductPanel()}
-                </div>
+                {/* ===== Bottom Navigation / Action Bar ===== */}
+                {!scannerOpen && !drawerVisible && (
+                    <div className="m-bottom-bar">
+                        {/* Primary actions row */}
+                        <div className="m-action-row">
+                            <Button
+                                type="primary"
+                                size="large"
+                                icon={<QrcodeOutlined style={{fontSize: 20}}/>}
+                                onClick={handleOpenScanner}
+                                className="m-fab-scan"
+                            >
+                                {hasResults ? (t.scanAgain || t.scan) : t.scan}
+                            </Button>
+                            <Button
+                                size="large"
+                                icon={<SearchOutlined style={{fontSize: 18}}/>}
+                                onClick={handleOpenSearch}
+                                className="m-fab-search"
+                            >
+                                {t.search}
+                            </Button>
+                        </div>
+
+                        {/* Tab navigation row */}
+                        <div className="m-tab-bar">
+                            <button
+                                className={`m-tab-item ${activeTab === 'scan' ? 'm-tab-active' : ''}`}
+                                onClick={() => setActiveTab('scan')}
+                            >
+                                <AppstoreOutlined style={{fontSize: 20}}/>
+                                <span>{t.product}</span>
+                            </button>
+                            <button
+                                className={`m-tab-item ${activeTab === 'orders' ? 'm-tab-active' : ''}`}
+                                onClick={() => setActiveTab('orders')}
+                            >
+                                <Badge count={showOrderPanel ? (activeOrder?.items?.length || 0) : 0} size="small" offset={[4, -2]}>
+                                    <ShoppingCartOutlined style={{fontSize: 20}}/>
+                                </Badge>
+                                <span>{t.purchaseOrders}</span>
+                            </button>
+                        </div>
+                    </div>
+                )}
             </div>
-
-            {/* ===== Floating Action Bar — always visible when not in scanner/drawer ===== */}
-            {!scannerOpen && !drawerVisible && (
-                <div className="floating-action-bar">
-                    <Button
-                        type="primary"
-                        size="large"
-                        icon={<QrcodeOutlined style={{fontSize: 20}}/>}
-                        onClick={handleOpenScanner}
-                        className="fab-scan-btn"
-                    >
-                        {hasResults ? (t.scanAgain || t.scan) : t.scan}
-                    </Button>
-                    <Button
-                        size="large"
-                        icon={<SearchOutlined style={{fontSize: 18}}/>}
-                        onClick={handleOpenSearch}
-                        className="fab-search-btn"
-                    >
-                        {t.search}
-                    </Button>
-                </div>
-            )}
         </>
     );
 };
