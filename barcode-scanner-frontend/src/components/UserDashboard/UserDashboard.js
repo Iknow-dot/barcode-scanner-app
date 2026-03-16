@@ -76,6 +76,9 @@ const UserDashboard = () => {
     // Order drawer for mobile (shows active order)
     const [orderDrawerVisible, setOrderDrawerVisible] = useState(false);
 
+    // Ref to track activeOrder without causing callback recreation
+    const activeOrderRef = useRef(null);
+
     const {
         token: {colorBgContainer, colorBgBase, colorTextSecondary, colorBorderSecondary},
     } = theme.useToken();
@@ -103,8 +106,9 @@ const UserDashboard = () => {
         try {
             const result = await orderService.getOrders();
             if (result.success) {
+                const currentOrder = activeOrderRef.current;
                 const drafts = (result.data || []).filter(
-                    (o) => o.status === 'draft' && (!activeOrder || o.id !== activeOrder.id)
+                    (o) => o.status === 'draft' && (!currentOrder || o.id !== currentOrder.id)
                 );
                 setIncompleteOrders(drafts);
             }
@@ -113,7 +117,7 @@ const UserDashboard = () => {
         } finally {
             setIncompleteOrdersLoading(false);
         }
-    }, [activeOrder]);
+    }, []);
 
     useEffect(() => {
         if (showIncompleteOrders) {
@@ -211,6 +215,7 @@ const UserDashboard = () => {
         setCustomerModalOpen(false);
         const result = await orderService.createOrder({customer: customer.id});
         if (result.success) {
+            activeOrderRef.current = result.data;
             setActiveOrder(result.data);
             setOrderMode(true);
             notify.success(t.success, t.orderCreated);
@@ -222,6 +227,7 @@ const UserDashboard = () => {
     const handleSaveForLater = () => {
         notify.success(t.success, t.orderSavedForLater);
         setOrderMode(false);
+        activeOrderRef.current = null;
         setActiveOrder(null);
         setOrderDrawerVisible(false);
         if (showIncompleteOrders) {
@@ -235,6 +241,7 @@ const UserDashboard = () => {
         if (result.success) {
             notify.success(t.success, t.orderConfirmedSuccess);
             setOrderMode(false);
+            activeOrderRef.current = null;
             setActiveOrder(null);
             setOrderDrawerVisible(false);
             if (showIncompleteOrders) {
@@ -251,6 +258,7 @@ const UserDashboard = () => {
         if (result.success) {
             notify.success(t.success, t.orderDeleted);
             setOrderMode(false);
+            activeOrderRef.current = null;
             setActiveOrder(null);
             setOrderDrawerVisible(false);
             if (showIncompleteOrders) {
@@ -261,13 +269,18 @@ const UserDashboard = () => {
         }
     };
 
-    const handleOrderUpdate = (updatedOrder) => {
-        setActiveOrder(updatedOrder);
-    };
+    // Called by OrderPanel when order details change (quantity, discount, delivery, etc.)
+    // Only update the ref — do NOT call setActiveOrder here, as that would re-render
+    // the parent and cause the Drawer to re-animate (slide down and back up).
+    // The OrderPanel manages its own local state for display.
+    const handleOrderUpdate = useCallback((updatedOrder) => {
+        activeOrderRef.current = updatedOrder;
+    }, []);
 
     const handleContinueOrder = async (orderId) => {
         const result = await orderService.getOrder(orderId);
         if (result.success) {
+            activeOrderRef.current = result.data;
             setActiveOrder(result.data);
             setOrderMode(true);
             setShowIncompleteOrders(false);
@@ -301,6 +314,7 @@ const UserDashboard = () => {
             warehouse_name: warehouseRecord.warehouse_name || '',
         });
         if (addResult.success) {
+            activeOrderRef.current = addResult.data;
             setActiveOrder(addResult.data);
             notify.success(t.success, t.productAddedToOrder);
         } else {
@@ -775,7 +789,13 @@ const UserDashboard = () => {
                 placement="bottom"
                 closable={true}
                 open={orderDrawerVisible && showOrderPanel}
-                onClose={() => setOrderDrawerVisible(false)}
+                onClose={() => {
+                    setOrderDrawerVisible(false);
+                    // Sync parent state from ref when drawer closes so indicator bar updates
+                    if (activeOrderRef.current) {
+                        setActiveOrder(activeOrderRef.current);
+                    }
+                }}
                 height="85vh"
                 className="m-order-drawer"
                 styles={{
