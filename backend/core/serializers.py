@@ -13,10 +13,42 @@ User = get_user_model()
 
 class OrganizationSerializer(serializers.ModelSerializer):
     users = UserSerializer(many=True, read_only=True)
+    has_password = serializers.SerializerMethodField()
+    clear_password = serializers.BooleanField(write_only=True, required=False, default=False)
 
     class Meta:
         model = Organization
         fields = '__all__'
+        extra_kwargs = {
+            'web_service_password': {'write_only': True, 'required': False},
+        }
+
+    def get_has_password(self, obj):
+        return bool(obj.web_service_password)
+
+    def create(self, validated_data):
+        validated_data.pop('clear_password', False)
+        password = validated_data.pop('web_service_password', None)
+        organization = Organization(**validated_data)
+        if password:
+            organization.encrypt_password(password)
+        organization.save()
+        return organization
+
+    def update(self, instance, validated_data):
+        clear_password = validated_data.pop('clear_password', False)
+        password = validated_data.pop('web_service_password', None)
+
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+
+        if clear_password:
+            instance.web_service_password = None
+        elif password:
+            instance.encrypt_password(password)
+
+        instance.save()
+        return instance
 
 
 class OrganizationExternalServiceSerializer(serializers.ModelSerializer):

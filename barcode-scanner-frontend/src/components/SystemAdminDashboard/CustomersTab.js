@@ -399,15 +399,13 @@ const CustomersTab = () => {
 
             {/* Toolbar */}
             <Flex justify="space-between" align="center" wrap="wrap" gap={12} style={{marginBottom: 16}}>
-                <Space size={12}>
-                    <Input.Search
-                        placeholder={t.searchCustomer}
-                        allowClear
-                        onSearch={handleSearch}
-                        style={{width: 260}}
-                        prefix={<SearchOutlined style={{opacity: 0.4}}/>}
-                    />
-                </Space>
+                <Input.Search
+                    placeholder={t.searchCustomer}
+                    allowClear
+                    onSearch={handleSearch}
+                    style={{width: '100%', maxWidth: 260}}
+                    prefix={<SearchOutlined style={{opacity: 0.4}}/>}
+                />
                 <Space size={8}>
                     <Button
                         type="primary"

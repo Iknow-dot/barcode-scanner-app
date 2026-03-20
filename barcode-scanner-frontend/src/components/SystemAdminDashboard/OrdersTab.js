@@ -368,14 +368,14 @@ const OrdersTab = () => {
                     <Text strong>{t.searchOrders}</Text>
                 </Flex>
                 <Flex wrap="wrap" gap={12} align="end">
-                    <Space direction="vertical" size={4}>
+                    <Space direction="vertical" size={4} style={{minWidth: 120, flex: '1 1 120px', maxWidth: 200}}>
                         <Text type="secondary" style={{fontSize: 11}}>{t.orderStatus}</Text>
                         <Select
                             placeholder={t.allStatuses}
                             allowClear
                             value={statusFilter}
                             onChange={setStatusFilter}
-                            style={{width: 150}}
+                            style={{width: '100%'}}
                             options={[
                                 {label: t.orderDraft, value: 'draft'},
                                 {label: t.orderConfirmed, value: 'confirmed'},
@@ -383,59 +383,61 @@ const OrdersTab = () => {
                             ]}
                         />
                     </Space>
-                    <Space direction="vertical" size={4}>
+                    <Space direction="vertical" size={4} style={{minWidth: 140, flex: '1 1 140px', maxWidth: 240}}>
                         <Text type="secondary" style={{fontSize: 11}}>{t.searchByCustomer}</Text>
                         <Input
                             placeholder={t.searchByCustomer}
                             value={customerSearch}
                             onChange={(e) => setCustomerSearch(e.target.value)}
-                            style={{width: 200}}
+                            style={{width: '100%'}}
                             prefix={<UserOutlined style={{opacity: 0.4}}/>}
                             allowClear
                             onPressEnter={handleSearch}
                         />
                     </Space>
-                    <Space direction="vertical" size={4}>
+                    <Space direction="vertical" size={4} style={{minWidth: 110, flex: '1 1 110px', maxWidth: 180}}>
                         <Text type="secondary" style={{fontSize: 11}}>{t.searchByOrderNumber}</Text>
                         <Input
                             placeholder={t.orderNumber}
                             value={orderNumberSearch}
                             onChange={(e) => setOrderNumberSearch(e.target.value)}
-                            style={{width: 140}}
+                            style={{width: '100%'}}
                             prefix={<ShoppingCartOutlined style={{opacity: 0.4}}/>}
                             allowClear
                             onPressEnter={handleSearch}
                         />
                     </Space>
-                    <Space direction="vertical" size={4}>
+                    <Space direction="vertical" size={4} style={{minWidth: 200, flex: '1 1 200px', maxWidth: 280}}>
                         <Text type="secondary" style={{fontSize: 11}}>{t.dateFrom} — {t.dateTo}</Text>
                         <RangePicker
                             value={dateRange}
                             onChange={setDateRange}
-                            style={{width: 240}}
+                            style={{width: '100%'}}
                         />
                     </Space>
-                    <Button
-                        type="primary"
-                        icon={<SearchOutlined/>}
-                        onClick={handleSearch}
-                        loading={loading}
-                    >
-                        {t.search}
-                    </Button>
-                    <Button
-                        icon={<ReloadOutlined/>}
-                        onClick={() => {
-                            setStatusFilter(null);
-                            setCustomerSearch('');
-                            setOrderNumberSearch('');
-                            setDateRange(null);
-                            // Fetch all after clearing
-                            setTimeout(fetchOrders, 0);
-                        }}
-                    >
-                        {t.clear}
-                    </Button>
+                    <Flex gap={8} wrap="wrap">
+                        <Button
+                            type="primary"
+                            icon={<SearchOutlined/>}
+                            onClick={handleSearch}
+                            loading={loading}
+                        >
+                            {t.search}
+                        </Button>
+                        <Button
+                            icon={<ReloadOutlined/>}
+                            onClick={() => {
+                                setStatusFilter(null);
+                                setCustomerSearch('');
+                                setOrderNumberSearch('');
+                                setDateRange(null);
+                                // Fetch all after clearing
+                                setTimeout(fetchOrders, 0);
+                            }}
+                        >
+                            {t.clear}
+                        </Button>
+                    </Flex>
                 </Flex>
             </Card>
 
@@ -445,6 +447,7 @@ const OrdersTab = () => {
                 columns={columns}
                 loading={loading}
                 size="middle"
+                scroll={{x: 'max-content'}}
                 pagination={{pageSize: 15, showSizeChanger: true, pageSizeOptions: ['10', '15', '25', '50']}}
                 locale={{
                     emptyText: (

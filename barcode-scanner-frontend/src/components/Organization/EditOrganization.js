@@ -1,10 +1,10 @@
 import React from 'react';
 import ModalForm, {useModalFormLoading} from "../ModalForm";
-import {Button, Divider, Flex, Form, Input, InputNumber, Switch} from "antd";
-import {LockOutlined, UserOutlined, SaveOutlined, GlobalOutlined} from "@ant-design/icons";
+import {Button, Divider, Flex, Form, Input, InputNumber, Switch, Tag} from "antd";
+import {LockOutlined, UserOutlined, SaveOutlined, GlobalOutlined, CheckCircleOutlined, CloseCircleOutlined} from "@ant-design/icons";
 import {useLanguage} from '../../i18n/LanguageContext';
 
-const EditOrganizationForm = () => {
+const EditOrganizationForm = ({hasPassword}) => {
     const {t} = useLanguage();
     const {loading} = useModalFormLoading();
 
@@ -88,14 +88,29 @@ const EditOrganizationForm = () => {
             <Flex gap={16} align="flex-start">
                 <Form.Item
                     style={{flex: 1}}
-                    label={t.password}
+                    label={
+                        <Flex align="center" gap={8}>
+                            {t.password}
+                            {hasPassword ? (
+                                <Tag
+                                    icon={<CheckCircleOutlined/>}
+                                    color="success"
+                                    style={{fontSize: 11, marginLeft: 4}}
+                                >
+                                    {t.passwordIsSet}
+                                </Tag>
+                            ) : (
+                                <Tag
+                                    icon={<CloseCircleOutlined/>}
+                                    color="default"
+                                    style={{fontSize: 11, marginLeft: 4}}
+                                >
+                                    {t.passwordNotSet}
+                                </Tag>
+                            )}
+                        </Flex>
+                    }
                     name="web_service_password"
-                    rules={[
-                        {
-                            required: false,
-                            message: t.webServicePasswordHint,
-                        }
-                    ]}
                     extra={<span style={{fontSize: 12, opacity: 0.5}}>{t.leaveEmptyPassword}</span>}
                 >
                     <Input.Password prefix={<LockOutlined style={{opacity: 0.4}}/>} autoComplete="new-password"/>
@@ -135,7 +150,7 @@ const EditOrganization = ({visible, setVisible, onFinish, object}) => {
             setVisible={setVisible}
             onFinish={(data) => onFinish(data, object)}
         >
-            <EditOrganizationForm/>
+            <EditOrganizationForm hasPassword={object?.has_password}/>
         </ModalForm>
     );
 };

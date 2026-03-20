@@ -51,8 +51,11 @@ const OrganizationsTab = () => {
             employees_count: newOrganizationData.employees_count,
             web_service_url: newOrganizationData.web_service_url,
             web_service_username: newOrganizationData.web_service_username,
-            web_service_password: newOrganizationData.web_service_password,
         };
+
+        if (newOrganizationData.web_service_password) {
+            payload.web_service_password = newOrganizationData.web_service_password;
+        }
 
         const result = await organizationService.createOrganization(payload);
 
@@ -72,9 +75,18 @@ const OrganizationsTab = () => {
             ...updatedOrganizationData,
         };
 
-        // If password field is empty, remove it so Django doesn't overwrite with empty
-        if (!payload.web_service_password) {
+        // Remove read-only fields that shouldn't be sent back
+        delete payload.has_password;
+
+        if (payload.clear_password) {
+            // When clearing password, send clear_password flag and remove password field
             delete payload.web_service_password;
+        } else if (!payload.web_service_password) {
+            // If password field is empty, remove it so Django doesn't overwrite with empty
+            delete payload.web_service_password;
+            delete payload.clear_password;
+        } else {
+            delete payload.clear_password;
         }
 
         const result = await organizationService.updateOrganization(originalOrganization.id, payload);

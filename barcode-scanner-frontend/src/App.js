@@ -114,7 +114,7 @@ const MainContentView = ({children, isDark, toggleTheme}) => {
     ];
 
     return (
-        <Layout style={{minHeight: "100vh"}}>
+        <Layout style={{minHeight: "100vh", overflowX: "hidden"}}>
             {screens.lg && (
                 <Sider
                     breakpoint="lg"
@@ -154,8 +154,8 @@ const MainContentView = ({children, isDark, toggleTheme}) => {
                     lineHeight: '64px',
                 }}>
                     {!screens.lg && (
-                        <Flex align="center" style={{width: '100%', height: '100%'}}>
-                            <Link to={window.location.href}>
+                        <Flex align="center" style={{width: '100%', height: '100%', overflow: 'hidden'}}>
+                            <Link to={window.location.href} style={{flexShrink: 0}}>
                                 <img
                                     src={isDarkMode ? "logo-dark.png" : "logo-light.png"}
                                     alt="Logo"
@@ -166,8 +166,9 @@ const MainContentView = ({children, isDark, toggleTheme}) => {
                             {authData?.organization_name && (
                                 <span className="org-name-badge" style={{
                                     color: colorText,
-                                    maxWidth: 100,
+                                    maxWidth: 80,
                                     marginRight: 4,
+                                    flexShrink: 0,
                                 }}>
                                     {authData.organization_name}
                                 </span>
@@ -175,6 +176,7 @@ const MainContentView = ({children, isDark, toggleTheme}) => {
                             <Menu
                                 style={{
                                     flex: 1,
+                                    minWidth: 0,
                                     background: "transparent",
                                     borderBottom: 'none',
                                 }}
@@ -183,7 +185,7 @@ const MainContentView = ({children, isDark, toggleTheme}) => {
                                 defaultSelectedKeys={authData?.role === "internal_admin" ? ['1'] : ['2']}
                                 items={subNav}
                             />
-                            <Space size={4}>
+                            <Space size={4} style={{flexShrink: 0}}>
                                 <LanguageSwitcher/>
                                 <Dropdown menu={{items}} trigger={['click']}>
                                     {userIcon}
