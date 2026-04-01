@@ -135,7 +135,6 @@ const OrderItemCard = memo(({
         const result = await orderService.removeOrderItem(orderId, item.id);
         if (result.success) {
             onLocalOrderUpdate(result.data);
-            notify.success(t.success, t.orderItemRemoved);
         } else {
             notify.error(t.orderError, result.error);
         }

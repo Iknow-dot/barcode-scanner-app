@@ -349,6 +349,7 @@ class ProductSearchSerializer(serializers.Serializer):
         warehouse = serializers.CharField(max_length=255)
         warehouse_name = serializers.CharField(max_length=255)
         quantity = serializers.IntegerField()
+        price = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
 
     is_barcode = serializers.BooleanField(write_only=True)
     sku = serializers.CharField(max_length=255)

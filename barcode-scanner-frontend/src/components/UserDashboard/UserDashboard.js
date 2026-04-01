@@ -316,7 +316,6 @@ const UserDashboard = () => {
         if (addResult.success) {
             activeOrderRef.current = addResult.data;
             setActiveOrder(addResult.data);
-            notify.success(t.success, t.productAddedToOrder);
         } else {
             notify.error(t.orderError, addResult.error);
         }
@@ -454,6 +453,7 @@ const UserDashboard = () => {
                             <div className="m-balance-list">
                                 {balances.map((item, idx) => {
                                     const isUserWarehouse = userWarehouses.map(wh => wh.name).includes(item.warehouse_name);
+                                    console.log(item);
                                     return (
                                         <div
                                             key={idx}

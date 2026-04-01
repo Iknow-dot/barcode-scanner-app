@@ -239,6 +239,7 @@ class ProductSearchAPIView(APIView):
             }, status=http_status.HTTP_404_NOT_FOUND)
 
         product_data = external_service_response.json()
+        print(product_data)
 
         # Convert img_url to Base64-encoded images
         if 'img_url' in product_data:
