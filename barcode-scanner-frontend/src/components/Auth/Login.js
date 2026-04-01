@@ -164,9 +164,7 @@ const Login = () => {
                                     fontSize: 16,
                                     fontWeight: 600,
                                 }}
-                            >
-                                {t.login}
-                            </Button>
+                            />
                         </Form.Item>
                     </Form>
                 </Card>
