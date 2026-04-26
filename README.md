@@ -1,146 +1,162 @@
 # Barcode Scanner App
 
+A multi-tenant warehouse stock management application. Company users scan product barcodes (or enter SKUs / article numbers) to look up stock from each organization's own external web service, then build purchase orders for customers.
 
 ## Table of Contents
 - [Overview](#overview)
-- [Run the Application](#run-the-application)
-- [Features](#features)
 - [Tech Stack](#tech-stack)
+- [Run Locally](#run-locally)
+- [Environment Variables](#environment-variables)
+- [API Documentation](#api-documentation)
+- [Features](#features)
 - [Project Structure](#project-structure)
 
 ## Overview
 
-The **Barcode Scanner App** is a web application designed to manage warehouse stock and retrieve product details using barcode scanning. The application supports multiple organizations, warehouses, and user roles with secure authentication and role-based access control.
+The app is split into a Django REST API backend and a React single-page frontend. It supports three user roles:
 
+- **`internal_admin`** — superadmin, full access across all organizations.
+- **`company_admin`** — manages users, warehouses, and the external web-service connection for a single organization.
+- **`company_user`** — scans products and creates purchase orders within the warehouses they're assigned to.
 
-## Run the Application locally
-
-**Pre-requisites**
-- [Docker](https://docs.docker.com/)
-
-**Steps**
-1. Clone the repository:
-   ```shell
-    git clone
-    cd barcode-scanner-app
-    ```
-2. Run docker-compose
-   ```shell
-   docker-compose up --build -d
-   ```
-3. Access the application at http://localhost:5000
-4. Access the backend API at http://localhost:8080
-
-
-## Features
-
-- **Authentication & Authorization**:
-  - User authentication with password hashing.
-  - Role-based access control with system admin, admin, and user roles.
-  - IP-based access restriction.
-
-- **Organization & Warehouse Management**:
-  - Register and manage multiple organizations and their respective warehouses.
-  - Store and manage data in PostgreSQL.
-
-- **Product Data Integration**:
-  - Retrieve product details from an external web service using barcodes or article numbers.
-  - Display product information based on the selected warehouse.
-
-- **Barcode Scanning Functionality**:
-  - Implemented "Start Scan" feature.
-  - Filter and retrieve product data by barcode or article number.
-
-- **API Development**:
-  - RESTful API endpoints for managing organizations, warehouses, and users.
-  - Secure access to product data via API.
+Per-user IP/CIDR allowlists can be configured to restrict where each account is allowed to log in from.
 
 ## Tech Stack
 
-- **Backend**: Python with Flask
-- **Database**: PostgreSQL
-- **Frontend (Optional)**: React
-- **Version Control**: GitHub
-- **ORM**: SQLAlchemy with Flask-Migrate
+- **Backend** — Python 3.13, Django 6, Django REST Framework, SimpleJWT, drf-spectacular (OpenAPI), django-guardian, django-jazzmin (admin theme)
+- **Database** — PostgreSQL 17 (SQLite fallback for local development without Docker)
+- **Frontend** — React 18, Ant Design 6, axios, react-router 7, `@ericblade/quagga2` + `html5-qrcode` (barcode scanning), PostHog (analytics), custom Georgian/English i18n
+- **Packaging** — `uv` for backend (`pyproject.toml` + `uv.lock`), npm for frontend
+- **Deploy** — DigitalOcean App Platform (`.do/app.yaml`)
+
+## Run Locally
+
+**Prerequisites:** [Docker](https://docs.docker.com/) and Docker Compose.
+
+```shell
+git clone <repo-url>
+cd barcode-scanner-app
+docker-compose up --build -d
+```
+
+- Frontend: <http://localhost:3000>
+- Backend API: <http://localhost:8080>
+- Swagger docs: <http://localhost:8080/api/docs/>
+- Django admin: <http://localhost:8080/admin/>
+
+To run the backend without Docker:
+
+```shell
+cd backend
+uv sync                     # or: pip install -r requirements.txt
+python manage.py migrate
+python manage.py createsuperuser
+python manage.py runserver 0.0.0.0:8080
+```
+
+To run the frontend without Docker:
+
+```shell
+cd barcode-scanner-frontend
+npm install
+npm start
+```
+
+To run the Django test suite:
+
+```shell
+cd backend
+python manage.py test            # all tests
+python manage.py test core       # one app
+```
+
+## Environment Variables
+
+Backend:
+
+| Variable | Purpose |
+| --- | --- |
+| `DJANGO_SECRET_KEY` | Django secret key (required in production). |
+| `DEBUG` | `True` / `False`. Defaults to `False`. |
+| `DATABASE_URL` | Postgres URL (e.g. `postgres://user:pass@host:5432/db`). Falls back to SQLite at `backend/db.sqlite3` if unset. |
+| `DATABASE_SSL_REQUIRE` | `True` / `False`. Defaults to `True`. |
+| `ALLOWED_HOSTS` | Comma-separated list. Defaults to `localhost,127.0.0.1`. |
+| `CORS_ALLOWED_ORIGINS` | Comma-separated list. Defaults to `http://localhost:3000`. |
+| `FERNET_KEY` | Fernet-compatible base64 key used to encrypt each organization's external-service password at rest. **Required** for product search to work. |
+| `POSTHOG_DASHBOARD_URL` | Optional — embedded in the admin Analytics page. |
+| `LOG_LEVEL` | Defaults to `INFO`. |
+
+Frontend:
+
+| Variable | Purpose |
+| --- | --- |
+| `REACT_APP_API_BASE_URL` | Backend base URL. Read at build time. |
+| `REACT_APP_PUBLIC_POSTHOG_KEY` | PostHog project key (optional). |
+| `REACT_APP_PUBLIC_POSTHOG_HOST` | PostHog host (optional). |
+
+## API Documentation
+
+The backend exposes interactive OpenAPI documentation generated by drf-spectacular:
+
+- Swagger UI: `/api/docs/`
+- ReDoc: `/api/redoc/`
+- Raw schema: `/api/schema/`
+
+Authentication is JWT via `rest_framework_simplejwt`. The login endpoint is `POST /api/v1/users/auth/login/` and returns `access_token` + `refresh_token` along with the user's `role`, `organization_id`, `organization_name`, and assigned `warehouses`.
+
+## Features
+
+- **JWT authentication** with token rotation and blacklist-on-logout.
+- **Per-user IP allowlist** — accepts both individual IPs and CIDR networks. Enforced at login.
+- **Three-tier role model** with multi-tenant isolation (every queryset is scoped to the user's organization).
+- **Organization-scoped warehouses** with per-user warehouse assignments.
+- **External product lookup** — proxies barcode/SKU/article searches to each organization's own web service. Credentials are stored encrypted with Fernet. Product images are fetched and base64-inlined in the API response so the frontend can render them without extra round trips.
+- **RS.ge taxpayer lookup** — resolves a Georgian identification number to a customer name via the public RS.ge API.
+- **Customer & purchase order management** — customers with multiple phone numbers, draft / confirmed / cancelled orders, line-item discounts, pickup or delivery conditions.
+- **Bilingual UI** — Georgian and English, driven by error `code` fields returned by the backend.
+- **Admin analytics** — PostHog dashboard embedded directly into the Django admin.
 
 ## Project Structure
 
-```shell
-barcode-scanner/
-├── app/
-│   ├── __init__.py 
-│   ├── models.py
-│   ├── routes.py
-│   ├── views/
-│   │   ├── __init__.py
-│   │   ├── auth.py
-│   │   ├── organization.py
-│   │   ├── warehouse.py
-│   │   ├── product.py
-│   │   └── user.py
-│   ├── templates/
-│   │   ├── base.html
-│   │   ├── index.html
-│   │   ├── login.html
-│   │   ├── dashboard.html
-│   │   ├── add_organization.html
-│   │   ├── add_user.html
-│   │   ├── add_warehouse.html
-│   │   └── scan_result.html
-│   ├── static/
-│   │   ├── css/
-│   │   │   ├── style.css
-│   │   └── js/
-│   │       ├── main.js
-│   └── config.py
-├── migrations/
-│   ├── versions/
-│   │   ├── .gitkeep
-│   └── alembic.ini
-├── tests/
-│   ├── __init__.py
-│   ├── test_auth.py
-│   ├── test_organization.py
-│   ├── test_warehouse.py
-│   ├── test_product.py
-│   └── test_user.py
-├── venv/
-├── instance/
-│   ├── config.py
-├── requirements.txt
-├── run.py
-├── .env
-├── .gitignore
-├── README.md
-└── Dockerfile (optional)
+```
+barcode-scanner-app/
+├── backend/                         # Django project
+│   ├── backend/                     # settings.py, urls.py, wsgi.py
+│   ├── core/                        # Organization, Warehouse, Customer, PurchaseOrder
+│   │   ├── models.py
+│   │   ├── views.py                 # DRF viewsets + product search + RS.ge lookup
+│   │   ├── serializers.py
+│   │   ├── permissions.py           # role + org scoping
+│   │   ├── urls.py
+│   │   └── migrations/
+│   ├── users/                       # custom User model + JWT auth + AllowedIP
+│   │   ├── models.py
+│   │   ├── views.py                 # login / logout / user CRUD / client IP
+│   │   ├── serializers.py           # CustomTokenObtainPairSerializer (IP allowlist)
+│   │   ├── urls.py
+│   │   └── migrations/
+│   ├── manage.py
+│   ├── Dockerfile
+│   └── requirements.txt
+├── barcode-scanner-frontend/        # React app (Create React App)
+│   ├── src/
+│   │   ├── api/                     # axios client + endpoints + per-resource services
+│   │   ├── components/              # Auth, Organization, Warehouse, User, Dashboards
+│   │   ├── contexts/                # SubNav context
+│   │   ├── hooks/
+│   │   ├── i18n/                    # LanguageContext + translations (ka/en)
+│   │   ├── App.js                   # routing + layout shell
+│   │   └── index.js
+│   ├── public/
+│   ├── package.json
+│   └── Dockerfile
+├── .do/app.yaml                     # DigitalOcean App Platform spec
+├── docker-compose.yml
+├── Dockerfile                       # alternative root-level backend image
+├── pyproject.toml
+└── uv.lock
 ```
 
-## Database Schema
+## License
 
-Users Table
-id (UUID, Primary Key): Unique identifier for each user.
-username (VARCHAR, UNIQUE, NOT NULL): Username for login.
-password_hash (VARCHAR, NOT NULL): Hashed password for secure authentication.
-role_id (UUID, Foreign Key): Links to the user roles table.
-organization_id (UUID, Foreign Key, Nullable): Links to the organization.
-warehouse_id (UUID, Foreign Key, Nullable): Links to the warehouse.
-ip_address (VARCHAR, NOT NULL): IP address for access control.
-
-Organizations Table
-id (UUID, Primary Key): Unique identifier for each organization.
-name (VARCHAR, NOT NULL): Name of the organization.
-identification_code (VARCHAR, UNIQUE, NOT NULL): Unique code for the organization.
-web_service_url (VARCHAR, NOT NULL): URL of the external service for product data.
-
-Warehouses Table
-id (UUID, Primary Key): Unique identifier for each warehouse.
-organization_id (UUID, Foreign Key, NOT NULL): Links to the organization.
-name (VARCHAR, NOT NULL): Name of the warehouse.
-location (VARCHAR, Nullable): Location of the warehouse.
-
-User Roles Table
-id (UUID, Primary Key): Unique identifier for each role.
-role_name (VARCHAR, UNIQUE, NOT NULL): Name of the role (e.g., system_admin, admin, user).
-
-### License
-This project is licensed under the MIT License.
+MIT
