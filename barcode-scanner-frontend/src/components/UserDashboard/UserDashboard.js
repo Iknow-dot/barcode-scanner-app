@@ -228,7 +228,6 @@ const UserDashboard = () => {
             activeOrderRef.current = result.data;
             setActiveOrder(result.data);
             setOrderMode(true);
-            notify.success(t.success, t.orderCreated);
         } else {
             notify.error(t.orderError, result.error);
         }

@@ -242,6 +242,8 @@ const ClientLookupModal = ({open, onSelect, onClose}) => {
                         placeholder={t.customerIdNumber}
                         prefix={<IdcardOutlined style={{opacity: 0.4}}/>}
                         allowClear
+                        inputMode="numeric"
+                        pattern="[0-9]*"
                     />
                 </Form.Item>
                 <Form.Item
@@ -253,6 +255,8 @@ const ClientLookupModal = ({open, onSelect, onClose}) => {
                         placeholder={t.customerPhone}
                         prefix={<PhoneOutlined style={{opacity: 0.4}}/>}
                         allowClear
+                        inputMode="tel"
+                        type="tel"
                     />
                 </Form.Item>
                 <Flex justify="end">
@@ -335,6 +339,8 @@ const ClientLookupModal = ({open, onSelect, onClose}) => {
                         size="large"
                         placeholder={t.customerIdNumber}
                         prefix={<IdcardOutlined style={{opacity: 0.4}}/>}
+                        inputMode="numeric"
+                        pattern="[0-9]*"
                         suffix={
                             <Button
                                 type="link"
@@ -386,6 +392,8 @@ const ClientLookupModal = ({open, onSelect, onClose}) => {
                             size="large"
                             placeholder={t.customerPhone}
                             prefix={<PhoneOutlined style={{opacity: 0.4}}/>}
+                            inputMode="tel"
+                            type="tel"
                         />
                     </Form.Item>
                     <Form.Item name="phone_2" label={t.secondaryPhone} style={{flex: 1}}>
@@ -393,6 +401,8 @@ const ClientLookupModal = ({open, onSelect, onClose}) => {
                             size="large"
                             placeholder={t.secondaryPhone}
                             prefix={<PhoneOutlined style={{opacity: 0.4}}/>}
+                            inputMode="tel"
+                            type="tel"
                         />
                     </Form.Item>
                 </Flex>

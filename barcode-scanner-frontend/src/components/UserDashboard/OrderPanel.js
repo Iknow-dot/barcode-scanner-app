@@ -212,6 +212,8 @@ const OrderItemCard = memo(({
                         onChange={handleQuantityChange}
                         className="m-qty-input"
                         controls={false}
+                        inputMode="numeric"
+                        pattern="[0-9]*"
                     />
                     <Button
                         size="small"
@@ -243,6 +245,7 @@ const OrderItemCard = memo(({
                         onChange={(val) => handleDiscountChange('discount_percent', val)}
                         className="m-discount-input"
                         controls={false}
+                        inputMode="decimal"
                     />
                     <Text type="secondary" style={{fontSize: 12}}>%</Text>
                 </Flex>
