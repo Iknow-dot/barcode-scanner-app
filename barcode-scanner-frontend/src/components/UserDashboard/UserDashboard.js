@@ -200,10 +200,6 @@ const UserDashboard = () => {
 
     // ===== Purchase Order handlers =====
 
-    const handleStartOrderMode = () => {
-        setCustomerModalOpen(true);
-    };
-
     // Save the in-progress order (already auto-saved on the backend) and start
     // a fresh one. Used by the "New Order" button on the Orders tab.
     const handleStartFreshOrder = () => {
@@ -211,15 +207,6 @@ const UserDashboard = () => {
             handleSaveForLater();
         }
         setCustomerModalOpen(true);
-    };
-
-    // Tap on the Current Order tab: if nothing's in progress, jump straight
-    // into the client lookup so the user can pick or create a customer.
-    const handleSelectCurrentTab = () => {
-        setActiveTab('current');
-        if (!activeOrder && !customerModalOpen) {
-            setCustomerModalOpen(true);
-        }
     };
 
     const handleClientSelected = async (client) => {
@@ -318,8 +305,39 @@ const UserDashboard = () => {
         }
     };
 
-    const handleAddToOrderFromWarehouse = async (warehouseRecord) => {
+    const animateAddToCart = (sourceEl) => {
+        const cartEl = document.querySelector('.m-cart-fab');
+        if (!cartEl || !sourceEl) return;
+        const sourceRect = sourceEl.getBoundingClientRect();
+        const cartRect = cartEl.getBoundingClientRect();
+
+        const fly = document.createElement('div');
+        fly.className = 'm-cart-fly';
+        fly.style.left = `${sourceRect.left + sourceRect.width / 2 - 14}px`;
+        fly.style.top = `${sourceRect.top + sourceRect.height / 2 - 14}px`;
+        document.body.appendChild(fly);
+
+        // Force reflow so the transition picks up the new transform.
+        // eslint-disable-next-line no-unused-expressions
+        fly.offsetHeight;
+
+        const dx = (cartRect.left + cartRect.width / 2) - (sourceRect.left + sourceRect.width / 2);
+        const dy = (cartRect.top + cartRect.height / 2) - (sourceRect.top + sourceRect.height / 2);
+        fly.style.transform = `translate(${dx}px, ${dy}px) scale(0.25)`;
+        fly.style.opacity = '0.4';
+
+        window.setTimeout(() => {
+            fly.remove();
+            cartEl.classList.add('m-cart-pulse');
+            window.setTimeout(() => cartEl.classList.remove('m-cart-pulse'), 460);
+        }, 600);
+    };
+
+    const handleAddToOrderFromWarehouse = async (warehouseRecord, e) => {
         if (!activeOrder) return;
+        if (e?.currentTarget) {
+            animateAddToCart(e.currentTarget);
+        }
         const addResult = await orderService.addOrderItem(activeOrder.id, {
             sku: productInfo.sku,
             sku_name: productInfo.sku_name || '',
@@ -500,7 +518,7 @@ const UserDashboard = () => {
                                                             type="primary"
                                                             size="middle"
                                                             icon={<PlusCircleOutlined/>}
-                                                            onClick={() => handleAddToOrderFromWarehouse(item)}
+                                                            onClick={(e) => handleAddToOrderFromWarehouse(item, e)}
                                                             disabled={item.quantity <= 0}
                                                             className="m-add-to-order-btn"
                                                         />
@@ -515,38 +533,6 @@ const UserDashboard = () => {
                     </div>
                 </Spin>
             )}
-        </div>
-    );
-
-    // ===== Current Order Tab Content =====
-    const renderCurrentTab = () => (
-        <div className="m-tab-content">
-            {/* New Order Button */}
-            {!showOrderPanel && (
-                <Button
-                    type="primary"
-                    size="large"
-                    icon={<PlusOutlined/>}
-                    onClick={handleStartOrderMode}
-                    block
-                    className="m-new-order-btn"
-                >
-                    {t.newOrder}
-                </Button>
-            )}
-
-            {/* Active Order */}
-            {showOrderPanel && (
-                <OrderPanel
-                    order={activeOrder}
-                    onOrderUpdate={handleOrderUpdate}
-                    onSaveForLater={handleSaveForLater}
-                    onProceedToPayment={handleProceedToPayment}
-                    onDeleteOrder={handleDeleteActiveOrder}
-                    notify={notify}
-                />
-            )}
-
         </div>
     );
 
@@ -821,9 +807,33 @@ const UserDashboard = () => {
                 {/* Tab Content */}
                 <div className="m-dashboard-body">
                     {activeTab === 'scan' && renderScanTab()}
-                    {activeTab === 'current' && renderCurrentTab()}
                     {activeTab === 'orders' && renderOrdersTab()}
                 </div>
+
+                {/* Floating cart FAB — replaces the old "Current Order" tab */}
+                {!scannerOpen && !drawerVisible && !orderDrawerVisible && !customerModalOpen && (
+                    <button
+                        type="button"
+                        className="m-cart-fab"
+                        aria-label={t.activeOrder}
+                        onClick={() => {
+                            if (activeOrder) {
+                                setOrderDrawerVisible(true);
+                            } else {
+                                setCustomerModalOpen(true);
+                            }
+                        }}
+                    >
+                        <Badge
+                            count={showOrderPanel ? (activeOrder?.items?.length || 0) : 0}
+                            size="small"
+                            offset={[2, -2]}
+                            color="#ff4d4f"
+                        >
+                            <ShoppingCartOutlined style={{color: '#fff', fontSize: 24}}/>
+                        </Badge>
+                    </button>
+                )}
 
                 {/* ===== Bottom Navigation / Action Bar ===== */}
                 {!scannerOpen && !drawerVisible && (
@@ -863,16 +873,6 @@ const UserDashboard = () => {
                             >
                                 <AppstoreOutlined style={{fontSize: 20}}/>
                                 <span>{t.product}</span>
-                            </button>
-                            <button
-                                className={`m-tab-item ${activeTab === 'current' ? 'm-tab-active' : ''}`}
-                                onClick={handleSelectCurrentTab}
-                                style={activeTab !== 'current' ? {color: isDarkMode ? 'rgba(255, 255, 255, 0.4)' : undefined} : undefined}
-                            >
-                                <Badge count={showOrderPanel ? (activeOrder?.items?.length || 0) : 0} size="small" offset={[4, -2]}>
-                                    <ShoppingCartOutlined style={{fontSize: 20, color: 'inherit'}}/>
-                                </Badge>
-                                <span>{t.currentOrder}</span>
                             </button>
                             <button
                                 className={`m-tab-item ${activeTab === 'orders' ? 'm-tab-active' : ''}`}
