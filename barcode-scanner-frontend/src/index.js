@@ -7,6 +7,7 @@ import App from './App';
 import reportWebVitals from './reportWebVitals';
 import posthog from 'posthog-js';
 import {PostHogProvider} from 'posthog-js/react';
+import {registerServiceWorker} from './components/serviceWorkerRegistration';
 
 
 posthog.init(process.env.REACT_APP_PUBLIC_POSTHOG_KEY, {
@@ -27,3 +28,5 @@ root.render(
 );
 
 reportWebVitals();
+
+registerServiceWorker();

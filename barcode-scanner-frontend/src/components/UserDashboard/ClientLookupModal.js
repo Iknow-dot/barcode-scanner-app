@@ -263,11 +263,10 @@ const ClientLookupModal = ({open, onSelect, onClose}) => {
                     <Button
                         type="primary"
                         htmlType="submit"
-                        size="large"
                         icon={<SearchOutlined/>}
                         loading={lookupLoading}
                     >
-                        {t.lookupClient}
+                        {t.search}
                     </Button>
                 </Flex>
             </Form>

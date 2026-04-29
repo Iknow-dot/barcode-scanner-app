@@ -853,6 +853,22 @@
 
 /* (Theme toggle moved to user dropdown) */
 
+/* iOS Safari auto-zooms when an input has font-size < 16px on focus.
+   Force the form-field font-size to 16px on phone-sized viewports so
+   the page never zooms. This applies to AntD's Input/InputNumber/Select
+   internal <input> elements as well. */
+@media (max-width: 768px) {
+  input,
+  textarea,
+  select,
+  .ant-input,
+  .ant-input-number-input,
+  .ant-select-selection-search-input,
+  .ant-picker-input > input {
+    font-size: 16px !important;
+  }
+}
+
 /* ===== Cart FAB (floating action button, bottom-right) ===== */
 .m-cart-fab {
   position: fixed;
