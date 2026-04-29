@@ -530,13 +530,6 @@ const OrderPanel = ({order: initialOrder, onSaveForLater, onProceedToPayment, on
     const orderActionsMenu = {
         items: [
             {
-                key: 'save',
-                label: t.saveForLater,
-                icon: <SaveOutlined/>,
-                onClick: onSaveForLater,
-            },
-            {type: 'divider'},
-            {
                 key: 'delete',
                 label: t.deleteOrder || t.delete || 'Delete',
                 icon: <DeleteOutlined/>,
@@ -547,20 +540,30 @@ const OrderPanel = ({order: initialOrder, onSaveForLater, onProceedToPayment, on
     };
 
     const actionsTrigger = (
-        <Dropdown menu={orderActionsMenu} trigger={['click']} placement="bottomRight">
+        <Flex gap={4} align="center">
             <Button
-                icon={<MoreOutlined style={{fontSize: 20}}/>}
-                type="text"
-                aria-label={t.moreActions || 'More actions'}
-            />
-        </Dropdown>
+                icon={<SaveOutlined/>}
+                onClick={onSaveForLater}
+                size="middle"
+            >
+                {t.saveForLater}
+            </Button>
+            <Dropdown menu={orderActionsMenu} trigger={['click']} placement="bottomRight">
+                <Button
+                    icon={<MoreOutlined style={{fontSize: 20}}/>}
+                    type="text"
+                    aria-label={t.moreActions || 'More actions'}
+                />
+            </Dropdown>
+        </Flex>
     );
 
     return (
         <div className={`m-order-panel ${isMobileDrawer ? 'm-order-panel-drawer' : ''}`}>
-            {/* Drawer mode: actions menu floats at top-right (drawer header has no extras) */}
+            {/* Drawer mode: surface Save + overflow menu at the top of the panel
+                (the Drawer's own header has no slot for action buttons). */}
             {isMobileDrawer && (
-                <Flex justify="flex-end" style={{marginBottom: 4, marginTop: -4}}>
+                <Flex justify="flex-end" style={{marginBottom: 8, marginTop: -4}}>
                     {actionsTrigger}
                 </Flex>
             )}
