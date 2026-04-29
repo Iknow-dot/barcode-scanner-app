@@ -18,10 +18,11 @@ const API_ENDPOINTS = {
     warehouse: warehouseId => `api/v1/warehouses/${warehouseId}/`,
     product_search: "api/v1/product/search/",
 
-    // Customers
-    customers: "api/v1/customers/",
-    customer: customerId => `api/v1/customers/${customerId}/`,
-    rs_ge_lookup: "api/v1/customers/rs-ge-lookup/",
+    // Clients (1C ConsultWebExchange)
+    client_check: "api/v1/clients/check/",
+    client_create: "api/v1/clients/create/",
+    rs_ge_lookup: "api/v1/clients/rs-ge-lookup/",
+    client_reverse_geocode: "api/v1/clients/reverse-geocode/",
 
     // Purchase Orders
     orders: "api/v1/orders/",

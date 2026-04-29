@@ -1,4 +1,5 @@
 import React, {useState, useCallback, useEffect, useRef, memo} from 'react';
+import dayjs from 'dayjs';
 import {useLanguage} from '../../i18n/LanguageContext';
 import {orderService} from '../../api';
 import {
@@ -19,6 +20,8 @@ import {
     Divider,
     Collapse,
     Select,
+    Dropdown,
+    Modal,
 } from 'antd';
 import {
     ShoppingCartOutlined,
@@ -32,6 +35,7 @@ import {
     CommentOutlined,
     MinusOutlined,
     PlusOutlined,
+    MoreOutlined,
 } from '@ant-design/icons';
 
 const {Text, Title} = Typography;
@@ -374,6 +378,7 @@ const DeliverySection = memo(({order, onLocalOrderUpdate, notify, t, deliveryExp
                                     size="large"
                                     style={{width: '100%'}}
                                     onChange={handleDeliveryDateChange}
+                                    disabledDate={(current) => current && current < dayjs().startOf('day')}
                                 />
                                 <Flex gap={8}>
                                     <TimePicker
@@ -382,6 +387,7 @@ const DeliverySection = memo(({order, onLocalOrderUpdate, notify, t, deliveryExp
                                         size="large"
                                         style={{flex: 1}}
                                         onChange={handleDeliveryTimeFromChange}
+                                        needConfirm={false}
                                     />
                                     <TimePicker
                                         placeholder={t.deliveryTimeTo}
@@ -389,6 +395,7 @@ const DeliverySection = memo(({order, onLocalOrderUpdate, notify, t, deliveryExp
                                         size="large"
                                         style={{flex: 1}}
                                         onChange={handleDeliveryTimeToChange}
+                                        needConfirm={false}
                                     />
                                 </Flex>
                                 <TextArea
@@ -507,8 +514,54 @@ const OrderPanel = ({order: initialOrder, onSaveForLater, onProceedToPayment, on
 
     const hasItems = localOrder.items && localOrder.items.length > 0;
 
+    const handleDeleteClick = () => {
+        Modal.confirm({
+            title: t.confirmDeleteOrder,
+            okText: t.yes,
+            cancelText: t.no,
+            okButtonProps: {danger: true},
+            onOk: onDeleteOrder,
+        });
+    };
+
+    const orderActionsMenu = {
+        items: [
+            {
+                key: 'save',
+                label: t.saveForLater,
+                icon: <SaveOutlined/>,
+                onClick: onSaveForLater,
+            },
+            {type: 'divider'},
+            {
+                key: 'delete',
+                label: t.deleteOrder || t.delete || 'Delete',
+                icon: <DeleteOutlined/>,
+                danger: true,
+                onClick: handleDeleteClick,
+            },
+        ],
+    };
+
+    const actionsTrigger = (
+        <Dropdown menu={orderActionsMenu} trigger={['click']} placement="bottomRight">
+            <Button
+                icon={<MoreOutlined style={{fontSize: 20}}/>}
+                type="text"
+                aria-label={t.moreActions || 'More actions'}
+            />
+        </Dropdown>
+    );
+
     return (
         <div className={`m-order-panel ${isMobileDrawer ? 'm-order-panel-drawer' : ''}`}>
+            {/* Drawer mode: actions menu floats at top-right (drawer header has no extras) */}
+            {isMobileDrawer && (
+                <Flex justify="flex-end" style={{marginBottom: 4, marginTop: -4}}>
+                    {actionsTrigger}
+                </Flex>
+            )}
+
             {/* Header (only show when not in drawer - drawer has its own header) */}
             {!isMobileDrawer && (
                 <Card
@@ -524,6 +577,7 @@ const OrderPanel = ({order: initialOrder, onSaveForLater, onProceedToPayment, on
                             <Tag color="blue">{t.orderDraft}</Tag>
                         </Flex>
                     }
+                    extra={actionsTrigger}
                 >
                     {/* Customer info */}
                     <Flex align="center" gap={8} className="m-customer-bar">
@@ -595,52 +649,26 @@ const OrderPanel = ({order: initialOrder, onSaveForLater, onProceedToPayment, on
                 t={t}
             />
 
-            {/* Action buttons */}
+            {/* Primary CTA — Save / Delete are in the actions menu (top-right) */}
             <div className="m-order-actions">
-                <Flex gap={8} wrap="wrap">
-                    <Popconfirm
-                        title={t.confirmProceedToPayment}
-                        onConfirm={onProceedToPayment}
-                        okText={t.yes}
-                        cancelText={t.no}
+                <Popconfirm
+                    title={t.confirmProceedToPayment}
+                    onConfirm={onProceedToPayment}
+                    okText={t.yes}
+                    cancelText={t.no}
+                    disabled={!hasItems}
+                >
+                    <Button
+                        type="primary"
+                        icon={<DollarOutlined/>}
                         disabled={!hasItems}
+                        className="m-order-action-btn"
+                        size="large"
+                        block
                     >
-                        <Button
-                            type="primary"
-                            icon={<DollarOutlined/>}
-                            disabled={!hasItems}
-                            className="m-order-action-btn"
-                            size="large"
-                            block
-                        >
-                            {t.proceedToPayment}
-                        </Button>
-                    </Popconfirm>
-                    <div className="m-order-actions-secondary">
-                        <Button
-                            icon={<SaveOutlined/>}
-                            onClick={onSaveForLater}
-                            className="m-order-action-btn"
-                            size="large"
-                            style={{flex: 1}}
-                        >
-                            {t.saveForLater}
-                        </Button>
-                        <Popconfirm
-                            title={t.confirmDeleteOrder}
-                            onConfirm={onDeleteOrder}
-                            okText={t.yes}
-                            cancelText={t.no}
-                        >
-                            <Button
-                                danger
-                                icon={<DeleteOutlined/>}
-                                className="m-order-action-btn"
-                                size="large"
-                            />
-                        </Popconfirm>
-                    </div>
-                </Flex>
+                        {t.proceedToPayment}
+                    </Button>
+                </Popconfirm>
             </div>
         </div>
     );

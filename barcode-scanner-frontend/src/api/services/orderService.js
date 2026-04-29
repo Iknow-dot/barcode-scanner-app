@@ -4,7 +4,7 @@ import API_ENDPOINTS from '../endpoints';
 /**
  * Get all purchase orders for the current user's organization.
  * @param {object} [params] - Optional query params for filtering
- *   { status, customer, customer_search, order_number, date_from, date_to, created_by }
+ *   { status, external_client_id, customer_search, order_number, date_from, date_to, created_by }
  */
 export const getOrders = (params) => {
     return api.get(API_ENDPOINTS.orders, { params });
@@ -20,7 +20,7 @@ export const getOrder = (orderId) => {
 
 /**
  * Create a new purchase order.
- * @param {object} data - { customer: <customerId>, delivery_type?, notes? }
+ * @param {object} data - { customer_name, customer_phone?, customer_identification_number?, external_client_id?, delivery_type?, delivery_address?, notes? }
  */
 export const createOrder = (data) => {
     return api.post(API_ENDPOINTS.orders, data);

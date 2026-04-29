@@ -1,7 +1,7 @@
 import React, {useState, useEffect, useContext, useCallback, useRef} from 'react';
 import {warehouseService, productService, orderService} from '../../api';
 import BarcodeScanner from './BarcodeScanner';
-import CustomerSelectModal from './CustomerSelectModal';
+import ClientLookupModal from './ClientLookupModal';
 import OrderPanel from './OrderPanel';
 import subNavContext from "../../contexts/SubNavContext";
 import useAppNotification from "../../hooks/useAppNotification";
@@ -68,9 +68,9 @@ const UserDashboard = () => {
     // Incomplete orders state
     const [incompleteOrders, setIncompleteOrders] = useState([]);
     const [incompleteOrdersLoading, setIncompleteOrdersLoading] = useState(false);
-    const [showIncompleteOrders, setShowIncompleteOrders] = useState(false);
 
-    // Mobile tab state: 'scan' or 'orders'
+    // Mobile tab state: 'scan' (product), 'current' (active order workflow),
+    // or 'orders' (incomplete / draft orders).
     const [activeTab, setActiveTab] = useState('scan');
 
     // Order drawer for mobile (shows active order)
@@ -119,17 +119,10 @@ const UserDashboard = () => {
         }
     }, []);
 
-    useEffect(() => {
-        if (showIncompleteOrders) {
-            fetchIncompleteOrders();
-        }
-    }, [showIncompleteOrders, fetchIncompleteOrders]);
-
-    // Also fetch when switching to orders tab
+    // Fetch incomplete drafts when switching to the Orders tab
     useEffect(() => {
         if (activeTab === 'orders') {
             fetchIncompleteOrders();
-            setShowIncompleteOrders(true);
         }
     }, [activeTab, fetchIncompleteOrders]);
 
@@ -211,9 +204,39 @@ const UserDashboard = () => {
         setCustomerModalOpen(true);
     };
 
-    const handleCustomerSelected = async (customer) => {
+    // Save the in-progress order (already auto-saved on the backend) and start
+    // a fresh one. Used by the "New Order" button on the Orders tab.
+    const handleStartFreshOrder = () => {
+        if (activeOrder) {
+            handleSaveForLater();
+        }
+        setCustomerModalOpen(true);
+    };
+
+    // Tap on the Current Order tab: if nothing's in progress, jump straight
+    // into the client lookup so the user can pick or create a customer.
+    const handleSelectCurrentTab = () => {
+        setActiveTab('current');
+        if (!activeOrder && !customerModalOpen) {
+            setCustomerModalOpen(true);
+        }
+    };
+
+    const handleClientSelected = async (client) => {
         setCustomerModalOpen(false);
-        const result = await orderService.createOrder({customer: customer.id});
+        const fullName = (client.name || '').trim()
+            || [client.first_name, client.last_name].filter(Boolean).join(' ').trim();
+        const payload = {
+            customer_name: fullName || client.identification_number || client.phone || t.client,
+            customer_phone: client.phone || '',
+            customer_identification_number: client.identification_number || '',
+            external_client_id: client.external_client_id || '',
+            // Seed delivery_address from the client's address; remains
+            // editable in the order's delivery panel for cases where the
+            // order ships to a different location.
+            delivery_address: client.address || '',
+        };
+        const result = await orderService.createOrder(payload);
         if (result.success) {
             activeOrderRef.current = result.data;
             setActiveOrder(result.data);
@@ -230,9 +253,7 @@ const UserDashboard = () => {
         activeOrderRef.current = null;
         setActiveOrder(null);
         setOrderDrawerVisible(false);
-        if (showIncompleteOrders) {
-            fetchIncompleteOrders();
-        }
+        fetchIncompleteOrders();
     };
 
     const handleProceedToPayment = async () => {
@@ -244,9 +265,7 @@ const UserDashboard = () => {
             activeOrderRef.current = null;
             setActiveOrder(null);
             setOrderDrawerVisible(false);
-            if (showIncompleteOrders) {
-                fetchIncompleteOrders();
-            }
+            fetchIncompleteOrders();
         } else {
             notify.error(t.orderError, result.error);
         }
@@ -261,9 +280,7 @@ const UserDashboard = () => {
             activeOrderRef.current = null;
             setActiveOrder(null);
             setOrderDrawerVisible(false);
-            if (showIncompleteOrders) {
-                fetchIncompleteOrders();
-            }
+            fetchIncompleteOrders();
         } else {
             notify.error(t.orderError, result.error);
         }
@@ -283,7 +300,6 @@ const UserDashboard = () => {
             activeOrderRef.current = result.data;
             setActiveOrder(result.data);
             setOrderMode(true);
-            setShowIncompleteOrders(false);
             // Switch to scan tab so user can start scanning
             setActiveTab('scan');
         } else {
@@ -502,8 +518,8 @@ const UserDashboard = () => {
         </div>
     );
 
-    // ===== Orders Tab Content =====
-    const renderOrdersTab = () => (
+    // ===== Current Order Tab Content =====
+    const renderCurrentTab = () => (
         <div className="m-tab-content">
             {/* New Order Button */}
             {!showOrderPanel && (
@@ -531,119 +547,104 @@ const UserDashboard = () => {
                 />
             )}
 
-            {/* Incomplete Orders Section */}
-            <Card
-                size="small"
-                className="m-incomplete-orders-card"
-                styles={{body: {padding: 0}}}
+        </div>
+    );
+
+    // ===== Orders Tab — incomplete (draft) orders =====
+    const renderOrdersTab = () => (
+        <div className="m-tab-content">
+            <Button
+                type="primary"
+                size="large"
+                icon={<PlusOutlined/>}
+                onClick={handleStartFreshOrder}
+                block
+                className="m-new-order-btn"
+                style={{marginBottom: 12}}
             >
-                <Collapse
-                    ghost
-                    activeKey={showIncompleteOrders ? ['incomplete'] : []}
-                    onChange={(keys) => setShowIncompleteOrders(keys.includes('incomplete'))}
-                    expandIcon={({isActive}) => <RightOutlined rotate={isActive ? 90 : 0}/>}
-                    items={[
-                        {
-                            key: 'incomplete',
-                            label: (
-                                <Flex align="center" gap={8}>
-                                    <UnorderedListOutlined style={{color: '#faad14'}}/>
-                                    <Text strong>{t.incompleteOrders}</Text>
-                                    {incompleteOrders.length > 0 && (
-                                        <Tag color="orange" style={{marginLeft: 4}}>
-                                            {incompleteOrders.length}
-                                        </Tag>
-                                    )}
-                                </Flex>
-                            ),
-                            children: (
-                                <Spin spinning={incompleteOrdersLoading} size="small">
-                                    {incompleteOrders.length === 0 ? (
-                                        <Empty
-                                            image={Empty.PRESENTED_IMAGE_SIMPLE}
-                                            description={
-                                                <Text type="secondary" style={{fontSize: 13}}>
-                                                    {t.noIncompleteOrders}
-                                                </Text>
-                                            }
-                                            style={{margin: '12px 0'}}
-                                        />
-                                    ) : (
-                                        <List
-                                            size="small"
-                                            dataSource={incompleteOrders}
-                                            renderItem={(order) => (
-                                                <List.Item
-                                                    className="m-incomplete-order-row"
-                                                    onClick={() => handleContinueOrder(order.id)}
-                                                >
-                                                    <List.Item.Meta
-                                                        title={
-                                                            <Flex align="center" gap={6}>
-                                                                <Text strong style={{fontSize: 14}}>
-                                                                    #{order.id}
-                                                                </Text>
-                                                                <Tag color="blue" style={{fontSize: 11}}>
-                                                                    {t.orderDraft}
-                                                                </Tag>
-                                                            </Flex>
-                                                        }
-                                                        description={
-                                                            <Flex vertical gap={2}>
-                                                                <Flex align="center" gap={4}>
-                                                                    <UserOutlined style={{fontSize: 11, opacity: 0.5}}/>
-                                                                    <Text type="secondary" style={{fontSize: 13}}>
-                                                                        {order.customer_name}
-                                                                    </Text>
-                                                                </Flex>
-                                                                <Flex align="center" gap={4} wrap="wrap">
-                                                                    <CalendarOutlined
-                                                                        style={{fontSize: 11, opacity: 0.5}}/>
-                                                                    <Text type="secondary" style={{fontSize: 12}}>
-                                                                        {new Date(order.created_at).toLocaleDateString()}
-                                                                    </Text>
-                                                                    {order.items_count > 0 && (
-                                                                        <Tag style={{fontSize: 11, marginLeft: 4}}>
-                                                                            {order.items_count} {t.items}
-                                                                        </Tag>
-                                                                    )}
-                                                                </Flex>
-                                                                {order.total != null && (
-                                                                    <Text strong style={{fontSize: 13, color: '#52c41a'}}>
-                                                                        {t.orderTotal}: {order.total} ₾
-                                                                    </Text>
-                                                                )}
-                                                            </Flex>
-                                                        }
-                                                    />
-                                                    <Flex align="center" gap={8}>
-                                                        <Popconfirm
-                                                            title={t.confirmDelete}
-                                                            onConfirm={(e) => handleDeleteIncompleteOrder(e, order.id)}
-                                                            onCancel={(e) => e.stopPropagation()}
-                                                            okText={t.yes}
-                                                            cancelText={t.no}
-                                                        >
-                                                            <Button
-                                                                type="text"
-                                                                danger
-                                                                size="small"
-                                                                icon={<DeleteOutlined/>}
-                                                                onClick={(e) => e.stopPropagation()}
-                                                            />
-                                                        </Popconfirm>
-                                                        <RightOutlined style={{fontSize: 12, opacity: 0.3}}/>
-                                                    </Flex>
-                                                </List.Item>
-                                            )}
-                                        />
-                                    )}
-                                </Spin>
-                            ),
+                {t.newOrder}
+            </Button>
+            <Spin spinning={incompleteOrdersLoading} size="large">
+                {incompleteOrders.length === 0 && !incompleteOrdersLoading ? (
+                    <Empty
+                        image={Empty.PRESENTED_IMAGE_SIMPLE}
+                        description={
+                            <Text type="secondary" style={{fontSize: 13}}>
+                                {t.noIncompleteOrders}
+                            </Text>
                         }
-                    ]}
-                />
-            </Card>
+                        style={{margin: '32px 0'}}
+                    />
+                ) : (
+                    <List
+                        size="small"
+                        dataSource={incompleteOrders}
+                        renderItem={(order) => (
+                            <List.Item
+                                className="m-incomplete-order-row"
+                                onClick={() => handleContinueOrder(order.id)}
+                            >
+                                <List.Item.Meta
+                                    title={
+                                        <Flex align="center" gap={6} wrap="wrap">
+                                            <Text strong style={{fontSize: 14}}>
+                                                #{order.id}
+                                            </Text>
+                                            <Tag color="blue" style={{fontSize: 11}}>
+                                                {t.orderDraft}
+                                            </Tag>
+                                        </Flex>
+                                    }
+                                    description={
+                                        <Flex vertical gap={2}>
+                                            <Flex align="center" gap={4}>
+                                                <UserOutlined style={{fontSize: 11, opacity: 0.5}}/>
+                                                <Text type="secondary" style={{fontSize: 13}}>
+                                                    {order.customer_name}
+                                                </Text>
+                                            </Flex>
+                                            <Flex align="center" gap={4} wrap="wrap">
+                                                <CalendarOutlined style={{fontSize: 11, opacity: 0.5}}/>
+                                                <Text type="secondary" style={{fontSize: 12}}>
+                                                    {order.created_at && new Date(order.created_at).toLocaleDateString()}
+                                                </Text>
+                                                {order.items_count > 0 && (
+                                                    <Tag style={{fontSize: 11, marginLeft: 4}}>
+                                                        {order.items_count} {t.items}
+                                                    </Tag>
+                                                )}
+                                            </Flex>
+                                            {order.total != null && (
+                                                <Text strong style={{fontSize: 13, color: '#52c41a'}}>
+                                                    {t.orderTotal}: {order.total} ₾
+                                                </Text>
+                                            )}
+                                        </Flex>
+                                    }
+                                />
+                                <Flex align="center" gap={8}>
+                                    <Popconfirm
+                                        title={t.confirmDelete}
+                                        onConfirm={(e) => handleDeleteIncompleteOrder(e, order.id)}
+                                        onCancel={(e) => e.stopPropagation()}
+                                        okText={t.yes}
+                                        cancelText={t.no}
+                                    >
+                                        <Button
+                                            type="text"
+                                            danger
+                                            size="small"
+                                            icon={<DeleteOutlined/>}
+                                            onClick={(e) => e.stopPropagation()}
+                                        />
+                                    </Popconfirm>
+                                    <RightOutlined style={{fontSize: 12, opacity: 0.3}}/>
+                                </Flex>
+                            </List.Item>
+                        )}
+                    />
+                )}
+            </Spin>
         </div>
     );
 
@@ -651,10 +652,10 @@ const UserDashboard = () => {
         <>
             {contextHolder}
 
-            {/* Customer Selection Modal */}
-            <CustomerSelectModal
+            {/* Client Lookup Modal — CheckClient → CreateClient via 1C ConsultWebExchange */}
+            <ClientLookupModal
                 open={customerModalOpen}
-                onSelect={handleCustomerSelected}
+                onSelect={handleClientSelected}
                 onClose={() => setCustomerModalOpen(false)}
             />
 
@@ -820,6 +821,7 @@ const UserDashboard = () => {
                 {/* Tab Content */}
                 <div className="m-dashboard-body">
                     {activeTab === 'scan' && renderScanTab()}
+                    {activeTab === 'current' && renderCurrentTab()}
                     {activeTab === 'orders' && renderOrdersTab()}
                 </div>
 
@@ -863,14 +865,22 @@ const UserDashboard = () => {
                                 <span>{t.product}</span>
                             </button>
                             <button
-                                className={`m-tab-item ${activeTab === 'orders' ? 'm-tab-active' : ''}`}
-                                onClick={() => setActiveTab('orders')}
-                                style={activeTab !== 'orders' ? {color: isDarkMode ? 'rgba(255, 255, 255, 0.4)' : undefined} : undefined}
+                                className={`m-tab-item ${activeTab === 'current' ? 'm-tab-active' : ''}`}
+                                onClick={handleSelectCurrentTab}
+                                style={activeTab !== 'current' ? {color: isDarkMode ? 'rgba(255, 255, 255, 0.4)' : undefined} : undefined}
                             >
                                 <Badge count={showOrderPanel ? (activeOrder?.items?.length || 0) : 0} size="small" offset={[4, -2]}>
                                     <ShoppingCartOutlined style={{fontSize: 20, color: 'inherit'}}/>
                                 </Badge>
-                                <span>{t.purchaseOrders}</span>
+                                <span>{t.currentOrder}</span>
+                            </button>
+                            <button
+                                className={`m-tab-item ${activeTab === 'orders' ? 'm-tab-active' : ''}`}
+                                onClick={() => setActiveTab('orders')}
+                                style={activeTab !== 'orders' ? {color: isDarkMode ? 'rgba(255, 255, 255, 0.4)' : undefined} : undefined}
+                            >
+                                <UnorderedListOutlined style={{fontSize: 20}}/>
+                                <span>{t.orders}</span>
                             </button>
                         </div>
                     </div>

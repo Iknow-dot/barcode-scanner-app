@@ -201,6 +201,13 @@ AUTH_USER_MODEL = 'users.User'
 # django-guardian settings
 ANONYMOUS_USER_NAME = None  # Disable guardian's anonymous user creation
 
+# Nominatim (OSM reverse geocoder) — public instance requires a User-Agent
+# string identifying the app per their usage policy.
+NOMINATIM_USER_AGENT = os.environ.get(
+    'NOMINATIM_USER_AGENT',
+    'BarcodeScannerApp/1.0 (admin@example.com)',
+)
+
 # Django REST Framework
 REST_FRAMEWORK = {
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
@@ -241,6 +248,8 @@ SPECTACULAR_SETTINGS = {
         {'name': 'Organizations', 'description': 'Organization management endpoints'},
         {'name': 'Warehouses', 'description': 'Warehouse management endpoints'},
         {'name': 'Products', 'description': 'Product search endpoints'},
+        {'name': 'Clients', 'description': '1C ConsultWebExchange client lookup/creation + RS.ge taxpayer lookup'},
+        {'name': 'Purchase Orders', 'description': 'Purchase order CRUD and item management'},
         {'name': 'Network', 'description': 'Network utility endpoints (IP detection)'},
     ],
 }

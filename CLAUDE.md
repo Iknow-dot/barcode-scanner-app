@@ -47,11 +47,11 @@ Required env vars for the backend: `DJANGO_SECRET_KEY`, `DATABASE_URL` (omit to 
 Two Django apps under `backend/`, both registered in `backend/settings.py`:
 
 - **`users`** — custom `AUTH_USER_MODEL = users.User` extending `AbstractUser` with a `role` enum (`internal_admin`, `company_admin`, `company_user`) and a nullable `organization` FK. `User.save()` calls `full_clean()`, so model-level role/org invariants are enforced on every write (internal admins must be `is_staff` + `is_superuser` and have no org; company roles must have one). Also defines `AllowedIP` (per-user IP/CIDR allowlist).
-- **`core`** — domain models: `Organization`, `Warehouse` (M2M to users, scoped to org via `limit_choices_to`), `Customer` + `CustomerPhone`, `PurchaseOrder` + `PurchaseOrderItem`. Plus DRF viewsets, serializers, and `permissions.py`.
+- **`core`** — domain models: `Organization`, `Warehouse` (M2M to users, scoped to org via `limit_choices_to`), `PurchaseOrder` + `PurchaseOrderItem`. Plus DRF viewsets, serializers, and `permissions.py`. Clients live in the per-org 1C ConsultWebExchange service rather than locally — `PurchaseOrder` carries denormalized `customer_name`, `customer_phone`, `customer_identification_number`, and `external_client_id` so order history survives even when the upstream system is unreachable. Local `Customer`/`CustomerPhone` models existed historically and were removed in migrations 0010–0014.
 
 URL layout (`backend/backend/urls.py`):
 - `/admin/` — Jazzmin-themed Django admin with a custom `analytics/` view that embeds a PostHog dashboard (URL from `POSTHOG_DASHBOARD_URL` env).
-- `/api/v1/` → `core.urls` (organizations, warehouses, customers, orders, product/search, RS.ge lookup)
+- `/api/v1/` → `core.urls` (organizations, warehouses, orders, product/search, clients/check, clients/create, clients/rs-ge-lookup)
 - `/api/v1/users/` → `users.urls` (auth/login,refresh,verify,logout, ip, user CRUD)
 - `/api/schema/`, `/api/docs/`, `/api/redoc/` — drf-spectacular.
 
@@ -73,15 +73,17 @@ Everything is scoped to `Organization`:
 
 ### External integrations
 
-- **Per-org product web service** — each `Organization` stores a `web_service_url` plus credentials. The password is **Fernet-encrypted** at rest using `FERNET_KEY`; use `Organization.encrypt_password()` / `decrypt_password()` rather than touching the field directly. `ProductSearchAPIView` proxies a GET to that URL with `Sku`/`Warehouse`/`IsBarcode` headers and basic auth, and (importantly) **fetches every image URL in `img_url` and base64-inlines them into the response as `images`** — that's why the response can be large and slow. Errors are normalized to `{"code": "EXTERNAL_SERVICE_*"}` with appropriate 502/504 statuses.
-- **RS.ge taxpayer lookup** — `RSGeLookupAPIView` (`POST /api/v1/customers/rs-ge-lookup/`) calls `https://xdata.rs.ge/TaxPayer/RSPublicInfo` to resolve a Georgian identification number to a name. **Has `permission_classes = []`** (intentionally public) — keep that in mind when reasoning about exposed surface.
+- **Per-org 1C ConsultWebExchange service** — each `Organization` stores a `web_service_url` (the BASE URL — everything before `/HS/ConsultWebExchange/`) plus credentials. The password is **Fernet-encrypted** at rest using `FERNET_KEY`; use `Organization.encrypt_password()` / `decrypt_password()` rather than touching the field directly. All upstream calls funnel through `core/services/consult_web_exchange.py::ConsultWebExchangeClient`, which exposes three operations: `check_client(identification_number=, phone=)`, `create_client(payload)`, and `get_stock_and_prices(sku, is_barcode=, warehouses=)`. The client raises one `ConsultWebExchangeError` type, which `_consult_error_response` (in `views.py`) turns into the standard `{"code": "EXTERNAL_SERVICE_*", ...}` envelope used by the frontend. `CHECK_CLIENT_REQUEST_FIELDS` / `CHECK_CLIENT_RESPONSE_FIELDS` / `CREATE_CLIENT_REQUEST_FIELDS` at the top of the module are placeholders — update them once the 1C field names are confirmed (every response also echoes `raw` so a wrong key name is recoverable without a code change).
+- **`ProductSearchAPIView`** is a thin wrapper around `get_stock_and_prices` that additionally **fetches every image URL in `img_url` and base64-inlines them into the response as `images`** — that's why the response can be large and slow.
+- **`CheckClientAPIView` / `CreateClientAPIView`** at `/api/v1/clients/check/` and `/api/v1/clients/create/` drive the frontend `ClientLookupModal` flow (lookup → CreateClient on `CLIENT_NOT_FOUND`). The frontend keys off `code === 'CLIENT_NOT_FOUND'` to switch from lookup to create panel.
+- **RS.ge taxpayer lookup** — `RSGeLookupAPIView` (`POST /api/v1/clients/rs-ge-lookup/`) calls `https://xdata.rs.ge/TaxPayer/RSPublicInfo` to resolve a Georgian identification number to a name. Used to autofill first/last name before `CreateClient`. **Has `permission_classes = []`** (intentionally public) — keep that in mind when reasoning about exposed surface.
 
 ### Frontend layout
 
 `barcode-scanner-frontend/src/`:
 - `api/client.js` — single axios instance with two interceptors: attach `Bearer` token from `localStorage`, and on 401 transparently refresh + retry once (skipping login/refresh URLs to avoid loops). On refresh failure it clears tokens and hard-redirects to `/login`.
 - `api/endpoints.js` — single source of truth for backend URLs; mirrors the DRF routes 1:1.
-- `api/services/` — one module per resource (auth, customer, order, organization, product, user, warehouse).
+- `api/services/` — one module per resource (auth, client, order, organization, product, user, warehouse). `clientService` wraps CheckClient/CreateClient/lookupRsGe (no local CRUD; clients are remote-only).
 - `components/` — feature-organized: `Auth/`, `Organization/`, `Warehouse/`, `User/`, `UserDashboard/`, `SystemAdminDashboard/`, plus `PrivateRoute.js` which gates routes by `allowedRoles`.
 - `i18n/` — Georgian/English with a `LanguageContext`. Backend errors are designed to be translated by their `code` field, not their `detail` text.
 - `App.js` is the layout shell (Ant Design `ConfigProvider` + `Layout` + `Sider`/`Header`) and the Router; route → role mapping lives there.

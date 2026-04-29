@@ -13,25 +13,37 @@ from rest_framework.viewsets import ModelViewSet
 
 from django.db import models
 
-from core.models import Organization, Warehouse, Customer, PurchaseOrder, PurchaseOrderItem
+from core.models import Organization, Warehouse, PurchaseOrder, PurchaseOrderItem
 from core.permissions import (
     OrganizationPermission,
     WarehousePermission,
     IsCompanyUserOrAdmin
 )
+from django.core.cache import cache
+
 from core.serializers import (
     OrganizationSerializer,
     OrganizationExternalServiceSerializer,
     WarehouseSerializer,
     WarehouseReadOnlySerializer,
     ProductSearchSerializer,
-    CustomerSerializer,
     PurchaseOrderSerializer,
     PurchaseOrderListSerializer,
     PurchaseOrderItemSerializer,
     AddOrderItemSerializer,
     RSGeLookupSerializer,
+    CheckClientRequestSerializer,
+    CheckClientResponseSerializer,
+    CreateClientRequestSerializer,
+    ReverseGeocodeRequestSerializer,
 )
+from core.services.consult_web_exchange import (
+    ConsultWebExchangeClient,
+    ConsultWebExchangeError,
+    _extract_client_list,
+    _normalize_client_response,
+)
+from core.services.nominatim import NominatimError, reverse_geocode
 from users.models import User, AllowedIP
 
 
@@ -40,6 +52,19 @@ def _convert_to_https(url):
     parsed_url = urlparse(url)
     secure_url = parsed_url._replace(scheme='https')
     return urlunparse(secure_url)
+
+
+def _consult_error_response(exc: ConsultWebExchangeError) -> Response:
+    """Translate a ConsultWebExchangeError into a DRF Response.
+
+    Mirrors the {"code", "detail", "external_service_status_code"} envelope
+    used by the previous inline implementation of ProductSearchAPIView so the
+    frontend error mapping does not change.
+    """
+    body: dict = {"code": exc.code, "detail": exc.detail}
+    if exc.upstream_status is not None:
+        body["external_service_status_code"] = exc.upstream_status
+    return Response(body, status=exc.http_status)
 
 
 @extend_schema_view(
@@ -183,63 +208,15 @@ class ProductSearchAPIView(APIView):
         else:
             selected_warehouses = ",".join(selected_warehouses.values_list('code', flat=True))
 
+        client = ConsultWebExchangeClient(user.organization)
         try:
-            url: str = f"{user.organization.web_service_url}"
-            external_service_response = httpx.get(
-                url,
-                auth=(
-                    user.organization.web_service_username,
-                    user.organization.decrypt_password() if user.organization.web_service_password else ''
-                ),
-                headers={
-                    'IsBarcode': 'true' if is_barcode else 'false',
-                    'Warehouse': selected_warehouses,
-                    'Sku': sku,
-                    'Content-Type': 'application/json; charset=utf-8'
-                }
+            product_data = client.get_stock_and_prices(
+                sku,
+                is_barcode=bool(is_barcode),
+                warehouses=selected_warehouses,
             )
-        except httpx.TimeoutException as e:
-            logging.error(f"External service timeout for org {user.organization.id}: {e}")
-            return Response({
-                "code": "EXTERNAL_SERVICE_TIMEOUT",
-                "detail": "Timeout while connecting to the organization's web service.",
-            }, status=http_status.HTTP_504_GATEWAY_TIMEOUT)
-        except httpx.ConnectError as e:
-            logging.error(f"External service connection error for org {user.organization.id}: {e}")
-            return Response({
-                "code": "EXTERNAL_SERVICE_UNAVAILABLE",
-                "detail": "Could not connect to the organization's web service.",
-            }, status=http_status.HTTP_502_BAD_GATEWAY)
-        except httpx.RequestError as e:
-            logging.error(f"External service request error for org {user.organization.id}: {e}")
-            return Response({
-                "code": "EXTERNAL_SERVICE_ERROR",
-                "detail": "Communication error with the organization's web service.",
-            }, status=http_status.HTTP_502_BAD_GATEWAY)
-
-        if external_service_response.status_code == 401:
-            logging.error(
-                f"External service returned 401 for org {user.organization.id}"
-            )
-            return Response({
-                "code": "EXTERNAL_SERVICE_UNAUTHORIZED",
-                "detail": "Unauthorized access to the organization's web service. Please check credentials.",
-                "external_service_status_code": external_service_response.status_code,
-            }, status=http_status.HTTP_502_BAD_GATEWAY)
-
-        if external_service_response.status_code != 200:
-            logging.warning(
-                f"External service returned {external_service_response.status_code} "
-                f"for sku={sku}, org={user.organization.id}"
-            )
-            return Response({
-                "code": "PRODUCT_NOT_FOUND",
-                "detail": f"Product with SKU '{sku}' not found in the organization's web service.",
-                "external_service_status_code": external_service_response.status_code,
-            }, status=http_status.HTTP_404_NOT_FOUND)
-
-        product_data = external_service_response.json()
-        print(product_data)
+        except ConsultWebExchangeError as exc:
+            return _consult_error_response(exc)
 
         # Convert img_url to Base64-encoded images
         if 'img_url' in product_data:
@@ -275,7 +252,7 @@ class ProductSearchAPIView(APIView):
 # RS.ge Taxpayer Lookup
 # ---------------------------------------------------------------------------
 
-@extend_schema(tags=['Customers'])
+@extend_schema(tags=['Clients'])
 class RSGeLookupAPIView(APIView):
     """Look up a taxpayer's name from RS.ge by identification number."""
     permission_classes = []
@@ -362,37 +339,109 @@ class RSGeLookupAPIView(APIView):
 
 
 # ---------------------------------------------------------------------------
-# Customer
+# Client lookup / creation (1C ConsultWebExchange)
 # ---------------------------------------------------------------------------
 
-@extend_schema_view(
-    list=extend_schema(tags=['Customers']),
-    retrieve=extend_schema(tags=['Customers']),
-    create=extend_schema(tags=['Customers']),
-    update=extend_schema(tags=['Customers']),
-    partial_update=extend_schema(tags=['Customers']),
-    destroy=extend_schema(tags=['Customers']),
-)
-class CustomerViewSet(ModelViewSet):
-    serializer_class = CustomerSerializer
-    permission_classes = [IsCompanyUserOrAdmin]
+@extend_schema(tags=['Clients'])
+class CheckClientAPIView(APIView):
+    """Look up a client in the org's 1C ConsultWebExchange service."""
 
-    def get_queryset(self):
-        user = self.request.user
-        qs = Customer.objects.filter(
-            organization=user.organization
-        ).prefetch_related('phone_numbers')
-        # Allow searching by name, identification number, or phone numbers
-        search = self.request.query_params.get('search')
-        if search:
-            qs = qs.filter(
-                models.Q(first_name__icontains=search)
-                | models.Q(last_name__icontains=search)
-                | models.Q(identification_number__icontains=search)
-                | models.Q(phone__icontains=search)
-                | models.Q(phone_numbers__phone__icontains=search)
-            ).distinct()
-        return qs
+    permission_classes = [IsCompanyUserOrAdmin]
+    serializer_class = CheckClientRequestSerializer
+    http_method_names = ["post"]
+
+    def post(self, request: Request) -> Response:
+        serializer = self.serializer_class(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        client = ConsultWebExchangeClient(request.user.organization)
+        try:
+            result = client.check_client(
+                identification_number=data.get('identification_number') or None,
+                phone=data.get('phone') or None,
+            )
+        except ConsultWebExchangeError as exc:
+            return _consult_error_response(exc)
+
+        if not result:
+            return Response(
+                {"code": "CLIENT_NOT_FOUND", "detail": "Client not found in the organization's web service."},
+                status=http_status.HTTP_404_NOT_FOUND,
+            )
+        return Response({
+            "clients": [CheckClientResponseSerializer(client).data for client in result],
+        })
+
+
+@extend_schema(tags=['Clients'])
+class CreateClientAPIView(APIView):
+    """Create a client in the org's 1C ConsultWebExchange service."""
+
+    permission_classes = [IsCompanyUserOrAdmin]
+    serializer_class = CreateClientRequestSerializer
+    http_method_names = ["post"]
+
+    def post(self, request: Request) -> Response:
+        serializer = self.serializer_class(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        client = ConsultWebExchangeClient(request.user.organization)
+        try:
+            result = client.create_client(serializer.validated_data)
+        except ConsultWebExchangeError as exc:
+            return _consult_error_response(exc)
+
+        # CreateClient returns a single newly-created client; pull the first
+        # entry out of whatever wrapper shape upstream used.
+        items = _extract_client_list(result)
+        normalized = _normalize_client_response(items[0]) if items else {"raw": result}
+        return Response(
+            CheckClientResponseSerializer(normalized).data,
+            status=http_status.HTTP_201_CREATED,
+        )
+
+
+@extend_schema(tags=['Clients'])
+class ReverseGeocodeAPIView(APIView):
+    """Reverse-geocode a lat/lng to a formatted address via OSM Nominatim.
+
+    Used by the frontend address-map picker. Results are cached for 24 h
+    keyed at 4-decimal precision (~10 m) to keep usage well under the
+    public Nominatim 1 req/sec policy.
+    """
+
+    permission_classes = [IsCompanyUserOrAdmin]
+    serializer_class = ReverseGeocodeRequestSerializer
+    http_method_names = ["post"]
+
+    CACHE_TTL_SECONDS = 60 * 60 * 24
+    CACHE_PRECISION = 4
+
+    def post(self, request: Request) -> Response:
+        serializer = self.serializer_class(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        lat = serializer.validated_data["lat"]
+        lng = serializer.validated_data["lng"]
+
+        cache_key = (
+            f"nominatim:rev:{round(lat, self.CACHE_PRECISION)}:"
+            f"{round(lng, self.CACHE_PRECISION)}"
+        )
+        cached = cache.get(cache_key)
+        if cached is not None:
+            return Response({"address": cached})
+
+        try:
+            address = reverse_geocode(lat, lng)
+        except NominatimError as exc:
+            body: dict = {"code": exc.code, "detail": exc.detail}
+            if exc.upstream_status is not None:
+                body["external_service_status_code"] = exc.upstream_status
+            return Response(body, status=exc.http_status)
+
+        cache.set(cache_key, address, self.CACHE_TTL_SECONDS)
+        return Response({"address": address})
 
 
 # ---------------------------------------------------------------------------
@@ -422,7 +471,7 @@ class PurchaseOrderViewSet(ModelViewSet):
         user = self.request.user
         qs = PurchaseOrder.objects.filter(
             organization=user.organization
-        ).select_related('customer', 'created_by').prefetch_related('items')
+        ).select_related('created_by').prefetch_related('items')
 
         # --- Filtering support for order history search ---
         # Status filter
@@ -430,21 +479,19 @@ class PurchaseOrderViewSet(ModelViewSet):
         if status:
             qs = qs.filter(status=status)
 
-        # Customer filter
-        customer_id = self.request.query_params.get('customer')
-        if customer_id:
-            qs = qs.filter(customer_id=customer_id)
+        # External client id filter
+        external_client_id = self.request.query_params.get('external_client_id')
+        if external_client_id:
+            qs = qs.filter(external_client_id=external_client_id)
 
-        # Customer search (name, phone, identification_number)
+        # Customer search (name, phone, identification_number) — denormalized
         customer_search = self.request.query_params.get('customer_search')
         if customer_search:
             qs = qs.filter(
-                models.Q(customer__first_name__icontains=customer_search)
-                | models.Q(customer__last_name__icontains=customer_search)
-                | models.Q(customer__phone__icontains=customer_search)
-                | models.Q(customer__phone_numbers__phone__icontains=customer_search)
-                | models.Q(customer__identification_number__icontains=customer_search)
-            ).distinct()
+                models.Q(customer_name__icontains=customer_search)
+                | models.Q(customer_phone__icontains=customer_search)
+                | models.Q(customer_identification_number__icontains=customer_search)
+            )
 
         # Order number search
         order_number = self.request.query_params.get('order_number')

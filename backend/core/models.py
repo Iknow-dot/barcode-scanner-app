@@ -72,63 +72,6 @@ class Warehouse(models.Model):
         return f"{self.name} ({self.code}) - {self.organization.name}"
 
 
-class Customer(models.Model):
-    """A customer attached to an organization, used for purchase orders."""
-    organization = models.ForeignKey(
-        Organization,
-        on_delete=models.CASCADE,
-        related_name='customers',
-    )
-    first_name = models.CharField(max_length=255)
-    last_name = models.CharField(max_length=255)
-    phone = models.CharField(max_length=50, blank=True, default='')
-    email = models.EmailField(blank=True, default='')
-    identification_number = models.CharField(max_length=50, blank=True, default='')
-
-    # Address fields
-    country = models.CharField(max_length=100, blank=True, default='')
-    city = models.CharField(max_length=100, blank=True, default='')
-    district = models.CharField(max_length=100, blank=True, default='')
-    address = models.CharField(max_length=500, blank=True, default='')
-
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        ordering = ['-created_at']
-
-    def __str__(self):
-        return f"{self.first_name} {self.last_name}"
-
-
-class CustomerPhone(models.Model):
-    """A phone number attached to a customer. Supports multiple phones per customer."""
-    customer = models.ForeignKey(
-        Customer,
-        on_delete=models.CASCADE,
-        related_name='phone_numbers',
-    )
-    country_code = models.CharField(
-        max_length=10,
-        blank=True,
-        default='+995',
-        help_text='Country calling code, e.g. "+995" for Georgia.',
-    )
-    phone = models.CharField(max_length=50)
-    label = models.CharField(
-        max_length=50,
-        blank=True,
-        default='',
-        help_text='Optional label, e.g. "mobile", "work", "home".',
-    )
-
-    class Meta:
-        ordering = ['id']
-
-    def __str__(self):
-        label_str = f" ({self.label})" if self.label else ""
-        return f"{self.country_code} {self.phone}{label_str}"
-
-
 class PurchaseOrder(models.Model):
     """A purchase order created by a company user, linked to a customer."""
 
@@ -146,10 +89,16 @@ class PurchaseOrder(models.Model):
         on_delete=models.CASCADE,
         related_name='purchase_orders',
     )
-    customer = models.ForeignKey(
-        Customer,
-        on_delete=models.CASCADE,
-        related_name='purchase_orders',
+    # Denormalized client fields — sourced from 1C ConsultWebExchange and stored
+    # on the order so historical data survives even after the legacy local
+    # Customer model is dropped.
+    customer_name = models.CharField(max_length=255, blank=True, default='')
+    customer_phone = models.CharField(max_length=50, blank=True, default='')
+    customer_identification_number = models.CharField(
+        max_length=50, blank=True, default='', db_index=True,
+    )
+    external_client_id = models.CharField(
+        max_length=128, blank=True, default='', db_index=True,
     )
     created_by = models.ForeignKey(
         User,
@@ -185,7 +134,7 @@ class PurchaseOrder(models.Model):
         ordering = ['-created_at']
 
     def __str__(self):
-        return f"Order #{self.pk} — {self.customer} ({self.status})"
+        return f"Order #{self.pk} — {self.customer_name or '(no client)'} ({self.status})"
 
     @property
     def total(self):

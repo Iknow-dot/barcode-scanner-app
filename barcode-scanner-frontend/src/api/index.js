@@ -25,7 +25,7 @@ export {
     warehouseService,
     productService,
     authService,
-    customerService,
+    clientService,
     orderService,
 } from './services';
 

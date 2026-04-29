@@ -5,7 +5,6 @@ import OrganizationsTab from './OrganizationsTab';
 import WarehousesTab from './WarehousesTab';
 import UsersTab from './UsersTab';
 import OrdersTab from './OrdersTab';
-import CustomersTab from './CustomersTab';
 import ExternalServiceSettings from '../Organization/ExternalServiceSettings';
 import {AppstoreOutlined, BankOutlined, GlobalOutlined, ShoppingOutlined, TeamOutlined, UserOutlined} from "@ant-design/icons";
 import SubNavContext from "../../contexts/SubNavContext";
@@ -26,7 +25,6 @@ const tabMeta = (t, role) => ({
     },
     4: {title: t.externalServiceSettings, subtitle: t.externalServiceSubtitle || '', icon: <GlobalOutlined style={{color: '#1677ff', fontSize: 22}}/>},
     5: {title: t.purchaseOrders, subtitle: t.ordersTabSubtitle || '', icon: <ShoppingOutlined style={{color: '#1677ff', fontSize: 22}}/>},
-    6: {title: t.customers, subtitle: t.customersTabSubtitle || '', icon: <UserOutlined style={{color: '#1677ff', fontSize: 22}}/>},
 });
 
 const SystemAdminDashboard = () => {
@@ -59,12 +57,6 @@ const SystemAdminDashboard = () => {
                 label: userRole === userRoles.company_admin ? t.employees : t.users,
                 onClick: () => setActiveTab(3)
             },
-            userRole === userRoles.company_admin && ({
-                key: '6',
-                icon: <UserOutlined/>,
-                label: t.customers,
-                onClick: () => setActiveTab(6)
-            }),
             userRole === userRoles.company_admin && ({
                 key: '5',
                 icon: <ShoppingOutlined/>,
@@ -118,9 +110,6 @@ const SystemAdminDashboard = () => {
             break;
         case 5:
             ActiveTabPane = <OrdersTab/>;
-            break;
-        case 6:
-            ActiveTabPane = <CustomersTab/>;
             break;
         default:
             ActiveTabPane = null;

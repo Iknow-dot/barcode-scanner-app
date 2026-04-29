@@ -1,7 +1,9 @@
+import re
+
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
 
-from core.models import Organization, Warehouse, Customer, CustomerPhone, PurchaseOrder, PurchaseOrderItem
+from core.models import Organization, Warehouse, PurchaseOrder, PurchaseOrderItem
 from users.serializers import UserSerializer
 
 User = get_user_model()
@@ -10,6 +12,25 @@ User = get_user_model()
 # ---------------------------------------------------------------------------
 # Organization
 # ---------------------------------------------------------------------------
+
+_WEB_SERVICE_URL_PATH_RE = re.compile(r'/+hs/consultwebexchange.*$', re.IGNORECASE)
+
+
+def _validate_consult_web_exchange_base_url(value: str) -> str:
+    """Strip trailing slash and reject values that include the endpoint suffix.
+
+    The org-level URL must be the BASE only — the client appends
+    `HS/ConsultWebExchange/{name}` itself.
+    """
+    if not value:
+        return value
+    cleaned = value.strip().rstrip('/')
+    if _WEB_SERVICE_URL_PATH_RE.search('/' + cleaned):
+        raise serializers.ValidationError(
+            "Enter the BASE URL only — do NOT include '/HS/ConsultWebExchange/...'."
+        )
+    return cleaned
+
 
 class OrganizationSerializer(serializers.ModelSerializer):
     users = UserSerializer(many=True, read_only=True)
@@ -25,6 +46,9 @@ class OrganizationSerializer(serializers.ModelSerializer):
 
     def get_has_password(self, obj):
         return bool(obj.web_service_password)
+
+    def validate_web_service_url(self, value):
+        return _validate_consult_web_exchange_base_url(value)
 
     def create(self, validated_data):
         validated_data.pop('clear_password', False)
@@ -60,7 +84,16 @@ class OrganizationExternalServiceSerializer(serializers.ModelSerializer):
         fields = ['web_service_url', 'web_service_username', 'web_service_password', 'clear_password']
         extra_kwargs = {
             'web_service_password': {'write_only': True, 'required': False},
+            'web_service_url': {
+                'help_text': (
+                    "Per-org BASE URL (everything before '/HS/ConsultWebExchange/'). "
+                    "The system appends 'HS/ConsultWebExchange/{CheckClient|CreateClient|GetStockAndPrices}'."
+                ),
+            },
         }
+
+    def validate_web_service_url(self, value):
+        return _validate_consult_web_exchange_base_url(value)
 
     def update(self, instance, validated_data):
         clear_password = validated_data.pop('clear_password', False)
@@ -171,63 +204,66 @@ class WarehouseReadOnlySerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 # ---------------------------------------------------------------------------
-# Customer
+# Client (1C ConsultWebExchange)
 # ---------------------------------------------------------------------------
 
-class CustomerPhoneSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = CustomerPhone
-        fields = ['id', 'country_code', 'phone', 'label']
-        read_only_fields = ['id']
+class CheckClientRequestSerializer(serializers.Serializer):
+    """User must provide identification_number OR phone (or both)."""
 
-
-class CustomerSerializer(serializers.ModelSerializer):
-    phone_numbers = CustomerPhoneSerializer(many=True, required=False)
-
-    class Meta:
-        model = Customer
-        fields = [
-            'id', 'first_name', 'last_name', 'phone', 'phone_numbers',
-            'email', 'identification_number',
-            'country', 'city', 'district', 'address',
-            'created_at',
-        ]
-        read_only_fields = ['id', 'created_at']
-        extra_kwargs = {
-            'identification_number': {'required': True, 'allow_blank': False},
-            'phone': {'required': False, 'allow_blank': True},
-            'country': {'required': False, 'allow_blank': True},
-            'city': {'required': False, 'allow_blank': True},
-            'district': {'required': False, 'allow_blank': True},
-            'address': {'required': False, 'allow_blank': True},
-        }
+    identification_number = serializers.CharField(
+        max_length=50, required=False, allow_blank=True, default='',
+    )
+    phone = serializers.CharField(
+        max_length=50, required=False, allow_blank=True, default='',
+    )
 
     def validate(self, attrs):
-        request = self.context.get('request')
-        if request and hasattr(request.user, 'organization') and request.user.organization:
-            attrs['organization'] = request.user.organization
+        if not attrs.get('identification_number') and not attrs.get('phone'):
+            raise serializers.ValidationError(
+                "Provide identification_number or phone."
+            )
         return attrs
 
-    def create(self, validated_data):
-        phone_numbers_data = validated_data.pop('phone_numbers', [])
-        customer = Customer.objects.create(**validated_data)
-        for phone_data in phone_numbers_data:
-            CustomerPhone.objects.create(customer=customer, **phone_data)
-        return customer
 
-    def update(self, instance, validated_data):
-        phone_numbers_data = validated_data.pop('phone_numbers', None)
-        for attr, value in validated_data.items():
-            setattr(instance, attr, value)
-        instance.save()
+class CheckClientResponseSerializer(serializers.Serializer):
+    """Normalized client response from CheckClient / CreateClient.
 
-        if phone_numbers_data is not None:
-            # Replace all phone numbers with the new set
-            instance.phone_numbers.all().delete()
-            for phone_data in phone_numbers_data:
-                CustomerPhone.objects.create(customer=instance, **phone_data)
+    Upstream 1C returns `name`, `address`, and `phone` for the customer
+    object (plus a wrapper `status`). `raw` echoes the unwrapped upstream
+    JSON so callers can recover unmapped fields without a backend code
+    change.
+    """
 
-        return instance
+    name = serializers.CharField(required=False, allow_blank=True, default='')
+    address = serializers.CharField(required=False, allow_blank=True, default='')
+    phone = serializers.CharField(required=False, allow_blank=True, default='')
+    raw = serializers.JSONField(required=False)
+
+
+class CreateClientRequestSerializer(serializers.Serializer):
+    """Payload for creating a client externally.
+
+    Mirrors the 1C ConsultWebExchange CreateClient body — see
+    `core/services/consult_web_exchange.py` for the upstream field-name
+    mapping. `is_phys` distinguishes a physical person from a legal entity
+    (defaults to True). The address is sent as a single string; lat/lng from
+    the frontend map picker are intentionally not persisted.
+    """
+
+    first_name = serializers.CharField(max_length=255)
+    last_name = serializers.CharField(max_length=255)
+    identification_number = serializers.CharField(
+        max_length=50, required=False, allow_blank=True, default='',
+    )
+    is_phys = serializers.BooleanField(required=False, default=True)
+    phone = serializers.CharField(
+        max_length=50, required=False, allow_blank=True, default='',
+    )
+    phone_2 = serializers.CharField(
+        max_length=50, required=False, allow_blank=True, default='',
+    )
+    email = serializers.EmailField(required=False, allow_blank=True, default='')
+    address_line = serializers.CharField(max_length=500, required=False, allow_blank=True, default='')
 
 
 # ---------------------------------------------------------------------------
@@ -270,31 +306,29 @@ class AddOrderItemSerializer(serializers.Serializer):
 class PurchaseOrderSerializer(serializers.ModelSerializer):
     items = PurchaseOrderItemSerializer(many=True, read_only=True)
     total = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
-    customer_name = serializers.SerializerMethodField()
     created_by_username = serializers.SerializerMethodField()
 
     class Meta:
         model = PurchaseOrder
         fields = [
-            'id', 'customer', 'customer_name', 'created_by', 'created_by_username',
+            'id',
+            'external_client_id', 'customer_name', 'customer_phone',
+            'customer_identification_number',
+            'created_by', 'created_by_username',
             'status', 'delivery_type', 'delivery_address', 'delivery_date',
             'delivery_time_from', 'delivery_time_to', 'delivery_notes',
             'notes', 'items', 'total', 'created_at', 'updated_at',
         ]
         read_only_fields = ['id', 'created_by', 'created_by_username', 'created_at', 'updated_at', 'total']
-
-    def get_customer_name(self, obj):
-        return str(obj.customer) if obj.customer else ''
+        extra_kwargs = {
+            'customer_name': {'required': True, 'allow_blank': False},
+            'customer_phone': {'required': False, 'allow_blank': True},
+            'customer_identification_number': {'required': False, 'allow_blank': True},
+            'external_client_id': {'required': False, 'allow_blank': True},
+        }
 
     def get_created_by_username(self, obj):
         return obj.created_by.username if obj.created_by else ''
-
-    def validate_customer(self, value):
-        request = self.context.get('request')
-        if request and hasattr(request.user, 'organization') and request.user.organization:
-            if value.organization_id != request.user.organization_id:
-                raise serializers.ValidationError('Customer does not belong to your organization.')
-        return value
 
     def create(self, validated_data):
         request = self.context.get('request')
@@ -305,7 +339,6 @@ class PurchaseOrderSerializer(serializers.ModelSerializer):
 
 class PurchaseOrderListSerializer(serializers.ModelSerializer):
     """Lightweight serializer for listing orders (without full item details)."""
-    customer_name = serializers.SerializerMethodField()
     created_by_username = serializers.SerializerMethodField()
     total = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
     items_count = serializers.SerializerMethodField()
@@ -313,12 +346,12 @@ class PurchaseOrderListSerializer(serializers.ModelSerializer):
     class Meta:
         model = PurchaseOrder
         fields = [
-            'id', 'customer', 'customer_name', 'created_by', 'created_by_username',
+            'id',
+            'external_client_id', 'customer_name', 'customer_phone',
+            'customer_identification_number',
+            'created_by', 'created_by_username',
             'status', 'delivery_type', 'total', 'items_count', 'created_at', 'updated_at',
         ]
-
-    def get_customer_name(self, obj):
-        return str(obj.customer) if obj.customer else ''
 
     def get_created_by_username(self, obj):
         return obj.created_by.username if obj.created_by else ''
@@ -338,6 +371,15 @@ class RSGeLookupSerializer(serializers.Serializer):
         allow_blank=False,
         help_text="Taxpayer identification number to look up on RS.ge.",
     )
+
+
+# ---------------------------------------------------------------------------
+# Reverse Geocode (Nominatim)
+# ---------------------------------------------------------------------------
+
+class ReverseGeocodeRequestSerializer(serializers.Serializer):
+    lat = serializers.FloatField(min_value=-90, max_value=90)
+    lng = serializers.FloatField(min_value=-180, max_value=180)
 
 
 # ---------------------------------------------------------------------------
