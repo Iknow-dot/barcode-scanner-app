@@ -133,8 +133,9 @@ class UserSerializer(serializers.ModelSerializer):
         model = User
         fields = [
             'id', 'username', 'email', 'role', 'organization',
-            'first_name', 'last_name', 'is_active', 'allowed_ips',
+            'first_name', 'last_name', 'is_active', 'last_login', 'allowed_ips',
         ]
+        read_only_fields = ['last_login']
 
     def get_allowed_ips(self, obj):
         return [{'ip_or_network': ip.ip_or_network} for ip in obj.allowed_ips.all()]
@@ -177,12 +178,13 @@ class _BaseUserSerializer(serializers.ModelSerializer):
             'last_name',
             'password',
             'is_active',
+            'last_login',
             'organization',
             'allowed_ips',
             'warehouse_ids',
             'warehouse_ids_read',
         ]
-        read_only_fields = ['id']
+        read_only_fields = ['id', 'last_login']
 
     # -- helpers shared by both serializers --
 

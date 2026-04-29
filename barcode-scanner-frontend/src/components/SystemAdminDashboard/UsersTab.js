@@ -8,6 +8,12 @@ import EditUserModal from "../User/EditUser";
 import {CheckOutlined, CloseOutlined, ClearOutlined, SearchOutlined} from "@ant-design/icons";
 import useAppNotification from "../../hooks/useAppNotification";
 import {useLanguage} from '../../i18n/LanguageContext';
+import dayjs from 'dayjs';
+import relativeTime from 'dayjs/plugin/relativeTime';
+import 'dayjs/locale/ka';
+import 'dayjs/locale/en';
+
+dayjs.extend(relativeTime);
 
 const {Text} = Typography;
 
@@ -33,12 +39,28 @@ const initialsFor = (user) => {
     return u ? u[0].toUpperCase() : '?';
 };
 
+// Sort rank for the role column — admin → company admin → user.
+const ROLE_RANK = {internal_admin: 0, company_admin: 1, company_user: 2};
+
+// Format a user's last_login in the active language. Recent values become
+// "5 minutes ago" / "3 days ago"; older than 30 days falls back to the
+// absolute date so the relative noise stops being useful.
+const formatLastLogin = (iso, language, t) => {
+    if (!iso) return <span style={{opacity: 0.45}}>{t.neverLoggedIn}</span>;
+    const d = dayjs(iso).locale(language === 'ka' ? 'ka' : 'en');
+    const diffDays = dayjs().diff(d, 'day');
+    const text = diffDays > 30 ? d.format('MMM D, YYYY') : d.fromNow();
+    return <span title={d.format('YYYY-MM-DD HH:mm')}>{text}</span>;
+};
+
 const UsersTab = ({initialUsers, initialLoading = false, addModalExtraProps, handleEditCallback = null, filtersEnabled = false}) => {
     const {authData} = useContext(AuthContext);
     const {notify, contextHolder} = useAppNotification();
-    const {t} = useLanguage();
+    const {t, language} = useLanguage();
     const [users, setUsers] = useState(initialUsers || []);
     const [loading, setLoading] = useState(initialLoading);
+    // Full org objects keyed by id (used by the org column for name lookup
+    // AND by the per-company quota bars to show employees_count + nested users).
     const [organizations, setOrganizations] = useState({});
     const [orgOptions, setOrgOptions] = useState([]);
     const [query, setQuery] = useState('');
@@ -69,18 +91,19 @@ const UsersTab = ({initialUsers, initialLoading = false, addModalExtraProps, han
     const debounceTimer = useRef(null);
     const DEBOUNCE_MS = 300;
 
+    const fetchOrganizations = async () => {
+        const result = await organizationService.getOrganizations();
+        if (result.success) {
+            const orgMap = result.data.reduce((acc, org) => {
+                acc[org.id] = org;
+                return acc;
+            }, {});
+            setOrganizations(orgMap);
+            setOrgOptions(result.data.map(org => ({value: org.id, label: org.name})));
+        }
+    };
+
     useEffect(() => {
-        const fetchOrganizations = async () => {
-            const result = await organizationService.getOrganizations();
-            if (result.success) {
-                const orgMap = result.data.reduce((acc, org) => {
-                    acc[org.id] = org.name;
-                    return acc;
-                }, {});
-                setOrganizations(orgMap);
-                setOrgOptions(result.data.map(org => ({value: org.id, label: org.name})));
-            }
-        };
         if (isInternalAdmin) {
             fetchOrganizations();
         }
@@ -189,6 +212,7 @@ const UsersTab = ({initialUsers, initialLoading = false, addModalExtraProps, han
 
         if (result.success) {
             setUsers(prev => [...prev, result.data]);
+            if (isInternalAdmin) fetchOrganizations();
             notify.success(t.success, t.userCreated(newUser.username));
             return true;
         }
@@ -211,6 +235,7 @@ const UsersTab = ({initialUsers, initialLoading = false, addModalExtraProps, han
 
         if (result.success) {
             setUsers(prev => prev.filter(u => u.id !== deleteUser.id));
+            if (isInternalAdmin) fetchOrganizations();
             notify.success(t.success, t.userDeleted(deleteUser.username));
         } else {
             notify.error(t.error, result.error);
@@ -242,6 +267,8 @@ const UsersTab = ({initialUsers, initialLoading = false, addModalExtraProps, han
         if (result.success) {
             const updatedUser = result.data;
             setUsers(prev => prev.map(u => u.id === editUser.id ? updatedUser : u));
+            // Role/active changes affect a company's quota count.
+            if (isInternalAdmin) fetchOrganizations();
             notify.success(t.success, t.userUpdated(editUser.username));
             if (handleEditCallback) handleEditCallback(updatedUser, modifiedFields, editUser);
             return true;
@@ -286,6 +313,18 @@ const UsersTab = ({initialUsers, initialLoading = false, addModalExtraProps, han
     const limitPercent = showLimit ? Math.min(100, Math.round((companyUserCount / employeesLimit) * 100)) : 0;
     const limitStrokeColor = limitReached ? '#ff4d4f' : (limitPercent >= 80 ? '#faad14' : '#52c41a');
 
+    // Per-company quota cards for the internal admin — sorted by % usage desc
+    // so high-pressure orgs surface first.
+    const orgsByPressure = useMemo(() => {
+        return Object.values(organizations).slice().sort((a, b) => {
+            const aUsed = (a.users || []).filter(u => u.role === 'company_user').length;
+            const bUsed = (b.users || []).filter(u => u.role === 'company_user').length;
+            const aPct = a.employees_count > 0 ? aUsed / a.employees_count : 0;
+            const bPct = b.employees_count > 0 ? bUsed / b.employees_count : 0;
+            return bPct - aPct;
+        });
+    }, [organizations]);
+
     const renderEmpty = () => {
         const filtered = !!hasActiveFilters;
         return (
@@ -313,6 +352,80 @@ const UsersTab = ({initialUsers, initialLoading = false, addModalExtraProps, han
     return (
         <>
             {contextHolder}
+
+            {isInternalAdmin && filtersEnabled && orgsByPressure.length > 0 && (
+                <div style={{
+                    background: 'rgba(0, 0, 0, 0.02)',
+                    border: '1px solid rgba(0, 0, 0, 0.06)',
+                    borderRadius: 8,
+                    padding: 12,
+                    marginBottom: 12,
+                }}>
+                    <div style={{
+                        fontSize: 11,
+                        color: 'rgba(0, 0, 0, 0.55)',
+                        fontWeight: 600,
+                        textTransform: 'uppercase',
+                        letterSpacing: 0.5,
+                        marginBottom: 8,
+                    }}>
+                        {t.companyQuotas}
+                    </div>
+                    <Row gutter={[8, 8]}>
+                        {orgsByPressure.map(org => {
+                            const used = (org.users || []).filter(u => u.role === 'company_user').length;
+                            const limit = org.employees_count || 0;
+                            const pct = limit > 0 ? Math.min(100, Math.round((used / limit) * 100)) : 0;
+                            const full = limit > 0 && used >= limit;
+                            const stroke = full ? '#ff4d4f' : (pct >= 80 ? '#faad14' : '#52c41a');
+                            const active = selectedOrg === org.id;
+                            return (
+                                <Col xs={24} sm={12} md={8} lg={6} key={org.id}>
+                                    <button
+                                        type="button"
+                                        onClick={() => handleOrgChange(active ? null : org.id)}
+                                        style={{
+                                            width: '100%',
+                                            background: active ? 'rgba(22, 119, 255, 0.06)' : '#fff',
+                                            border: `1px solid ${active ? '#1677ff' : 'rgba(0, 0, 0, 0.08)'}`,
+                                            borderRadius: 6,
+                                            padding: '8px 10px',
+                                            textAlign: 'left',
+                                            cursor: 'pointer',
+                                            transition: 'background 0.15s, border-color 0.15s',
+                                        }}
+                                    >
+                                        <Flex align="center" justify="space-between" gap={8} style={{marginBottom: 6}}>
+                                            <span style={{
+                                                fontWeight: 500,
+                                                fontSize: 13,
+                                                overflow: 'hidden',
+                                                textOverflow: 'ellipsis',
+                                                whiteSpace: 'nowrap',
+                                                color: 'rgba(0, 0, 0, 0.85)',
+                                            }}>{org.name}</span>
+                                            <span style={{
+                                                fontSize: 12,
+                                                color: full ? '#ff4d4f' : 'rgba(0, 0, 0, 0.55)',
+                                                fontWeight: 500,
+                                                fontVariantNumeric: 'tabular-nums',
+                                                flexShrink: 0,
+                                            }}>{used} / {limit || '—'}</span>
+                                        </Flex>
+                                        <Progress
+                                            percent={pct}
+                                            showInfo={false}
+                                            strokeColor={stroke}
+                                            size="small"
+                                            style={{margin: 0}}
+                                        />
+                                    </button>
+                                </Col>
+                            );
+                        })}
+                    </Row>
+                </div>
+            )}
 
             {isInternalAdmin && filtersEnabled && (
                 <div className="filter-bar">
@@ -417,6 +530,7 @@ const UsersTab = ({initialUsers, initialLoading = false, addModalExtraProps, han
                     key: 'identity',
                     title: t.user,
                     dataIndex: 'username',
+                    sorter: (a, b) => (a.username || '').localeCompare(b.username || ''),
                     render: (_, user) => {
                         const fullName = [user.first_name, user.last_name].filter(Boolean).join(' ').trim();
                         const muted = !user.is_active;
@@ -462,12 +576,14 @@ const UsersTab = ({initialUsers, initialLoading = false, addModalExtraProps, han
                     key: 'organization',
                     title: t.organization,
                     dataIndex: 'organization',
-                    render: orgId => organizations[orgId] || <span style={{opacity: 0.4}}>N/A</span>
+                    sorter: (a, b) => (organizations[a.organization]?.name || '').localeCompare(organizations[b.organization]?.name || ''),
+                    render: orgId => organizations[orgId]?.name || <span style={{opacity: 0.4}}>N/A</span>
                 }] : []),
                 {
                     key: 'role',
                     title: t.role,
                     dataIndex: 'role',
+                    sorter: (a, b) => (ROLE_RANK[a.role] ?? 99) - (ROLE_RANK[b.role] ?? 99),
                     render: role => (
                         <Tag color={roleColors[role]} style={{fontWeight: 500}}>
                             {roleLabels[role] || role}
@@ -479,6 +595,7 @@ const UsersTab = ({initialUsers, initialLoading = false, addModalExtraProps, han
                     title: t.userStatus,
                     dataIndex: 'is_active',
                     align: 'center',
+                    sorter: (a, b) => (b.is_active ? 1 : 0) - (a.is_active ? 1 : 0),
                     render: (_, user) => {
                         const isSelf = user.id === authData?.user?.id;
                         const tag = (
@@ -512,6 +629,20 @@ const UsersTab = ({initialUsers, initialLoading = false, addModalExtraProps, han
                             </Popconfirm>
                         );
                     },
+                },
+                {
+                    key: 'last_login',
+                    title: t.lastLogin,
+                    dataIndex: 'last_login',
+                    sorter: (a, b) => {
+                        // Nulls sort to the start of ascending so admins can spot
+                        // never-logged-in users first when sorting "oldest".
+                        if (!a.last_login && !b.last_login) return 0;
+                        if (!a.last_login) return -1;
+                        if (!b.last_login) return 1;
+                        return dayjs(a.last_login).valueOf() - dayjs(b.last_login).valueOf();
+                    },
+                    render: (val) => formatLastLogin(val, language, t),
                 },
                 {
                     key: 'ip_enabled',

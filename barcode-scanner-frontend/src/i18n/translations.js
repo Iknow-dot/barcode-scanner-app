@@ -190,6 +190,13 @@ const translations = {
         noFilterMatchDescription: 'სცადეთ ფილტრების გასუფთავება',
         searchUsersPlaceholder: 'ძებნა სახელით, ელ. ფოსტით ან მომხმარებლით',
 
+        // Last login
+        lastLogin: 'ბოლო შესვლა',
+        neverLoggedIn: 'არასოდეს',
+
+        // Per-company quota bars (internal admin)
+        companyQuotas: 'ორგანიზაციების კვოტა',
+
         // User form validations
         usernameFieldRequired: 'გთხოვთ შეიყვანოთ მომხმარებელი!',
         emailInvalid: 'გთხოვთ შეიყვანოთ სწორი ელ. ფოსტა!',
@@ -567,6 +574,13 @@ const translations = {
         noFilterMatchTitle: 'No matches',
         noFilterMatchDescription: 'Try clearing the filters',
         searchUsersPlaceholder: 'Search by name, email, or username',
+
+        // Last login
+        lastLogin: 'Last login',
+        neverLoggedIn: 'Never',
+
+        // Per-company quota bars (internal admin)
+        companyQuotas: 'Company quotas',
 
         // User form validations
         usernameFieldRequired: 'Please enter a username!',
