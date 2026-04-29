@@ -1,11 +1,27 @@
 import React, {useState, useEffect, useContext} from 'react';
 import {userService, organizationService, warehouseService} from '../../api';
 import AuthContext from '../Auth/AuthContext';
-import {Button, Divider, Flex, Form, Input, Select, Space, Tag} from "antd";
+import {Button, Divider, Flex, Form, Input, Select, Space, Switch, Tag, Tooltip} from "antd";
 import ModalForm, {RenderOption, useModalFormLoading} from "../ModalForm";
-import {PlusOutlined, UserOutlined, LockOutlined, MailOutlined} from "@ant-design/icons";
+import {PlusOutlined, UserOutlined, LockOutlined, MailOutlined, SafetyCertificateOutlined} from "@ant-design/icons";
 import {useLanguage} from '../../i18n/LanguageContext';
 
+
+const roleTagColors = {
+    company_admin: 'green',
+    company_user: 'geekblue',
+};
+
+const RoleOption = ({label, desc}) => (
+    <div style={{padding: '2px 0'}}>
+        <div style={{fontWeight: 500, lineHeight: 1.3}}>{label}</div>
+        {desc && (
+            <div style={{fontSize: 12, color: 'rgba(0, 0, 0, 0.45)', marginTop: 2, lineHeight: 1.3}}>
+                {desc}
+            </div>
+        )}
+    </div>
+);
 
 const AddUserForm = ({organization = null}) => {
     const {authData} = useContext(AuthContext);
@@ -16,8 +32,16 @@ const AddUserForm = ({organization = null}) => {
     const [allWarehouses, setAllWarehouses] = useState([]);
     const [warehouses, setWarehouses] = useState([]);
     const [selectedOrg, setSelectedOrg] = useState(organization ? organization.id : null);
+    const [restrictByIp, setRestrictByIp] = useState(false);
     const isCompanyAdmin = authData?.role === 'company_admin';
     const isInternalAdmin = authData?.role === 'internal_admin';
+
+    const roleOptions = (isCompanyAdmin
+        ? [{value: 'company_user', label: t.roleCompanyUser, desc: t.roleCompanyUserDesc}]
+        : [
+            {value: 'company_admin', label: t.roleCompanyAdmin, desc: t.roleCompanyAdminDesc},
+            {value: 'company_user', label: t.roleCompanyUser, desc: t.roleCompanyUserDesc},
+        ]);
 
     useEffect(() => {
         const fetchData = async () => {
@@ -135,41 +159,22 @@ const AddUserForm = ({organization = null}) => {
                     rules={[{required: true, message: t.roleRequired}]}
                     initialValue={isCompanyAdmin ? 'company_user' : 'company_admin'}
                 >
-                    <Select>
-                        {isCompanyAdmin ? (
-                            <Select.Option value="company_user">company_user</Select.Option>
-                        ) : (
-                            <>
-                                <Select.Option value="company_admin">company_admin</Select.Option>
-                                <Select.Option value="company_user">company_user</Select.Option>
-                            </>
+                    <Select
+                        options={roleOptions}
+                        optionRender={(option) => (
+                            <RoleOption label={option.data.label} desc={option.data.desc}/>
                         )}
-                    </Select>
+                        labelRender={(option) => {
+                            const value = option.value;
+                            return (
+                                <Tag color={roleTagColors[value]} style={{margin: 0, fontWeight: 500}}>
+                                    {option.label}
+                                </Tag>
+                            );
+                        }}
+                    />
                 </Form.Item>
             </Flex>
-
-            <Divider style={{margin: '4px 0 16px'}} dashed/>
-
-            <Form.Item
-                label={t.ipAddress}
-                name="ip_address"
-                rules={[{required: false, message: t.ipAddressHint}]}
-            >
-                <Select
-                    options={IPOptions}
-                    mode="tags"
-                    placeholder={t.ipAddress}
-                    optionRender={(option) => (
-                        <Space>
-                            <span role="img">{option.data?.emoji}</span>
-                            {option.data?.desc || option.data?.label}
-                        </Space>
-                    )}
-                    tagRender={(props) => (
-                        <Tag color='green'>{props.label}</Tag>
-                    )}
-                />
-            </Form.Item>
 
             {isInternalAdmin && (
                 <Form.Item
@@ -226,7 +231,46 @@ const AddUserForm = ({organization = null}) => {
                 </Form.Item>
             )}
 
-            <Form.Item label={null} style={{marginTop: 8, marginBottom: 0}}>
+            <Divider style={{margin: '4px 0 16px'}} dashed/>
+
+            <Flex align="center" justify="space-between" style={{marginBottom: restrictByIp ? 12 : 0}}>
+                <Space>
+                    <SafetyCertificateOutlined style={{color: '#1677ff', fontSize: 16}}/>
+                    <span style={{fontWeight: 500}}>{t.restrictByIp}</span>
+                    <Tooltip title={t.restrictByIpHint}>
+                        <span style={{fontSize: 12, color: 'rgba(0,0,0,0.45)', cursor: 'help'}}>?</span>
+                    </Tooltip>
+                </Space>
+                <Switch
+                    checked={restrictByIp}
+                    onChange={setRestrictByIp}
+                    size="small"
+                />
+            </Flex>
+
+            <Form.Item
+                label={null}
+                name="ip_address"
+                hidden={!restrictByIp}
+                style={{marginBottom: restrictByIp ? undefined : 0}}
+            >
+                <Select
+                    options={IPOptions}
+                    mode="tags"
+                    placeholder={t.ipAddress}
+                    optionRender={(option) => (
+                        <Space>
+                            <span role="img">{option.data?.emoji}</span>
+                            {option.data?.desc || option.data?.label}
+                        </Space>
+                    )}
+                    tagRender={(props) => (
+                        <Tag color='green'>{props.label}</Tag>
+                    )}
+                />
+            </Form.Item>
+
+            <Form.Item label={null} style={{marginTop: 16, marginBottom: 0}}>
                 <Button
                     block
                     type="primary"

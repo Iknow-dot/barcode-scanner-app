@@ -127,9 +127,17 @@ class ClientIPSerializer(serializers.Serializer):
 
 
 class UserSerializer(serializers.ModelSerializer):
+    allowed_ips = serializers.SerializerMethodField()
+
     class Meta:
         model = User
-        fields = ['id', 'username', 'email', 'role', 'organization']
+        fields = [
+            'id', 'username', 'email', 'role', 'organization',
+            'first_name', 'last_name', 'is_active', 'allowed_ips',
+        ]
+
+    def get_allowed_ips(self, obj):
+        return [{'ip_or_network': ip.ip_or_network} for ip in obj.allowed_ips.all()]
 
 
 class AllowedIPAddressSerializer(serializers.ModelSerializer):

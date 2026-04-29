@@ -1,12 +1,28 @@
 import React, {useState, useEffect, useContext} from 'react';
 import {userService, organizationService, warehouseService} from '../../api';
 import AuthContext from '../Auth/AuthContext';
-import {Button, Divider, Flex, Form, Input, Select, Space, Tag} from "antd";
+import {Button, Divider, Flex, Form, Input, Select, Space, Switch, Tag, Tooltip} from "antd";
 import ModalForm, {RenderOption, useModalFormLoading} from "../ModalForm";
-import {SaveOutlined, UserOutlined, LockOutlined, MailOutlined} from "@ant-design/icons";
+import {SaveOutlined, UserOutlined, LockOutlined, MailOutlined, SafetyCertificateOutlined} from "@ant-design/icons";
 import {useLanguage} from '../../i18n/LanguageContext';
 
-const EditUserForm = ({object}) => {
+const roleTagColors = {
+    company_admin: 'green',
+    company_user: 'geekblue',
+};
+
+const RoleOption = ({label, desc}) => (
+    <div style={{padding: '2px 0'}}>
+        <div style={{fontWeight: 500, lineHeight: 1.3}}>{label}</div>
+        {desc && (
+            <div style={{fontSize: 12, color: 'rgba(0, 0, 0, 0.45)', marginTop: 2, lineHeight: 1.3}}>
+                {desc}
+            </div>
+        )}
+    </div>
+);
+
+const EditUserForm = ({object, hasExistingIps}) => {
     const {authData} = useContext(AuthContext);
     const {t} = useLanguage();
     const {loading} = useModalFormLoading();
@@ -14,8 +30,16 @@ const EditUserForm = ({object}) => {
     const [IPOptions, setIPOptions] = useState([]);
     const [organizations, setOrganizations] = useState([]);
     const [warehouses, setWarehouses] = useState([]);
+    const [restrictByIp, setRestrictByIp] = useState(hasExistingIps);
     const isCompanyAdmin = authData?.role === 'company_admin';
     const isInternalAdmin = authData?.role === 'internal_admin';
+
+    const roleOptions = (isCompanyAdmin
+        ? [{value: 'company_user', label: t.roleCompanyUser, desc: t.roleCompanyUserDesc}]
+        : [
+            {value: 'company_admin', label: t.roleCompanyAdmin, desc: t.roleCompanyAdminDesc},
+            {value: 'company_user', label: t.roleCompanyUser, desc: t.roleCompanyUserDesc},
+        ]);
 
     useEffect(() => {
         const fetchData = async () => {
@@ -79,6 +103,8 @@ const EditUserForm = ({object}) => {
         fetchIpData();
     }, [object.organization, isInternalAdmin, authData?.organization_id, t]);
 
+    const isSelf = object.id === authData?.user?.id;
+
     return (
         <>
             {isInternalAdmin && (
@@ -134,40 +160,22 @@ const EditUserForm = ({object}) => {
                     style={{flex: 1}}
                     rules={[{required: true, message: t.roleRequired}]}
                 >
-                    <Select>
-                        {isCompanyAdmin ? (
-                            <Select.Option value="company_user">company_user</Select.Option>
-                        ) : (
-                            <>
-                                <Select.Option value="company_admin">company_admin</Select.Option>
-                                <Select.Option value="company_user">company_user</Select.Option>
-                            </>
+                    <Select
+                        options={roleOptions}
+                        optionRender={(option) => (
+                            <RoleOption label={option.data.label} desc={option.data.desc}/>
                         )}
-                    </Select>
+                        labelRender={(option) => {
+                            const value = option.value;
+                            return (
+                                <Tag color={roleTagColors[value]} style={{margin: 0, fontWeight: 500}}>
+                                    {option.label}
+                                </Tag>
+                            );
+                        }}
+                    />
                 </Form.Item>
             </Flex>
-
-            <Divider style={{margin: '4px 0 16px'}} dashed/>
-
-            <Form.Item
-                label={t.ipAddress}
-                name="ip_address"
-            >
-                <Select
-                    options={IPOptions}
-                    mode="tags"
-                    placeholder={t.ipAddress}
-                    optionRender={(option) => (
-                        <Space>
-                            <span role="img">{option.data?.emoji}</span>
-                            {option.data?.desc || option.data?.label}
-                        </Space>
-                    )}
-                    tagRender={(props) => (
-                        <Tag color='green'>{props.label}</Tag>
-                    )}
-                />
-            </Form.Item>
 
             {(isCompanyAdmin || isInternalAdmin) && (
                 <Form.Item
@@ -194,7 +202,55 @@ const EditUserForm = ({object}) => {
                 </Form.Item>
             )}
 
-            <Form.Item label={null} style={{marginTop: 8, marginBottom: 0}}>
+            <Divider style={{margin: '4px 0 16px'}} dashed/>
+
+            <Form.Item
+                label={null}
+                name="is_active"
+                valuePropName="checked"
+                style={{marginBottom: 12}}
+            >
+                <ActiveToggle isSelf={isSelf} t={t}/>
+            </Form.Item>
+
+            <Flex align="center" justify="space-between" style={{marginBottom: restrictByIp ? 12 : 0}}>
+                <Space>
+                    <SafetyCertificateOutlined style={{color: '#1677ff', fontSize: 16}}/>
+                    <span style={{fontWeight: 500}}>{t.restrictByIp}</span>
+                    <Tooltip title={t.restrictByIpHint}>
+                        <span style={{fontSize: 12, color: 'rgba(0,0,0,0.45)', cursor: 'help'}}>?</span>
+                    </Tooltip>
+                </Space>
+                <Switch
+                    checked={restrictByIp}
+                    onChange={setRestrictByIp}
+                    size="small"
+                />
+            </Flex>
+
+            <Form.Item
+                label={null}
+                name="ip_address"
+                hidden={!restrictByIp}
+                style={{marginBottom: restrictByIp ? undefined : 0}}
+            >
+                <Select
+                    options={IPOptions}
+                    mode="tags"
+                    placeholder={t.ipAddress}
+                    optionRender={(option) => (
+                        <Space>
+                            <span role="img">{option.data?.emoji}</span>
+                            {option.data?.desc || option.data?.label}
+                        </Space>
+                    )}
+                    tagRender={(props) => (
+                        <Tag color='green'>{props.label}</Tag>
+                    )}
+                />
+            </Form.Item>
+
+            <Form.Item label={null} style={{marginTop: 16, marginBottom: 0}}>
                 <Button
                     block
                     type="primary"
@@ -207,6 +263,30 @@ const EditUserForm = ({object}) => {
                 </Button>
             </Form.Item>
         </>
+    );
+};
+
+// Custom control so the row reads as one unit and disables the toggle when
+// editing yourself (mirrors the inline-table behaviour).
+// Form.Item with valuePropName="checked" injects `checked` + `onChange`.
+const ActiveToggle = ({checked, onChange, isSelf, t}) => {
+    const control = (
+        <Switch
+            checked={!!checked}
+            onChange={onChange}
+            disabled={isSelf}
+        />
+    );
+    return (
+        <Flex align="center" justify="space-between" style={{padding: '4px 0'}}>
+            <Space>
+                <span style={{fontWeight: 500}}>{t.userStatus}</span>
+                <Tag color={checked ? 'success' : 'default'} style={{margin: 0}}>
+                    {checked ? t.userActive : t.userDisabled}
+                </Tag>
+            </Space>
+            {isSelf ? <Tooltip title={t.cannotDeleteSelf}>{control}</Tooltip> : control}
+        </Flex>
     );
 };
 
@@ -236,7 +316,7 @@ const EditUser = ({visible, setVisible, onFinish, object}) => {
             footer={null}
             onFinish={(data) => onFinish(data, object)}
         >
-            <EditUserForm object={object}/>
+            <EditUserForm object={object} hasExistingIps={existingIps.length > 0}/>
         </ModalForm>
     );
 };

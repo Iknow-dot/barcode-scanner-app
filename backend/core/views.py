@@ -84,9 +84,12 @@ class OrganizationViewSet(ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
+        # Prefetch users + their allowed_ips so the nested UserSerializer doesn't
+        # fire N+1 queries when org pages render the embedded users table.
+        base = Organization.objects.prefetch_related('users__allowed_ips')
         if user.role == User.Role.INTERNAL_ADMIN:
-            return Organization.objects.all()
-        return Organization.objects.filter(pk=user.organization_id)
+            return base.all()
+        return base.filter(pk=user.organization_id)
 
     @action(detail=False, methods=['get'], url_path='my-organization')
     def get_user_organization(self, request: Request) -> Response:

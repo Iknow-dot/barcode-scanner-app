@@ -158,6 +158,38 @@ const translations = {
         selectUsers: 'აირჩიეთ მომხმარებლები',
         selectOrgFirst: 'ჯერ აირჩიეთ ორგანიზაცია',
 
+        // User identity / status
+        userActive: 'აქტიური',
+        userDisabled: 'გათიშული',
+        userStatus: 'სტატუსი',
+        activate: 'გააქტიურება',
+        deactivate: 'გათიშვა',
+        userActivated: (username) => `მომხმარებელი "${username}" გააქტიურდა`,
+        userDeactivated: (username) => `მომხმარებელი "${username}" გათიშულია`,
+
+        // Friendly role labels & descriptions
+        roleInternalAdmin: 'ადმინისტრატორი',
+        roleCompanyAdmin: 'კომპანიის ადმინი',
+        roleCompanyUser: 'მომხმარებელი',
+        roleCompanyAdminDesc: 'მართავს ორგანიზაციის მომხმარებლებს და საწყობებს',
+        roleCompanyUserDesc: 'სკანერება და შეკვეთების შექმნა მინიჭებულ საწყობებში',
+
+        // Restrict access toggle
+        restrictByIp: 'IP-ით წვდომის შეზღუდვა',
+        restrictByIpHint: 'მომხმარებელი შეძლებს შესვლას მხოლოდ ჩამოთვლილი IP-ებიდან',
+
+        // User limit
+        userLimitProgress: (current, max) => `${current} / ${max} მომხმარებელი`,
+        userLimitFull: 'მომხმარებელთა ლიმიტი მიღწეულია',
+
+        // Empty states
+        noUsersTitle: 'მომხმარებლები ჯერ არ არის დამატებული',
+        noUsersDescription: 'დაამატეთ პირველი მომხმარებელი თქვენი გუნდისთვის',
+        addFirstUser: 'პირველი მომხმარებლის დამატება',
+        noFilterMatchTitle: 'შედეგი ვერ მოიძებნა',
+        noFilterMatchDescription: 'სცადეთ ფილტრების გასუფთავება',
+        searchUsersPlaceholder: 'ძებნა სახელით, ელ. ფოსტით ან მომხმარებლით',
+
         // User form validations
         usernameFieldRequired: 'გთხოვთ შეიყვანოთ მომხმარებელი!',
         emailInvalid: 'გთხოვთ შეიყვანოთ სწორი ელ. ფოსტა!',
@@ -503,6 +535,38 @@ const translations = {
         selectWarehouses: 'Select Warehouses',
         selectUsers: 'Select Users',
         selectOrgFirst: 'Select an organization first',
+
+        // User identity / status
+        userActive: 'Active',
+        userDisabled: 'Disabled',
+        userStatus: 'Status',
+        activate: 'Activate',
+        deactivate: 'Deactivate',
+        userActivated: (username) => `User "${username}" activated`,
+        userDeactivated: (username) => `User "${username}" disabled`,
+
+        // Friendly role labels & descriptions
+        roleInternalAdmin: 'Admin',
+        roleCompanyAdmin: 'Company Admin',
+        roleCompanyUser: 'User',
+        roleCompanyAdminDesc: 'Manages users and warehouses in the organization',
+        roleCompanyUserDesc: 'Scans products and creates orders in assigned warehouses',
+
+        // Restrict access toggle
+        restrictByIp: 'Restrict access by IP',
+        restrictByIpHint: 'User will only be able to sign in from the listed IPs',
+
+        // User limit
+        userLimitProgress: (current, max) => `${current} / ${max} users`,
+        userLimitFull: 'User limit reached',
+
+        // Empty states
+        noUsersTitle: 'No users yet',
+        noUsersDescription: 'Add the first user to get your team started',
+        addFirstUser: 'Add the first user',
+        noFilterMatchTitle: 'No matches',
+        noFilterMatchDescription: 'Try clearing the filters',
+        searchUsersPlaceholder: 'Search by name, email, or username',
 
         // User form validations
         usernameFieldRequired: 'Please enter a username!',
