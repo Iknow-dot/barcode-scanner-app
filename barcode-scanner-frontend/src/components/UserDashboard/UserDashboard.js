@@ -75,6 +75,7 @@ const UserDashboard = () => {
 
     // Order drawer for mobile (shows active order)
     const [orderDrawerVisible, setOrderDrawerVisible] = useState(false);
+    const orderDrawerSwipeRef = useRef({startY: 0, fired: false});
 
     // Ref to track activeOrder without causing callback recreation
     const activeOrderRef = useRef(null);
@@ -301,6 +302,33 @@ const UserDashboard = () => {
             setIncompleteOrders((prev) => prev.filter((o) => o.id !== orderId));
         } else {
             notify.error(t.orderError, result.error);
+        }
+    };
+
+    // Swipe-down-to-dismiss for the order drawer. Triggers only when the
+    // content is already scrolled to the top, so vertical scrolling within
+    // the drawer is unaffected.
+    const SWIPE_CLOSE_THRESHOLD = 80;
+
+    const closeOrderDrawer = useCallback(() => {
+        setOrderDrawerVisible(false);
+        if (activeOrderRef.current) {
+            setActiveOrder(activeOrderRef.current);
+        }
+    }, []);
+
+    const handleOrderDrawerTouchStart = (e) => {
+        orderDrawerSwipeRef.current.startY = e.touches[0].clientY;
+        orderDrawerSwipeRef.current.fired = false;
+    };
+
+    const handleOrderDrawerTouchMove = (e) => {
+        if (orderDrawerSwipeRef.current.fired) return;
+        const el = e.currentTarget;
+        const deltaY = e.touches[0].clientY - orderDrawerSwipeRef.current.startY;
+        if (el.scrollTop <= 0 && deltaY > SWIPE_CLOSE_THRESHOLD) {
+            orderDrawerSwipeRef.current.fired = true;
+            closeOrderDrawer();
         }
     };
 
@@ -775,29 +803,34 @@ const UserDashboard = () => {
                 placement="bottom"
                 closable={true}
                 open={orderDrawerVisible && showOrderPanel}
-                onClose={() => {
-                    setOrderDrawerVisible(false);
-                    // Sync parent state from ref when drawer closes so indicator bar updates
-                    if (activeOrderRef.current) {
-                        setActiveOrder(activeOrderRef.current);
-                    }
-                }}
+                onClose={closeOrderDrawer}
                 height="85vh"
                 className="m-order-drawer"
                 styles={{
-                    body: {padding: '12px 16px', paddingBottom: 24},
+                    body: {padding: 0, overflow: 'hidden'},
                 }}
             >
                 {showOrderPanel && (
-                    <OrderPanel
-                        order={activeOrder}
-                        onOrderUpdate={handleOrderUpdate}
-                        onSaveForLater={handleSaveForLater}
-                        onProceedToPayment={handleProceedToPayment}
-                        onDeleteOrder={handleDeleteActiveOrder}
-                        notify={notify}
-                        isMobileDrawer={true}
-                    />
+                    <div
+                        onTouchStart={handleOrderDrawerTouchStart}
+                        onTouchMove={handleOrderDrawerTouchMove}
+                        style={{
+                            height: '100%',
+                            overflowY: 'auto',
+                            overscrollBehaviorY: 'contain',
+                            padding: '12px 16px 24px',
+                        }}
+                    >
+                        <OrderPanel
+                            order={activeOrder}
+                            onOrderUpdate={handleOrderUpdate}
+                            onSaveForLater={handleSaveForLater}
+                            onProceedToPayment={handleProceedToPayment}
+                            onDeleteOrder={handleDeleteActiveOrder}
+                            notify={notify}
+                            isMobileDrawer={true}
+                        />
+                    </div>
                 )}
             </Drawer>
 
