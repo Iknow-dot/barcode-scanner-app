@@ -114,7 +114,6 @@ const Login = () => {
 
                     <Form
                         layout="vertical"
-                        initialValues={{remember: true}}
                         autoComplete="on"
                         onFinish={handleSubmit}
                         size="large"
@@ -156,12 +155,12 @@ const Login = () => {
                                 type="primary"
                                 htmlType="submit"
                                 loading={loading}
-                                icon={<LoginOutlined/>}
+                                aria-label={t.login}
+                                icon={<LoginOutlined style={{fontSize: 22}}/>}
                                 style={{
                                     width: "100%",
                                     height: 48,
                                     borderRadius: 10,
-                                    fontSize: 16,
                                     fontWeight: 600,
                                 }}
                             />

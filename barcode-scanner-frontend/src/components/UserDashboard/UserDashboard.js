@@ -6,6 +6,7 @@ import OrderPanel from './OrderPanel';
 import subNavContext from "../../contexts/SubNavContext";
 import useAppNotification from "../../hooks/useAppNotification";
 import {useLanguage} from '../../i18n/LanguageContext';
+import {playFoundSound, playNotFoundSound} from '../../utils/sound';
 import {
     Badge,
     Button,
@@ -142,6 +143,7 @@ const UserDashboard = () => {
             const result = await productService.searchProduct(search, searchType, warehouseCodes);
 
             if (result.success && result.data?.stock) {
+                playFoundSound();
                 setBalances(result.data.stock);
                 setProductInfo({
                     sku_name: result.data.sku_name,
@@ -154,6 +156,7 @@ const UserDashboard = () => {
                 // Switch to scan tab to show results
                 setActiveTab('scan');
             } else {
+                playNotFoundSound();
                 setBalances([]);
                 setProductInfo({sku_name: '', article: '', price: '', images: []});
 
@@ -229,6 +232,13 @@ const UserDashboard = () => {
             activeOrderRef.current = result.data;
             setActiveOrder(result.data);
             setOrderMode(true);
+            // Backend returns 200 (instead of 201) when it resumed an existing
+            // open draft for this client — surface that so the user knows
+            // they're continuing rather than starting fresh.
+            if (result.status === 200) {
+                notify.info(t.activeOrder, t.orderResumedExisting);
+                setIncompleteOrders((prev) => prev.filter((o) => o.id !== result.data.id));
+            }
         } else {
             notify.error(t.orderError, result.error);
         }
@@ -469,8 +479,6 @@ const UserDashboard = () => {
                                     <Carousel
                                         arrows
                                         infinite
-                                        autoplay
-                                        autoplaySpeed={4000}
                                     >
                                         {productInfo.images.map((img, index) => (
                                             <div key={index}>
@@ -514,24 +522,24 @@ const UserDashboard = () => {
                             <div className="m-balance-list">
                                 {balances.map((item, idx) => {
                                     const isUserWarehouse = userWarehouses.map(wh => wh.name).includes(item.warehouse_name);
-                                    console.log(item);
                                     return (
                                         <div
                                             key={idx}
                                             className={`m-balance-card ${isUserWarehouse ? 'm-balance-card-highlight' : ''}`}
                                         >
-                                            <Flex justify="space-between" align="start">
+                                            <Flex justify="space-between" align="center" gap={12}>
                                                 <div style={{flex: 1, minWidth: 0}}>
                                                     <Text
                                                         strong={isUserWarehouse}
-                                                        style={{fontSize: 14, display: 'block'}}
+                                                        className="m-balance-warehouse"
                                                         ellipsis
                                                     >
                                                         {item.warehouse_name}
                                                     </Text>
-                                                    <Text type="secondary" style={{fontSize: 12}}>
-                                                        {t.price}: {item.price} ₾
-                                                    </Text>
+                                                    <div className="m-balance-price">
+                                                        {item.price}
+                                                        <span className="m-balance-price-unit">₾</span>
+                                                    </div>
                                                 </div>
                                                 <Flex align="center" gap={8}>
                                                     <Tag
@@ -698,6 +706,7 @@ const UserDashboard = () => {
                 onClose={() => setDrawerVisible(false)}
                 className="search-drawer"
                 height="auto"
+                destroyOnHidden
                 styles={{
                     body: {paddingTop: 16, paddingBottom: 24},
                 }}
@@ -751,6 +760,7 @@ const UserDashboard = () => {
                     >
                         <Input.Search
                             size="large"
+                            autoFocus
                             placeholder={t.searchPlaceholder}
                             enterButton={
                                 <Button type="primary" icon={<SearchOutlined/>}>
@@ -842,7 +852,8 @@ const UserDashboard = () => {
                     {activeTab === 'orders' && renderOrdersTab()}
                 </div>
 
-                {/* Floating cart FAB — replaces the old "Current Order" tab */}
+                {/* Floating cart FAB — always available so the active order is
+                    one tap away from any tab. */}
                 {!scannerOpen && !drawerVisible && !orderDrawerVisible && !customerModalOpen && (
                     <button
                         type="button"
@@ -873,7 +884,8 @@ const UserDashboard = () => {
                         background: isDarkMode ? 'rgba(20, 20, 20, 0.96)' : 'rgba(255, 255, 255, 0.96)',
                         borderTopColor: isDarkMode ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.06)',
                     }}>
-                        {/* Primary actions row */}
+                        {/* Primary actions row — kept visible above the tab bar so
+                            scan/search stay within thumb reach on mobile. */}
                         <div className="m-action-row">
                             <Button
                                 type="primary"

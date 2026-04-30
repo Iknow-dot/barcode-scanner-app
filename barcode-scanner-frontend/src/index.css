@@ -399,6 +399,32 @@
   border-color: #91caff;
 }
 
+.m-balance-warehouse {
+  display: block;
+  font-size: 13px;
+  color: rgba(0, 0, 0, 0.6);
+  margin-bottom: 2px;
+}
+
+.m-balance-card-highlight .m-balance-warehouse {
+  color: #0958d9;
+}
+
+.m-balance-price {
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: -0.5px;
+  color: rgba(0, 0, 0, 0.92);
+}
+
+.m-balance-price-unit {
+  font-size: 14px;
+  font-weight: 600;
+  opacity: 0.55;
+  margin-left: 4px;
+}
+
 .m-balance-qty {
   font-weight: 700 !important;
   font-size: 14px !important;
@@ -641,6 +667,18 @@
 .dark-theme .m-balance-card-highlight {
   background: rgba(22, 119, 255, 0.1);
   border-color: rgba(22, 119, 255, 0.3);
+}
+
+.dark-theme .m-balance-warehouse {
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.dark-theme .m-balance-card-highlight .m-balance-warehouse {
+  color: #69b1ff;
+}
+
+.dark-theme .m-balance-price {
+  color: rgba(255, 255, 255, 0.92);
 }
 
 .dark-theme .m-order-item-card {

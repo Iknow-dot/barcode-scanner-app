@@ -470,6 +470,31 @@ class PurchaseOrderViewSet(ModelViewSet):
             return PurchaseOrderListSerializer
         return PurchaseOrderSerializer
 
+    def create(self, request, *args, **kwargs):
+        """Create an order, or return the existing open draft for the same
+        client. A client can only have one open (draft) order at a time —
+        match first by external_client_id, then fall back to the local
+        identification number."""
+        org = request.user.organization
+        external_client_id = (request.data.get('external_client_id') or '').strip()
+        identification_number = (request.data.get('customer_identification_number') or '').strip()
+
+        existing = None
+        drafts = PurchaseOrder.objects.filter(organization=org, status='draft')
+        if external_client_id:
+            existing = drafts.filter(external_client_id=external_client_id).first()
+        if not existing and identification_number:
+            existing = drafts.filter(
+                external_client_id='',
+                customer_identification_number=identification_number,
+            ).first()
+
+        if existing:
+            serializer = self.get_serializer(existing)
+            return Response(serializer.data, status=http_status.HTTP_200_OK)
+
+        return super().create(request, *args, **kwargs)
+
     def get_queryset(self):
         user = self.request.user
         qs = PurchaseOrder.objects.filter(
