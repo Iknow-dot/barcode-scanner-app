@@ -1,7 +1,8 @@
-import React, {useState, useCallback, useEffect, useRef, memo} from 'react';
+import React, {useState, useCallback, useEffect, useMemo, useRef, useContext, memo} from 'react';
 import dayjs from 'dayjs';
 import {useLanguage} from '../../i18n/LanguageContext';
 import {orderService} from '../../api';
+import AuthContext from '../Auth/AuthContext';
 import {
     Card,
     Tag,
@@ -98,7 +99,15 @@ const OrderItemCard = memo(({
     notify,
     t,
     unitOptions,
+    discountConfig,
 }) => {
+    const {canApplyDiscount, maxDiscountPercent} = discountConfig;
+    // Track discount mode locally — default to "price" if a manual price
+    // override is set, otherwise default to percent. This lets the user
+    // switch modes mid-edit without losing their input.
+    const [discountMode, setDiscountMode] = useState(
+        item.discounted_price != null ? 'price' : 'percent'
+    );
     const handleQuantityChange = useCallback(async (newQuantity) => {
         if (newQuantity < 1) return;
         const result = await orderService.updateOrderItem(orderId, item.id, {quantity: newQuantity});
@@ -235,20 +244,56 @@ const OrderItemCard = memo(({
                     options={unitOptions}
                 />
 
-                {/* Discount */}
-                <Flex align="center" gap={4}>
-                    <InputNumber
-                        min={0}
-                        max={100}
-                        value={item.discount_percent || 0}
-                        size="small"
-                        onChange={(val) => handleDiscountChange('discount_percent', val)}
-                        className="m-discount-input"
-                        controls={false}
-                        inputMode="decimal"
-                    />
-                    <Text type="secondary" style={{fontSize: 12}}>%</Text>
-                </Flex>
+                {/* Discount — only visible to users with the discount permission */}
+                {canApplyDiscount && maxDiscountPercent > 0 && (
+                    <Flex align="center" gap={4}>
+                        <Select
+                            value={discountMode}
+                            onChange={(mode) => {
+                                setDiscountMode(mode);
+                                // Switching mode clears the other side so the
+                                // backend doesn't see two competing values.
+                                if (mode === 'percent') {
+                                    handleDiscountChange('discounted_price', null);
+                                } else {
+                                    handleDiscountChange('discount_percent', 0);
+                                }
+                            }}
+                            options={[
+                                {label: '%', value: 'percent'},
+                                {label: '₾', value: 'price'},
+                            ]}
+                            size="small"
+                            className="m-discount-mode"
+                        />
+                        {discountMode === 'percent' ? (
+                            <InputNumber
+                                min={0}
+                                max={Math.min(100, maxDiscountPercent)}
+                                value={item.discount_percent || 0}
+                                size="small"
+                                onChange={(val) => handleDiscountChange('discount_percent', val)}
+                                className="m-discount-input"
+                                controls={false}
+                                inputMode="decimal"
+                                addonAfter="%"
+                            />
+                        ) : (
+                            <InputNumber
+                                min={parseFloat(item.price || 0) * (1 - maxDiscountPercent / 100)}
+                                max={parseFloat(item.price || 0)}
+                                value={item.discounted_price ?? item.price}
+                                size="small"
+                                onChange={(val) => handleDiscountChange('discounted_price', val)}
+                                className="m-discount-input"
+                                controls={false}
+                                inputMode="decimal"
+                                addonAfter="₾"
+                                placeholder={t.setPrice}
+                            />
+                        )}
+                    </Flex>
+                )}
             </Flex>
 
             {/* Line total */}
@@ -470,6 +515,11 @@ NotesSection.displayName = 'NotesSection';
 
 const OrderPanel = ({order: initialOrder, onSaveForLater, onProceedToPayment, onDeleteOrder, onOrderUpdate, notify, isMobileDrawer}) => {
     const {t} = useLanguage();
+    const {authData} = useContext(AuthContext);
+    const discountConfig = useMemo(() => ({
+        canApplyDiscount: !!authData?.user?.can_apply_discount,
+        maxDiscountPercent: parseFloat(authData?.user?.max_discount_percent || 0),
+    }), [authData?.user?.can_apply_discount, authData?.user?.max_discount_percent]);
     // Keep order state LOCAL so updates don't re-render the parent (and the Drawer)
     const [localOrder, setLocalOrder] = useState(initialOrder);
     const [deliveryExpanded, setDeliveryExpanded] = useState(
@@ -614,6 +664,7 @@ const OrderPanel = ({order: initialOrder, onSaveForLater, onProceedToPayment, on
                                 notify={notify}
                                 t={t}
                                 unitOptions={unitOptions}
+                                discountConfig={discountConfig}
                             />
                         ))}
                     </div>

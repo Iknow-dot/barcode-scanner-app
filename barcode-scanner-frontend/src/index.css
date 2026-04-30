@@ -441,6 +441,13 @@
   padding: 0 !important;
 }
 
+.m-show-other-warehouses-btn {
+  margin-top: 12px !important;
+  border-radius: 10px !important;
+  height: 44px !important;
+  border-style: dashed !important;
+}
+
 /* ===== Order Panel (Mobile) ===== */
 .m-order-panel {
   padding: 0;
@@ -506,7 +513,7 @@
 }
 
 .m-qty-input {
-  width: 44px !important;
+  width: 64px !important;
   height: 30px !important;
   border: none !important;
   border-left: 1px solid #d9d9d9 !important;
@@ -518,7 +525,7 @@
 
 .m-qty-input .ant-input-number-input {
   text-align: center;
-  padding: 0 4px;
+  padding: 0 2px;
   height: 30px;
 }
 
@@ -527,7 +534,11 @@
 }
 
 .m-discount-input {
-  width: 52px !important;
+  width: 92px !important;
+}
+
+.m-discount-mode {
+  width: 56px !important;
 }
 
 /* Order total bar */

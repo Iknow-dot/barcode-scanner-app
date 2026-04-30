@@ -19,6 +19,13 @@ class User(AbstractUser):
     )
     role = models.CharField(max_length=20, choices=Role.choices, default=Role.INTERNAL_ADMIN)
 
+    # Discount permissions — enforced on PurchaseOrderItem add/update.
+    # Default is "no discount allowed" so a fresh user has to be explicitly
+    # granted the privilege; max_discount_percent caps both the percentage
+    # discount and the implied discount of a manually-entered "set price".
+    can_apply_discount = models.BooleanField(default=False)
+    max_discount_percent = models.DecimalField(max_digits=5, decimal_places=2, default=0)
+
     def clean(self) -> None:
         if self.role == self.Role.INTERNAL_ADMIN and not (self.is_staff or self.is_superuser):
             raise ValidationError({

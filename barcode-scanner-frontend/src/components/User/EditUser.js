@@ -1,9 +1,9 @@
 import React, {useState, useEffect, useContext} from 'react';
 import {userService, organizationService, warehouseService} from '../../api';
 import AuthContext from '../Auth/AuthContext';
-import {Button, Divider, Flex, Form, Input, Select, Space, Switch, Tag, Tooltip} from "antd";
+import {Button, Divider, Flex, Form, Input, InputNumber, Select, Space, Switch, Tag, Tooltip} from "antd";
 import ModalForm, {RenderOption, useModalFormLoading} from "../ModalForm";
-import {SaveOutlined, UserOutlined, LockOutlined, MailOutlined, SafetyCertificateOutlined} from "@ant-design/icons";
+import {SaveOutlined, UserOutlined, LockOutlined, MailOutlined, SafetyCertificateOutlined, PercentageOutlined} from "@ant-design/icons";
 import {useLanguage} from '../../i18n/LanguageContext';
 
 const roleTagColors = {
@@ -31,6 +31,8 @@ const EditUserForm = ({object, hasExistingIps}) => {
     const [organizations, setOrganizations] = useState([]);
     const [warehouses, setWarehouses] = useState([]);
     const [restrictByIp, setRestrictByIp] = useState(hasExistingIps);
+    const form = Form.useFormInstance();
+    const canApplyDiscount = Form.useWatch('can_apply_discount', form);
     const isCompanyAdmin = authData?.role === 'company_admin';
     const isInternalAdmin = authData?.role === 'internal_admin';
 
@@ -250,6 +252,40 @@ const EditUserForm = ({object, hasExistingIps}) => {
                 />
             </Form.Item>
 
+            <Divider style={{margin: '4px 0 16px'}} dashed/>
+
+            <Flex align="center" justify="space-between" style={{marginBottom: canApplyDiscount ? 12 : 0}}>
+                <Space>
+                    <PercentageOutlined style={{color: '#1677ff', fontSize: 16}}/>
+                    <span style={{fontWeight: 500}}>{t.canApplyDiscount}</span>
+                    <Tooltip title={t.canApplyDiscountHint}>
+                        <span style={{fontSize: 12, color: 'rgba(0,0,0,0.45)', cursor: 'help'}}>?</span>
+                    </Tooltip>
+                </Space>
+                <Form.Item
+                    name="can_apply_discount"
+                    valuePropName="checked"
+                    noStyle
+                >
+                    <Switch size="small"/>
+                </Form.Item>
+            </Flex>
+
+            <Form.Item
+                label={t.maxDiscountPercent}
+                name="max_discount_percent"
+                hidden={!canApplyDiscount}
+                rules={[{type: 'number', min: 0, max: 100, message: t.maxDiscountRange}]}
+            >
+                <InputNumber
+                    min={0}
+                    max={100}
+                    step={1}
+                    style={{width: '100%'}}
+                    addonAfter="%"
+                />
+            </Form.Item>
+
             <Form.Item label={null} style={{marginTop: 16, marginBottom: 0}}>
                 <Button
                     block
@@ -309,6 +345,8 @@ const EditUser = ({visible, setVisible, onFinish, object}) => {
                 organization: object.organization,
                 ip_address: existingIps,
                 warehouse_ids: existingWarehouseIds,
+                can_apply_discount: !!object.can_apply_discount,
+                max_discount_percent: Number(object.max_discount_percent || 0),
             }}
             name="editUser"
             visible={visible}

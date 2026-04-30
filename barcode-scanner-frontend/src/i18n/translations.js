@@ -41,6 +41,7 @@ const translations = {
         article: 'არტიკული',
         product: 'პროდუქტი',
         allWarehouses: 'ყველა საწყობი',
+        showOtherWarehouses: 'სხვა საწყობების ნახვა',
         scan: 'დასკანერება',
         scanAgain: 'დასკანერება',
         scanInstead: 'დასკანერება',
@@ -177,6 +178,11 @@ const translations = {
         // Restrict access toggle
         restrictByIp: 'IP-ით წვდომის შეზღუდვა',
         restrictByIpHint: 'მომხმარებელი შეძლებს შესვლას მხოლოდ ჩამოთვლილი IP-ებიდან',
+        canApplyDiscount: 'ფასდაკლების უფლება',
+        canApplyDiscountHint: 'მომხმარებელი შეძლებს ფასდაკლების მითითებას შეკვეთის პოზიციებზე',
+        maxDiscountPercent: 'მაქს. ფასდაკლება (%)',
+        maxDiscountRange: 'შეიყვანეთ მნიშვნელობა 0-დან 100-მდე',
+        setPrice: 'ფასი',
 
         // User limit
         userLimitProgress: (current, max) => `${current} / ${max} მომხმარებელი`,
@@ -427,6 +433,7 @@ const translations = {
         article: 'Article',
         product: 'Product',
         allWarehouses: 'All Warehouses',
+        showOtherWarehouses: 'Show other warehouses',
         scan: 'Scan',
         scanAgain: 'Scan Again',
         scanInstead: 'Scan Instead',
@@ -563,6 +570,11 @@ const translations = {
         // Restrict access toggle
         restrictByIp: 'Restrict access by IP',
         restrictByIpHint: 'User will only be able to sign in from the listed IPs',
+        canApplyDiscount: 'Allow discounts',
+        canApplyDiscountHint: 'User can apply discounts to order line items',
+        maxDiscountPercent: 'Max discount (%)',
+        maxDiscountRange: 'Enter a value between 0 and 100',
+        setPrice: 'Price',
 
         // User limit
         userLimitProgress: (current, max) => `${current} / ${max} users`,

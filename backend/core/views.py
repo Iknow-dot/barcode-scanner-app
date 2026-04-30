@@ -54,6 +54,55 @@ def _convert_to_https(url):
     return urlunparse(secure_url)
 
 
+def _enforce_discount_permission(user, *, base_price, discount_percent, discounted_price):
+    """Check that *user* is allowed to apply this discount on a line item.
+
+    Returns ``None`` if no real discount is being applied (caller can proceed),
+    otherwise returns a DRF ``Response`` with a ``DISCOUNT_*`` error envelope
+    that the view should return as-is.
+
+    A "real discount" is any non-zero ``discount_percent`` or any
+    ``discounted_price`` strictly below ``base_price``. Both modes are
+    normalized to an effective percent and compared against the user's
+    ``max_discount_percent`` cap.
+    """
+    from decimal import Decimal
+
+    pct = Decimal(discount_percent or 0)
+    base = Decimal(base_price or 0)
+    set_price = Decimal(discounted_price) if discounted_price is not None else None
+
+    set_price_is_discount = (
+        set_price is not None and base > 0 and set_price < base
+    )
+    has_discount = pct > 0 or set_price_is_discount
+    if not has_discount:
+        return None
+
+    if not user.can_apply_discount:
+        return Response(
+            {"code": "DISCOUNT_NOT_ALLOWED",
+             "detail": "You are not permitted to apply discounts."},
+            status=http_status.HTTP_403_FORBIDDEN,
+        )
+
+    effective_pct = pct
+    if set_price_is_discount:
+        implied = (Decimal(1) - (set_price / base)) * Decimal(100)
+        if implied > effective_pct:
+            effective_pct = implied
+
+    cap = Decimal(user.max_discount_percent or 0)
+    if effective_pct > cap:
+        return Response(
+            {"code": "DISCOUNT_EXCEEDS_LIMIT",
+             "detail": f"Discount exceeds your limit ({cap}%).",
+             "max_discount_percent": str(cap)},
+            status=http_status.HTTP_403_FORBIDDEN,
+        )
+    return None
+
+
 def _consult_error_response(exc: ConsultWebExchangeError) -> Response:
     """Translate a ConsultWebExchangeError into a DRF Response.
 
@@ -553,6 +602,15 @@ class PurchaseOrderViewSet(ModelViewSet):
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
 
+        denied = _enforce_discount_permission(
+            request.user,
+            base_price=data.get('price') or 0,
+            discount_percent=data.get('discount_percent') or 0,
+            discounted_price=data.get('discounted_price'),
+        )
+        if denied is not None:
+            return denied
+
         # Check if the same SKU + warehouse already exists — if so, increment quantity
         filter_kwargs = {'sku': data['sku']}
         if data.get('warehouse_code'):
@@ -626,6 +684,27 @@ class PurchaseOrderViewSet(ModelViewSet):
             )
         serializer = PurchaseOrderItemSerializer(item, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
+
+        # Only enforce the discount permission when the request is actually
+        # *changing* a discount field. Re-validating existing values on
+        # unrelated edits (e.g. a quantity change) would lock users with
+        # prior discounts out of routine line-item updates.
+        validated = serializer.validated_data
+        is_changing_discount = (
+            'discount_percent' in validated or 'discounted_price' in validated
+        )
+        if is_changing_discount:
+            discount_percent = validated.get('discount_percent', item.discount_percent)
+            discounted_price = validated.get('discounted_price', item.discounted_price)
+            denied = _enforce_discount_permission(
+                request.user,
+                base_price=validated.get('price', item.price),
+                discount_percent=discount_percent,
+                discounted_price=discounted_price,
+            )
+            if denied is not None:
+                return denied
+
         serializer.save()
         # Refresh to clear cached/prefetched items
         order.refresh_from_db()

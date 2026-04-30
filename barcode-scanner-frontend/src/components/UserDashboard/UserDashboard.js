@@ -129,6 +129,10 @@ const UserDashboard = () => {
     }, [activeTab, fetchIncompleteOrders]);
 
     const isSearchingRef = useRef(false);
+    // Remembers the last successful search so the "show other warehouses"
+    // button can re-run it with the warehouse filter dropped.
+    const lastSearchRef = useRef(null);
+    const [searchedAllWarehouses, setSearchedAllWarehouses] = useState(false);
 
     const handleSearch = useCallback(async ({search, searchType, allWarehouses}) => {
         if (isSearchingRef.current) return;
@@ -152,6 +156,8 @@ const UserDashboard = () => {
                     sku: result.data.sku,
                     images: result.data.images || []
                 });
+                lastSearchRef.current = {search, searchType};
+                setSearchedAllWarehouses(!!allWarehouses);
                 setDrawerVisible(false);
                 // Switch to scan tab to show results
                 setActiveTab('scan');
@@ -159,6 +165,7 @@ const UserDashboard = () => {
                 playNotFoundSound();
                 setBalances([]);
                 setProductInfo({sku_name: '', article: '', price: '', images: []});
+                setSearchedAllWarehouses(false);
 
                 if (!result.success) {
                     const errorMessages = {
@@ -191,6 +198,14 @@ const UserDashboard = () => {
             allWarehouses: form.getFieldValue('allWarehouses')
         });
     }, [handleSearch, form]);
+
+    const handleShowOtherWarehouses = useCallback(() => {
+        if (!lastSearchRef.current) return;
+        handleSearch({
+            ...lastSearchRef.current,
+            allWarehouses: true,
+        });
+    }, [handleSearch]);
 
     const handleOpenScanner = () => {
         setDrawerVisible(false);
@@ -564,6 +579,20 @@ const UserDashboard = () => {
                                     );
                                 })}
                             </div>
+
+                            {!searchedAllWarehouses && userWarehouses.length > 0 && lastSearchRef.current && (
+                                <Button
+                                    type="default"
+                                    size="large"
+                                    icon={<AppstoreOutlined/>}
+                                    onClick={handleShowOtherWarehouses}
+                                    loading={loading}
+                                    block
+                                    className="m-show-other-warehouses-btn"
+                                >
+                                    {t.showOtherWarehouses}
+                                </Button>
+                            )}
                         </div>
                     </div>
                 </Spin>

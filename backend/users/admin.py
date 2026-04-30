@@ -52,4 +52,12 @@ class UserAdmin(DjangoUserAdmin):
         ("Role & Organization", {
             "fields": ("role", "organization"),
         }),
+        ("Discounts", {
+            "fields": ("can_apply_discount", "max_discount_percent"),
+            "description": (
+                "Toggle whether this user can apply discounts to order items, "
+                "and set the maximum discount percent they are permitted to "
+                "use (also applies to manually-entered 'set price' overrides)."
+            ),
+        }),
     )

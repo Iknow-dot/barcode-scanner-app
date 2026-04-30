@@ -118,6 +118,8 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         data['user'] = {
             'id': self.user.id,
             'username': self.user.username,
+            'can_apply_discount': self.user.can_apply_discount,
+            'max_discount_percent': str(self.user.max_discount_percent),
         }
         return data
 
@@ -183,6 +185,8 @@ class _BaseUserSerializer(serializers.ModelSerializer):
             'allowed_ips',
             'warehouse_ids',
             'warehouse_ids_read',
+            'can_apply_discount',
+            'max_discount_percent',
         ]
         read_only_fields = ['id', 'last_login']
 
