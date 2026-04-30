@@ -70,3 +70,12 @@ export const removeOrderItem = (orderId, itemId) => {
 export const updateOrderItem = (orderId, itemId, data) => {
     return api.patch(API_ENDPOINTS.order_item_update(orderId, itemId), data);
 };
+
+/**
+ * Fetch the printable invoice HTML for an order.
+ * Returns the standard {success, data, error} envelope; data is the raw HTML string.
+ * @param {number} orderId
+ */
+export const fetchInvoiceHtml = (orderId) => {
+    return api.get(API_ENDPOINTS.order_invoice(orderId), { responseType: 'text' });
+};
