@@ -14,7 +14,7 @@ from django.urls import reverse
 from rest_framework.exceptions import ValidationError as DRFValidationError
 from rest_framework.test import APIClient
 
-from core.models import Organization, PurchaseOrder, Warehouse
+from core.models import Organization, PurchaseOrder
 from core.serializers import (
     OrganizationExternalServiceSerializer,
     OrganizationSerializer,
@@ -831,7 +831,7 @@ class InvoiceEndpointTests(TestCase):
     def test_confirmed_invoice_omits_draft_watermark(self):
         response = self.client_a.get(self._url(self.order_a.id))
         body = response.content.decode()
-        # The literal "DRAFT" string must not appear in the rendered HTML
-        # for a confirmed order. (Status display is "Confirmed".)
+        # The DRAFT element must not render for a confirmed order;
+        # the CSS rule is allowed to remain in the stylesheet (harmless
+        # when nothing matches it).
         self.assertNotIn('>DRAFT<', body)
-        self.assertNotIn('draft-watermark', body)

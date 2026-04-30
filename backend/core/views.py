@@ -732,7 +732,7 @@ class PurchaseOrderViewSet(ModelViewSet):
         html = render_to_string('core/invoice.html', {
             'org': order.organization,
             'order': order,
-            'items': list(order.items.all()),
+            'items': order.items.all(),
             'generated_at': timezone.now(),
         })
         return Response(html, content_type='text/html')
