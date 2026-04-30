@@ -690,3 +690,28 @@ class ReverseGeocodeAPIViewTests(TestCase):
         self.assertEqual(r2.status_code, 200)
         self.assertEqual(r1.data['address'], 'cached')
         self.assertEqual(call_count['n'], 1)
+
+
+class OrganizationInvoiceFieldsTests(TestCase):
+    def test_invoice_fields_default_to_blank(self):
+        org = _make_organization()
+        self.assertEqual(org.invoice_logo, '')
+        self.assertEqual(org.invoice_display_name, '')
+        self.assertEqual(org.invoice_address, '')
+        self.assertEqual(org.invoice_phone, '')
+        self.assertEqual(org.invoice_email, '')
+        self.assertEqual(org.invoice_footer_text, '')
+
+    def test_invoice_fields_can_be_set(self):
+        org = _make_organization(
+            invoice_logo='data:image/png;base64,iVBORw0KGgo=',
+            invoice_display_name='Acme Retail',
+            invoice_address='12 Main St\nTbilisi',
+            invoice_phone='+995 555 000 111',
+            invoice_email='hello@acme.example',
+            invoice_footer_text='Thank you for your business.',
+        )
+        org.refresh_from_db()
+        self.assertEqual(org.invoice_display_name, 'Acme Retail')
+        self.assertIn('iVBORw0KGgo=', org.invoice_logo)
+        self.assertIn('Tbilisi', org.invoice_address)

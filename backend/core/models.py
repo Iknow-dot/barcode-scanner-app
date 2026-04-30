@@ -20,6 +20,16 @@ class Organization(models.Model):
     web_service_password = models.CharField(max_length=255, null=True, blank=True)
     employees_count = models.PositiveIntegerField()
 
+    # Invoice template — rendered into the printable invoice HTML.
+    # Logo is stored as a base64 data URL (size-capped server-side); other
+    # fields are optional and fall back gracefully in the template.
+    invoice_logo = models.TextField(blank=True, default='')
+    invoice_display_name = models.CharField(max_length=255, blank=True, default='')
+    invoice_address = models.TextField(blank=True, default='')
+    invoice_phone = models.CharField(max_length=50, blank=True, default='')
+    invoice_email = models.EmailField(blank=True, default='')
+    invoice_footer_text = models.TextField(blank=True, default='')
+
     @property
     def non_admin_user_count(self) -> int:
         """Return the number of non-admin (company_user) users in this organization."""
