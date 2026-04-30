@@ -7,6 +7,7 @@ import subNavContext from "../../contexts/SubNavContext";
 import useAppNotification from "../../hooks/useAppNotification";
 import {useLanguage} from '../../i18n/LanguageContext';
 import {playFoundSound, playNotFoundSound} from '../../utils/sound';
+import {printInvoice} from '../../utils/printInvoice';
 import {
     Badge,
     Button,
@@ -19,6 +20,7 @@ import {
     Form,
     Input,
     List,
+    Modal,
     Popconfirm,
     Result,
     Select,
@@ -39,12 +41,14 @@ import {
     EditOutlined,
     PlusOutlined,
     PlusCircleOutlined,
+    PrinterOutlined,
     DeleteOutlined,
     UnorderedListOutlined,
     UserOutlined,
     CalendarOutlined,
     RightOutlined,
     AppstoreOutlined,
+    CheckCircleFilled,
 } from "@ant-design/icons";
 
 const {Title, Text} = Typography;
@@ -270,17 +274,28 @@ const UserDashboard = () => {
 
     const handleProceedToPayment = async () => {
         if (!activeOrder) return;
-        const result = await orderService.updateOrder(activeOrder.id, {status: 'confirmed'});
-        if (result.success) {
-            notify.success(t.success, t.orderConfirmedSuccess);
-            setOrderMode(false);
-            activeOrderRef.current = null;
-            setActiveOrder(null);
-            setOrderDrawerVisible(false);
-            fetchIncompleteOrders();
-        } else {
+        const orderId = activeOrder.id;
+        const result = await orderService.updateOrder(orderId, {status: 'confirmed'});
+        if (!result.success) {
             notify.error(t.orderError, result.error);
+            return;
         }
+        // Reset order panel state immediately — the modal lives on the
+        // dashboard, not on the panel.
+        setOrderMode(false);
+        activeOrderRef.current = null;
+        setActiveOrder(null);
+        setOrderDrawerVisible(false);
+        fetchIncompleteOrders();
+        Modal.confirm({
+            title: t.orderConfirmedSuccess,
+            content: t.orderConfirmedPrintPrompt(orderId),
+            icon: <CheckCircleFilled style={{color: '#52c41a'}}/>,
+            okText: t.printInvoice,
+            cancelText: t.done,
+            okType: 'primary',
+            onOk: () => printInvoice(orderId, t, notify),
+        });
     };
 
     const handleDeleteActiveOrder = async () => {
@@ -673,6 +688,16 @@ const UserDashboard = () => {
                                     }
                                 />
                                 <Flex align="center" gap={8}>
+                                    <Button
+                                        type="text"
+                                        size="small"
+                                        icon={<PrinterOutlined/>}
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            printInvoice(order.id, t, notify);
+                                        }}
+                                        title={t.printInvoice}
+                                    />
                                     <Popconfirm
                                         title={t.confirmDelete}
                                         onConfirm={(e) => handleDeleteIncompleteOrder(e, order.id)}
