@@ -21,6 +21,10 @@ const EditOrganizationForm = ({hasPassword}) => {
     const logoValue = Form.useWatch('invoice_logo', form);
 
     const handleLogoFile = (file) => {
+        // Use AntD's static `message` API rather than `useAppNotification` —
+        // each `useAppNotification` call owns its own contextHolder, and
+        // mounting one inside a leaf form rendered via ModalForm adds
+        // noise without UX benefit. `message.warning` is sufficient here.
         if (file.size > 1_048_576) {
             message.warning(t.logoTooLarge);
             return Upload.LIST_IGNORE;
@@ -28,6 +32,9 @@ const EditOrganizationForm = ({hasPassword}) => {
         const reader = new FileReader();
         reader.onload = (e) => {
             form.setFieldsValue({invoice_logo: e.target.result});
+        };
+        reader.onerror = () => {
+            message.error(t.logoReadError);
         };
         reader.readAsDataURL(file);
         return Upload.LIST_IGNORE;
