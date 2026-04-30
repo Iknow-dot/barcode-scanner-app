@@ -20,6 +20,38 @@ class OrganizationAdmin(admin.ModelAdmin):
 
     inlines = [WarehouseInline]
 
+    readonly_fields = ("invoice_logo_preview",)
+
+    fieldsets = (
+        (None, {
+            'fields': ('name', 'identification_number', 'employees_count'),
+        }),
+        ('External service (1C ConsultWebExchange)', {
+            'fields': ('web_service_url', 'web_service_username', 'web_service_password'),
+        }),
+        ('Invoice template', {
+            'fields': (
+                'invoice_logo_preview',
+                'invoice_logo',
+                'invoice_display_name',
+                'invoice_address',
+                'invoice_phone',
+                'invoice_email',
+                'invoice_footer_text',
+            ),
+        }),
+    )
+
+    def invoice_logo_preview(self, obj):
+        from django.utils.html import format_html
+        if obj and obj.invoice_logo:
+            return format_html(
+                '<img src="{}" style="max-height:80px;max-width:240px;" />',
+                obj.invoice_logo,
+            )
+        return '(none)'
+    invoice_logo_preview.short_description = 'Logo preview'
+
 
 class PurchaseOrderItemInline(admin.TabularInline):
     model = PurchaseOrderItem
