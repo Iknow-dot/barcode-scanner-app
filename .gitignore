@@ -30,3 +30,6 @@ backend/db.sqlite3
 
 # uv lock (regenerate with `uv lock`)
 uv.lock
+
+# Git worktrees
+.worktrees/
