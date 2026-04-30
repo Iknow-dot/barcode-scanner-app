@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import os
 from unittest import mock
 
@@ -16,6 +17,7 @@ from rest_framework.test import APIClient
 from core.models import Organization, PurchaseOrder
 from core.serializers import (
     OrganizationExternalServiceSerializer,
+    OrganizationSerializer,
     PurchaseOrderSerializer,
 )
 from core.services.consult_web_exchange import (
@@ -715,3 +717,54 @@ class OrganizationInvoiceFieldsTests(TestCase):
         self.assertEqual(org.invoice_display_name, 'Acme Retail')
         self.assertIn('iVBORw0KGgo=', org.invoice_logo)
         self.assertIn('Tbilisi', org.invoice_address)
+
+
+class OrganizationInvoiceLogoValidationTests(TestCase):
+    def setUp(self):
+        self.base_payload = {
+            'name': 'NewOrg',
+            'identification_number': '999999999',
+            'web_service_url': 'http://example.com/db',
+            'employees_count': 3,
+        }
+
+    def _data_url(self, mime: str, raw_size_bytes: int) -> str:
+        raw = b'A' * raw_size_bytes
+        return f'data:{mime};base64,{base64.b64encode(raw).decode()}'
+
+    def test_blank_logo_is_accepted(self):
+        serializer = OrganizationSerializer(
+            data={**self.base_payload, 'invoice_logo': ''},
+        )
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+
+    def test_valid_png_data_url_is_accepted(self):
+        serializer = OrganizationSerializer(
+            data={**self.base_payload,
+                  'invoice_logo': self._data_url('image/png', 1024)},
+        )
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+
+    def test_non_image_mime_is_rejected(self):
+        serializer = OrganizationSerializer(
+            data={**self.base_payload,
+                  'invoice_logo': self._data_url('application/pdf', 100)},
+        )
+        self.assertFalse(serializer.is_valid())
+        self.assertIn('invoice_logo', serializer.errors)
+
+    def test_oversize_logo_is_rejected(self):
+        # 1 MiB + 1 byte raw → > cap after base64
+        serializer = OrganizationSerializer(
+            data={**self.base_payload,
+                  'invoice_logo': self._data_url('image/png', 1_048_577)},
+        )
+        self.assertFalse(serializer.is_valid())
+        self.assertIn('invoice_logo', serializer.errors)
+
+    def test_garbage_string_is_rejected(self):
+        serializer = OrganizationSerializer(
+            data={**self.base_payload, 'invoice_logo': 'not-a-data-url'},
+        )
+        self.assertFalse(serializer.is_valid())
+        self.assertIn('invoice_logo', serializer.errors)

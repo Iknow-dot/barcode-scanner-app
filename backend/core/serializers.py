@@ -1,3 +1,4 @@
+import base64
 import re
 
 from django.contrib.auth import get_user_model
@@ -46,6 +47,32 @@ class OrganizationSerializer(serializers.ModelSerializer):
 
     def get_has_password(self, obj):
         return bool(obj.web_service_password)
+
+    _INVOICE_LOGO_MAX_BYTES = 1_048_576  # 1 MiB
+    _INVOICE_LOGO_MIME_RE = re.compile(
+        r'^data:image/(png|jpeg|jpg|svg\+xml|webp);base64,(?P<payload>[A-Za-z0-9+/=\s]+)$'
+    )
+
+    def validate_invoice_logo(self, value):
+        if not value:
+            return value
+        match = self._INVOICE_LOGO_MIME_RE.match(value)
+        if not match:
+            raise serializers.ValidationError(
+                "invoice_logo must be a base64 data URL of an image "
+                "(png, jpeg, svg+xml, or webp)."
+            )
+        try:
+            decoded = base64.b64decode(match.group('payload'), validate=False)
+        except (ValueError, TypeError) as exc:
+            raise serializers.ValidationError(
+                "invoice_logo base64 payload could not be decoded."
+            ) from exc
+        if len(decoded) > self._INVOICE_LOGO_MAX_BYTES:
+            raise serializers.ValidationError(
+                f"invoice_logo exceeds the {self._INVOICE_LOGO_MAX_BYTES} byte limit."
+            )
+        return value
 
     def validate_web_service_url(self, value):
         return _validate_consult_web_exchange_base_url(value)
