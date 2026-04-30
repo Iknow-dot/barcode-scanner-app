@@ -2,6 +2,7 @@ import React, {useState, useEffect, useCallback} from 'react';
 import {orderService} from '../../api';
 import {useLanguage} from '../../i18n/LanguageContext';
 import useAppNotification from '../../hooks/useAppNotification';
+import {printInvoice} from '../../utils/printInvoice';
 import {
     Table,
     Tag,
@@ -33,6 +34,7 @@ import {
     ClockCircleOutlined,
     CommentOutlined,
     FilterOutlined,
+    PrinterOutlined,
 } from '@ant-design/icons';
 
 const {Text, Title} = Typography;
@@ -245,7 +247,7 @@ const OrdersTab = () => {
         {
             title: '',
             key: 'actions',
-            width: 80,
+            width: 110,
             align: 'center',
             render: (_, record) => (
                 <Space size={4}>
@@ -255,6 +257,13 @@ const OrdersTab = () => {
                         icon={<EyeOutlined/>}
                         onClick={() => handleViewDetails(record.id)}
                         title={t.viewDetails}
+                    />
+                    <Button
+                        type="text"
+                        size="small"
+                        icon={<PrinterOutlined/>}
+                        onClick={() => printInvoice(record.id, t, notify)}
+                        title={t.printInvoice}
                     />
                     <Popconfirm
                         title={t.confirmDelete}
