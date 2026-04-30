@@ -53,7 +53,7 @@ const formatLastLogin = (iso, language, t) => {
     return <span title={d.format('YYYY-MM-DD HH:mm')}>{text}</span>;
 };
 
-const UsersTab = ({initialUsers, initialLoading = false, addModalExtraProps, handleEditCallback = null, filtersEnabled = false}) => {
+const UsersTab = ({initialUsers, initialLoading = false, addModalExtraProps, handleEditCallback = null, filtersEnabled = false, hideOrgColumn = false}) => {
     const {authData} = useContext(AuthContext);
     const {notify, contextHolder} = useAppNotification();
     const {t, language} = useLanguage();
@@ -572,7 +572,7 @@ const UsersTab = ({initialUsers, initialLoading = false, addModalExtraProps, han
                         );
                     },
                 },
-                ...(isInternalAdmin ? [{
+                ...(isInternalAdmin && !hideOrgColumn ? [{
                     key: 'organization',
                     title: t.organization,
                     dataIndex: 'organization',

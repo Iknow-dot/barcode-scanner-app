@@ -1,11 +1,41 @@
 import React, {useEffect, useState} from 'react';
 import {organizationService} from '../../api';
+import {Flex, Progress} from "antd";
 import DataTab from "../DataTab";
 import AddOrganization from "../Organization/AddOrganization";
 import EditOrganization from "../Organization/EditOrganization";
 import UsersTab from "./UsersTab";
 import useAppNotification from "../../hooks/useAppNotification";
 import {useLanguage} from '../../i18n/LanguageContext';
+
+const QuotaCell = ({org}) => {
+    const used = (org.users || []).filter(u => u.role === 'company_user').length;
+    const limit = org.employees_count || 0;
+    const pct = limit > 0 ? Math.min(100, Math.round((used / limit) * 100)) : 0;
+    const full = limit > 0 && used >= limit;
+    const stroke = full ? '#ff4d4f' : (pct >= 80 ? '#faad14' : '#52c41a');
+    return (
+        <div style={{minWidth: 140}}>
+            <Flex align="center" justify="space-between" gap={8} style={{marginBottom: 4}}>
+                <span style={{
+                    fontSize: 12,
+                    color: full ? '#ff4d4f' : 'rgba(0, 0, 0, 0.65)',
+                    fontWeight: 500,
+                    fontVariantNumeric: 'tabular-nums',
+                }}>
+                    {used} / {limit || '—'}
+                </span>
+            </Flex>
+            <Progress
+                percent={pct}
+                showInfo={false}
+                strokeColor={stroke}
+                size="small"
+                style={{margin: 0}}
+            />
+        </div>
+    );
+};
 
 const OrganizationsTab = () => {
     const [organizations, setOrganizations] = useState([]);
@@ -114,7 +144,19 @@ const OrganizationsTab = () => {
                 columns={[
                     {key: "name", title: t.organization, dataIndex: 'name'},
                     {key: "identification_number", title: t.idNumberShort, dataIndex: 'identification_number'},
-                    {key: "employees_count", title: t.employeesCountShort, dataIndex: 'employees_count'},
+                    {
+                        key: "employees_count",
+                        title: t.employeesCountShort,
+                        dataIndex: 'employees_count',
+                        sorter: (a, b) => {
+                            const aUsed = (a.users || []).filter(u => u.role === 'company_user').length;
+                            const bUsed = (b.users || []).filter(u => u.role === 'company_user').length;
+                            const aPct = a.employees_count > 0 ? aUsed / a.employees_count : 0;
+                            const bPct = b.employees_count > 0 ? bUsed / b.employees_count : 0;
+                            return bPct - aPct;
+                        },
+                        render: (_, org) => <QuotaCell org={org}/>,
+                    },
                 ]}
                 AddModal={AddOrganization}
                 handleAdd={handleAddOrganization}
@@ -124,6 +166,7 @@ const OrganizationsTab = () => {
                 expandedRowRender={(organization) => (
                     <UsersTab
                         initialUsers={organization.users}
+                        hideOrgColumn={true}
                         handleEditCallback={(user, modifiedFields, editUser) => {
                             const org = organizations.find(o => o.id === user.organization);
                             if (!org) return;
