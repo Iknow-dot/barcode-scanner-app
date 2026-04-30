@@ -2,12 +2,16 @@ import base64
 import logging
 from urllib.parse import urlparse, urlunparse
 
+from django.template.loader import render_to_string
+from django.utils import timezone
+
 import httpx
 from drf_spectacular.utils import extend_schema, extend_schema_view
 from rest_framework import status as http_status
 from rest_framework.decorators import action
 from rest_framework.request import Request
 from rest_framework.response import Response
+from rest_framework.renderers import StaticHTMLRenderer
 from rest_framework.views import APIView
 from rest_framework.viewsets import ModelViewSet
 
@@ -510,6 +514,7 @@ class ReverseGeocodeAPIView(APIView):
     add_item=extend_schema(tags=['Purchase Orders']),
     remove_item=extend_schema(tags=['Purchase Orders']),
     update_item=extend_schema(tags=['Purchase Orders']),
+    invoice=extend_schema(tags=['Purchase Orders']),
 )
 class PurchaseOrderViewSet(ModelViewSet):
     permission_classes = [IsCompanyUserOrAdmin]
@@ -714,3 +719,20 @@ class PurchaseOrderViewSet(ModelViewSet):
             pass
         order_serializer = PurchaseOrderSerializer(order)
         return Response(order_serializer.data)
+
+    @action(
+        detail=True,
+        methods=['get'],
+        url_path='invoice',
+        renderer_classes=[StaticHTMLRenderer],
+    )
+    def invoice(self, request, pk=None):
+        """Render a printable HTML invoice for the order."""
+        order = self.get_object()
+        html = render_to_string('core/invoice.html', {
+            'org': order.organization,
+            'order': order,
+            'items': list(order.items.all()),
+            'generated_at': timezone.now(),
+        })
+        return Response(html, content_type='text/html')

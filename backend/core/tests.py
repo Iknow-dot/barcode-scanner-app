@@ -14,7 +14,7 @@ from django.urls import reverse
 from rest_framework.exceptions import ValidationError as DRFValidationError
 from rest_framework.test import APIClient
 
-from core.models import Organization, PurchaseOrder
+from core.models import Organization, PurchaseOrder, Warehouse
 from core.serializers import (
     OrganizationExternalServiceSerializer,
     OrganizationSerializer,
@@ -768,3 +768,70 @@ class OrganizationInvoiceLogoValidationTests(TestCase):
         )
         self.assertFalse(serializer.is_valid())
         self.assertIn('invoice_logo', serializer.errors)
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
+class InvoiceEndpointTests(TestCase):
+    def setUp(self):
+        os.environ['FERNET_KEY'] = _TEST_FERNET_KEY
+        self.org_a = _make_organization(name='OrgA', identification_number='100')
+        self.org_b = _make_organization(name='OrgB', identification_number='200')
+        self.user_a = User.objects.create_user(
+            username='ua', password='p',
+            role=User.Role.COMPANY_USER, organization=self.org_a,
+        )
+        self.user_b = User.objects.create_user(
+            username='ub', password='p',
+            role=User.Role.COMPANY_USER, organization=self.org_b,
+        )
+        self.order_a = PurchaseOrder.objects.create(
+            organization=self.org_a, created_by=self.user_a,
+            customer_name='Nino Beridze', status='confirmed',
+        )
+        self.client_a = APIClient()
+        self.client_a.force_authenticate(self.user_a)
+
+    def tearDown(self):
+        os.environ.pop('FERNET_KEY', None)
+
+    def _url(self, order_id):
+        return f'/api/v1/orders/{order_id}/invoice/'
+
+    def test_invoice_returns_html_for_own_org(self):
+        response = self.client_a.get(self._url(self.order_a.id))
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('text/html', response['Content-Type'])
+        body = response.content.decode()
+        self.assertIn('Nino Beridze', body)
+        self.assertIn(f'#{self.order_a.id}', body)
+
+    def test_invoice_returns_404_for_foreign_org(self):
+        response = self.client_a.get(self._url(
+            PurchaseOrder.objects.create(
+                organization=self.org_b, created_by=self.user_b,
+                customer_name='Foreign',
+            ).id
+        ))
+        self.assertEqual(response.status_code, 404)
+
+    def test_invoice_unauthenticated_returns_401_or_403(self):
+        anon = APIClient()
+        response = anon.get(self._url(self.order_a.id))
+        self.assertIn(response.status_code, (401, 403))
+
+    def test_draft_invoice_includes_draft_watermark(self):
+        draft = PurchaseOrder.objects.create(
+            organization=self.org_a, created_by=self.user_a,
+            customer_name='Drafty', status='draft',
+        )
+        response = self.client_a.get(self._url(draft.id))
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('DRAFT', response.content.decode())
+
+    def test_confirmed_invoice_omits_draft_watermark(self):
+        response = self.client_a.get(self._url(self.order_a.id))
+        body = response.content.decode()
+        # The literal "DRAFT" string must not appear in the rendered HTML
+        # for a confirmed order. (Status display is "Confirmed".)
+        self.assertNotIn('>DRAFT<', body)
+        self.assertNotIn('draft-watermark', body)
