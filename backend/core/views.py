@@ -574,6 +574,7 @@ class InvoiceTokensAPIView(APIView):
     remove_item=extend_schema(tags=['Purchase Orders']),
     update_item=extend_schema(tags=['Purchase Orders']),
     invoice=extend_schema(tags=['Purchase Orders']),
+    invoice_preview=extend_schema(tags=['Purchase Orders']),
 )
 class PurchaseOrderViewSet(ModelViewSet):
     permission_classes = [IsCompanyUserOrAdmin]
@@ -794,5 +795,35 @@ class PurchaseOrderViewSet(ModelViewSet):
         org = order.organization
         template_html = org.invoice_template_html or DEFAULT_INVOICE_TEMPLATE_HTML
         body = render_invoice_template(template_html, org=org, order=order)
+        wrapped = wrap_in_skeleton(body, draft=order.status != 'confirmed')
+        return Response(wrapped, content_type='text/html')
+
+    @action(
+        detail=True,
+        methods=['post'],
+        url_path='invoice-preview',
+        renderer_classes=[StaticHTMLRenderer],
+    )
+    def invoice_preview(self, request, pk=None):
+        """Render an unsaved template against this order. No persistence."""
+        import json as _json
+        from django.http import HttpResponse
+        from core.services.invoice_renderer import render_invoice_template, wrap_in_skeleton
+        from core.services.invoice_template_sanitizer import (
+            InvoiceTemplateValidationError,
+            sanitize_and_validate,
+        )
+
+        order = self.get_object()
+        template_html = request.data.get('invoice_template_html', '') or ''
+        try:
+            sanitized = sanitize_and_validate(template_html)
+        except InvoiceTemplateValidationError as exc:
+            return HttpResponse(
+                _json.dumps({'code': exc.code, 'detail': exc.detail}),
+                status=400,
+                content_type='application/json',
+            )
+        body = render_invoice_template(sanitized, org=order.organization, order=order)
         wrapped = wrap_in_skeleton(body, draft=order.status != 'confirmed')
         return Response(wrapped, content_type='text/html')

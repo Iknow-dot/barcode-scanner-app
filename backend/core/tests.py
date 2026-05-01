@@ -1309,3 +1309,66 @@ class InvoiceTokensEndpointTests(TestCase):
         self.assertIn('item', resp.data['tokens'])
         self.assertIn('display_name', resp.data['tokens']['org'])
         self.assertIn('data-items-table', resp.data['default_template_html'])
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
+class InvoicePreviewEndpointTests(TestCase):
+    def setUp(self):
+        self.org_a = Organization.objects.create(
+            name='A', identification_number='1', web_service_url='https://a.example',
+            employees_count=5,
+        )
+        self.org_b = Organization.objects.create(
+            name='B', identification_number='2', web_service_url='https://b.example',
+            employees_count=5,
+        )
+        self.user_a = User.objects.create_user(
+            username='a', password='pw', role=User.Role.COMPANY_ADMIN,
+            organization=self.org_a,
+        )
+        self.order_a = PurchaseOrder.objects.create(
+            organization=self.org_a, customer_name='Alice', delivery_type='pickup',
+            status='confirmed',
+        )
+        self.order_b = PurchaseOrder.objects.create(
+            organization=self.org_b, customer_name='Bob', delivery_type='pickup',
+            status='confirmed',
+        )
+        self.client = APIClient()
+
+    def test_unauthenticated_returns_401(self):
+        resp = self.client.post(
+            f'/api/v1/orders/{self.order_a.id}/invoice-preview/',
+            data={'invoice_template_html': '<p>x</p>'}, format='json',
+        )
+        self.assertEqual(resp.status_code, 401)
+
+    def test_renders_override_without_persisting(self):
+        self.client.force_authenticate(self.user_a)
+        resp = self.client.post(
+            f'/api/v1/orders/{self.order_a.id}/invoice-preview/',
+            data={'invoice_template_html': '<p>PREVIEW-MARKER</p>'},
+            format='json',
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn('PREVIEW-MARKER', resp.content.decode('utf-8'))
+        self.org_a.refresh_from_db()
+        self.assertNotEqual(self.org_a.invoice_template_html, '<p>PREVIEW-MARKER</p>')
+
+    def test_invalid_template_returns_400(self):
+        self.client.force_authenticate(self.user_a)
+        resp = self.client.post(
+            f'/api/v1/orders/{self.order_a.id}/invoice-preview/',
+            data={'invoice_template_html': '<span data-token="org.nope"></span>'},
+            format='json',
+        )
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn('INVOICE_TEMPLATE_INVALID', str(resp.content))
+
+    def test_cross_org_order_returns_404(self):
+        self.client.force_authenticate(self.user_a)
+        resp = self.client.post(
+            f'/api/v1/orders/{self.order_b.id}/invoice-preview/',
+            data={'invoice_template_html': '<p>x</p>'}, format='json',
+        )
+        self.assertEqual(resp.status_code, 404)
