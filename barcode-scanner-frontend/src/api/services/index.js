@@ -5,3 +5,4 @@ export * as productService from './productService';
 export * as authService from './authService';
 export * as clientService from './clientService';
 export * as orderService from './orderService';
+export { default as invoiceTokenService } from './invoiceTokenService';

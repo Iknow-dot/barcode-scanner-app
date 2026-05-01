@@ -1,4 +1,4 @@
-import React, {useEffect, useState} from 'react';
+import React, {Suspense, useEffect, useState} from 'react';
 import {
     Button,
     Card,
@@ -9,6 +9,7 @@ import {
     Input,
     message,
     Spin,
+    Tabs,
     Upload,
 } from 'antd';
 import {
@@ -21,7 +22,11 @@ import {organizationService} from '../../api';
 import useAppNotification from '../../hooks/useAppNotification';
 import {useLanguage} from '../../i18n/LanguageContext';
 
-const InvoiceTemplateSettings = () => {
+const InvoiceTemplateEditor = React.lazy(() =>
+    import('./InvoiceEditor/InvoiceTemplateEditor')
+);
+
+const BrandingForm = () => {
     const [form] = Form.useForm();
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -180,6 +185,31 @@ const InvoiceTemplateSettings = () => {
                 </Card>
             </Spin>
         </>
+    );
+};
+
+const InvoiceTemplateSettings = () => {
+    const {t} = useLanguage();
+    return (
+        <Tabs
+            defaultActiveKey="branding"
+            items={[
+                {
+                    key: 'branding',
+                    label: t.invoiceTemplateBranding,
+                    children: <BrandingForm />,
+                },
+                {
+                    key: 'template',
+                    label: t.invoiceTemplateDesign,
+                    children: (
+                        <Suspense fallback={<Spin />}>
+                            <InvoiceTemplateEditor />
+                        </Suspense>
+                    ),
+                },
+            ]}
+        />
     );
 };
 

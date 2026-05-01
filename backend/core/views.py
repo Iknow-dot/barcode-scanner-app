@@ -534,6 +534,31 @@ class ReverseGeocodeAPIView(APIView):
         return Response({"address": address})
 
 
+@extend_schema(tags=['Invoice Templates'])
+class InvoiceTokensAPIView(APIView):
+    """Return the token catalog and default template HTML for the invoice editor.
+
+    The catalog is the same dict the renderer consumes — keeping it on a
+    single endpoint guarantees the editor's Insert-token menu and the
+    renderer cannot drift.
+    """
+    http_method_names = ['get']
+
+    def get(self, request: Request) -> Response:
+        from core.services.invoice_tokens import (
+            DEFAULT_INVOICE_TEMPLATE_HTML,
+            TOKEN_CATALOG,
+        )
+        public_catalog = {
+            scope: sorted(names.keys())
+            for scope, names in TOKEN_CATALOG.items()
+        }
+        return Response({
+            'tokens': public_catalog,
+            'default_template_html': DEFAULT_INVOICE_TEMPLATE_HTML,
+        })
+
+
 # ---------------------------------------------------------------------------
 # Purchase Order
 # ---------------------------------------------------------------------------
@@ -549,6 +574,7 @@ class ReverseGeocodeAPIView(APIView):
     remove_item=extend_schema(tags=['Purchase Orders']),
     update_item=extend_schema(tags=['Purchase Orders']),
     invoice=extend_schema(tags=['Purchase Orders']),
+    invoice_preview=extend_schema(tags=['Purchase Orders']),
 )
 class PurchaseOrderViewSet(ModelViewSet):
     permission_classes = [IsCompanyUserOrAdmin]
@@ -762,11 +788,42 @@ class PurchaseOrderViewSet(ModelViewSet):
     )
     def invoice(self, request, pk=None):
         """Render a printable HTML invoice for the order."""
+        from core.services.invoice_renderer import render_invoice_template, wrap_in_skeleton
+        from core.services.invoice_tokens import DEFAULT_INVOICE_TEMPLATE_HTML
+
         order = self.get_object()
-        html = render_to_string('core/invoice.html', {
-            'org': order.organization,
-            'order': order,
-            'items': order.items.all(),
-            'generated_at': timezone.now(),
-        })
-        return Response(html, content_type='text/html')
+        org = order.organization
+        template_html = org.invoice_template_html or DEFAULT_INVOICE_TEMPLATE_HTML
+        body = render_invoice_template(template_html, org=org, order=order)
+        wrapped = wrap_in_skeleton(body, draft=order.status != 'confirmed')
+        return Response(wrapped, content_type='text/html')
+
+    @action(
+        detail=True,
+        methods=['post'],
+        url_path='invoice-preview',
+        renderer_classes=[StaticHTMLRenderer],
+    )
+    def invoice_preview(self, request, pk=None):
+        """Render an unsaved template against this order. No persistence."""
+        import json as _json
+        from django.http import HttpResponse
+        from core.services.invoice_renderer import render_invoice_template, wrap_in_skeleton
+        from core.services.invoice_template_sanitizer import (
+            InvoiceTemplateValidationError,
+            sanitize_and_validate,
+        )
+
+        order = self.get_object()
+        template_html = request.data.get('invoice_template_html', '') or ''
+        try:
+            sanitized = sanitize_and_validate(template_html)
+        except InvoiceTemplateValidationError as exc:
+            return HttpResponse(
+                _json.dumps({'code': exc.code, 'detail': exc.detail}),
+                status=400,
+                content_type='application/json',
+            )
+        body = render_invoice_template(sanitized, org=order.organization, order=order)
+        wrapped = wrap_in_skeleton(body, draft=order.status != 'confirmed')
+        return Response(wrapped, content_type='text/html')

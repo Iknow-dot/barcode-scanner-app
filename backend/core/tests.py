@@ -14,7 +14,7 @@ from django.urls import reverse
 from rest_framework.exceptions import ValidationError as DRFValidationError
 from rest_framework.test import APIClient
 
-from core.models import Organization, PurchaseOrder
+from core.models import Organization, PurchaseOrder, PurchaseOrderItem, Warehouse
 from core.serializers import (
     OrganizationExternalServiceSerializer,
     OrganizationSerializer,
@@ -905,3 +905,485 @@ class InvoiceTemplateEndpointTests(TestCase):
     def test_anonymous_is_unauthorized(self):
         response = APIClient().get(self.url)
         self.assertIn(response.status_code, (401, 403))
+
+
+from core.services.invoice_tokens import (
+    DEFAULT_INVOICE_TEMPLATE_HTML,
+    TOKEN_CATALOG,
+    resolve_token,
+)
+
+
+class InvoiceTokenCatalogTests(TestCase):
+    def test_catalog_contains_three_scopes(self):
+        self.assertEqual(set(TOKEN_CATALOG.keys()), {'org', 'order', 'item'})
+
+    def test_org_scope_includes_expected_keys(self):
+        self.assertEqual(
+            set(TOKEN_CATALOG['org'].keys()),
+            {
+                'logo', 'display_name', 'address', 'phone', 'email',
+                'footer_text', 'identification_number', 'name',
+            },
+        )
+
+    def test_item_scope_includes_expected_keys(self):
+        self.assertEqual(
+            set(TOKEN_CATALOG['item'].keys()),
+            {
+                'index', 'sku', 'sku_name', 'article', 'warehouse_name',
+                'quantity', 'unit', 'price', 'discount', 'line_total',
+            },
+        )
+
+
+class InvoiceTokenResolverTests(TestCase):
+    def setUp(self):
+        self.org = Organization.objects.create(
+            name='Acme', identification_number='123456789',
+            web_service_url='https://example.com', employees_count=5,
+            invoice_display_name='Acme Display',
+            invoice_address='Tbilisi\nKostava 1',
+            invoice_phone='+995 555 11 22 33',
+            invoice_email='acme@example.com',
+            invoice_footer_text='Thanks for your business!',
+            invoice_logo='data:image/png;base64,iVBORw0KGgo=',
+        )
+        self.order = PurchaseOrder.objects.create(
+            organization=self.org,
+            customer_name='John Doe',
+            customer_phone='+995 555 99 88 77',
+            customer_identification_number='ID-001',
+            delivery_type='pickup',
+            status='confirmed',
+        )
+
+    def test_resolve_org_display_name(self):
+        self.assertEqual(resolve_token('org.display_name', org=self.org, order=self.order), 'Acme Display')
+
+    def test_resolve_org_display_name_falls_back_to_name(self):
+        self.org.invoice_display_name = ''
+        self.assertEqual(resolve_token('org.display_name', org=self.org, order=self.order), 'Acme')
+
+    def test_resolve_org_logo_returns_data_url(self):
+        self.assertEqual(
+            resolve_token('org.logo', org=self.org, order=self.order),
+            'data:image/png;base64,iVBORw0KGgo=',
+        )
+
+    def test_resolve_order_id(self):
+        self.assertEqual(resolve_token('order.id', org=self.org, order=self.order), str(self.order.id))
+
+    def test_resolve_order_customer_name(self):
+        self.assertEqual(resolve_token('order.customer_name', org=self.org, order=self.order), 'John Doe')
+
+    def test_resolve_unknown_token_raises(self):
+        with self.assertRaises(KeyError):
+            resolve_token('org.does_not_exist', org=self.org, order=self.order)
+
+    def test_resolve_item_warehouse_name(self):
+        item = PurchaseOrderItem.objects.create(
+            order=self.order, sku='X', sku_name='X', quantity=1, price=1,
+            warehouse_name='Main Warehouse',
+        )
+        self.assertEqual(
+            resolve_token('item.warehouse_name', item=item, index=1),
+            'Main Warehouse',
+        )
+
+    def test_resolve_item_warehouse_name_empty(self):
+        item = PurchaseOrderItem.objects.create(
+            order=self.order, sku='X', sku_name='X', quantity=1, price=1,
+        )
+        self.assertEqual(
+            resolve_token('item.warehouse_name', item=item, index=1),
+            '',
+        )
+
+    def test_resolve_item_discount_zero_decimal_is_rendered(self):
+        from decimal import Decimal
+        item = PurchaseOrderItem.objects.create(
+            order=self.order, sku='X', sku_name='X', quantity=1, price=10,
+            discounted_price=Decimal('0.00'),
+        )
+        result = resolve_token('item.discount', item=item, index=1)
+        self.assertIn('0', result)
+        self.assertNotEqual(result, '—')
+
+
+class DefaultInvoiceTemplateTests(TestCase):
+    def test_default_template_is_non_empty_html(self):
+        self.assertIn('<table', DEFAULT_INVOICE_TEMPLATE_HTML)
+        self.assertIn('data-items-table', DEFAULT_INVOICE_TEMPLATE_HTML)
+        self.assertIn('data-repeat="items"', DEFAULT_INVOICE_TEMPLATE_HTML)
+        self.assertIn('data-token="org.display_name"', DEFAULT_INVOICE_TEMPLATE_HTML)
+        self.assertIn('data-token="item.sku"', DEFAULT_INVOICE_TEMPLATE_HTML)
+
+
+from core.services.invoice_renderer import (
+    render_invoice_template,
+    wrap_in_skeleton,
+)
+
+
+class InvoiceRendererTests(TestCase):
+    def setUp(self):
+        self.org = Organization.objects.create(
+            name='Acme', identification_number='123456789',
+            web_service_url='https://example.com', employees_count=5,
+            invoice_display_name='Acme Display',
+            invoice_logo='data:image/png;base64,iVBORw0KGgo=',
+        )
+        self.order = PurchaseOrder.objects.create(
+            organization=self.org, customer_name='John', delivery_type='pickup',
+            status='confirmed',
+        )
+        # Two items so we can verify the row-clone count
+        PurchaseOrderItem.objects.create(
+            order=self.order, sku='SKU1', sku_name='Widget', quantity=2,
+            price=10, warehouse_name='Main',
+        )
+        PurchaseOrderItem.objects.create(
+            order=self.order, sku='SKU2', sku_name='Gadget', quantity=1,
+            price=20, warehouse_name='Main',
+        )
+
+    def test_substitutes_org_token(self):
+        template = '<p><span data-token="org.display_name"></span></p>'
+        html = render_invoice_template(template, org=self.org, order=self.order)
+        self.assertIn('Acme Display', html)
+        self.assertNotIn('data-token', html)
+
+    def test_substitutes_order_token(self):
+        template = '<p>#<span data-token="order.id"></span></p>'
+        html = render_invoice_template(template, org=self.org, order=self.order)
+        self.assertIn(f'#{self.order.id}', html)
+
+    def test_org_logo_token_rewrites_img_src(self):
+        template = '<img data-token="org.logo" alt="logo">'
+        html = render_invoice_template(template, org=self.org, order=self.order)
+        self.assertIn('src="data:image/png;base64,iVBORw0KGgo="', html)
+        self.assertNotIn('data-token', html)
+
+    def test_clones_items_row_per_item(self):
+        template = (
+            '<table data-items-table><tbody>'
+            '<tr data-repeat="items">'
+            '<td><span data-token="item.sku"></span></td>'
+            '<td><span data-token="item.index"></span></td>'
+            '</tr></tbody></table>'
+        )
+        html = render_invoice_template(template, org=self.org, order=self.order)
+        self.assertEqual(html.count('<tr>'), 2)  # one row per item, marker removed
+        self.assertIn('SKU1', html)
+        self.assertIn('SKU2', html)
+        self.assertNotIn('data-repeat', html)
+
+    def test_item_index_is_one_based(self):
+        template = (
+            '<table data-items-table><tbody>'
+            '<tr data-repeat="items"><td><span data-token="item.index"></span></td></tr>'
+            '</tbody></table>'
+        )
+        html = render_invoice_template(template, org=self.org, order=self.order)
+        self.assertIn('>1<', html)
+        self.assertIn('>2<', html)
+        self.assertNotIn('>0<', html)
+
+    def test_no_items_table_renders_no_items(self):
+        template = '<p>Hello</p>'
+        html = render_invoice_template(template, org=self.org, order=self.order)
+        self.assertEqual(html.strip(), '<p>Hello</p>')
+
+    def test_invalid_item_token_outside_row_renders_marker(self):
+        template = '<p><span data-token="item.sku"></span></p>'
+        html = render_invoice_template(template, org=self.org, order=self.order)
+        self.assertIn('[invalid:item.sku]', html)
+
+    def test_skeleton_wraps_body_with_print_css(self):
+        wrapped = wrap_in_skeleton('<p>body</p>', draft=False)
+        self.assertIn('<html', wrapped)
+        self.assertIn('<body', wrapped)
+        self.assertIn('@page', wrapped)
+        self.assertIn('<p>body</p>', wrapped)
+
+    def test_skeleton_includes_draft_watermark_for_draft(self):
+        wrapped = wrap_in_skeleton('<p>body</p>', draft=True)
+        self.assertIn('DRAFT', wrapped)
+
+    def test_skeleton_omits_draft_watermark_for_confirmed(self):
+        wrapped = wrap_in_skeleton('<p>body</p>', draft=False)
+        self.assertNotIn('class="draft-watermark"', wrapped)
+
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
+class InvoiceEndpointRenderingTests(TestCase):
+    def setUp(self):
+        self.org = Organization.objects.create(
+            name='Acme', identification_number='123456789',
+            web_service_url='https://example.com', employees_count=5,
+            invoice_display_name='Acme Display',
+        )
+        self.user = User.objects.create_user(
+            username='admin', password='pw', role=User.Role.COMPANY_ADMIN,
+            organization=self.org,
+        )
+        self.order = PurchaseOrder.objects.create(
+            organization=self.org, customer_name='John', delivery_type='pickup',
+            status='confirmed',
+        )
+        self.client = APIClient()
+        self.client.force_authenticate(self.user)
+
+    def test_invoice_uses_custom_template_when_present(self):
+        self.org.invoice_template_html = '<p>Custom-marker <span data-token="order.id"></span></p>'
+        self.org.save()
+        resp = self.client.get(f'/api/v1/orders/{self.order.id}/invoice/')
+        self.assertEqual(resp.status_code, 200)
+        body = resp.content.decode('utf-8')
+        self.assertIn('Custom-marker', body)
+        self.assertIn(str(self.order.id), body)
+
+    def test_invoice_falls_back_to_default_when_template_empty(self):
+        self.org.invoice_template_html = ''
+        self.org.save()
+        resp = self.client.get(f'/api/v1/orders/{self.order.id}/invoice/')
+        self.assertEqual(resp.status_code, 200)
+        body = resp.content.decode('utf-8')
+        self.assertIn('Acme Display', body)
+        self.assertIn('INVOICE', body)
+
+
+from core.services.invoice_template_sanitizer import (
+    InvoiceTemplateValidationError,
+    sanitize_and_validate,
+)
+
+
+class InvoiceTemplateSanitizerTests(TestCase):
+    def test_strips_script_tag(self):
+        result = sanitize_and_validate('<p>hi</p><script>alert(1)</script>')
+        self.assertNotIn('<script', result)
+        self.assertIn('<p>hi</p>', result)
+
+    def test_strips_event_handlers(self):
+        result = sanitize_and_validate('<p onclick="alert(1)">hi</p>')
+        self.assertNotIn('onclick', result)
+
+    def test_strips_dangerous_styles(self):
+        result = sanitize_and_validate(
+            '<p style="position: fixed; color: red; behavior: url(x);">hi</p>'
+        )
+        self.assertNotIn('position', result)
+        self.assertNotIn('behavior', result)
+        self.assertIn('color', result)
+        self.assertNotIn('expression', result.lower())
+
+    def test_strips_expression_in_allowed_property(self):
+        result = sanitize_and_validate('<p style="width: expression(alert(1));">hi</p>')
+        self.assertNotIn('expression', result.lower())
+
+    def test_strips_javascript_uri_in_img_src(self):
+        result = sanitize_and_validate('<img src="javascript:alert(1)" data-token="org.logo">')
+        self.assertNotIn('javascript:', result)
+
+    def test_allows_data_image_in_img_src(self):
+        html = '<img data-token="org.logo" src="data:image/png;base64,abc">'
+        result = sanitize_and_validate(html)
+        self.assertIn('src="data:image/png;base64,abc"', result)
+
+    def test_allows_data_token_attribute(self):
+        result = sanitize_and_validate('<span data-token="org.display_name"></span>')
+        self.assertIn('data-token="org.display_name"', result)
+
+    def test_allows_data_repeat_attribute(self):
+        result = sanitize_and_validate(
+            '<table data-items-table><tbody>'
+            '<tr data-repeat="items"><td><span data-token="item.sku"></span></td></tr>'
+            '</tbody></table>'
+        )
+        self.assertIn('data-repeat="items"', result)
+        self.assertIn('data-items-table', result)
+
+    def test_rejects_two_items_tables(self):
+        html = (
+            '<table data-items-table><tbody>'
+            '<tr data-repeat="items"><td>a</td></tr></tbody></table>'
+            '<table data-items-table><tbody>'
+            '<tr data-repeat="items"><td>b</td></tr></tbody></table>'
+        )
+        with self.assertRaises(InvoiceTemplateValidationError) as ctx:
+            sanitize_and_validate(html)
+        self.assertIn('items table', str(ctx.exception).lower())
+
+    def test_rejects_items_table_without_repeat_row(self):
+        html = '<table data-items-table><tbody><tr><td>a</td></tr></tbody></table>'
+        with self.assertRaises(InvoiceTemplateValidationError):
+            sanitize_and_validate(html)
+
+    def test_rejects_unknown_token(self):
+        html = '<span data-token="org.does_not_exist"></span>'
+        with self.assertRaises(InvoiceTemplateValidationError):
+            sanitize_and_validate(html)
+
+    def test_rejects_item_token_outside_repeat_row(self):
+        html = '<p><span data-token="item.sku"></span></p>'
+        with self.assertRaises(InvoiceTemplateValidationError):
+            sanitize_and_validate(html)
+
+    def test_accepts_default_template(self):
+        from core.services.invoice_tokens import DEFAULT_INVOICE_TEMPLATE_HTML
+        # Should not raise.
+        sanitize_and_validate(DEFAULT_INVOICE_TEMPLATE_HTML)
+
+    def test_empty_string_returns_empty(self):
+        self.assertEqual(sanitize_and_validate(''), '')
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
+class InvoiceTemplateSaveTests(TestCase):
+    def setUp(self):
+        self.org = Organization.objects.create(
+            name='Acme', identification_number='123456789',
+            web_service_url='https://example.com', employees_count=5,
+        )
+        self.admin = User.objects.create_user(
+            username='admin', password='pw', role=User.Role.COMPANY_ADMIN,
+            organization=self.org,
+        )
+        self.client = APIClient()
+        self.client.force_authenticate(self.admin)
+
+    def test_get_returns_invoice_template_html(self):
+        self.org.invoice_template_html = '<p>hi</p>'
+        self.org.save()
+        resp = self.client.get('/api/v1/organizations/my-organization/invoice-template/')
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data['invoice_template_html'], '<p>hi</p>')
+
+    def test_patch_persists_sanitized_invoice_template_html(self):
+        payload = {'invoice_template_html': '<p>hi</p><script>alert(1)</script>'}
+        resp = self.client.patch(
+            '/api/v1/organizations/my-organization/invoice-template/',
+            data=payload, format='json',
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.org.refresh_from_db()
+        self.assertIn('<p>hi</p>', self.org.invoice_template_html)
+        self.assertNotIn('<script', self.org.invoice_template_html)
+
+    def test_patch_rejects_two_items_tables(self):
+        bad = (
+            '<table data-items-table><tbody>'
+            '<tr data-repeat="items"><td>a</td></tr></tbody></table>'
+            '<table data-items-table><tbody>'
+            '<tr data-repeat="items"><td>b</td></tr></tbody></table>'
+        )
+        resp = self.client.patch(
+            '/api/v1/organizations/my-organization/invoice-template/',
+            data={'invoice_template_html': bad}, format='json',
+        )
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn('INVOICE_TEMPLATE_INVALID', str(resp.content))
+
+    def test_patch_rejects_unknown_token(self):
+        resp = self.client.patch(
+            '/api/v1/organizations/my-organization/invoice-template/',
+            data={'invoice_template_html': '<span data-token="org.nope"></span>'},
+            format='json',
+        )
+        self.assertEqual(resp.status_code, 400)
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
+class InvoiceTokensEndpointTests(TestCase):
+    def setUp(self):
+        self.org = Organization.objects.create(
+            name='Acme', identification_number='123456789',
+            web_service_url='https://example.com', employees_count=5,
+        )
+        self.user = User.objects.create_user(
+            username='u', password='pw', role=User.Role.COMPANY_USER,
+            organization=self.org,
+        )
+        self.client = APIClient()
+
+    def test_unauthenticated_returns_401(self):
+        resp = self.client.get('/api/v1/invoice-tokens/')
+        self.assertEqual(resp.status_code, 401)
+
+    def test_authenticated_returns_catalog_and_default(self):
+        self.client.force_authenticate(self.user)
+        resp = self.client.get('/api/v1/invoice-tokens/')
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn('tokens', resp.data)
+        self.assertIn('default_template_html', resp.data)
+        self.assertIn('org', resp.data['tokens'])
+        self.assertIn('order', resp.data['tokens'])
+        self.assertIn('item', resp.data['tokens'])
+        self.assertIn('display_name', resp.data['tokens']['org'])
+        self.assertIn('data-items-table', resp.data['default_template_html'])
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
+class InvoicePreviewEndpointTests(TestCase):
+    def setUp(self):
+        self.org_a = Organization.objects.create(
+            name='A', identification_number='1', web_service_url='https://a.example',
+            employees_count=5,
+        )
+        self.org_b = Organization.objects.create(
+            name='B', identification_number='2', web_service_url='https://b.example',
+            employees_count=5,
+        )
+        self.user_a = User.objects.create_user(
+            username='a', password='pw', role=User.Role.COMPANY_ADMIN,
+            organization=self.org_a,
+        )
+        self.order_a = PurchaseOrder.objects.create(
+            organization=self.org_a, customer_name='Alice', delivery_type='pickup',
+            status='confirmed',
+        )
+        self.order_b = PurchaseOrder.objects.create(
+            organization=self.org_b, customer_name='Bob', delivery_type='pickup',
+            status='confirmed',
+        )
+        self.client = APIClient()
+
+    def test_unauthenticated_returns_401(self):
+        resp = self.client.post(
+            f'/api/v1/orders/{self.order_a.id}/invoice-preview/',
+            data={'invoice_template_html': '<p>x</p>'}, format='json',
+        )
+        self.assertEqual(resp.status_code, 401)
+
+    def test_renders_override_without_persisting(self):
+        self.client.force_authenticate(self.user_a)
+        resp = self.client.post(
+            f'/api/v1/orders/{self.order_a.id}/invoice-preview/',
+            data={'invoice_template_html': '<p>PREVIEW-MARKER</p>'},
+            format='json',
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn('PREVIEW-MARKER', resp.content.decode('utf-8'))
+        self.org_a.refresh_from_db()
+        self.assertNotEqual(self.org_a.invoice_template_html, '<p>PREVIEW-MARKER</p>')
+
+    def test_invalid_template_returns_400(self):
+        self.client.force_authenticate(self.user_a)
+        resp = self.client.post(
+            f'/api/v1/orders/{self.order_a.id}/invoice-preview/',
+            data={'invoice_template_html': '<span data-token="org.nope"></span>'},
+            format='json',
+        )
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn('INVOICE_TEMPLATE_INVALID', str(resp.content))
+
+    def test_cross_org_order_returns_404(self):
+        self.client.force_authenticate(self.user_a)
+        resp = self.client.post(
+            f'/api/v1/orders/{self.order_b.id}/invoice-preview/',
+            data={'invoice_template_html': '<p>x</p>'}, format='json',
+        )
+        self.assertEqual(resp.status_code, 404)
