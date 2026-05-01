@@ -69,7 +69,7 @@ TOKEN_CATALOG: Dict[str, Dict[str, Callable]] = {
         'sku': lambda item, index: item.sku or '',
         'sku_name': lambda item, index: item.sku_name or '',
         'article': lambda item, index: getattr(item, 'article', '') or '',
-        'warehouse_name': lambda item, index: getattr(item.warehouse, 'name', '') if getattr(item, 'warehouse_id', None) else '',
+        'warehouse_name': lambda item, index: item.warehouse_name or '',
         'quantity': lambda item, index: str(item.quantity),
         'unit': lambda item, index: getattr(item, 'unit', '') or '',
         'price': lambda item, index: str(item.price),

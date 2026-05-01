@@ -981,6 +981,25 @@ class InvoiceTokenResolverTests(TestCase):
         with self.assertRaises(KeyError):
             resolve_token('org.does_not_exist', org=self.org, order=self.order)
 
+    def test_resolve_item_warehouse_name(self):
+        item = PurchaseOrderItem.objects.create(
+            order=self.order, sku='X', sku_name='X', quantity=1, price=1,
+            warehouse_name='Main Warehouse',
+        )
+        self.assertEqual(
+            resolve_token('item.warehouse_name', item=item, index=1),
+            'Main Warehouse',
+        )
+
+    def test_resolve_item_warehouse_name_empty(self):
+        item = PurchaseOrderItem.objects.create(
+            order=self.order, sku='X', sku_name='X', quantity=1, price=1,
+        )
+        self.assertEqual(
+            resolve_token('item.warehouse_name', item=item, index=1),
+            '',
+        )
+
 
 class DefaultInvoiceTemplateTests(TestCase):
     def test_default_template_is_non_empty_html(self):
