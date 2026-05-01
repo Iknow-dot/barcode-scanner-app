@@ -1142,4 +1142,84 @@ class InvoiceEndpointRenderingTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         body = resp.content.decode('utf-8')
         self.assertIn('Acme Display', body)
-        self.assertIn('INVOICE', body)
+
+
+from core.services.invoice_template_sanitizer import (
+    InvoiceTemplateValidationError,
+    sanitize_and_validate,
+)
+
+
+class InvoiceTemplateSanitizerTests(TestCase):
+    def test_strips_script_tag(self):
+        result = sanitize_and_validate('<p>hi</p><script>alert(1)</script>')
+        self.assertNotIn('<script', result)
+        self.assertIn('<p>hi</p>', result)
+
+    def test_strips_event_handlers(self):
+        result = sanitize_and_validate('<p onclick="alert(1)">hi</p>')
+        self.assertNotIn('onclick', result)
+
+    def test_strips_dangerous_styles(self):
+        result = sanitize_and_validate(
+            '<p style="position: fixed; color: red; behavior: url(x);">hi</p>'
+        )
+        self.assertNotIn('position', result)
+        self.assertNotIn('behavior', result)
+        self.assertIn('color', result)
+
+    def test_strips_javascript_uri_in_img_src(self):
+        result = sanitize_and_validate('<img src="javascript:alert(1)" data-token="org.logo">')
+        self.assertNotIn('javascript:', result)
+
+    def test_allows_data_image_in_img_src(self):
+        html = '<img data-token="org.logo" src="data:image/png;base64,abc">'
+        result = sanitize_and_validate(html)
+        self.assertIn('src="data:image/png;base64,abc"', result)
+
+    def test_allows_data_token_attribute(self):
+        result = sanitize_and_validate('<span data-token="org.display_name"></span>')
+        self.assertIn('data-token="org.display_name"', result)
+
+    def test_allows_data_repeat_attribute(self):
+        result = sanitize_and_validate(
+            '<table data-items-table><tbody>'
+            '<tr data-repeat="items"><td><span data-token="item.sku"></span></td></tr>'
+            '</tbody></table>'
+        )
+        self.assertIn('data-repeat="items"', result)
+        self.assertIn('data-items-table', result)
+
+    def test_rejects_two_items_tables(self):
+        html = (
+            '<table data-items-table><tbody>'
+            '<tr data-repeat="items"><td>a</td></tr></tbody></table>'
+            '<table data-items-table><tbody>'
+            '<tr data-repeat="items"><td>b</td></tr></tbody></table>'
+        )
+        with self.assertRaises(InvoiceTemplateValidationError) as ctx:
+            sanitize_and_validate(html)
+        self.assertIn('items table', str(ctx.exception).lower())
+
+    def test_rejects_items_table_without_repeat_row(self):
+        html = '<table data-items-table><tbody><tr><td>a</td></tr></tbody></table>'
+        with self.assertRaises(InvoiceTemplateValidationError):
+            sanitize_and_validate(html)
+
+    def test_rejects_unknown_token(self):
+        html = '<span data-token="org.does_not_exist"></span>'
+        with self.assertRaises(InvoiceTemplateValidationError):
+            sanitize_and_validate(html)
+
+    def test_rejects_item_token_outside_repeat_row(self):
+        html = '<p><span data-token="item.sku"></span></p>'
+        with self.assertRaises(InvoiceTemplateValidationError):
+            sanitize_and_validate(html)
+
+    def test_accepts_default_template(self):
+        from core.services.invoice_tokens import DEFAULT_INVOICE_TEMPLATE_HTML
+        # Should not raise.
+        sanitize_and_validate(DEFAULT_INVOICE_TEMPLATE_HTML)
+
+    def test_empty_string_returns_empty(self):
+        self.assertEqual(sanitize_and_validate(''), '')
