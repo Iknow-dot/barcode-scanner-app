@@ -14,7 +14,7 @@ from django.urls import reverse
 from rest_framework.exceptions import ValidationError as DRFValidationError
 from rest_framework.test import APIClient
 
-from core.models import Organization, PurchaseOrder
+from core.models import Organization, PurchaseOrder, PurchaseOrderItem, Warehouse
 from core.serializers import (
     OrganizationExternalServiceSerializer,
     OrganizationSerializer,
@@ -989,3 +989,99 @@ class DefaultInvoiceTemplateTests(TestCase):
         self.assertIn('data-repeat="items"', DEFAULT_INVOICE_TEMPLATE_HTML)
         self.assertIn('data-token="org.display_name"', DEFAULT_INVOICE_TEMPLATE_HTML)
         self.assertIn('data-token="item.sku"', DEFAULT_INVOICE_TEMPLATE_HTML)
+
+
+from core.services.invoice_renderer import (
+    render_invoice_template,
+    wrap_in_skeleton,
+)
+
+
+class InvoiceRendererTests(TestCase):
+    def setUp(self):
+        self.org = Organization.objects.create(
+            name='Acme', identification_number='123456789',
+            web_service_url='https://example.com', employees_count=5,
+            invoice_display_name='Acme Display',
+            invoice_logo='data:image/png;base64,iVBORw0KGgo=',
+        )
+        self.order = PurchaseOrder.objects.create(
+            organization=self.org, customer_name='John', delivery_type='pickup',
+            status='confirmed',
+        )
+        # Two items so we can verify the row-clone count
+        PurchaseOrderItem.objects.create(
+            order=self.order, sku='SKU1', sku_name='Widget', quantity=2,
+            price=10, warehouse_name='Main',
+        )
+        PurchaseOrderItem.objects.create(
+            order=self.order, sku='SKU2', sku_name='Gadget', quantity=1,
+            price=20, warehouse_name='Main',
+        )
+
+    def test_substitutes_org_token(self):
+        template = '<p><span data-token="org.display_name"></span></p>'
+        html = render_invoice_template(template, org=self.org, order=self.order)
+        self.assertIn('Acme Display', html)
+        self.assertNotIn('data-token', html)
+
+    def test_substitutes_order_token(self):
+        template = '<p>#<span data-token="order.id"></span></p>'
+        html = render_invoice_template(template, org=self.org, order=self.order)
+        self.assertIn(f'#{self.order.id}', html)
+
+    def test_org_logo_token_rewrites_img_src(self):
+        template = '<img data-token="org.logo" alt="logo">'
+        html = render_invoice_template(template, org=self.org, order=self.order)
+        self.assertIn('src="data:image/png;base64,iVBORw0KGgo="', html)
+        self.assertNotIn('data-token', html)
+
+    def test_clones_items_row_per_item(self):
+        template = (
+            '<table data-items-table><tbody>'
+            '<tr data-repeat="items">'
+            '<td><span data-token="item.sku"></span></td>'
+            '<td><span data-token="item.index"></span></td>'
+            '</tr></tbody></table>'
+        )
+        html = render_invoice_template(template, org=self.org, order=self.order)
+        self.assertEqual(html.count('<tr>'), 2)  # one row per item, marker removed
+        self.assertIn('SKU1', html)
+        self.assertIn('SKU2', html)
+        self.assertNotIn('data-repeat', html)
+
+    def test_item_index_is_one_based(self):
+        template = (
+            '<table data-items-table><tbody>'
+            '<tr data-repeat="items"><td><span data-token="item.index"></span></td></tr>'
+            '</tbody></table>'
+        )
+        html = render_invoice_template(template, org=self.org, order=self.order)
+        self.assertIn('>1<', html)
+        self.assertIn('>2<', html)
+        self.assertNotIn('>0<', html)
+
+    def test_no_items_table_renders_no_items(self):
+        template = '<p>Hello</p>'
+        html = render_invoice_template(template, org=self.org, order=self.order)
+        self.assertEqual(html.strip(), '<p>Hello</p>')
+
+    def test_invalid_item_token_outside_row_renders_marker(self):
+        template = '<p><span data-token="item.sku"></span></p>'
+        html = render_invoice_template(template, org=self.org, order=self.order)
+        self.assertIn('[invalid:item.sku]', html)
+
+    def test_skeleton_wraps_body_with_print_css(self):
+        wrapped = wrap_in_skeleton('<p>body</p>', draft=False)
+        self.assertIn('<html', wrapped)
+        self.assertIn('<body', wrapped)
+        self.assertIn('@page', wrapped)
+        self.assertIn('<p>body</p>', wrapped)
+
+    def test_skeleton_includes_draft_watermark_for_draft(self):
+        wrapped = wrap_in_skeleton('<p>body</p>', draft=True)
+        self.assertIn('DRAFT', wrapped)
+
+    def test_skeleton_omits_draft_watermark_for_confirmed(self):
+        wrapped = wrap_in_skeleton('<p>body</p>', draft=False)
+        self.assertNotIn('class="draft-watermark"', wrapped)
