@@ -79,3 +79,17 @@ export const updateOrderItem = (orderId, itemId, data) => {
 export const fetchInvoiceHtml = (orderId) => {
     return api.get(API_ENDPOINTS.order_invoice(orderId), { responseType: 'text' });
 };
+
+/**
+ * Render a preview of an invoice using a custom template.
+ * @param {number} orderId
+ * @param {string} templateHtml - The TipTap-generated HTML template with token placeholders.
+ * @returns {Promise<string>} The rendered HTML string.
+ */
+export const fetchInvoicePreviewHtml = (orderId, templateHtml) => {
+    return api.post(
+        API_ENDPOINTS.order_invoice_preview(orderId),
+        {invoice_template_html: templateHtml},
+        {responseType: 'text'},
+    );
+};
