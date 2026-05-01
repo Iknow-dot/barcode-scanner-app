@@ -53,6 +53,12 @@ import {
 
 const {Title, Text} = Typography;
 
+const ORDER_STATUS_COLOR = {
+    draft: 'blue',
+    confirmed: 'green',
+    cancelled: 'red',
+};
+
 const UserDashboard = () => {
     const [drawerVisible, setDrawerVisible] = useState(false);
     const [form] = Form.useForm();
@@ -73,6 +79,13 @@ const UserDashboard = () => {
     // Incomplete orders state
     const [incompleteOrders, setIncompleteOrders] = useState([]);
     const [incompleteOrdersLoading, setIncompleteOrdersLoading] = useState(false);
+
+    // Customer search across all orders (any status) — used to find a past
+    // order to reprint its invoice. Empty input keeps the tab in its
+    // default "my drafts" view.
+    const [customerSearch, setCustomerSearch] = useState('');
+    const [searchResults, setSearchResults] = useState([]);
+    const [searchLoading, setSearchLoading] = useState(false);
 
     // Mobile tab state: 'scan' (product), 'current' (active order workflow),
     // or 'orders' (incomplete / draft orders).
@@ -131,6 +144,29 @@ const UserDashboard = () => {
             fetchIncompleteOrders();
         }
     }, [activeTab, fetchIncompleteOrders]);
+
+    // Debounced customer search across all org orders. Only runs while the
+    // Orders tab is active and the input is non-empty.
+    useEffect(() => {
+        const trimmed = customerSearch.trim();
+        if (activeTab !== 'orders' || !trimmed) {
+            return;
+        }
+        const handle = setTimeout(async () => {
+            setSearchLoading(true);
+            try {
+                const result = await orderService.getOrders({customer_search: trimmed});
+                if (result.success) {
+                    setSearchResults(Array.isArray(result.data) ? result.data : result.data?.results || []);
+                } else {
+                    setSearchResults([]);
+                }
+            } finally {
+                setSearchLoading(false);
+            }
+        }, 300);
+        return () => clearTimeout(handle);
+    }, [activeTab, customerSearch]);
 
     const isSearchingRef = useRef(false);
     // Remembers the last successful search so the "show other warehouses"
@@ -340,6 +376,7 @@ const UserDashboard = () => {
         if (result.success) {
             notify.success(t.success, t.orderDeleted);
             setIncompleteOrders((prev) => prev.filter((o) => o.id !== orderId));
+            setSearchResults((prev) => prev.filter((o) => o.id !== orderId));
         } else {
             notify.error(t.orderError, result.error);
         }
@@ -615,113 +652,142 @@ const UserDashboard = () => {
         </div>
     );
 
-    // ===== Orders Tab — incomplete (draft) orders =====
-    const renderOrdersTab = () => (
-        <div className="m-tab-content">
-            <Button
-                type="primary"
-                size="large"
-                icon={<PlusOutlined/>}
-                onClick={handleStartFreshOrder}
-                block
-                className="m-new-order-btn"
-                style={{marginBottom: 12}}
+    // ===== Orders Tab — incomplete drafts + customer search across all orders =====
+    const renderOrderRow = (order) => {
+        const isDraft = order.status === 'draft';
+        const statusLabelMap = {
+            draft: t.orderDraft,
+            confirmed: t.orderConfirmed,
+            cancelled: t.orderCancelled,
+        };
+        return (
+            <List.Item
+                className="m-incomplete-order-row"
+                onClick={isDraft ? () => handleContinueOrder(order.id) : undefined}
+                style={!isDraft ? {cursor: 'default'} : undefined}
             >
-                {t.newOrder}
-            </Button>
-            <Spin spinning={incompleteOrdersLoading} size="large">
-                {incompleteOrders.length === 0 && !incompleteOrdersLoading ? (
-                    <Empty
-                        image={Empty.PRESENTED_IMAGE_SIMPLE}
-                        description={
-                            <Text type="secondary" style={{fontSize: 13}}>
-                                {t.noIncompleteOrders}
+                <List.Item.Meta
+                    title={
+                        <Flex align="center" gap={6} wrap="wrap">
+                            <Text strong style={{fontSize: 14}}>
+                                #{order.id}
                             </Text>
-                        }
-                        style={{margin: '32px 0'}}
-                    />
-                ) : (
-                    <List
+                            <Tag color={ORDER_STATUS_COLOR[order.status] || 'default'} style={{fontSize: 11}}>
+                                {statusLabelMap[order.status] || order.status}
+                            </Tag>
+                        </Flex>
+                    }
+                    description={
+                        <Flex vertical gap={2}>
+                            <Flex align="center" gap={4}>
+                                <UserOutlined style={{fontSize: 11, opacity: 0.5}}/>
+                                <Text type="secondary" style={{fontSize: 13}}>
+                                    {order.customer_name}
+                                </Text>
+                            </Flex>
+                            <Flex align="center" gap={4} wrap="wrap">
+                                <CalendarOutlined style={{fontSize: 11, opacity: 0.5}}/>
+                                <Text type="secondary" style={{fontSize: 12}}>
+                                    {order.created_at && new Date(order.created_at).toLocaleDateString()}
+                                </Text>
+                                {order.items_count > 0 && (
+                                    <Tag style={{fontSize: 11, marginLeft: 4}}>
+                                        {order.items_count} {t.items}
+                                    </Tag>
+                                )}
+                            </Flex>
+                            {order.total != null && (
+                                <Text strong style={{fontSize: 13, color: '#52c41a'}}>
+                                    {t.orderTotal}: {order.total} ₾
+                                </Text>
+                            )}
+                        </Flex>
+                    }
+                />
+                <Flex align="center" gap={8}>
+                    <Button
+                        type="text"
                         size="small"
-                        dataSource={incompleteOrders}
-                        renderItem={(order) => (
-                            <List.Item
-                                className="m-incomplete-order-row"
-                                onClick={() => handleContinueOrder(order.id)}
-                            >
-                                <List.Item.Meta
-                                    title={
-                                        <Flex align="center" gap={6} wrap="wrap">
-                                            <Text strong style={{fontSize: 14}}>
-                                                #{order.id}
-                                            </Text>
-                                            <Tag color="blue" style={{fontSize: 11}}>
-                                                {t.orderDraft}
-                                            </Tag>
-                                        </Flex>
-                                    }
-                                    description={
-                                        <Flex vertical gap={2}>
-                                            <Flex align="center" gap={4}>
-                                                <UserOutlined style={{fontSize: 11, opacity: 0.5}}/>
-                                                <Text type="secondary" style={{fontSize: 13}}>
-                                                    {order.customer_name}
-                                                </Text>
-                                            </Flex>
-                                            <Flex align="center" gap={4} wrap="wrap">
-                                                <CalendarOutlined style={{fontSize: 11, opacity: 0.5}}/>
-                                                <Text type="secondary" style={{fontSize: 12}}>
-                                                    {order.created_at && new Date(order.created_at).toLocaleDateString()}
-                                                </Text>
-                                                {order.items_count > 0 && (
-                                                    <Tag style={{fontSize: 11, marginLeft: 4}}>
-                                                        {order.items_count} {t.items}
-                                                    </Tag>
-                                                )}
-                                            </Flex>
-                                            {order.total != null && (
-                                                <Text strong style={{fontSize: 13, color: '#52c41a'}}>
-                                                    {t.orderTotal}: {order.total} ₾
-                                                </Text>
-                                            )}
-                                        </Flex>
-                                    }
-                                />
-                                <Flex align="center" gap={8}>
-                                    <Button
-                                        type="text"
-                                        size="small"
-                                        icon={<PrinterOutlined/>}
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            printInvoice(order.id, t, notify);
-                                        }}
-                                        title={t.printInvoice}
-                                    />
-                                    <Popconfirm
-                                        title={t.confirmDelete}
-                                        onConfirm={(e) => handleDeleteIncompleteOrder(e, order.id)}
-                                        onCancel={(e) => e.stopPropagation()}
-                                        okText={t.yes}
-                                        cancelText={t.no}
-                                    >
-                                        <Button
-                                            type="text"
-                                            danger
-                                            size="small"
-                                            icon={<DeleteOutlined/>}
-                                            onClick={(e) => e.stopPropagation()}
-                                        />
-                                    </Popconfirm>
-                                    <RightOutlined style={{fontSize: 12, opacity: 0.3}}/>
-                                </Flex>
-                            </List.Item>
-                        )}
+                        icon={<PrinterOutlined/>}
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            printInvoice(order.id, t, notify);
+                        }}
+                        title={t.printInvoice}
                     />
-                )}
-            </Spin>
-        </div>
-    );
+                    {isDraft && (
+                        <Popconfirm
+                            title={t.confirmDelete}
+                            onConfirm={(e) => handleDeleteIncompleteOrder(e, order.id)}
+                            onCancel={(e) => e.stopPropagation()}
+                            okText={t.yes}
+                            cancelText={t.no}
+                        >
+                            <Button
+                                type="text"
+                                danger
+                                size="small"
+                                icon={<DeleteOutlined/>}
+                                onClick={(e) => e.stopPropagation()}
+                            />
+                        </Popconfirm>
+                    )}
+                    {isDraft && <RightOutlined style={{fontSize: 12, opacity: 0.3}}/>}
+                </Flex>
+            </List.Item>
+        );
+    };
+
+    const renderOrdersTab = () => {
+        const isSearching = customerSearch.trim().length > 0;
+        const displayedOrders = isSearching ? searchResults : incompleteOrders;
+        const isLoading = isSearching ? searchLoading : incompleteOrdersLoading;
+        const emptyText = isSearching ? t.noOrders : t.noIncompleteOrders;
+
+        return (
+            <div className="m-tab-content">
+                <Button
+                    type="primary"
+                    size="large"
+                    icon={<PlusOutlined/>}
+                    onClick={handleStartFreshOrder}
+                    block
+                    className="m-new-order-btn"
+                    style={{marginBottom: 12}}
+                >
+                    {t.newOrder}
+                </Button>
+                <Input
+                    placeholder={t.searchByCustomer}
+                    value={customerSearch}
+                    onChange={(e) => setCustomerSearch(e.target.value)}
+                    prefix={<UserOutlined style={{opacity: 0.4}}/>}
+                    allowClear
+                    style={{marginBottom: 12}}
+                    size="large"
+                />
+                <Spin spinning={isLoading} size="large">
+                    {displayedOrders.length === 0 && !isLoading ? (
+                        <Empty
+                            image={Empty.PRESENTED_IMAGE_SIMPLE}
+                            description={
+                                <Text type="secondary" style={{fontSize: 13}}>
+                                    {emptyText}
+                                </Text>
+                            }
+                            style={{margin: '32px 0'}}
+                        />
+                    ) : (
+                        <List
+                            size="small"
+                            dataSource={displayedOrders}
+                            renderItem={renderOrderRow}
+                        />
+                    )}
+                </Spin>
+            </div>
+        );
+    };
 
     return (
         <>
