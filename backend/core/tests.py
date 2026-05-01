@@ -1224,3 +1224,58 @@ class InvoiceTemplateSanitizerTests(TestCase):
 
     def test_empty_string_returns_empty(self):
         self.assertEqual(sanitize_and_validate(''), '')
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
+class InvoiceTemplateSaveTests(TestCase):
+    def setUp(self):
+        self.org = Organization.objects.create(
+            name='Acme', identification_number='123456789',
+            web_service_url='https://example.com', employees_count=5,
+        )
+        self.admin = User.objects.create_user(
+            username='admin', password='pw', role=User.Role.COMPANY_ADMIN,
+            organization=self.org,
+        )
+        self.client = APIClient()
+        self.client.force_authenticate(self.admin)
+
+    def test_get_returns_invoice_template_html(self):
+        self.org.invoice_template_html = '<p>hi</p>'
+        self.org.save()
+        resp = self.client.get('/api/v1/organizations/my-organization/invoice-template/')
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data['invoice_template_html'], '<p>hi</p>')
+
+    def test_patch_persists_sanitized_invoice_template_html(self):
+        payload = {'invoice_template_html': '<p>hi</p><script>alert(1)</script>'}
+        resp = self.client.patch(
+            '/api/v1/organizations/my-organization/invoice-template/',
+            data=payload, format='json',
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.org.refresh_from_db()
+        self.assertIn('<p>hi</p>', self.org.invoice_template_html)
+        self.assertNotIn('<script', self.org.invoice_template_html)
+
+    def test_patch_rejects_two_items_tables(self):
+        bad = (
+            '<table data-items-table><tbody>'
+            '<tr data-repeat="items"><td>a</td></tr></tbody></table>'
+            '<table data-items-table><tbody>'
+            '<tr data-repeat="items"><td>b</td></tr></tbody></table>'
+        )
+        resp = self.client.patch(
+            '/api/v1/organizations/my-organization/invoice-template/',
+            data={'invoice_template_html': bad}, format='json',
+        )
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn('INVOICE_TEMPLATE_INVALID', str(resp.content))
+
+    def test_patch_rejects_unknown_token(self):
+        resp = self.client.patch(
+            '/api/v1/organizations/my-organization/invoice-template/',
+            data={'invoice_template_html': '<span data-token="org.nope"></span>'},
+            format='json',
+        )
+        self.assertEqual(resp.status_code, 400)

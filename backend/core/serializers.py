@@ -144,7 +144,8 @@ class OrganizationInvoiceTemplateSerializer(serializers.ModelSerializer):
     """Serializer for company admins to update their organization's invoice template fields.
 
     Reuses `OrganizationSerializer.validate_invoice_logo` to keep the size cap
-    and MIME allowlist in one place.
+    and MIME allowlist in one place. `invoice_template_html` is sanitized and
+    structurally validated via the dedicated sanitizer module.
     """
 
     class Meta:
@@ -156,12 +157,21 @@ class OrganizationInvoiceTemplateSerializer(serializers.ModelSerializer):
             'invoice_phone',
             'invoice_email',
             'invoice_footer_text',
+            'invoice_template_html',
         ]
 
     def validate_invoice_logo(self, value):
-        # Delegate to the canonical validator on OrganizationSerializer so the
-        # constraints don't drift between the two write paths.
         return OrganizationSerializer().validate_invoice_logo(value)
+
+    def validate_invoice_template_html(self, value):
+        from core.services.invoice_template_sanitizer import (
+            InvoiceTemplateValidationError,
+            sanitize_and_validate,
+        )
+        try:
+            return sanitize_and_validate(value or '')
+        except InvoiceTemplateValidationError as exc:
+            raise serializers.ValidationError({'code': exc.code, 'detail': exc.detail})
 
 
 # ---------------------------------------------------------------------------
