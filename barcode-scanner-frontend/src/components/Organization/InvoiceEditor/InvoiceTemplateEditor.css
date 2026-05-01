@@ -1,0 +1,32 @@
+/* A4 page surface (816 x 1056 ≈ A4 at 96dpi). */
+.invoice-editor-surface {
+  width: 816px;
+  min-height: 1056px;
+  margin: 16px auto;
+  padding: 60px 60px;
+  background: white;
+  box-shadow: 0 0 12px rgba(0, 0, 0, 0.15);
+  font-size: 13px;
+  color: #222;
+}
+.invoice-editor-surface .ProseMirror { outline: none; min-height: 800px; }
+
+.invoice-editor-toolbar { position: sticky; top: 0; z-index: 5; background: #fafafa; padding: 8px; border-bottom: 1px solid #e0e0e0; display: flex; flex-wrap: wrap; gap: 4px; }
+
+.token-chip {
+  display: inline-block;
+  padding: 1px 8px;
+  margin: 0 2px;
+  background: #f0f0f0;
+  border-radius: 10px;
+  font-size: 11px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  color: #333;
+  user-select: none;
+  cursor: default;
+}
+.token-chip-org { box-shadow: inset 4px 0 0 #722ed1; padding-left: 12px; }
+.token-chip-order { box-shadow: inset 4px 0 0 #1677ff; padding-left: 12px; }
+.token-chip-item { box-shadow: inset 4px 0 0 #52c41a; padding-left: 12px; }
+
+.invoice-editor-page-bg { background: #f5f5f5; padding: 16px 0; }
