@@ -6,7 +6,8 @@ import WarehousesTab from './WarehousesTab';
 import UsersTab from './UsersTab';
 import OrdersTab from './OrdersTab';
 import ExternalServiceSettings from '../Organization/ExternalServiceSettings';
-import {AppstoreOutlined, BankOutlined, GlobalOutlined, ShoppingOutlined, TeamOutlined, UserOutlined} from "@ant-design/icons";
+import InvoiceTemplateSettings from '../Organization/InvoiceTemplateSettings';
+import {AppstoreOutlined, BankOutlined, FileImageOutlined, GlobalOutlined, ShoppingOutlined, TeamOutlined, UserOutlined} from "@ant-design/icons";
 import SubNavContext from "../../contexts/SubNavContext";
 import {useLanguage} from '../../i18n/LanguageContext';
 import {Typography} from "antd";
@@ -25,6 +26,7 @@ const tabMeta = (t, role) => ({
     },
     4: {title: t.externalServiceSettings, subtitle: t.externalServiceSubtitle || '', icon: <GlobalOutlined style={{color: '#1677ff', fontSize: 22}}/>},
     5: {title: t.purchaseOrders, subtitle: t.ordersTabSubtitle || '', icon: <ShoppingOutlined style={{color: '#1677ff', fontSize: 22}}/>},
+    6: {title: t.invoiceTemplateSettings, subtitle: t.invoiceTemplateSubtitle || '', icon: <FileImageOutlined style={{color: '#1677ff', fontSize: 22}}/>},
 });
 
 const SystemAdminDashboard = () => {
@@ -69,6 +71,12 @@ const SystemAdminDashboard = () => {
                 label: t.externalServiceSettings,
                 onClick: () => setActiveTab(4)
             }),
+            userRole === userRoles.company_admin && ({
+                key: '6',
+                icon: <FileImageOutlined/>,
+                label: t.invoiceTemplateSettings,
+                onClick: () => setActiveTab(6)
+            }),
         ].filter(Boolean));
     }, [userRole, setSubNav, t]);
 
@@ -110,6 +118,9 @@ const SystemAdminDashboard = () => {
             break;
         case 5:
             ActiveTabPane = <OrdersTab/>;
+            break;
+        case 6:
+            ActiveTabPane = <InvoiceTemplateSettings/>;
             break;
         default:
             ActiveTabPane = null;

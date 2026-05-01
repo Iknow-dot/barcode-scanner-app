@@ -62,3 +62,16 @@ export const getExternalService = () =>
  */
 export const updateExternalService = (payload) =>
     api.patch(API_ENDPOINTS.my_organization_external_service, payload);
+
+/**
+ * Fetch the current user's organization invoice template fields.
+ */
+export const getInvoiceTemplate = () =>
+    api.get(API_ENDPOINTS.my_organization_invoice_template);
+
+/**
+ * Update the current user's organization invoice template fields.
+ * @param {Object} payload - { invoice_logo?, invoice_display_name?, invoice_address?, invoice_phone?, invoice_email?, invoice_footer_text? }
+ */
+export const updateInvoiceTemplate = (payload) =>
+    api.patch(API_ENDPOINTS.my_organization_invoice_template, payload);
