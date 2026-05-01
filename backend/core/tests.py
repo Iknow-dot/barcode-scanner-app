@@ -1142,6 +1142,7 @@ class InvoiceEndpointRenderingTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         body = resp.content.decode('utf-8')
         self.assertIn('Acme Display', body)
+        self.assertIn('INVOICE', body)
 
 
 from core.services.invoice_template_sanitizer import (
