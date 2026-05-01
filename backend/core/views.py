@@ -28,6 +28,7 @@ from django.core.cache import cache
 from core.serializers import (
     OrganizationSerializer,
     OrganizationExternalServiceSerializer,
+    OrganizationInvoiceTemplateSerializer,
     WarehouseSerializer,
     WarehouseReadOnlySerializer,
     ProductSearchSerializer,
@@ -129,6 +130,7 @@ def _consult_error_response(exc: ConsultWebExchangeError) -> Response:
     destroy=extend_schema(tags=['Organizations']),
     get_user_organization=extend_schema(tags=['Organizations']),
     external_service=extend_schema(tags=['Organizations']),
+    invoice_template=extend_schema(tags=['Organizations']),
     used_ips=extend_schema(tags=['Organizations']),
 )
 class OrganizationViewSet(ModelViewSet):
@@ -198,6 +200,38 @@ class OrganizationViewSet(ModelViewSet):
             'has_password': bool(organization.web_service_password),
         }
         return Response(data)
+
+    @action(detail=False, methods=['get', 'patch'], url_path='my-organization/invoice-template')
+    def invoice_template(self, request: Request) -> Response:
+        """
+        GET: Retrieve the current user's organization invoice template fields.
+        PATCH: Update the current user's organization invoice template fields.
+
+        Only accessible by company admins.
+        """
+        user = request.user
+        if user.role != User.Role.COMPANY_ADMIN:
+            return Response(
+                {"detail": "Only company admins can manage the invoice template."},
+                status=http_status.HTTP_403_FORBIDDEN,
+            )
+        if not user.organization:
+            return Response(
+                {"code": "NO_ORGANIZATION", "detail": "User does not belong to any organization."},
+                status=http_status.HTTP_404_NOT_FOUND,
+            )
+
+        organization = user.organization
+
+        if request.method == 'GET':
+            serializer = OrganizationInvoiceTemplateSerializer(organization)
+            return Response(serializer.data)
+
+        # PATCH
+        serializer = OrganizationInvoiceTemplateSerializer(organization, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(OrganizationInvoiceTemplateSerializer(organization).data)
 
     @action(detail=True, methods=['get'], url_path='used-ips')
     def used_ips(self, request: Request, pk=None) -> Response:

@@ -835,3 +835,73 @@ class InvoiceEndpointTests(TestCase):
         # the CSS rule is allowed to remain in the stylesheet (harmless
         # when nothing matches it).
         self.assertNotIn('>DRAFT<', body)
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
+class InvoiceTemplateEndpointTests(TestCase):
+    def setUp(self):
+        os.environ['FERNET_KEY'] = _TEST_FERNET_KEY
+        self.org = _make_organization(name='OrgT', identification_number='300')
+        self.admin = User.objects.create_user(
+            username='admin', password='p',
+            role=User.Role.COMPANY_ADMIN, organization=self.org,
+            is_staff=True,
+        )
+        self.user = User.objects.create_user(
+            username='user', password='p',
+            role=User.Role.COMPANY_USER, organization=self.org,
+        )
+        self.url = '/api/v1/organizations/my-organization/invoice-template/'
+
+    def tearDown(self):
+        os.environ.pop('FERNET_KEY', None)
+
+    def _admin_client(self):
+        c = APIClient()
+        c.force_authenticate(self.admin)
+        return c
+
+    def test_get_returns_current_template_for_company_admin(self):
+        self.org.invoice_display_name = 'Acme'
+        self.org.invoice_phone = '+995 555 000 111'
+        self.org.save()
+        response = self._admin_client().get(self.url)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['invoice_display_name'], 'Acme')
+        self.assertEqual(response.data['invoice_phone'], '+995 555 000 111')
+        # Always echoes all 6 fields, even when blank.
+        self.assertIn('invoice_logo', response.data)
+        self.assertIn('invoice_address', response.data)
+        self.assertIn('invoice_email', response.data)
+        self.assertIn('invoice_footer_text', response.data)
+
+    def test_patch_updates_template_for_company_admin(self):
+        response = self._admin_client().patch(
+            self.url,
+            {'invoice_display_name': 'New Name', 'invoice_phone': '+1 555'},
+            format='json',
+        )
+        self.assertEqual(response.status_code, 200)
+        self.org.refresh_from_db()
+        self.assertEqual(self.org.invoice_display_name, 'New Name')
+        self.assertEqual(self.org.invoice_phone, '+1 555')
+
+    def test_patch_rejects_oversize_logo(self):
+        import base64
+        oversized = b'A' * 1_048_577
+        data_url = f'data:image/png;base64,{base64.b64encode(oversized).decode()}'
+        response = self._admin_client().patch(
+            self.url, {'invoice_logo': data_url}, format='json',
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('invoice_logo', response.data)
+
+    def test_company_user_is_forbidden(self):
+        c = APIClient()
+        c.force_authenticate(self.user)
+        response = c.get(self.url)
+        self.assertEqual(response.status_code, 403)
+
+    def test_anonymous_is_unauthorized(self):
+        response = APIClient().get(self.url)
+        self.assertIn(response.status_code, (401, 403))

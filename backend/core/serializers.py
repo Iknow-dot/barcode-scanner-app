@@ -140,6 +140,30 @@ class OrganizationExternalServiceSerializer(serializers.ModelSerializer):
         return instance
 
 
+class OrganizationInvoiceTemplateSerializer(serializers.ModelSerializer):
+    """Serializer for company admins to update their organization's invoice template fields.
+
+    Reuses `OrganizationSerializer.validate_invoice_logo` to keep the size cap
+    and MIME allowlist in one place.
+    """
+
+    class Meta:
+        model = Organization
+        fields = [
+            'invoice_logo',
+            'invoice_display_name',
+            'invoice_address',
+            'invoice_phone',
+            'invoice_email',
+            'invoice_footer_text',
+        ]
+
+    def validate_invoice_logo(self, value):
+        # Delegate to the canonical validator on OrganizationSerializer so the
+        # constraints don't drift between the two write paths.
+        return OrganizationSerializer().validate_invoice_logo(value)
+
+
 # ---------------------------------------------------------------------------
 # Warehouse �� full access (internal_admin, company_admin)
 # ---------------------------------------------------------------------------
