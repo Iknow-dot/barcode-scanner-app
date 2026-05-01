@@ -905,3 +905,87 @@ class InvoiceTemplateEndpointTests(TestCase):
     def test_anonymous_is_unauthorized(self):
         response = APIClient().get(self.url)
         self.assertIn(response.status_code, (401, 403))
+
+
+from core.services.invoice_tokens import (
+    DEFAULT_INVOICE_TEMPLATE_HTML,
+    TOKEN_CATALOG,
+    resolve_token,
+)
+
+
+class InvoiceTokenCatalogTests(TestCase):
+    def test_catalog_contains_three_scopes(self):
+        self.assertEqual(set(TOKEN_CATALOG.keys()), {'org', 'order', 'item'})
+
+    def test_org_scope_includes_expected_keys(self):
+        self.assertEqual(
+            set(TOKEN_CATALOG['org'].keys()),
+            {
+                'logo', 'display_name', 'address', 'phone', 'email',
+                'footer_text', 'identification_number', 'name',
+            },
+        )
+
+    def test_item_scope_includes_expected_keys(self):
+        self.assertEqual(
+            set(TOKEN_CATALOG['item'].keys()),
+            {
+                'index', 'sku', 'sku_name', 'article', 'warehouse_name',
+                'quantity', 'unit', 'price', 'discount', 'line_total',
+            },
+        )
+
+
+class InvoiceTokenResolverTests(TestCase):
+    def setUp(self):
+        self.org = Organization.objects.create(
+            name='Acme', identification_number='123456789',
+            web_service_url='https://example.com', employees_count=5,
+            invoice_display_name='Acme Display',
+            invoice_address='Tbilisi\nKostava 1',
+            invoice_phone='+995 555 11 22 33',
+            invoice_email='acme@example.com',
+            invoice_footer_text='Thanks for your business!',
+            invoice_logo='data:image/png;base64,iVBORw0KGgo=',
+        )
+        self.order = PurchaseOrder.objects.create(
+            organization=self.org,
+            customer_name='John Doe',
+            customer_phone='+995 555 99 88 77',
+            customer_identification_number='ID-001',
+            delivery_type='pickup',
+            status='confirmed',
+        )
+
+    def test_resolve_org_display_name(self):
+        self.assertEqual(resolve_token('org.display_name', org=self.org, order=self.order), 'Acme Display')
+
+    def test_resolve_org_display_name_falls_back_to_name(self):
+        self.org.invoice_display_name = ''
+        self.assertEqual(resolve_token('org.display_name', org=self.org, order=self.order), 'Acme')
+
+    def test_resolve_org_logo_returns_data_url(self):
+        self.assertEqual(
+            resolve_token('org.logo', org=self.org, order=self.order),
+            'data:image/png;base64,iVBORw0KGgo=',
+        )
+
+    def test_resolve_order_id(self):
+        self.assertEqual(resolve_token('order.id', org=self.org, order=self.order), str(self.order.id))
+
+    def test_resolve_order_customer_name(self):
+        self.assertEqual(resolve_token('order.customer_name', org=self.org, order=self.order), 'John Doe')
+
+    def test_resolve_unknown_token_raises(self):
+        with self.assertRaises(KeyError):
+            resolve_token('org.does_not_exist', org=self.org, order=self.order)
+
+
+class DefaultInvoiceTemplateTests(TestCase):
+    def test_default_template_is_non_empty_html(self):
+        self.assertIn('<table', DEFAULT_INVOICE_TEMPLATE_HTML)
+        self.assertIn('data-items-table', DEFAULT_INVOICE_TEMPLATE_HTML)
+        self.assertIn('data-repeat="items"', DEFAULT_INVOICE_TEMPLATE_HTML)
+        self.assertIn('data-token="org.display_name"', DEFAULT_INVOICE_TEMPLATE_HTML)
+        self.assertIn('data-token="item.sku"', DEFAULT_INVOICE_TEMPLATE_HTML)
