@@ -1104,3 +1104,42 @@ class InvoiceRendererTests(TestCase):
     def test_skeleton_omits_draft_watermark_for_confirmed(self):
         wrapped = wrap_in_skeleton('<p>body</p>', draft=False)
         self.assertNotIn('class="draft-watermark"', wrapped)
+
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
+class InvoiceEndpointTests(TestCase):
+    def setUp(self):
+        self.org = Organization.objects.create(
+            name='Acme', identification_number='123456789',
+            web_service_url='https://example.com', employees_count=5,
+            invoice_display_name='Acme Display',
+        )
+        self.user = User.objects.create_user(
+            username='admin', password='pw', role=User.Role.COMPANY_ADMIN,
+            organization=self.org,
+        )
+        self.order = PurchaseOrder.objects.create(
+            organization=self.org, customer_name='John', delivery_type='pickup',
+            status='confirmed',
+        )
+        self.client = APIClient()
+        self.client.force_authenticate(self.user)
+
+    def test_invoice_uses_custom_template_when_present(self):
+        self.org.invoice_template_html = '<p>Custom-marker <span data-token="order.id"></span></p>'
+        self.org.save()
+        resp = self.client.get(f'/api/v1/orders/{self.order.id}/invoice/')
+        self.assertEqual(resp.status_code, 200)
+        body = resp.content.decode('utf-8')
+        self.assertIn('Custom-marker', body)
+        self.assertIn(str(self.order.id), body)
+
+    def test_invoice_falls_back_to_default_when_template_empty(self):
+        self.org.invoice_template_html = ''
+        self.org.save()
+        resp = self.client.get(f'/api/v1/orders/{self.order.id}/invoice/')
+        self.assertEqual(resp.status_code, 200)
+        body = resp.content.decode('utf-8')
+        self.assertIn('Acme Display', body)
+        self.assertIn('INVOICE', body)

@@ -762,11 +762,12 @@ class PurchaseOrderViewSet(ModelViewSet):
     )
     def invoice(self, request, pk=None):
         """Render a printable HTML invoice for the order."""
+        from core.services.invoice_renderer import render_invoice_template, wrap_in_skeleton
+        from core.services.invoice_tokens import DEFAULT_INVOICE_TEMPLATE_HTML
+
         order = self.get_object()
-        html = render_to_string('core/invoice.html', {
-            'org': order.organization,
-            'order': order,
-            'items': order.items.all(),
-            'generated_at': timezone.now(),
-        })
-        return Response(html, content_type='text/html')
+        org = order.organization
+        template_html = org.invoice_template_html or DEFAULT_INVOICE_TEMPLATE_HTML
+        body = render_invoice_template(template_html, org=org, order=order)
+        wrapped = wrap_in_skeleton(body, draft=order.status != 'confirmed')
+        return Response(wrapped, content_type='text/html')
