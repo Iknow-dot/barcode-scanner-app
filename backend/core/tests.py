@@ -1108,7 +1108,7 @@ class InvoiceRendererTests(TestCase):
 
 
 @override_settings(SECURE_SSL_REDIRECT=False)
-class InvoiceEndpointTests(TestCase):
+class InvoiceEndpointRenderingTests(TestCase):
     def setUp(self):
         self.org = Organization.objects.create(
             name='Acme', identification_number='123456789',
