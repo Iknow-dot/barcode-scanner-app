@@ -30,7 +30,9 @@ class Organization(models.Model):
     invoice_email = models.EmailField(blank=True, default='')
     invoice_footer_text = models.TextField(blank=True, default='')
 
-    # Sanitized HTML emitted by the in-app TipTap editor. Contains token
+    # HTML emitted by the in-app TipTap editor (sanitized at the
+    # serializer layer before persistence — this field stores whatever
+    # the serializer wrote, treat it as trusted). Contains token
     # markers (`<span data-token="scope.name">`) and a single marked items
     # row (`<tr data-repeat="items">`) that the renderer clones per item.
     # Empty means "use the built-in default", so first-deploy orgs render
