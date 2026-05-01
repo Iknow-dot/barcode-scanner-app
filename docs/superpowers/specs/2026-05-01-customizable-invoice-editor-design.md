@@ -190,8 +190,8 @@ The Template tab is a 3-column flex:
 
 ### Save / load / reset
 
-- On mount, fetch `GET /organizations/{id}/invoice-template/` (existing endpoint, returns `invoice_template_html` alongside the branding fields).
-- If `invoice_template_html` is empty, seed the editor with the **default template HTML** (a constant in `frontend/src/invoiceTemplates/default.js` — same constant as the backend's `DEFAULT_INVOICE_TEMPLATE_HTML`, kept in sync via a tiny script that copies the source-of-truth HTML from the backend module on build, **OR** by checking the byte-identical match in CI). Initial choice: **the constant lives in the frontend, the backend imports a stripped copy via a build-time codegen step.** *(See Open questions: the actual sync mechanism.)*
+- On mount, fetch `GET /organizations/{id}/invoice-template/` (existing endpoint, returns `invoice_template_html` alongside the branding fields) **and** `GET /invoice-tokens/` (returns both the token catalog and the backend's `DEFAULT_INVOICE_TEMPLATE_HTML` string under a `default_template_html` key). Both responses are cached for the editor session.
+- If `invoice_template_html` is empty, seed the editor with the `default_template_html` returned by the backend. The backend module is the **single source of truth** — no codegen, no duplication, no CI sync check. The "first open seed" and the "empty-template fallback render" can never drift because they read from the same constant.
 - **Reset to default** button reseeds the editor without saving; admin still has to click Save.
 - **Save** button calls `PUT /organizations/{id}/invoice-template/` with `invoice_template_html` (and any branding-tab values that changed). Success → toast, content stays in editor (no reload — avoid jarring rerender).
 - Unsaved-changes guard: leaving the tab with dirty content prompts confirmation (Ant Design `Modal.confirm`).
@@ -199,7 +199,7 @@ The Template tab is a 3-column flex:
 ### Endpoints (frontend additions)
 
 - `endpoints.invoiceTemplate(orgId)` — already used for `GET`/`PUT`. Body now includes `invoice_template_html`.
-- `endpoints.invoiceTokens` — `GET /invoice-tokens/` returns the catalog `{org: {...}, order: {...}, item: {...}}`. Cached for the editor session.
+- `endpoints.invoiceTokens` — `GET /invoice-tokens/` returns `{tokens: {org: {...}, order: {...}, item: {...}}, default_template_html: "..."}`. The frontend uses `tokens` to populate the **Insert token** menu and `default_template_html` to seed the editor when `invoice_template_html` is empty. Cached for the editor session.
 - `endpoints.orderInvoice(id)` — already exists; the editor passes `?template_override=...` for previews.
 
 ### i18n
@@ -324,7 +324,7 @@ The CSS classes (`header`, `org-block`, `meta-row`, `items`, `num`, `totals`, `f
 ## Risks / things to watch
 
 - **TipTap dependency weight.** ~200KB gzipped is real. Mitigation: lazy-load the editor route. If we end up with one company_admin per org spending 30 seconds in the editor every six months, this is fine. Worth re-checking if we ship a mobile-only flow.
-- **Sync between frontend `default.js` and backend `DEFAULT_INVOICE_TEMPLATE_HTML`.** If they drift, the "first open seed" and the "empty-template fallback render" diverge — admin sees one thing in the editor, prints something different. Mitigation: backend module is the source of truth; a tiny pre-build script (`scripts/sync-default-template.js`) copies its HTML literal into `frontend/src/invoiceTemplates/default.js`. CI runs it in `--check` mode and fails on divergence. **Decision: included in scope.**
+- **Default template sync.** No risk: backend `DEFAULT_INVOICE_TEMPLATE_HTML` is the single source of truth, served to the frontend via `GET /invoice-tokens/` alongside the catalog. The "first open seed" and the "empty-template fallback render" cannot drift. One extra request on first editor mount (cacheable) is the entire cost.
 - **Sanitization completeness.** `bleach` is well-vetted but the css_sanitizer is finicky. Test all the dangerous-style cases explicitly (see Testing).
 - **`lxml.html` parse drift on malformed HTML.** TipTap-emitted HTML is well-formed; pasted content is the risk. Mitigation: bleach normalizes before storage, lxml is being asked to parse already-sanitized output, so the failure modes are bounded.
 - **Preview iframe and CORS.** The iframe loads a same-origin URL with `?template_override`, no CORS concerns. Auth is bearer-token via `client.js`'s axios — but iframes can't carry custom headers. **Open issue:** the preview path needs an alternative auth mechanism (signed short-lived URL, or POST-and-redirect). See Open questions.
@@ -349,6 +349,4 @@ These are deliberate gaps to resolve in the implementation plan, not before:
    - Something else.
    The first option is simplest; pick during implementation planning unless we have reason not to.
 
-2. **Default-template sync mechanism.** The pre-build codegen approach is a placeholder. Acceptable alternatives: backend exposes the default via the same `GET /invoice-tokens/` endpoint (or a sibling), frontend loads it at runtime, no codegen. Trade-off: an extra request on first editor mount (cacheable) vs. a build-time step. Pick during implementation planning.
-
-3. **Reduced/expanded token catalog.** The catalog above is comprehensive but conservative. We may discover during implementation that real customers want one more token (e.g. `order.notes` if such a field exists) — additive, no schema change.
+2. **Reduced/expanded token catalog.** The catalog above is comprehensive but conservative. We may discover during implementation that real customers want one more token (e.g. `order.notes` if such a field exists) — additive, no schema change.
