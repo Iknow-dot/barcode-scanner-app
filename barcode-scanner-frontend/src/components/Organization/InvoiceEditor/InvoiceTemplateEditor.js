@@ -10,6 +10,8 @@ import {
   SaveOutlined, ReloadOutlined,
 } from '@ant-design/icons';
 
+import Underline from '@tiptap/extension-underline';
+import TextAlign from '@tiptap/extension-text-align';
 import TokenNode from './TokenNode';
 import invoiceTokenService from '../../../api/services/invoiceTokenService';
 import {organizationService} from '../../../api';
@@ -54,7 +56,12 @@ const InvoiceTemplateEditor = () => {
   const [tokens, setTokens] = useState({org: [], order: [], item: []});
 
   const editor = useEditor({
-    extensions: [StarterKit, TokenNode],
+    extensions: [
+      StarterKit,
+      TokenNode,
+      Underline,
+      TextAlign.configure({types: ['heading', 'paragraph']}),
+    ],
     content: '<p></p>',
   });
 
@@ -150,10 +157,10 @@ const InvoiceTemplateEditor = () => {
         <Button size="small" icon={<RedoOutlined />} onClick={() => editor.chain().focus().redo().run()} />
         <Button size="small" icon={<BoldOutlined />} onClick={() => editor.chain().focus().toggleBold().run()} />
         <Button size="small" icon={<ItalicOutlined />} onClick={() => editor.chain().focus().toggleItalic().run()} />
-        <Button size="small" icon={<UnderlineOutlined />} onClick={() => editor.chain().focus().toggleStrike().run()} />
-        <Button size="small" icon={<AlignLeftOutlined />} onClick={() => editor.chain().focus().setTextAlign?.('left').run()} />
-        <Button size="small" icon={<AlignCenterOutlined />} onClick={() => editor.chain().focus().setTextAlign?.('center').run()} />
-        <Button size="small" icon={<AlignRightOutlined />} onClick={() => editor.chain().focus().setTextAlign?.('right').run()} />
+        <Button size="small" icon={<UnderlineOutlined />} onClick={() => editor.chain().focus().toggleUnderline().run()} />
+        <Button size="small" icon={<AlignLeftOutlined />} onClick={() => editor.chain().focus().setTextAlign('left').run()} />
+        <Button size="small" icon={<AlignCenterOutlined />} onClick={() => editor.chain().focus().setTextAlign('center').run()} />
+        <Button size="small" icon={<AlignRightOutlined />} onClick={() => editor.chain().focus().setTextAlign('right').run()} />
         <Dropdown menu={{items: tokenMenuItems}} trigger={['click']}>
           <Button size="small" icon={<FieldStringOutlined />}>{t.insertToken}</Button>
         </Dropdown>

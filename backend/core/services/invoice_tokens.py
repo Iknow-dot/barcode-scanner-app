@@ -32,7 +32,7 @@ def _format_item_discount(item) -> str:
     price = getattr(item, 'discounted_price', None)
     if pct:
         return f'{pct}%'
-    if price:
+    if price is not None:
         return f'{price} ₾'
     return '—'
 

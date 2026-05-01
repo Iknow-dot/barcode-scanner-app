@@ -50,6 +50,10 @@ _ALLOWED_STYLES = [
 
 _DATA_IMAGE_RE = re.compile(r'^data:image/(png|jpeg|jpg|svg\+xml|webp);base64,')
 
+_DANGEROUS_CSS_RE = re.compile(
+    r'(expression\s*\([^)]*\)|javascript:)', re.IGNORECASE,
+)
+
 
 def _img_src_allowed(value: str) -> bool:
     return bool(_DATA_IMAGE_RE.match(value or ''))
@@ -130,5 +134,6 @@ def sanitize_and_validate(html: str) -> str:
         strip=True,
         strip_comments=True,
     )
+    sanitized = _DANGEROUS_CSS_RE.sub('', sanitized)
     _validate_structure(sanitized)
     return sanitized

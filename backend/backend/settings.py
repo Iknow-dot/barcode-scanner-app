@@ -251,6 +251,7 @@ SPECTACULAR_SETTINGS = {
         {'name': 'Clients', 'description': '1C ConsultWebExchange client lookup/creation + RS.ge taxpayer lookup'},
         {'name': 'Purchase Orders', 'description': 'Purchase order CRUD and item management'},
         {'name': 'Network', 'description': 'Network utility endpoints (IP detection)'},
+        {'name': 'Invoice Templates', 'description': 'Invoice token catalog and template preview'},
     ],
 }
 

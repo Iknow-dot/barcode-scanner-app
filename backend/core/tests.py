@@ -1000,6 +1000,16 @@ class InvoiceTokenResolverTests(TestCase):
             '',
         )
 
+    def test_resolve_item_discount_zero_decimal_is_rendered(self):
+        from decimal import Decimal
+        item = PurchaseOrderItem.objects.create(
+            order=self.order, sku='X', sku_name='X', quantity=1, price=10,
+            discounted_price=Decimal('0.00'),
+        )
+        result = resolve_token('item.discount', item=item, index=1)
+        self.assertIn('0', result)
+        self.assertNotEqual(result, '—')
+
 
 class DefaultInvoiceTemplateTests(TestCase):
     def test_default_template_is_non_empty_html(self):
@@ -1168,6 +1178,11 @@ class InvoiceTemplateSanitizerTests(TestCase):
         self.assertNotIn('position', result)
         self.assertNotIn('behavior', result)
         self.assertIn('color', result)
+        self.assertNotIn('expression', result.lower())
+
+    def test_strips_expression_in_allowed_property(self):
+        result = sanitize_and_validate('<p style="width: expression(alert(1));">hi</p>')
+        self.assertNotIn('expression', result.lower())
 
     def test_strips_javascript_uri_in_img_src(self):
         result = sanitize_and_validate('<img src="javascript:alert(1)" data-token="org.logo">')

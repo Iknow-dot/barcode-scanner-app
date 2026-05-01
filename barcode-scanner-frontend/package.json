@@ -12,6 +12,8 @@
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.3.0",
     "@testing-library/user-event": "^14.6.1",
+    "@tiptap/extension-text-align": "^3.22.5",
+    "@tiptap/extension-underline": "^3.22.5",
     "@tiptap/pm": "^3.22.5",
     "@tiptap/react": "^3.22.5",
     "@tiptap/starter-kit": "^3.22.5",
