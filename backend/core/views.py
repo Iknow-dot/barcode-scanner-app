@@ -534,6 +534,31 @@ class ReverseGeocodeAPIView(APIView):
         return Response({"address": address})
 
 
+@extend_schema(tags=['Invoice Templates'])
+class InvoiceTokensAPIView(APIView):
+    """Return the token catalog and default template HTML for the invoice editor.
+
+    The catalog is the same dict the renderer consumes — keeping it on a
+    single endpoint guarantees the editor's Insert-token menu and the
+    renderer cannot drift.
+    """
+    http_method_names = ['get']
+
+    def get(self, request: Request) -> Response:
+        from core.services.invoice_tokens import (
+            DEFAULT_INVOICE_TEMPLATE_HTML,
+            TOKEN_CATALOG,
+        )
+        public_catalog = {
+            scope: sorted(names.keys())
+            for scope, names in TOKEN_CATALOG.items()
+        }
+        return Response({
+            'tokens': public_catalog,
+            'default_template_html': DEFAULT_INVOICE_TEMPLATE_HTML,
+        })
+
+
 # ---------------------------------------------------------------------------
 # Purchase Order
 # ---------------------------------------------------------------------------

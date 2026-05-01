@@ -1279,3 +1279,33 @@ class InvoiceTemplateSaveTests(TestCase):
             format='json',
         )
         self.assertEqual(resp.status_code, 400)
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
+class InvoiceTokensEndpointTests(TestCase):
+    def setUp(self):
+        self.org = Organization.objects.create(
+            name='Acme', identification_number='123456789',
+            web_service_url='https://example.com', employees_count=5,
+        )
+        self.user = User.objects.create_user(
+            username='u', password='pw', role=User.Role.COMPANY_USER,
+            organization=self.org,
+        )
+        self.client = APIClient()
+
+    def test_unauthenticated_returns_401(self):
+        resp = self.client.get('/api/v1/invoice-tokens/')
+        self.assertEqual(resp.status_code, 401)
+
+    def test_authenticated_returns_catalog_and_default(self):
+        self.client.force_authenticate(self.user)
+        resp = self.client.get('/api/v1/invoice-tokens/')
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn('tokens', resp.data)
+        self.assertIn('default_template_html', resp.data)
+        self.assertIn('org', resp.data['tokens'])
+        self.assertIn('order', resp.data['tokens'])
+        self.assertIn('item', resp.data['tokens'])
+        self.assertIn('display_name', resp.data['tokens']['org'])
+        self.assertIn('data-items-table', resp.data['default_template_html'])
