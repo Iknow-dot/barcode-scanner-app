@@ -1,7 +1,8 @@
 import React, {useEffect, useMemo, useState} from 'react';
 import {EditorContent, useEditor} from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
-import {Button, Dropdown, Spin, Modal} from 'antd';
+import {Button, Dropdown, Flex, Spin, Modal} from 'antd';
+import InvoicePreviewPanel from './InvoicePreviewPanel';
 import {
   BoldOutlined, ItalicOutlined, UnderlineOutlined,
   AlignLeftOutlined, AlignCenterOutlined, AlignRightOutlined,
@@ -56,6 +57,14 @@ const InvoiceTemplateEditor = () => {
     extensions: [StarterKit, TokenNode],
     content: '<p></p>',
   });
+
+  const [editorHtml, setEditorHtml] = useState('');
+  useEffect(() => {
+    if (!editor) return;
+    const onUpdate = () => setEditorHtml(editor.getHTML());
+    editor.on('update', onUpdate);
+    return () => editor.off('update', onUpdate);
+  }, [editor]);
 
   useEffect(() => {
     let cancelled = false;
@@ -153,11 +162,14 @@ const InvoiceTemplateEditor = () => {
         <Button size="small" onClick={handleReset} icon={<ReloadOutlined />}>{t.resetToDefault}</Button>
         <Button size="small" type="primary" loading={saving} onClick={handleSave} icon={<SaveOutlined />}>{t.save}</Button>
       </div>
-      <div className="invoice-editor-page-bg">
-        <div className="invoice-editor-surface">
-          <EditorContent editor={editor} />
+      <Flex style={{height: 'calc(100vh - 200px)'}}>
+        <div className="invoice-editor-page-bg" style={{flex: 1, overflow: 'auto'}}>
+          <div className="invoice-editor-surface">
+            <EditorContent editor={editor} />
+          </div>
         </div>
-      </div>
+        <InvoicePreviewPanel templateHtml={editorHtml} />
+      </Flex>
     </>
   );
 };
