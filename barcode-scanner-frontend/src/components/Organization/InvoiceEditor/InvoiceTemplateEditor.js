@@ -12,12 +12,47 @@ import {
 
 import Underline from '@tiptap/extension-underline';
 import TextAlign from '@tiptap/extension-text-align';
+import {Table, TableRow, TableCell, TableHeader} from '@tiptap/extension-table';
 import TokenNode from './TokenNode';
 import invoiceTokenService from '../../../api/services/invoiceTokenService';
 import {organizationService} from '../../../api';
 import useAppNotification from '../../../hooks/useAppNotification';
 import {useLanguage} from '../../../i18n/LanguageContext';
 import './InvoiceTemplateEditor.css';
+
+// Extend the stock Table to round-trip our `data-items-table` marker
+// through the editor's parse/serialize cycle. Without this, the marker
+// is silently stripped on paste/setContent and the renderer can no
+// longer find the items table.
+const ItemsTable = Table.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      dataItemsTable: {
+        default: null,
+        parseHTML: (el) => (el.hasAttribute('data-items-table') ? '' : null),
+        renderHTML: (attrs) =>
+          attrs.dataItemsTable !== null ? {'data-items-table': ''} : {},
+      },
+    };
+  },
+});
+
+// Same trick for `<tr data-repeat="items">` — the row that the renderer
+// clones once per PurchaseOrderItem.
+const ItemsTableRow = TableRow.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      dataRepeat: {
+        default: null,
+        parseHTML: (el) => el.getAttribute('data-repeat'),
+        renderHTML: (attrs) =>
+          attrs.dataRepeat ? {'data-repeat': attrs.dataRepeat} : {},
+      },
+    };
+  },
+});
 
 // HTML the editor inserts when the admin clicks "Insert items table".
 // Mirrors the items-table block in DEFAULT_INVOICE_TEMPLATE_HTML so a
@@ -61,6 +96,10 @@ const InvoiceTemplateEditor = () => {
       TokenNode,
       Underline,
       TextAlign.configure({types: ['heading', 'paragraph']}),
+      ItemsTable.configure({resizable: false}),
+      ItemsTableRow,
+      TableCell,
+      TableHeader,
     ],
     content: '<p></p>',
   });
