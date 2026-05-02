@@ -29,6 +29,7 @@ class InvoiceTemplateValidationError(ValueError):
 _ALLOWED_TAGS = {
     'p', 'h1', 'h2', 'h3', 'h4', 'span', 'strong', 'em', 'u', 's', 'br', 'hr',
     'ul', 'ol', 'li', 'table', 'thead', 'tbody', 'tr', 'th', 'td', 'img', 'div',
+    'colgroup', 'col',
 }
 
 _GLOBAL_ATTRS = ['class', 'style', 'data-token', 'data-repeat', 'data-items-table']
@@ -39,6 +40,8 @@ _ALLOWED_ATTRS = {
     'th': _GLOBAL_ATTRS + ['colspan', 'rowspan', 'align'],
     'img': _GLOBAL_ATTRS + ['src', 'alt'],
     'table': _GLOBAL_ATTRS + ['border', 'cellpadding', 'cellspacing'],
+    'col': _GLOBAL_ATTRS + ['span'],
+    'colgroup': _GLOBAL_ATTRS,
 }
 
 _ALLOWED_STYLES = [

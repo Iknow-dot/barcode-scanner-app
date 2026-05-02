@@ -1240,6 +1240,20 @@ class InvoiceTemplateSanitizerTests(TestCase):
     def test_empty_string_returns_empty(self):
         self.assertEqual(sanitize_and_validate(''), '')
 
+    def test_allows_colgroup_and_col(self):
+        """TipTap resizable table emits <colgroup><col style="width:..."></colgroup>."""
+        html = (
+            '<table data-items-table>'
+            '<colgroup><col style="width: 120px;"><col style="width: 80px;"></colgroup>'
+            '<tbody>'
+            '<tr data-repeat="items"><td><span data-token="item.sku"></span></td></tr>'
+            '</tbody></table>'
+        )
+        result = sanitize_and_validate(html)
+        self.assertIn('<colgroup>', result)
+        self.assertIn('<col', result)
+        self.assertIn('width: 120px', result)
+
 
 @override_settings(SECURE_SSL_REDIRECT=False)
 class InvoiceTemplateSaveTests(TestCase):

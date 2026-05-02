@@ -1,18 +1,22 @@
 import React, {useCallback, useEffect, useMemo, useState} from 'react';
 import {EditorContent, useEditor} from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
-import {Button, Dropdown, Flex, Select, Spin, Modal} from 'antd';
+import {Button, ColorPicker, Dropdown, Flex, Select, Spin, Modal} from 'antd';
 import InvoicePreviewPanel from './InvoicePreviewPanel';
 import {
   BoldOutlined, ItalicOutlined, UnderlineOutlined,
   AlignLeftOutlined, AlignCenterOutlined, AlignRightOutlined,
   TableOutlined, FieldStringOutlined, RedoOutlined, UndoOutlined,
   SaveOutlined, ReloadOutlined,
+  UnorderedListOutlined, OrderedListOutlined,
+  FontColorsOutlined, BgColorsOutlined,
 } from '@ant-design/icons';
 
 import Underline from '@tiptap/extension-underline';
 import TextAlign from '@tiptap/extension-text-align';
 import {Table, TableRow, TableCell, TableHeader} from '@tiptap/extension-table';
+import {TextStyle, FontSize, Color} from '@tiptap/extension-text-style';
+import {Highlight} from '@tiptap/extension-highlight';
 import TokenNode from './TokenNode';
 import invoiceTokenService from '../../../api/services/invoiceTokenService';
 import * as orderService from '../../../api/services/orderService';
@@ -83,6 +87,8 @@ const ITEMS_TABLE_HTML = `
 </table>
 `;
 
+const SEPARATOR = <div style={{width: 1, background: '#e0e0e0', alignSelf: 'stretch', margin: '0 2px'}} />;
+
 const InvoiceTemplateEditor = () => {
   const {t} = useLanguage();
   const {notify, contextHolder} = useAppNotification();
@@ -100,10 +106,14 @@ const InvoiceTemplateEditor = () => {
       TokenNode,
       Underline,
       TextAlign.configure({types: ['heading', 'paragraph']}),
-      ItemsTable.configure({resizable: false}),
+      ItemsTable.configure({resizable: true}),
       ItemsTableRow,
       TableCell,
       TableHeader,
+      TextStyle,
+      FontSize.configure({types: ['textStyle']}),
+      Color,
+      Highlight.configure({multicolor: true}),
     ],
     content: '<p></p>',
   });
@@ -227,6 +237,20 @@ const InvoiceTemplateEditor = () => {
     }));
   }, [tokens, t, editor, sampleValues]);
 
+  const tableMenu = useMemo(() => ({
+    items: [
+      {key: 'add-row-above', label: 'Add row above', onClick: () => editor?.chain().focus().addRowBefore().run()},
+      {key: 'add-row-below', label: 'Add row below', onClick: () => editor?.chain().focus().addRowAfter().run()},
+      {key: 'delete-row', label: 'Delete row', onClick: () => editor?.chain().focus().deleteRow().run()},
+      {type: 'divider'},
+      {key: 'add-col-left', label: 'Add column left', onClick: () => editor?.chain().focus().addColumnBefore().run()},
+      {key: 'add-col-right', label: 'Add column right', onClick: () => editor?.chain().focus().addColumnAfter().run()},
+      {key: 'delete-col', label: 'Delete column', onClick: () => editor?.chain().focus().deleteColumn().run()},
+      {type: 'divider'},
+      {key: 'toggle-header-row', label: 'Toggle header row', onClick: () => editor?.chain().focus().toggleHeaderRow().run()},
+    ],
+  }), [editor]);
+
   const handleSave = async () => {
     if (!editor) return;
     setSaving(true);
@@ -263,35 +287,180 @@ const InvoiceTemplateEditor = () => {
     })),
   ];
 
+  const currentFontSize = editor.getAttributes('textStyle').fontSize?.replace('px', '') || undefined;
+  const currentColor = editor.getAttributes('textStyle').color || '#000000';
+  const currentHighlight = editor.getAttributes('highlight').color || '#ffffff';
+
+  const headingValue =
+    editor.isActive('heading', {level: 1}) ? 'h1' :
+    editor.isActive('heading', {level: 2}) ? 'h2' :
+    editor.isActive('heading', {level: 3}) ? 'h3' : 'p';
+
   return (
     <>
       {contextHolder}
       <div className="invoice-editor-toolbar">
-        <Button size="small" icon={<UndoOutlined />} onClick={() => editor.chain().focus().undo().run()} />
-        <Button size="small" icon={<RedoOutlined />} onClick={() => editor.chain().focus().redo().run()} />
-        <Button size="small" icon={<BoldOutlined />} onClick={() => editor.chain().focus().toggleBold().run()} />
-        <Button size="small" icon={<ItalicOutlined />} onClick={() => editor.chain().focus().toggleItalic().run()} />
-        <Button size="small" icon={<UnderlineOutlined />} onClick={() => editor.chain().focus().toggleUnderline().run()} />
-        <Button size="small" icon={<AlignLeftOutlined />} onClick={() => editor.chain().focus().setTextAlign('left').run()} />
-        <Button size="small" icon={<AlignCenterOutlined />} onClick={() => editor.chain().focus().setTextAlign('center').run()} />
-        <Button size="small" icon={<AlignRightOutlined />} onClick={() => editor.chain().focus().setTextAlign('right').run()} />
-        <Dropdown menu={{items: tokenMenuItems}} trigger={['click']}>
-          <Button size="small" icon={<FieldStringOutlined />}>{t.insertToken}</Button>
+        {/* Undo / Redo */}
+        <Flex gap={4} align="center">
+          <Button size="small" icon={<UndoOutlined />} onClick={() => editor.chain().focus().undo().run()} />
+          <Button size="small" icon={<RedoOutlined />} onClick={() => editor.chain().focus().redo().run()} />
+        </Flex>
+
+        {SEPARATOR}
+
+        {/* Basic text style: B / I / U */}
+        <Flex gap={4} align="center">
+          <Button
+            size="small"
+            icon={<BoldOutlined />}
+            type={editor.isActive('bold') ? 'primary' : 'default'}
+            onClick={() => editor.chain().focus().toggleBold().run()}
+          />
+          <Button
+            size="small"
+            icon={<ItalicOutlined />}
+            type={editor.isActive('italic') ? 'primary' : 'default'}
+            onClick={() => editor.chain().focus().toggleItalic().run()}
+          />
+          <Button
+            size="small"
+            icon={<UnderlineOutlined />}
+            type={editor.isActive('underline') ? 'primary' : 'default'}
+            onClick={() => editor.chain().focus().toggleUnderline().run()}
+          />
+        </Flex>
+
+        {SEPARATOR}
+
+        {/* Heading dropdown + font-size picker */}
+        <Flex gap={4} align="center">
+          <Select
+            size="small"
+            value={headingValue}
+            style={{width: 110}}
+            onChange={(v) => {
+              if (v === 'p') editor.chain().focus().setParagraph().run();
+              else editor.chain().focus().toggleHeading({level: Number(v.slice(1))}).run();
+            }}
+            options={[
+              {value: 'p', label: 'Paragraph'},
+              {value: 'h1', label: 'Heading 1'},
+              {value: 'h2', label: 'Heading 2'},
+              {value: 'h3', label: 'Heading 3'},
+            ]}
+          />
+          <Select
+            size="small"
+            style={{width: 72}}
+            placeholder="Size"
+            value={currentFontSize}
+            onChange={(px) => {
+              if (!px) editor.chain().focus().unsetFontSize().run();
+              else editor.chain().focus().setFontSize(`${px}px`).run();
+            }}
+            options={[8, 10, 12, 14, 16, 18, 24, 32].map((n) => ({value: String(n), label: `${n}px`}))}
+            allowClear
+          />
+        </Flex>
+
+        {SEPARATOR}
+
+        {/* Color pickers: text color + highlight */}
+        <Flex gap={4} align="center">
+          <ColorPicker
+            size="small"
+            presets={[{label: 'Common', colors: ['#000000', '#1677ff', '#722ed1', '#52c41a', '#fa541c', '#fadb14', '#ffffff']}]}
+            value={currentColor}
+            onChangeComplete={(c) => editor.chain().focus().setColor(c.toHexString()).run()}
+          >
+            <Button size="small" icon={<FontColorsOutlined />} title="Text color" />
+          </ColorPicker>
+          <ColorPicker
+            size="small"
+            presets={[{label: 'Highlight', colors: ['#fff59d', '#a5d6a7', '#90caf9', '#ffab91', '#ce93d8', 'transparent']}]}
+            value={currentHighlight}
+            onChangeComplete={(c) => editor.chain().focus().toggleHighlight({color: c.toHexString()}).run()}
+          >
+            <Button size="small" icon={<BgColorsOutlined />} title="Highlight color" />
+          </ColorPicker>
+        </Flex>
+
+        {SEPARATOR}
+
+        {/* Alignment */}
+        <Flex gap={4} align="center">
+          <Button
+            size="small"
+            icon={<AlignLeftOutlined />}
+            type={editor.isActive({textAlign: 'left'}) ? 'primary' : 'default'}
+            onClick={() => editor.chain().focus().setTextAlign('left').run()}
+          />
+          <Button
+            size="small"
+            icon={<AlignCenterOutlined />}
+            type={editor.isActive({textAlign: 'center'}) ? 'primary' : 'default'}
+            onClick={() => editor.chain().focus().setTextAlign('center').run()}
+          />
+          <Button
+            size="small"
+            icon={<AlignRightOutlined />}
+            type={editor.isActive({textAlign: 'right'}) ? 'primary' : 'default'}
+            onClick={() => editor.chain().focus().setTextAlign('right').run()}
+          />
+        </Flex>
+
+        {SEPARATOR}
+
+        {/* Bullet list + numbered list */}
+        <Flex gap={4} align="center">
+          <Button
+            size="small"
+            icon={<UnorderedListOutlined />}
+            type={editor.isActive('bulletList') ? 'primary' : 'default'}
+            onClick={() => editor.chain().focus().toggleBulletList().run()}
+          />
+          <Button
+            size="small"
+            icon={<OrderedListOutlined />}
+            type={editor.isActive('orderedList') ? 'primary' : 'default'}
+            onClick={() => editor.chain().focus().toggleOrderedList().run()}
+          />
+        </Flex>
+
+        {SEPARATOR}
+
+        {/* Insert token + Insert items table */}
+        <Flex gap={4} align="center">
+          <Dropdown menu={{items: tokenMenuItems}} trigger={['click']}>
+            <Button size="small" icon={<FieldStringOutlined />}>{t.insertToken}</Button>
+          </Dropdown>
+          <Button size="small" icon={<TableOutlined />} onClick={insertItemsTable}>{t.insertItemsTable}</Button>
+        </Flex>
+
+        {SEPARATOR}
+
+        {/* Table operations (only usable when cursor is inside a table) */}
+        <Dropdown menu={tableMenu} trigger={['click']} disabled={!editor.isActive('table')}>
+          <Button size="small" icon={<TableOutlined />}>Table</Button>
         </Dropdown>
-        <Button size="small" icon={<TableOutlined />} onClick={insertItemsTable}>{t.insertItemsTable}</Button>
+
         <div style={{flex: 1}} />
-        <Select
-          size="small"
-          style={{minWidth: 160}}
-          value={sampleOrderId}
-          onChange={setSampleOrderId}
-          options={orderPickerOptions}
-          placeholder={t.sampleDataAuto || 'Sample data'}
-          showSearch
-          optionFilterProp="label"
-        />
-        <Button size="small" onClick={handleReset} icon={<ReloadOutlined />}>{t.resetToDefault}</Button>
-        <Button size="small" type="primary" loading={saving} onClick={handleSave} icon={<SaveOutlined />}>{t.save}</Button>
+
+        {/* Right side: sample-data picker + reset + save */}
+        <Flex gap={4} align="center">
+          <Select
+            size="small"
+            style={{minWidth: 160}}
+            value={sampleOrderId}
+            onChange={setSampleOrderId}
+            options={orderPickerOptions}
+            placeholder={t.sampleDataAuto || 'Sample data'}
+            showSearch
+            optionFilterProp="label"
+          />
+          <Button size="small" onClick={handleReset} icon={<ReloadOutlined />}>{t.resetToDefault}</Button>
+          <Button size="small" type="primary" loading={saving} onClick={handleSave} icon={<SaveOutlined />}>{t.save}</Button>
+        </Flex>
       </div>
       <Flex style={{height: 'calc(100vh - 200px)'}}>
         <div className="invoice-editor-page-bg" style={{flex: 1, overflow: 'auto'}}>
