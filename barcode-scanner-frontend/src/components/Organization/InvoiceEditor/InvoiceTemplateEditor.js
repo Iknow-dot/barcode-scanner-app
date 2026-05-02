@@ -1,7 +1,7 @@
-import React, {useCallback, useEffect, useMemo, useState} from 'react';
+import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {EditorContent, useEditor} from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
-import {Button, ColorPicker, Dropdown, Flex, Select, Spin, Modal} from 'antd';
+import {Button, ColorPicker, Dropdown, Flex, InputNumber, Select, Spin, Modal} from 'antd';
 import InvoicePreviewPanel from './InvoicePreviewPanel';
 import {
   BoldOutlined, ItalicOutlined, UnderlineOutlined,
@@ -9,7 +9,7 @@ import {
   TableOutlined, FieldStringOutlined, RedoOutlined, UndoOutlined,
   SaveOutlined, ReloadOutlined,
   UnorderedListOutlined, OrderedListOutlined,
-  FontColorsOutlined, BgColorsOutlined,
+  FontColorsOutlined, BgColorsOutlined, PictureOutlined,
 } from '@ant-design/icons';
 
 import Underline from '@tiptap/extension-underline';
@@ -17,6 +17,8 @@ import TextAlign from '@tiptap/extension-text-align';
 import {Table, TableRow, TableCell, TableHeader} from '@tiptap/extension-table';
 import {TextStyle, FontSize, Color} from '@tiptap/extension-text-style';
 import {Highlight} from '@tiptap/extension-highlight';
+import {Image} from '@tiptap/extension-image';
+import {Plugin} from '@tiptap/pm/state';
 import TokenNode from './TokenNode';
 import invoiceTokenService from '../../../api/services/invoiceTokenService';
 import * as orderService from '../../../api/services/orderService';
@@ -24,6 +26,79 @@ import {organizationService} from '../../../api';
 import useAppNotification from '../../../hooks/useAppNotification';
 import {useLanguage} from '../../../i18n/LanguageContext';
 import './InvoiceTemplateEditor.css';
+
+const IMAGE_SIZE_LIMIT = 1_048_576; // 1 MB
+
+// Extend Image to persist width/height as HTML attributes (not inline style)
+// and add paste + drag-drop handlers that base64-inline clipboard/file images.
+const ResizableImage = Image.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      width: {
+        default: null,
+        parseHTML: (el) => el.getAttribute('width'),
+        renderHTML: (attrs) => (attrs.width ? {width: attrs.width} : {}),
+      },
+      height: {
+        default: null,
+        parseHTML: (el) => el.getAttribute('height'),
+        renderHTML: (attrs) => (attrs.height ? {height: attrs.height} : {}),
+      },
+    };
+  },
+
+  addProseMirrorPlugins() {
+    return [
+      new Plugin({
+        props: {
+          handlePaste(view, event) {
+            const items = event.clipboardData?.items || [];
+            for (const item of items) {
+              if (item.type.startsWith('image/')) {
+                const file = item.getAsFile();
+                if (!file) continue;
+                if (file.size > IMAGE_SIZE_LIMIT) {
+                  window.dispatchEvent(new CustomEvent('invoice-editor-image-too-large'));
+                  return true;
+                }
+                const reader = new FileReader();
+                reader.onload = (ev) => {
+                  const {schema} = view.state;
+                  const node = schema.nodes.image.create({src: ev.target.result});
+                  view.dispatch(view.state.tr.replaceSelectionWith(node));
+                };
+                reader.readAsDataURL(file);
+                return true;
+              }
+            }
+            return false;
+          },
+
+          handleDrop(view, event) {
+            const file = event.dataTransfer?.files?.[0];
+            if (!file || !file.type.startsWith('image/')) return false;
+            event.preventDefault();
+            if (file.size > IMAGE_SIZE_LIMIT) {
+              window.dispatchEvent(new CustomEvent('invoice-editor-image-too-large'));
+              return true;
+            }
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+              const {schema} = view.state;
+              const node = schema.nodes.image.create({src: ev.target.result});
+              const pos = view.posAtCoords({left: event.clientX, top: event.clientY});
+              const tr = view.state.tr.insert(pos?.pos ?? view.state.selection.from, node);
+              view.dispatch(tr);
+            };
+            reader.readAsDataURL(file);
+            return true;
+          },
+        },
+      }),
+    ];
+  },
+});
 
 // Extend the stock Table to round-trip our `data-items-table` marker
 // through the editor's parse/serialize cycle. Without this, the marker
@@ -100,6 +175,30 @@ const InvoiceTemplateEditor = () => {
   const [sampleOrderId, setSampleOrderId] = useState(null); // null = auto (most recent)
   const [sampleOrderOptions, setSampleOrderOptions] = useState([]);
 
+  const fileInputRef = useRef();
+
+  const handleInsertImage = () => fileInputRef.current?.click();
+
+  const handleFilePicked = (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      notify.warning(t.error, t.logoTooLarge);
+      return;
+    }
+    if (file.size > IMAGE_SIZE_LIMIT) {
+      notify.warning(t.error, t.logoTooLarge);
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      editor?.chain().focus().setImage({src: ev.target.result}).run();
+    };
+    reader.onerror = () => notify.error(t.error, t.logoReadError);
+    reader.readAsDataURL(file);
+  };
+
   const editor = useEditor({
     extensions: [
       StarterKit,
@@ -114,6 +213,11 @@ const InvoiceTemplateEditor = () => {
       FontSize.configure({types: ['textStyle']}),
       Color,
       Highlight.configure({multicolor: true}),
+      ResizableImage.configure({
+        inline: true,
+        allowBase64: true,
+        HTMLAttributes: {style: 'max-width: 100%; height: auto;'},
+      }),
     ],
     content: '<p></p>',
   });
@@ -160,6 +264,13 @@ const InvoiceTemplateEditor = () => {
     editor.on('update', onUpdate);
     return () => editor.off('update', onUpdate);
   }, [editor, sampleValues, applyLiveFill]);
+
+  // Listen for the too-large custom event dispatched by the ProseMirror paste/drop plugin.
+  useEffect(() => {
+    const handler = () => notify.warning(t.error, t.logoTooLarge);
+    window.addEventListener('invoice-editor-image-too-large', handler);
+    return () => window.removeEventListener('invoice-editor-image-too-large', handler);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // --- Fetch sample values whenever sampleOrderId changes ---
   useEffect(() => {
@@ -429,12 +540,32 @@ const InvoiceTemplateEditor = () => {
 
         {SEPARATOR}
 
-        {/* Insert token + Insert items table */}
+        {/* Insert token + Insert items table + Insert image */}
         <Flex gap={4} align="center">
           <Dropdown menu={{items: tokenMenuItems}} trigger={['click']}>
             <Button size="small" icon={<FieldStringOutlined />}>{t.insertToken}</Button>
           </Dropdown>
           <Button size="small" icon={<TableOutlined />} onClick={insertItemsTable}>{t.insertItemsTable}</Button>
+          <input
+            type="file"
+            accept="image/png,image/jpeg,image/webp,image/svg+xml"
+            ref={fileInputRef}
+            style={{display: 'none'}}
+            onChange={handleFilePicked}
+          />
+          <Button size="small" icon={<PictureOutlined />} onClick={handleInsertImage}>{t.insertImage}</Button>
+          {editor.isActive('image') && (
+            <InputNumber
+              size="small"
+              placeholder="Width"
+              addonAfter="px"
+              style={{width: 110}}
+              min={20}
+              max={900}
+              value={Number(editor.getAttributes('image').width) || undefined}
+              onChange={(v) => editor.chain().focus().updateAttributes('image', {width: v ? String(v) : null}).run()}
+            />
+          )}
         </Flex>
 
         {SEPARATOR}

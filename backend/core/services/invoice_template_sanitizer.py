@@ -38,7 +38,7 @@ _ALLOWED_ATTRS = {
     '*': _GLOBAL_ATTRS,
     'td': _GLOBAL_ATTRS + ['colspan', 'rowspan', 'align'],
     'th': _GLOBAL_ATTRS + ['colspan', 'rowspan', 'align'],
-    'img': _GLOBAL_ATTRS + ['src', 'alt'],
+    'img': _GLOBAL_ATTRS + ['src', 'alt', 'width', 'height'],
     'table': _GLOBAL_ATTRS + ['border', 'cellpadding', 'cellspacing'],
     'col': _GLOBAL_ATTRS + ['span'],
     'colgroup': _GLOBAL_ATTRS,

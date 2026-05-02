@@ -1254,6 +1254,14 @@ class InvoiceTemplateSanitizerTests(TestCase):
         self.assertIn('<col', result)
         self.assertIn('width: 120px', result)
 
+    def test_img_width_and_height_attrs_survive_sanitization(self):
+        """<img> elements with width/height attrs must pass through bleach intact."""
+        html = '<img src="data:image/png;base64,abc" width="200" height="150" alt="test">'
+        result = sanitize_and_validate(html)
+        self.assertIn('width="200"', result)
+        self.assertIn('height="150"', result)
+        self.assertIn('src="data:image/png;base64,abc"', result)
+
 
 @override_settings(SECURE_SSL_REDIRECT=False)
 class InvoiceTemplateSaveTests(TestCase):
