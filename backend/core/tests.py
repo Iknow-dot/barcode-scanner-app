@@ -1327,6 +1327,88 @@ class InvoiceTokensEndpointTests(TestCase):
 
 
 @override_settings(SECURE_SSL_REDIRECT=False)
+class InvoiceSampleValuesEndpointTests(TestCase):
+    URL = '/api/v1/invoice-tokens/sample-values/'
+
+    def setUp(self):
+        os.environ['FERNET_KEY'] = _TEST_FERNET_KEY
+        self.org_a = _make_organization(name='OrgSV-A', identification_number='700',
+                                        invoice_display_name='Acme Sample Ltd')
+        self.org_b = _make_organization(name='OrgSV-B', identification_number='800')
+        self.user_a = User.objects.create_user(
+            username='sv_ua', password='p',
+            role=User.Role.COMPANY_ADMIN, organization=self.org_a,
+        )
+        self.user_b = User.objects.create_user(
+            username='sv_ub', password='p',
+            role=User.Role.COMPANY_USER, organization=self.org_b,
+        )
+        self.order_a = PurchaseOrder.objects.create(
+            organization=self.org_a, customer_name='Sample Customer',
+            delivery_type='pickup', status='confirmed',
+        )
+        PurchaseOrderItem.objects.create(
+            order=self.order_a, sku='SKU-001', sku_name='Widget',
+            quantity=2, price=10,
+        )
+        self.client_a = APIClient()
+        self.client_a.force_authenticate(self.user_a)
+
+    def tearDown(self):
+        os.environ.pop('FERNET_KEY', None)
+
+    def test_unauthenticated_returns_401(self):
+        anon = APIClient()
+        response = anon.get(self.URL)
+        self.assertEqual(response.status_code, 401)
+
+    def test_returns_org_values_for_own_org(self):
+        response = self.client_a.get(self.URL)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('org.display_name', response.data)
+        self.assertEqual(response.data['org.display_name'], 'Acme Sample Ltd')
+        self.assertIn('org.name', response.data)
+
+    def test_with_order_id_returns_order_and_item_values(self):
+        response = self.client_a.get(self.URL, {'order_id': self.order_a.id})
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('order.customer_name', response.data)
+        self.assertEqual(response.data['order.customer_name'], 'Sample Customer')
+        self.assertIn('item.sku', response.data)
+        self.assertEqual(response.data['item.sku'], 'SKU-001')
+
+    def test_cross_org_order_returns_404(self):
+        order_b = PurchaseOrder.objects.create(
+            organization=self.org_b, customer_name='Foreign',
+            delivery_type='pickup', status='draft',
+        )
+        response = self.client_a.get(self.URL, {'order_id': order_b.id})
+        self.assertEqual(response.status_code, 404)
+
+    def test_without_order_id_and_no_orders_returns_only_org_keys(self):
+        # Create a fresh org + user with no orders.
+        org_empty = _make_organization(name='OrgEmpty', identification_number='999')
+        user_empty = User.objects.create_user(
+            username='empty_u', password='p',
+            role=User.Role.COMPANY_USER, organization=org_empty,
+        )
+        c = APIClient()
+        c.force_authenticate(user_empty)
+        response = c.get(self.URL)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('org.display_name', response.data)
+        self.assertNotIn('order.id', response.data)
+        self.assertNotIn('item.sku', response.data)
+
+    def test_keys_are_flat(self):
+        response = self.client_a.get(self.URL)
+        self.assertEqual(response.status_code, 200)
+        for key in response.data:
+            self.assertIn('.', key, msg=f'Key {key!r} is not flat scope.name format')
+            self.assertNotIsInstance(response.data[key], dict)
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
 class InvoicePreviewEndpointTests(TestCase):
     def setUp(self):
         self.org_a = Organization.objects.create(

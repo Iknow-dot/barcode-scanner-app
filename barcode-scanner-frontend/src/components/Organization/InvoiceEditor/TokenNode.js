@@ -36,6 +36,7 @@ export const TokenNode = Node.create({
       mergeAttributes({
         'data-token': token,
         class: `token-chip token-chip-${scope}`,
+        title: token || '',
       }, HTMLAttributes),
       label || token || '',
     ];

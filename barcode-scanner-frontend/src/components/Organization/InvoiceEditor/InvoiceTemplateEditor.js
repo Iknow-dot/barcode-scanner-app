@@ -1,7 +1,7 @@
-import React, {useEffect, useMemo, useState} from 'react';
+import React, {useCallback, useEffect, useMemo, useState} from 'react';
 import {EditorContent, useEditor} from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
-import {Button, Dropdown, Flex, Spin, Modal} from 'antd';
+import {Button, Dropdown, Flex, Select, Spin, Modal} from 'antd';
 import InvoicePreviewPanel from './InvoicePreviewPanel';
 import {
   BoldOutlined, ItalicOutlined, UnderlineOutlined,
@@ -15,6 +15,7 @@ import TextAlign from '@tiptap/extension-text-align';
 import {Table, TableRow, TableCell, TableHeader} from '@tiptap/extension-table';
 import TokenNode from './TokenNode';
 import invoiceTokenService from '../../../api/services/invoiceTokenService';
+import * as orderService from '../../../api/services/orderService';
 import {organizationService} from '../../../api';
 import useAppNotification from '../../../hooks/useAppNotification';
 import {useLanguage} from '../../../i18n/LanguageContext';
@@ -89,6 +90,9 @@ const InvoiceTemplateEditor = () => {
   const [saving, setSaving] = useState(false);
   const [defaultTemplate, setDefaultTemplate] = useState('');
   const [tokens, setTokens] = useState({org: [], order: [], item: []});
+  const [sampleValues, setSampleValues] = useState({});
+  const [sampleOrderId, setSampleOrderId] = useState(null); // null = auto (most recent)
+  const [sampleOrderOptions, setSampleOrderOptions] = useState([]);
 
   const editor = useEditor({
     extensions: [
@@ -112,13 +116,68 @@ const InvoiceTemplateEditor = () => {
     return () => editor.off('update', onUpdate);
   }, [editor]);
 
+  // --- Live-fill: walk the doc and update every token node's label attr ---
+  const applyLiveFill = useCallback((values) => {
+    if (!editor || Object.keys(values).length === 0) return;
+    editor.commands.command(({tr, state}) => {
+      let changed = false;
+      state.doc.descendants((node, pos) => {
+        if (node.type.name !== 'token') return;
+        const token = node.attrs.token;
+        const resolved = values[token];
+        const newLabel = resolved !== undefined && resolved !== '' ? resolved : (token || '');
+        if (newLabel !== node.attrs.label) {
+          tr.setNodeMarkup(pos, undefined, {...node.attrs, label: newLabel});
+          changed = true;
+        }
+      });
+      return changed;
+    });
+  }, [editor]);
+
+  // Re-apply whenever sampleValues change (including after initial load
+  // and after a setContent that resets all labels to their i18n defaults).
+  useEffect(() => {
+    applyLiveFill(sampleValues);
+  }, [sampleValues, applyLiveFill]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // When a new token node is inserted (via the menu) the doc triggers an
+  // 'update' event. We hook into it to re-apply live fill on every update
+  // so newly inserted chips immediately show their real value.
+  useEffect(() => {
+    if (!editor) return;
+    const onUpdate = () => applyLiveFill(sampleValues);
+    editor.on('update', onUpdate);
+    return () => editor.off('update', onUpdate);
+  }, [editor, sampleValues, applyLiveFill]);
+
+  // --- Fetch sample values whenever sampleOrderId changes ---
+  useEffect(() => {
+    let cancelled = false;
+    async function loadSampleValues() {
+      const result = await invoiceTokenService.fetchSampleValues(
+        sampleOrderId ? {orderId: sampleOrderId} : {}
+      );
+      if (cancelled) return;
+      if (result.success) {
+        setSampleValues(result.data);
+      }
+    }
+    loadSampleValues();
+    return () => { cancelled = true; };
+  }, [sampleOrderId]);
+
+  // --- Main load: tokens catalog + saved template + order list for picker ---
   useEffect(() => {
     let cancelled = false;
     async function load() {
       setLoading(true);
       try {
-        const tokensResult = await invoiceTokenService.fetchCatalogAndDefault();
-        const settingsResult = await organizationService.getInvoiceTemplate();
+        const [tokensResult, settingsResult, ordersResult] = await Promise.all([
+          invoiceTokenService.fetchCatalogAndDefault(),
+          organizationService.getInvoiceTemplate(),
+          orderService.getOrders({page_size: 30}),
+        ]);
         if (cancelled) return;
         if (!tokensResult.success || !settingsResult.success) {
           notify.error(t.error, t.previewLoadFailed);
@@ -128,6 +187,14 @@ const InvoiceTemplateEditor = () => {
         setDefaultTemplate(tokensResult.data.default_template_html);
         const saved = settingsResult.data?.invoice_template_html || '';
         editor?.commands.setContent(saved || tokensResult.data.default_template_html);
+
+        // Populate order picker options
+        if (ordersResult?.success) {
+          const orderList = Array.isArray(ordersResult.data)
+            ? ordersResult.data
+            : ordersResult.data?.results || [];
+          setSampleOrderOptions(orderList);
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -150,7 +217,7 @@ const InvoiceTemplateEditor = () => {
         label: t[`tokenLabel_${scope}_${name}`] || `${scope}.${name}`,
         onClick: () => {
           const token = `${scope}.${name}`;
-          const label = t[`tokenLabel_${scope}_${name}`] || token;
+          const label = sampleValues[token] || t[`tokenLabel_${scope}_${name}`] || token;
           editor?.chain().focus().insertContent({
             type: 'token',
             attrs: {token, label, scope},
@@ -158,7 +225,7 @@ const InvoiceTemplateEditor = () => {
         },
       })),
     }));
-  }, [tokens, t, editor]);
+  }, [tokens, t, editor, sampleValues]);
 
   const handleSave = async () => {
     if (!editor) return;
@@ -188,6 +255,14 @@ const InvoiceTemplateEditor = () => {
 
   if (loading || !editor) return <Spin />;
 
+  const orderPickerOptions = [
+    {value: null, label: t.sampleDataAuto || 'Auto (most recent)'},
+    ...sampleOrderOptions.map((o) => ({
+      value: o.id,
+      label: `#${o.id} — ${o.customer_name || ''}`,
+    })),
+  ];
+
   return (
     <>
       {contextHolder}
@@ -205,6 +280,16 @@ const InvoiceTemplateEditor = () => {
         </Dropdown>
         <Button size="small" icon={<TableOutlined />} onClick={insertItemsTable}>{t.insertItemsTable}</Button>
         <div style={{flex: 1}} />
+        <Select
+          size="small"
+          style={{minWidth: 160}}
+          value={sampleOrderId}
+          onChange={setSampleOrderId}
+          options={orderPickerOptions}
+          placeholder={t.sampleDataAuto || 'Sample data'}
+          showSearch
+          optionFilterProp="label"
+        />
         <Button size="small" onClick={handleReset} icon={<ReloadOutlined />}>{t.resetToDefault}</Button>
         <Button size="small" type="primary" loading={saving} onClick={handleSave} icon={<SaveOutlined />}>{t.save}</Button>
       </div>

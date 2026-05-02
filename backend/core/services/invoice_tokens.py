@@ -79,6 +79,33 @@ TOKEN_CATALOG: Dict[str, Dict[str, Callable]] = {
 }
 
 
+def resolve_all_sample_values(*, org, order=None, item=None, index: int = 1) -> dict:
+    """Return a flat dict of all resolvable tokens to their current values.
+
+    Walks every token in TOKEN_CATALOG and calls the resolver with the
+    provided entities.  Skips ``order.*`` when *order* is None; skips
+    ``item.*`` when *item* is None.
+    """
+    result: dict = {}
+    for scope, names in TOKEN_CATALOG.items():
+        if scope == 'order' and order is None:
+            continue
+        if scope == 'item' and item is None:
+            continue
+        for name, resolver in names.items():
+            key = f'{scope}.{name}'
+            try:
+                if scope == 'org':
+                    result[key] = resolver(org)
+                elif scope == 'order':
+                    result[key] = resolver(order)
+                elif scope == 'item':
+                    result[key] = resolver(item, index)
+            except Exception:
+                result[key] = ''
+    return result
+
+
 def resolve_token(token: str, *, org=None, order=None, item=None, index: int = 1) -> str:
     """Resolve a `scope.name` token to a string. Raises KeyError on unknown tokens."""
     try:

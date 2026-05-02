@@ -13,6 +13,16 @@ const invoiceTokenService = {
       };
     }
   },
+
+  async fetchSampleValues({orderId} = {}) {
+    try {
+      const params = orderId ? {order_id: orderId} : {};
+      const response = await client.get(endpoints.invoice_token_sample_values, {params});
+      return {success: true, data: response.data};
+    } catch (error) {
+      return {success: false, error: error.response?.data?.detail || error.message};
+    }
+  },
 };
 
 export default invoiceTokenService;
