@@ -285,9 +285,9 @@ Add the action below `update_item` (after the existing `_prefetched_objects_cach
         """Apply a partial update to multiple line items atomically.
 
         Body: {"item_ids": [int, ...], "data": {price?, discount_percent?,
-        discounted_price?, unit?, quantity?}}. Items not belonging to this
-        order are silently filtered. Permission denial on any item rolls
-        back the whole batch.
+        discounted_price?, unit?}}. Items not belonging to this order are
+        silently filtered. Permission denial on any item rolls back the
+        whole batch.
         """
         from django.db import transaction
 
