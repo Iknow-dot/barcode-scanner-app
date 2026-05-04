@@ -177,7 +177,6 @@ const SharedDiscountControl = memo(({group, maxDiscountPercent, applyBulk, t}) =
         applyBulk(
             {discount_percent: val || 0, discounted_price: null},
             group.isMixedDiscount,
-            t.discount || 'Discount',
             (it) => `${it.discount_percent}%`,
             `${val || 0}%`,
         );
@@ -186,7 +185,6 @@ const SharedDiscountControl = memo(({group, maxDiscountPercent, applyBulk, t}) =
         applyBulk(
             {discounted_price: val ?? null, discount_percent: 0},
             group.isMixedDiscount,
-            t.discount || 'Discount',
             (it) => (it.discounted_price ? `${it.discounted_price} ₾` : `${it.discount_percent}%`),
             val == null ? '—' : `${val} ₾`,
         );
@@ -247,9 +245,12 @@ const OrderItemGroupCard = memo(({
 
     // itemIds and applyBulk must be declared before the early return so that
     // useCallback is always called unconditionally (React hooks rules).
-    const itemIds = group.items.map((i) => i.id);
+    const itemIds = useMemo(
+        () => group.items.map((i) => i.id),
+        [group.items],
+    );
 
-    const applyBulk = useCallback(async (data, mixedFlag, fieldLabel, formatCurrent, formatNew) => {
+    const applyBulk = useCallback(async (data, mixedFlag, formatCurrent, formatNew) => {
         const doApply = async () => {
             const result = await orderService.bulkUpdateOrderItems(orderId, itemIds, data);
             if (result.success) onLocalOrderUpdate(result.data);
@@ -257,15 +258,18 @@ const OrderItemGroupCard = memo(({
         };
 
         if (mixedFlag) {
-            const lines = group.items.map((it) =>
-                `${it.warehouse_name}: ${formatCurrent(it)} → ${formatNew}`
-            ).join('\n');
+            const lines = group.items.map((it) => ({
+                key: it.id,
+                text: `${it.warehouse_name}: ${formatCurrent(it)} → ${formatNew}`,
+            }));
             Modal.confirm({
                 title: t.confirmOverwriteTitle || 'Apply to all warehouses?',
                 content: (
                     <div>
                         <div>{t.confirmOverwriteBody || 'The following warehouses will change:'}</div>
-                        <pre style={{fontSize: 12, whiteSpace: 'pre-wrap', marginTop: 6}}>{lines}</pre>
+                        <ul style={{fontSize: 12, marginTop: 6, paddingInlineStart: 18}}>
+                            {lines.map(({key, text}) => <li key={key}>{text}</li>)}
+                        </ul>
                     </div>
                 ),
                 okText: t.yes,
@@ -296,26 +300,26 @@ const OrderItemGroupCard = memo(({
     const handleRemoveGroup = async () => {
         // Remove every line in the group; backend has no group concept, so we
         // issue parallel deletes. Last successful response wins for the
-        // refreshed-order shape.
-        let lastOrder = null;
-        for (const id of itemIds) {
-            const res = await orderService.removeOrderItem(orderId, id);
-            if (res.success) {
-                lastOrder = res.data;
-            } else {
-                notify.error(t.orderError, res.error);
-                return;
-            }
+        // refreshed-order shape; if any fails, surface the first error and stop
+        // applying the others' refreshed-order responses (the failed ones are
+        // still surfaced via notify).
+        const results = await Promise.all(
+            itemIds.map((id) => orderService.removeOrderItem(orderId, id))
+        );
+        const failed = results.find((r) => !r.success);
+        if (failed) {
+            notify.error(t.orderError, failed.error);
+            return;
         }
+        const lastOrder = results[results.length - 1].data;
         if (lastOrder) onLocalOrderUpdate(lastOrder);
     };
 
     const handleSharedPriceChange = (val) => {
-        if (val == null) return;
+        if (val == null || !Number.isFinite(val) || val < 0) return;
         applyBulk(
             {discounted_price: val, discount_percent: 0},
             group.isMixedPrice,
-            t.price,
             (it) => `${it.effective_price} ₾`,
             `${val} ₾`,
         );
@@ -424,7 +428,6 @@ const OrderItemGroupCard = memo(({
                     onChange={(val) => applyBulk(
                         {unit: val || ''},
                         group.isMixedUnit,
-                        t.unit,
                         (it) => (it.unit || '—'),
                         (val || '—'),
                     )}
