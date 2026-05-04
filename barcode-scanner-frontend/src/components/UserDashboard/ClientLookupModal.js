@@ -60,6 +60,7 @@ const ClientLookupModal = ({open, onSelect, onClose}) => {
     const [lookupSeed, setLookupSeed] = useState({identification_number: '', phone: ''});
     const [addressOptions, setAddressOptions] = useState([]);
     const [addressSearching, setAddressSearching] = useState(false);
+    const [mapPosition, setMapPosition] = useState(null);
     const lastAutoLookupId = useRef('');
     const autoLookupTimer = useRef(null);
     const addressSearchTimer = useRef(null);
@@ -73,6 +74,7 @@ const ClientLookupModal = ({open, onSelect, onClose}) => {
             setLookupSeed({identification_number: '', phone: ''});
             setAddressOptions([]);
             setAddressSearching(false);
+            setMapPosition(null);
             lastAutoLookupId.current = '';
             if (autoLookupTimer.current) {
                 clearTimeout(autoLookupTimer.current);
@@ -303,7 +305,16 @@ const ClientLookupModal = ({open, onSelect, onClose}) => {
             const suggestions = Array.isArray(result.data?.suggestions)
                 ? result.data.suggestions
                 : [];
-            setAddressOptions(suggestions.map((s) => ({value: s, label: s})));
+            // Suggestions arrive shaped as {label, lat, lng}. Keep lat/lng on
+            // each option so onSelect can recenter the map pin.
+            setAddressOptions(
+                suggestions.map((s) => ({
+                    value: s.label,
+                    label: s.label,
+                    lat: s.lat,
+                    lng: s.lng,
+                })),
+            );
         } else {
             setAddressOptions([]);
         }
@@ -557,6 +568,8 @@ const ClientLookupModal = ({open, onSelect, onClose}) => {
                     <AutoComplete
                         options={addressOptions.map((opt) => ({
                             value: opt.value,
+                            lat: opt.lat,
+                            lng: opt.lng,
                             label: (
                                 <span style={{whiteSpace: 'normal', wordBreak: 'break-word'}}>
                                     {opt.label}
@@ -564,6 +577,14 @@ const ClientLookupModal = ({open, onSelect, onClose}) => {
                             ),
                         }))}
                         onSearch={handleAddressSearch}
+                        onSelect={(_, option) => {
+                            if (
+                                typeof option?.lat === 'number'
+                                && typeof option?.lng === 'number'
+                            ) {
+                                setMapPosition({lat: option.lat, lng: option.lng});
+                            }
+                        }}
                         notFoundContent={
                             addressSearching
                                 ? (t.addressSearching || t.search)
@@ -587,6 +608,8 @@ const ClientLookupModal = ({open, onSelect, onClose}) => {
 
                 <div style={{marginBottom: 16}}>
                     <AddressMapPicker
+                        position={mapPosition}
+                        onPositionChange={setMapPosition}
                         onAddressResolved={handleAddressResolved}
                         onResolvingChange={setResolvingAddress}
                     />

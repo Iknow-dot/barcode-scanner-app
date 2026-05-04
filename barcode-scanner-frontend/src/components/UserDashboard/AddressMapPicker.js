@@ -1,5 +1,5 @@
-import React, {useState} from 'react';
-import {MapContainer, TileLayer, Marker, useMapEvents} from 'react-leaflet';
+import React, {useEffect, useRef} from 'react';
+import {MapContainer, TileLayer, Marker, useMapEvents, useMap} from 'react-leaflet';
 import L from 'leaflet';
 import {message} from 'antd';
 import {clientService} from '../../api';
@@ -20,6 +20,7 @@ L.Icon.Default.mergeOptions({
 
 const TBILISI_CENTER = [41.7151, 44.8271];
 const DEFAULT_ZOOM = 12;
+const PIN_ZOOM = 16;
 
 const ClickHandler = ({onPick}) => {
     useMapEvents({
@@ -30,9 +31,30 @@ const ClickHandler = ({onPick}) => {
     return null;
 };
 
-const AddressMapPicker = ({onAddressResolved, onResolvingChange, height = 250}) => {
+// Keeps the map view in sync with an externally-driven `position` (e.g. when
+// the parent picks a forward-geocoded suggestion). Skips the initial render
+// when position is null so the default Tbilisi view is preserved.
+const RecenterOnPosition = ({position}) => {
+    const map = useMap();
+    const lastKey = useRef(null);
+    useEffect(() => {
+        if (!position) return;
+        const key = `${position.lat},${position.lng}`;
+        if (lastKey.current === key) return;
+        lastKey.current = key;
+        map.flyTo([position.lat, position.lng], PIN_ZOOM);
+    }, [position, map]);
+    return null;
+};
+
+const AddressMapPicker = ({
+    position,
+    onPositionChange,
+    onAddressResolved,
+    onResolvingChange,
+    height = 250,
+}) => {
     const {t} = useLanguage();
-    const [position, setPosition] = useState(null);
 
     const resolve = async ({lat, lng}) => {
         if (onResolvingChange) onResolvingChange(true);
@@ -50,7 +72,7 @@ const AddressMapPicker = ({onAddressResolved, onResolvingChange, height = 250}) 
     };
 
     const handlePick = (latlng) => {
-        setPosition(latlng);
+        if (onPositionChange) onPositionChange(latlng);
         resolve(latlng);
     };
 
@@ -67,15 +89,14 @@ const AddressMapPicker = ({onAddressResolved, onResolvingChange, height = 250}) 
                     url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                 />
                 <ClickHandler onPick={handlePick}/>
+                <RecenterOnPosition position={position}/>
                 {position && (
                     <Marker
-                        position={position}
+                        position={[position.lat, position.lng]}
                         draggable
                         eventHandlers={{
                             dragend: (e) => {
-                                const latlng = e.target.getLatLng();
-                                setPosition(latlng);
-                                resolve(latlng);
+                                handlePick(e.target.getLatLng());
                             },
                         }}
                     />

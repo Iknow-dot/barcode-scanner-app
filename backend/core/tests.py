@@ -610,10 +610,10 @@ def _mock_httpx_response(status_code: int, body: object = None, json_raises: boo
     return resp
 
 
-def _photon_feature(**props) -> dict:
+def _photon_feature(coordinates=(0.0, 0.0), **props) -> dict:
     return {
         'type': 'Feature',
-        'geometry': {'type': 'Point', 'coordinates': [0, 0]},
+        'geometry': {'type': 'Point', 'coordinates': list(coordinates)},
         'properties': props,
     }
 
@@ -791,6 +791,7 @@ class PhotonServiceTests(TestCase):
     def test_formats_street_with_housenumber(self):
         body = _photon_collection(
             _photon_feature(
+                coordinates=(44.8271, 41.7151),
                 street='Pekini Avenue',
                 housenumber='12',
                 city='Tbilisi',
@@ -800,7 +801,11 @@ class PhotonServiceTests(TestCase):
         with mock.patch('httpx.get', return_value=_mock_httpx_response(200, body)):
             self.assertEqual(
                 search_addresses('q'),
-                ['Pekini Avenue 12, Tbilisi, Georgia'],
+                [{
+                    'label': 'Pekini Avenue 12, Tbilisi, Georgia',
+                    'lat': 41.7151,
+                    'lng': 44.8271,
+                }],
             )
 
     def test_formats_street_without_housenumber(self):
@@ -810,7 +815,7 @@ class PhotonServiceTests(TestCase):
         with mock.patch('httpx.get', return_value=_mock_httpx_response(200, body)):
             self.assertEqual(
                 search_addresses('q'),
-                ['Rustaveli Avenue, Tbilisi, Georgia'],
+                [{'label': 'Rustaveli Avenue, Tbilisi, Georgia', 'lat': 0.0, 'lng': 0.0}],
             )
 
     def test_falls_back_to_name_when_no_street(self):
@@ -820,7 +825,7 @@ class PhotonServiceTests(TestCase):
         with mock.patch('httpx.get', return_value=_mock_httpx_response(200, body)):
             self.assertEqual(
                 search_addresses('q'),
-                ['Dry Bridge, Tbilisi, Georgia'],
+                [{'label': 'Dry Bridge, Tbilisi, Georgia', 'lat': 0.0, 'lng': 0.0}],
             )
 
     def test_drops_blank_and_duplicate_parts(self):
@@ -828,7 +833,10 @@ class PhotonServiceTests(TestCase):
             _photon_feature(name='Tbilisi', city='Tbilisi', country='Georgia'),
         )
         with mock.patch('httpx.get', return_value=_mock_httpx_response(200, body)):
-            self.assertEqual(search_addresses('q'), ['Tbilisi, Georgia'])
+            self.assertEqual(
+                search_addresses('q'),
+                [{'label': 'Tbilisi, Georgia', 'lat': 0.0, 'lng': 0.0}],
+            )
 
     def test_deduplicates_features_with_same_formatted_string(self):
         body = _photon_collection(
@@ -836,7 +844,29 @@ class PhotonServiceTests(TestCase):
             _photon_feature(name='X', city='Tbilisi', country='Georgia'),
         )
         with mock.patch('httpx.get', return_value=_mock_httpx_response(200, body)):
-            self.assertEqual(search_addresses('q'), ['X, Tbilisi, Georgia'])
+            self.assertEqual(
+                search_addresses('q'),
+                [{'label': 'X, Tbilisi, Georgia', 'lat': 0.0, 'lng': 0.0}],
+            )
+
+    def test_drops_features_without_usable_geometry(self):
+        # Photon should never omit `geometry`, but tolerate it: no coords →
+        # nothing to plot on the map, so the item is unusable.
+        body = {
+            'type': 'FeatureCollection',
+            'features': [
+                {
+                    'type': 'Feature',
+                    'properties': {'name': 'NoGeom', 'country': 'Georgia'},
+                },
+                _photon_feature(name='HasGeom', country='Georgia'),
+            ],
+        }
+        with mock.patch('httpx.get', return_value=_mock_httpx_response(200, body)):
+            self.assertEqual(
+                search_addresses('q'),
+                [{'label': 'HasGeom, Georgia', 'lat': 0.0, 'lng': 0.0}],
+            )
 
     def test_returns_empty_list_when_no_features(self):
         body = _photon_collection()
@@ -939,10 +969,12 @@ class SearchAddressesAPIViewTests(TestCase):
     def test_happy_path_returns_suggestions(self):
         body = _photon_collection(
             _photon_feature(
+                coordinates=(44.7, 41.7),
                 street='Pekini Avenue', housenumber='12',
                 city='Tbilisi', country='Georgia',
             ),
             _photon_feature(
+                coordinates=(44.8, 41.8),
                 street='Rustaveli Avenue',
                 city='Tbilisi', country='Georgia',
             ),
@@ -955,8 +987,16 @@ class SearchAddressesAPIViewTests(TestCase):
         self.assertEqual(
             response.data,
             {'suggestions': [
-                'Pekini Avenue 12, Tbilisi, Georgia',
-                'Rustaveli Avenue, Tbilisi, Georgia',
+                {
+                    'label': 'Pekini Avenue 12, Tbilisi, Georgia',
+                    'lat': 41.7,
+                    'lng': 44.7,
+                },
+                {
+                    'label': 'Rustaveli Avenue, Tbilisi, Georgia',
+                    'lat': 41.8,
+                    'lng': 44.8,
+                },
             ]},
         )
 
@@ -1005,7 +1045,10 @@ class SearchAddressesAPIViewTests(TestCase):
 
         self.assertEqual(r1.status_code, 200)
         self.assertEqual(r2.status_code, 200)
-        self.assertEqual(r1.data['suggestions'], ['cached, Tbilisi, Georgia'])
+        self.assertEqual(
+            r1.data['suggestions'],
+            [{'label': 'cached, Tbilisi, Georgia', 'lat': 0.0, 'lng': 0.0}],
+        )
         self.assertEqual(call_count['n'], 1)
 
     def test_upstream_403_returns_502_envelope(self):

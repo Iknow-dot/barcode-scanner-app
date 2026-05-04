@@ -81,6 +81,23 @@ def _format_feature(feature: dict) -> str:
     return ", ".join(parts)
 
 
+def _feature_coords(feature: dict) -> tuple[float, float] | None:
+    """Extract (lat, lng) from a Photon feature, or None if unusable.
+
+    Photon geometry is GeoJSON: `coordinates = [lng, lat]`.
+    """
+    geometry = feature.get("geometry") or {}
+    coords = geometry.get("coordinates")
+    if not isinstance(coords, (list, tuple)) or len(coords) < 2:
+        return None
+    try:
+        lng = float(coords[0])
+        lat = float(coords[1])
+    except (TypeError, ValueError):
+        return None
+    return lat, lng
+
+
 def search_addresses(
     query: str,
     *,
@@ -88,11 +105,14 @@ def search_addresses(
     lang: str = "en",
     bias: tuple[float, float] | None = (DEFAULT_BIAS_LAT, DEFAULT_BIAS_LNG),
     timeout: float | None = None,
-) -> list[str]:
+) -> list[dict]:
     """Return a list of formatted address suggestions for a typed query.
 
-    Calls Photon's `/api/` endpoint and returns up to `limit` formatted
-    strings. An empty list is returned when no matches exist (not an error).
+    Calls Photon's `/api/` endpoint and returns up to `limit` items shaped
+    as `{"label": str, "lat": float, "lng": float}`. The frontend uses the
+    coordinates to recenter the map pin when a suggestion is picked from
+    the autocomplete. Features without usable geometry are dropped. An
+    empty list is returned when no matches exist (not an error).
 
     `bias` is an optional (lat, lng) tuple used as a soft proximity bias —
     nearby results rank higher but the search is still global. Pass
@@ -174,14 +194,19 @@ def search_addresses(
         return []
 
     seen: set[str] = set()
-    suggestions: list[str] = []
+    suggestions: list[dict] = []
     for feature in features:
         if not isinstance(feature, dict):
             continue
         formatted = _format_feature(feature)
-        if formatted and formatted not in seen:
-            seen.add(formatted)
-            suggestions.append(formatted)
+        if not formatted or formatted in seen:
+            continue
+        coords = _feature_coords(feature)
+        if coords is None:
+            continue
+        lat, lng = coords
+        seen.add(formatted)
+        suggestions.append({"label": formatted, "lat": lat, "lng": lng})
     return suggestions
 
 
