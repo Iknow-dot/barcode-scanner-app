@@ -527,6 +527,76 @@ class PurchaseOrderDenormalizedSearchTests(TestCase):
         self.assertNotIn('customer', data)
 
 
+@override_settings(SECURE_SSL_REDIRECT=False)
+class ProductSearchIncludeImagesTests(TestCase):
+    """Verify include_images=False skips the slow base64 inlining loop."""
+
+    def setUp(self):
+        self.org = _make_organization()
+        os.environ['FERNET_KEY'] = _TEST_FERNET_KEY
+        self.org.encrypt_password('s3cret')
+        self.org.save()
+        self.user = User.objects.create_user(
+            username='ps_user', password='p',
+            role=User.Role.COMPANY_USER, organization=self.org,
+        )
+        warehouse = Warehouse.objects.create(
+            organization=self.org, code='W1', name='Main',
+        )
+        warehouse.users.add(self.user)
+        self.client_api = APIClient()
+        self.client_api.force_authenticate(self.user)
+        self.url = reverse('product-search')
+
+    def tearDown(self):
+        os.environ.pop('FERNET_KEY', None)
+
+    def _stock_response(self):
+        return {
+            'sku': 'SKU1',
+            'sku_name': 'Name',
+            'article': 'A1',
+            'price': '10.00',
+            'stock': [{
+                'warehouse': 'W1',
+                'warehouse_name': 'Main',
+                'quantity': 5,
+                'price': '10.00',
+            }],
+            'img_url': ['https://example.invalid/img.jpg'],
+        }
+
+    def test_include_images_false_skips_image_fetch(self):
+        with mock.patch('core.views.ConsultWebExchangeClient') as cls:
+            cls.return_value.get_stock_and_prices.return_value = self._stock_response()
+            with mock.patch('core.views.httpx.get') as httpx_get:
+                response = self.client_api.post(
+                    self.url,
+                    {'sku': 'SKU1', 'is_barcode': True, 'warehouses': ['W1'],
+                     'include_images': False},
+                    format='json',
+                )
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data['images'], [])
+        httpx_get.assert_not_called()
+
+    def test_include_images_default_true_fetches_images(self):
+        fake_image = mock.Mock()
+        fake_image.status_code = 200
+        fake_image.content = b'binary'
+        with mock.patch('core.views.ConsultWebExchangeClient') as cls:
+            cls.return_value.get_stock_and_prices.return_value = self._stock_response()
+            with mock.patch('core.views.httpx.get', return_value=fake_image) as httpx_get:
+                response = self.client_api.post(
+                    self.url,
+                    {'sku': 'SKU1', 'is_barcode': True, 'warehouses': ['W1']},
+                    format='json',
+                )
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(len(response.data['images']), 1)
+        httpx_get.assert_called_once()
+
+
 # ---------------------------------------------------------------------------
 # Reverse Geocode (Nominatim)
 # ---------------------------------------------------------------------------

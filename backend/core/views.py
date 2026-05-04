@@ -311,30 +311,34 @@ class ProductSearchAPIView(APIView):
         except ConsultWebExchangeError as exc:
             return _consult_error_response(exc)
 
-        # Convert img_url to Base64-encoded images
+        # Convert img_url to Base64-encoded images. include_images defaults
+        # to True (backward-compatible); set to False from low-bandwidth
+        # callers like the cart card's stock-only fetch.
+        include_images = bool(request.data.get('include_images', True))
         if 'img_url' in product_data:
-            base64_images = []
-            for url in product_data['img_url']:
-                try:
-                    if not url:
-                        logging.warning(f"Empty image URL for product with barcode {sku}")
-                        continue
-                    https_url = _convert_to_https(url)
-                    image_response = httpx.get(https_url)
-                    if image_response.status_code == 200:
-                        base64_string = base64.b64encode(image_response.content).decode('utf-8')
-                        base64_images.append({
-                            "original_url": https_url,
-                            "base64": f"data:image/jpeg;base64,{base64_string}"
-                        })
-                    else:
-                        logging.warning(
-                            f"Failed to fetch image from {https_url}: Status code {image_response.status_code}")
-                except Exception as e:
-                    logging.error(f"Error fetching image from {url}: {e}")
-
-            # Add Base64 images to product data
-            product_data['images'] = base64_images
+            if include_images:
+                base64_images = []
+                for url in product_data['img_url']:
+                    try:
+                        if not url:
+                            logging.warning(f"Empty image URL for product with barcode {sku}")
+                            continue
+                        https_url = _convert_to_https(url)
+                        image_response = httpx.get(https_url)
+                        if image_response.status_code == 200:
+                            base64_string = base64.b64encode(image_response.content).decode('utf-8')
+                            base64_images.append({
+                                "original_url": https_url,
+                                "base64": f"data:image/jpeg;base64,{base64_string}"
+                            })
+                        else:
+                            logging.warning(
+                                f"Failed to fetch image from {https_url}: Status code {image_response.status_code}")
+                    except Exception as e:
+                        logging.error(f"Error fetching image from {url}: {e}")
+                product_data['images'] = base64_images
+            else:
+                product_data['images'] = []
             del product_data['img_url']
 
         serializer = self.serializer_class(product_data)
