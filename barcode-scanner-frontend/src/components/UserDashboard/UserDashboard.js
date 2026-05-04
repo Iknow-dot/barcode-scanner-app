@@ -15,6 +15,7 @@ import {
 } from '../../utils/sound';
 import {printInvoice} from '../../utils/printInvoice';
 import groupItemsBySku from './groupItemsBySku';
+import inheritFromGroup from './inheritFromGroup';
 import {
     Badge,
     Button,
@@ -460,31 +461,8 @@ const UserDashboard = () => {
     const inheritFromExistingGroup = (sku) => {
         const order = activeOrderRef.current;
         if (!order || !Array.isArray(order.items)) return {};
-        const groups = groupItemsBySku(order.items);
-        const group = groups.find((g) => g.sku === sku);
-        if (!group) return {};
-        // Only inherit when the group is genuinely shared. Mixed → start
-        // fresh at the warehouse's catalog price.
-        const inherited = {};
-        const canApplyDiscount = !!authData?.user?.can_apply_discount;
-        if (canApplyDiscount) {
-            if (!group.isMixedPrice && group.sharedDiscountedPrice != null) {
-                inherited.discounted_price = group.sharedDiscountedPrice;
-            }
-            if (!group.isMixedDiscount && parseFloat(group.sharedDiscountPercent || 0) > 0) {
-                inherited.discount_percent = group.sharedDiscountPercent;
-            }
-        }
-        // unit inherits regardless of discount permission
-        if (!group.isMixedUnit && group.sharedUnit) {
-            inherited.unit = group.sharedUnit;
-        }
-        // Note: we deliberately don't inherit `price` (the line's catalog
-        // price); only the override fields and unit. When the user has lost
-        // discount permission, we drop those override fields too — the new
-        // line is added at catalog price and the group will read as
-        // "mixed", which is the right visible feedback.
-        return inherited;
+        const group = groupItemsBySku(order.items).find((g) => g.sku === sku);
+        return inheritFromGroup(group, !!authData?.user?.can_apply_discount);
     };
 
     const handleAddToOrderFromWarehouse = async (warehouseRecord, e) => {
