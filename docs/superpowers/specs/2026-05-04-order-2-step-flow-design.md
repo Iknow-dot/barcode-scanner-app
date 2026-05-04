@@ -67,7 +67,7 @@ Approach: add `destroyOnHidden` to the order drawer. The neighbouring search dra
 
 ### i18n
 
-Four new keys in `barcode-scanner-frontend/src/i18n/en.js` and `ka.js`:
+Four new keys in `barcode-scanner-frontend/src/i18n/translations.js` (single file with `ka` and `en` blocks):
 
 | Key | English | Georgian |
 |---|---|---|
@@ -82,8 +82,7 @@ Existing `proceedToPayment`, `confirmProceedToPayment`, `saveForLater`, `deleteO
 
 - `barcode-scanner-frontend/src/components/UserDashboard/OrderPanel.js` — add `step` state, `Steps` indicator, conditional middle region, swapped action bar, reset-step in the id-change branch of the sync effect.
 - `barcode-scanner-frontend/src/components/UserDashboard/UserDashboard.js` — add `destroyOnHidden` prop to the order `<Drawer>`.
-- `barcode-scanner-frontend/src/i18n/en.js` — add 4 keys.
-- `barcode-scanner-frontend/src/i18n/ka.js` — add 4 keys.
+- `barcode-scanner-frontend/src/i18n/translations.js` — add 4 keys to both `ka` and `en` blocks.
 
 No backend, no migrations, no API changes.
 
