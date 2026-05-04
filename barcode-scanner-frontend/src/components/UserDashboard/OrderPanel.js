@@ -127,15 +127,36 @@ const WarehouseSubRow = memo(({item, stockText, stockNumber, assigned, orderId, 
     const hasOverride = item.discounted_price != null || parseFloat(item.discount_percent || 0) > 0;
     const exceedsLocal =
         Number.isFinite(stockNumber) && Number(item.quantity) > Number(stockNumber);
+    const hasDiscount =
+        item.effective_price && parseFloat(item.effective_price) !== parseFloat(item.price);
 
     return (
-        <Flex align="center" wrap="wrap" gap={8} className="m-warehouse-subrow">
-            <Tag color={assigned ? 'green' : 'blue'} style={{fontSize: 10, marginInlineEnd: 0}}>
+        <Flex vertical gap={6} className="m-warehouse-subrow">
+            {/* Line 1 — warehouse name */}
+            <Tag color={assigned ? 'green' : 'blue'} style={{fontSize: 11, alignSelf: 'flex-start'}}>
                 {item.warehouse_name}
                 {assigned && <span style={{marginLeft: 4}}>✓</span>}
             </Tag>
 
-            <div className="m-qty-stepper">
+            {/* Line 2 — stock (with warning if needed) */}
+            <Flex align="center" gap={6} wrap="wrap">
+                {stockText != null && (
+                    <Text type="secondary" style={{fontSize: 12}}>
+                        {t.stockRemaining}: {stockText}
+                    </Text>
+                )}
+                {exceedsLocal && (
+                    <Flex align="center" gap={2}>
+                        <WarningOutlined style={{color: '#faad14', fontSize: 12}}/>
+                        <Text type="warning" style={{fontSize: 12}}>
+                            {t.exceedsStock(stockNumber)}
+                        </Text>
+                    </Flex>
+                )}
+            </Flex>
+
+            {/* Line 3 — qty stepper */}
+            <div className="m-qty-stepper" style={{alignSelf: 'flex-start'}}>
                 <Button size="small" icon={<MinusOutlined/>}
                         onClick={() => handleQuantityChange(item.quantity - 1)}
                         disabled={item.quantity <= 1}
@@ -149,52 +170,49 @@ const WarehouseSubRow = memo(({item, stockText, stockNumber, assigned, orderId, 
                         className="m-qty-btn"/>
             </div>
 
-            {stockText != null && (
-                <Text type="secondary" style={{fontSize: 11}}>
-                    {t.stockRemaining}: {stockText}
+            {/* Line 4 — unit price + line total */}
+            <Flex align="center" gap={6} wrap="wrap">
+                {hasDiscount ? (
+                    <>
+                        <Text delete type="secondary" style={{fontSize: 12}}>{item.price} ₾</Text>
+                        <Text style={{fontSize: 13, fontWeight: 500}}>{item.effective_price} ₾</Text>
+                    </>
+                ) : (
+                    <Text style={{fontSize: 13, fontWeight: 500}}>{item.price} ₾</Text>
+                )}
+                <Text type="secondary" style={{fontSize: 12}}>· {t.total || 'Total'}:</Text>
+                <Text strong style={{fontSize: 14, color: '#52c41a'}}>
+                    {item.line_total} ₾
                 </Text>
-            )}
-            {exceedsLocal && (
-                <Flex align="center" gap={2}>
-                    <WarningOutlined style={{color: '#faad14', fontSize: 11}}/>
-                    <Text type="warning" style={{fontSize: 11}}>
-                        {t.exceedsStock(stockNumber)}
-                    </Text>
-                </Flex>
-            )}
+            </Flex>
 
-            <Text type="secondary" style={{fontSize: 12}}>
-                @ {item.effective_price} ₾
-            </Text>
-            <Text strong style={{fontSize: 13, color: '#52c41a'}}>
-                = {item.line_total} ₾
-            </Text>
-
-            <Button type="link" size="small" onClick={() => setOverrideOpen((v) => !v)}>
-                {overrideOpen ? (t.cancel || 'Cancel') : (t.overridePrice || 'Override price')}
-            </Button>
-
-            {hasOverride && (
-                <Button type="text" size="small" icon={<UndoOutlined/>} onClick={handleResetPrice}
-                        title={t.resetPrice} aria-label={t.resetPrice}/>
-            )}
-
-            {overrideOpen && (
-                <InputNumber
-                    min={0}
-                    max={parseFloat(item.price || 0)}
-                    defaultValue={parseFloat(item.discounted_price ?? item.price)}
-                    size="small"
-                    addonAfter="₾"
-                    controls={false}
-                    inputMode="decimal"
-                    onBlur={(e) => {
-                        const v = parseFloat(e.target.value);
-                        handleOverrideSave(Number.isFinite(v) ? v : null);
-                        setOverrideOpen(false);
-                    }}
-                />
-            )}
+            {/* Line 5 — override price */}
+            <Flex align="center" gap={6} wrap="wrap">
+                <Button type="link" size="small" onClick={() => setOverrideOpen((v) => !v)}
+                        style={{padding: 0}}>
+                    {overrideOpen ? (t.cancel || 'Cancel') : (t.overridePrice || 'Override price')}
+                </Button>
+                {overrideOpen && (
+                    <InputNumber
+                        min={0}
+                        max={parseFloat(item.price || 0)}
+                        defaultValue={parseFloat(item.discounted_price ?? item.price)}
+                        size="small"
+                        addonAfter="₾"
+                        controls={false}
+                        inputMode="decimal"
+                        onBlur={(e) => {
+                            const v = parseFloat(e.target.value);
+                            handleOverrideSave(Number.isFinite(v) ? v : null);
+                            setOverrideOpen(false);
+                        }}
+                    />
+                )}
+                {hasOverride && (
+                    <Button type="text" size="small" icon={<UndoOutlined/>} onClick={handleResetPrice}
+                            title={t.resetPrice} aria-label={t.resetPrice}/>
+                )}
+            </Flex>
         </Flex>
     );
 });
