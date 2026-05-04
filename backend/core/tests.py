@@ -1621,3 +1621,58 @@ class PurchaseOrderBulkUpdateTests(TestCase):
         other_item.refresh_from_db()
         self.assertEqual(str(self.item_a.price), '11.00')
         self.assertEqual(str(other_item.price), '999.00')
+
+    def test_discount_denial_rolls_back_whole_batch(self):
+        self.user.max_discount_percent = 10  # cap discount at 10%
+        self.user.save()
+        # Setting price=50 implies a 50% discount on a base of 100, exceeding
+        # the cap. The whole batch must roll back so item_a is also unchanged.
+        response = self.client.patch(
+            self.url,
+            {'item_ids': [self.item_a.id, self.item_b.id],
+             'data': {'discounted_price': '50.00'}},
+            format='json',
+        )
+        self.assertEqual(response.status_code, 403, response.data)
+        self.assertEqual(response.data['code'], 'DISCOUNT_EXCEEDS_LIMIT')
+        self.assertIn('failed_item_id', response.data)
+        self.item_a.refresh_from_db()
+        self.item_b.refresh_from_db()
+        # Neither item was mutated — full rollback.
+        self.assertIsNone(self.item_a.discounted_price)
+        self.assertIsNone(self.item_b.discounted_price)
+
+    def test_other_org_order_returns_404(self):
+        other_org = _make_organization(name='Other', identification_number='999')
+        other_user = User.objects.create_user(
+            username='outsider', password='p',
+            role=User.Role.COMPANY_USER, organization=other_org,
+        )
+        other_client = APIClient()
+        other_client.force_authenticate(user=other_user)
+        response = other_client.patch(
+            self.url,  # this points at self.org's order
+            {'item_ids': [self.item_a.id], 'data': {'price': '1.00'}},
+            format='json',
+        )
+        # PurchaseOrderViewSet.get_queryset filters by user.organization, so a
+        # cross-org order is invisible (404), not a 403.
+        self.assertEqual(response.status_code, 404)
+        self.item_a.refresh_from_db()
+        self.assertEqual(str(self.item_a.price), '100.00')
+
+    def test_unit_only_change_does_not_trigger_discount_check(self):
+        # User has no discount permission — but a pure unit change must succeed.
+        self.user.can_apply_discount = False
+        self.user.save()
+        response = self.client.patch(
+            self.url,
+            {'item_ids': [self.item_a.id, self.item_b.id],
+             'data': {'unit': 'box'}},
+            format='json',
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        self.item_a.refresh_from_db()
+        self.item_b.refresh_from_db()
+        self.assertEqual(self.item_a.unit, 'box')
+        self.assertEqual(self.item_b.unit, 'box')
