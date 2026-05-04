@@ -128,11 +128,13 @@ const UserDashboard = () => {
         fetchWarehouses();
     }, [setSubNav]);
 
-    // Fetch incomplete (draft) orders
+    // Scoped to current user; the customer-search effect below omits this filter on purpose so colleagues' drafts stay findable.
+    const currentUserId = authData?.user?.id;
     const fetchIncompleteOrders = useCallback(async () => {
+        if (!currentUserId) return;
         setIncompleteOrdersLoading(true);
         try {
-            const result = await orderService.getOrders();
+            const result = await orderService.getOrders({created_by: currentUserId});
             if (result.success) {
                 const currentOrder = activeOrderRef.current;
                 const drafts = (result.data || []).filter(
@@ -145,7 +147,7 @@ const UserDashboard = () => {
         } finally {
             setIncompleteOrdersLoading(false);
         }
-    }, []);
+    }, [currentUserId]);
 
     // Fetch incomplete drafts when switching to the Orders tab
     useEffect(() => {
