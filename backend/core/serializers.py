@@ -363,13 +363,14 @@ class AddOrderItemSerializer(serializers.Serializer):
 class BulkUpdateOrderItemsDataSerializer(serializers.Serializer):
     """Whitelisted fields the bulk-update endpoint may set on each item.
 
-    All fields are optional; at least one must be provided (validated by the
-    parent serializer).
+    Per-warehouse quantity has its own update_item endpoint; only price,
+    discount_percent, discounted_price, and unit are bulk-updatable.
+    All fields are optional; at least one must be provided (validated by this
+    serializer's validate method).
     """
     price = serializers.DecimalField(
         max_digits=10, decimal_places=2, required=False,
     )
-    quantity = serializers.IntegerField(min_value=1, required=False)
     unit = serializers.CharField(max_length=50, required=False, allow_blank=True)
     discount_percent = serializers.DecimalField(
         max_digits=5, decimal_places=2, required=False,
@@ -377,6 +378,13 @@ class BulkUpdateOrderItemsDataSerializer(serializers.Serializer):
     discounted_price = serializers.DecimalField(
         max_digits=10, decimal_places=2, required=False, allow_null=True,
     )
+
+    def validate(self, attrs):
+        if not attrs:
+            raise serializers.ValidationError(
+                'At least one field must be provided.'
+            )
+        return attrs
 
 
 class BulkUpdateOrderItemsSerializer(serializers.Serializer):
@@ -387,13 +395,6 @@ class BulkUpdateOrderItemsSerializer(serializers.Serializer):
         allow_empty=False,
     )
     data = BulkUpdateOrderItemsDataSerializer()
-
-    def validate_data(self, value):
-        if not value:
-            raise serializers.ValidationError(
-                'At least one field must be provided.'
-            )
-        return value
 
 
 # ---------------------------------------------------------------------------

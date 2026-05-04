@@ -1,0 +1,5 @@
+{"type":"server-started","port":55244,"host":"127.0.0.1","url_host":"localhost","url":"http://localhost:55244","screen_dir":"/Users/sds-ge573/PycharmProjects/barcode-scanner-app/.superpowers/brainstorm/3051-1777558018/content","state_dir":"/Users/sds-ge573/PycharmProjects/barcode-scanner-app/.superpowers/brainstorm/3051-1777558018/state"}
+{"type":"screen-added","file":"/Users/sds-ge573/PycharmProjects/barcode-scanner-app/.superpowers/brainstorm/3051-1777558018/content/scope.html"}
+{"source":"user-event","type":"click","text":"F\n    \n      Login page branding\n      Org logo + colors on login page (requires resolving org from subdomain or URL param — adds complexity).","choice":"login-page","id":null,"timestamp":1777558071647}
+{"source":"user-event","type":"click","text":"A\n    \n      Primary / accent color\n      Buttons, links, highlights — drives Ant Design's colorPrimary token.","choice":"primary-color","id":null,"timestamp":1777558080240}
+{"type":"server-stopped","reason":"idle timeout"}

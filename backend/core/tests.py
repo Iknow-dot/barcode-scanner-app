@@ -1534,3 +1534,15 @@ class BulkUpdateOrderItemsSerializerTests(TestCase):
         })
         self.assertTrue(s.is_valid(), s.errors)
         self.assertIsNone(s.validated_data['data']['discounted_price'])
+
+    def test_rejects_quantity_field(self):
+        """quantity is intentionally NOT in the bulk-update whitelist —
+        per-warehouse qty has its own update_item endpoint."""
+        from core.serializers import BulkUpdateOrderItemsSerializer
+        # quantity-only payload should be treated as empty data and rejected
+        s = BulkUpdateOrderItemsSerializer(data={
+            'item_ids': [1],
+            'data': {'quantity': 5},
+        })
+        self.assertFalse(s.is_valid())
+        self.assertIn('data', s.errors)

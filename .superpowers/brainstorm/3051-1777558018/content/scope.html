@@ -1,0 +1,61 @@
+<h2>What can a company admin customize?</h2>
+<p class="subtitle">Pick everything that should be in scope. We'll narrow later if needed.</p>
+
+<div class="options" data-multiselect>
+  <div class="option" data-choice="primary-color" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Primary / accent color</h3>
+      <p>Buttons, links, highlights — drives Ant Design's <code>colorPrimary</code> token.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="logo" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Logo upload</h3>
+      <p>Replace the default logo in the sidebar / header (light + dark variants).</p>
+    </div>
+  </div>
+  <div class="option" data-choice="dark-light" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Default theme (light/dark) for the org</h3>
+      <p>Set what new users see by default. Individuals can still toggle per-session.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="full-palette" onclick="toggleSelect(this)">
+    <div class="letter">D</div>
+    <div class="content">
+      <h3>Full color palette</h3>
+      <p>Primary + success/warning/error + neutral background. More control, more rope.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="typography" onclick="toggleSelect(this)">
+    <div class="letter">E</div>
+    <div class="content">
+      <h3>Typography</h3>
+      <p>Font family, base size. Note: Georgian script needs a Georgian-compatible font.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="login-page" onclick="toggleSelect(this)">
+    <div class="letter">F</div>
+    <div class="content">
+      <h3>Login page branding</h3>
+      <p>Org logo + colors on login page (requires resolving org from subdomain or URL param — adds complexity).</p>
+    </div>
+  </div>
+  <div class="option" data-choice="favicon" onclick="toggleSelect(this)">
+    <div class="letter">G</div>
+    <div class="content">
+      <h3>Favicon / browser tab title</h3>
+      <p>Per-org favicon and document title.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="density" onclick="toggleSelect(this)">
+    <div class="letter">H</div>
+    <div class="content">
+      <h3>UI density / border radius</h3>
+      <p>Compact vs comfortable, sharp vs round corners.</p>
+    </div>
+  </div>
+</div>
