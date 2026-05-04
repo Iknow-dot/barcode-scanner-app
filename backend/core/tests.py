@@ -1623,22 +1623,29 @@ class PurchaseOrderBulkUpdateTests(TestCase):
         self.assertEqual(str(other_item.price), '999.00')
 
     def test_discount_denial_rolls_back_whole_batch(self):
-        self.user.max_discount_percent = 10  # cap discount at 10%
+        # Make item_b pricier so the same discounted_price implies a much
+        # larger discount on it. With cap=30: item_a's 20% passes (and is
+        # save()'d), item_b's 60% is denied. Without atomic rollback,
+        # item_a's discounted_price would persist as 80.00.
+        self.item_b.price = '200.00'
+        self.item_b.save()
+        self.user.max_discount_percent = 30
         self.user.save()
-        # Setting price=50 implies a 50% discount on a base of 100, exceeding
-        # the cap. The whole batch must roll back so item_a is also unchanged.
+
         response = self.client.patch(
             self.url,
             {'item_ids': [self.item_a.id, self.item_b.id],
-             'data': {'discounted_price': '50.00'}},
+             'data': {'discounted_price': '80.00'}},
             format='json',
         )
         self.assertEqual(response.status_code, 403, response.data)
         self.assertEqual(response.data['code'], 'DISCOUNT_EXCEEDS_LIMIT')
-        self.assertIn('failed_item_id', response.data)
+        # item_b is the one that exceeded the cap, so it's the failed_item_id.
+        self.assertEqual(response.data['failed_item_id'], self.item_b.id)
         self.item_a.refresh_from_db()
         self.item_b.refresh_from_db()
-        # Neither item was mutated — full rollback.
+        # item_a passed validation and was save()'d in iteration 1 — only
+        # transaction.atomic() rolling back can keep its discounted_price None.
         self.assertIsNone(self.item_a.discounted_price)
         self.assertIsNone(self.item_b.discounted_price)
 
@@ -1652,19 +1659,29 @@ class PurchaseOrderBulkUpdateTests(TestCase):
         other_client.force_authenticate(user=other_user)
         response = other_client.patch(
             self.url,  # this points at self.org's order
-            {'item_ids': [self.item_a.id], 'data': {'price': '1.00'}},
+            {'item_ids': [self.item_a.id, self.item_b.id],
+             'data': {'price': '1.00'}},
             format='json',
         )
         # PurchaseOrderViewSet.get_queryset filters by user.organization, so a
-        # cross-org order is invisible (404), not a 403.
+        # cross-org order is invisible (404), not a 403. Both items must be
+        # untouched — neither id should ever reach the filter().
         self.assertEqual(response.status_code, 404)
         self.item_a.refresh_from_db()
+        self.item_b.refresh_from_db()
         self.assertEqual(str(self.item_a.price), '100.00')
+        self.assertEqual(str(self.item_b.price), '100.00')
 
     def test_unit_only_change_does_not_trigger_discount_check(self):
-        # User has no discount permission — but a pure unit change must succeed.
+        # Pre-existing 15% discount on item_a. Without the is_changing_discount
+        # short-circuit, _enforce_discount_permission would be invoked with
+        # the existing 15% and (since can_apply_discount=False) deny — so a
+        # *unit-only* edit would 403, breaking routine line edits.
+        self.item_a.discount_percent = '15.00'
+        self.item_a.save()
         self.user.can_apply_discount = False
         self.user.save()
+
         response = self.client.patch(
             self.url,
             {'item_ids': [self.item_a.id, self.item_b.id],
@@ -1676,3 +1693,5 @@ class PurchaseOrderBulkUpdateTests(TestCase):
         self.item_b.refresh_from_db()
         self.assertEqual(self.item_a.unit, 'box')
         self.assertEqual(self.item_b.unit, 'box')
+        # The pre-existing discount must survive — we only touched unit.
+        self.assertEqual(str(self.item_a.discount_percent), '15.00')
