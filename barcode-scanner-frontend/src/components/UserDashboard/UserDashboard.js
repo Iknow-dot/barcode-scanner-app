@@ -192,7 +192,11 @@ const UserDashboard = () => {
                 ? []
                 : userWarehouses.map(warehouse => warehouse.code);
 
-            const result = await productService.searchProduct(search, searchType, warehouseCodes);
+            const result = await productService.searchProduct({
+                sku: search,
+                searchType,
+                warehouseCodes,
+            });
 
             if (result.success && result.data?.stock) {
                 playFoundSound();
