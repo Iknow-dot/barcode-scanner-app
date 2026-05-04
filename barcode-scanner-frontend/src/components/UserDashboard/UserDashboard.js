@@ -8,6 +8,7 @@ import useAppNotification from "../../hooks/useAppNotification";
 import {useLanguage} from '../../i18n/LanguageContext';
 import {playFoundSound, playNotFoundSound} from '../../utils/sound';
 import {printInvoice} from '../../utils/printInvoice';
+import groupItemsBySku from './groupItemsBySku';
 import {
     Badge,
     Button,
@@ -437,11 +438,36 @@ const UserDashboard = () => {
         }, 600);
     };
 
+    const inheritFromExistingGroup = (sku) => {
+        const order = activeOrderRef.current;
+        if (!order || !Array.isArray(order.items)) return {};
+        const groups = groupItemsBySku(order.items);
+        const group = groups.find((g) => g.sku === sku);
+        if (!group) return {};
+        // Only inherit when the group is genuinely shared. Mixed → start fresh
+        // at the warehouse's catalog price.
+        const inherited = {};
+        if (!group.isMixedPrice && group.sharedDiscountedPrice != null) {
+            inherited.discounted_price = group.sharedDiscountedPrice;
+        }
+        if (!group.isMixedDiscount && parseFloat(group.sharedDiscountPercent || 0) > 0) {
+            inherited.discount_percent = group.sharedDiscountPercent;
+        }
+        if (!group.isMixedUnit && group.sharedUnit) {
+            inherited.unit = group.sharedUnit;
+        }
+        // Note: we deliberately don't inherit `price` (the line's catalog
+        // price); only the override fields (discounted_price/discount_percent)
+        // and unit.
+        return inherited;
+    };
+
     const handleAddToOrderFromWarehouse = async (warehouseRecord, e) => {
         if (!activeOrder) return;
         if (e?.currentTarget) {
             animateAddToCart(e.currentTarget);
         }
+        const inherited = inheritFromExistingGroup(productInfo.sku);
         const addResult = await orderService.addOrderItem(activeOrder.id, {
             sku: productInfo.sku,
             sku_name: productInfo.sku_name || '',
@@ -450,6 +476,7 @@ const UserDashboard = () => {
             quantity: 1,
             warehouse_code: warehouseRecord.warehouse || '',
             warehouse_name: warehouseRecord.warehouse_name || '',
+            ...inherited,
         });
         if (addResult.success) {
             activeOrderRef.current = addResult.data;
