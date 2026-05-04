@@ -626,7 +626,11 @@ class InvoiceTokensAPIView(APIView):
     add_item=extend_schema(tags=['Purchase Orders']),
     remove_item=extend_schema(tags=['Purchase Orders']),
     update_item=extend_schema(tags=['Purchase Orders']),
-    bulk_update_items=extend_schema(tags=['Purchase Orders']),
+    bulk_update_items=extend_schema(
+        tags=['Purchase Orders'],
+        request=BulkUpdateOrderItemsSerializer,
+        responses=PurchaseOrderSerializer,
+    ),
     invoice=extend_schema(tags=['Purchase Orders']),
     invoice_preview=extend_schema(tags=['Purchase Orders']),
 )
@@ -841,7 +845,8 @@ class PurchaseOrderViewSet(ModelViewSet):
         Body: {"item_ids": [int, ...], "data": {price?, discount_percent?,
         discounted_price?, unit?}}. Items not belonging to this order are
         silently filtered. Permission denial on any item rolls back the
-        whole batch.
+        whole batch. On denial, returns the `_enforce_discount_permission`
+        403 body augmented with `failed_item_id`.
         """
         from django.db import transaction
 
@@ -852,12 +857,12 @@ class PurchaseOrderViewSet(ModelViewSet):
         data = serializer.validated_data['data']
 
         items = list(order.items.filter(pk__in=item_ids))
+        is_changing_discount = (
+            'discount_percent' in data or 'discounted_price' in data
+        )
 
         with transaction.atomic():
             for item in items:
-                is_changing_discount = (
-                    'discount_percent' in data or 'discounted_price' in data
-                )
                 if is_changing_discount:
                     discount_percent = data.get(
                         'discount_percent', item.discount_percent,
