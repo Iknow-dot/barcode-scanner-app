@@ -958,6 +958,14 @@
   transform: scale(0.94);
 }
 
+/* Gray inactive state — shown when there is no live order to drop into
+   (no activeOrder, or order paused via orderMode toggle). Matches the
+   "badge count = 0" branch in UserDashboard.js. */
+.m-cart-fab.m-cart-fab--inactive {
+  background: #8c8c8c;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
+}
+
 .m-cart-fab .anticon {
   font-size: 24px;
 }

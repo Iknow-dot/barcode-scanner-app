@@ -7,7 +7,12 @@ import subNavContext from "../../contexts/SubNavContext";
 import AuthContext from "../Auth/AuthContext";
 import useAppNotification from "../../hooks/useAppNotification";
 import {useLanguage} from '../../i18n/LanguageContext';
-import {playFoundSound, playNotFoundSound} from '../../utils/sound';
+import {
+    playFoundSound,
+    playNotFoundSound,
+    playOrderCreatedSound,
+    playOrderResumedSound,
+} from '../../utils/sound';
 import {printInvoice} from '../../utils/printInvoice';
 import groupItemsBySku from './groupItemsBySku';
 import {
@@ -296,6 +301,9 @@ const UserDashboard = () => {
             if (result.status === 200) {
                 notify.info(t.activeOrder, t.orderResumedExisting);
                 setIncompleteOrders((prev) => prev.filter((o) => o.id !== result.data.id));
+                playOrderResumedSound();
+            } else {
+                playOrderCreatedSound();
             }
         } else {
             notify.error(t.orderError, result.error);
@@ -368,6 +376,7 @@ const UserDashboard = () => {
             setOrderMode(true);
             // Switch to scan tab so user can start scanning
             setActiveTab('scan');
+            playOrderResumedSound();
         } else {
             notify.error(t.orderError, result.error);
         }
@@ -1012,7 +1021,7 @@ const UserDashboard = () => {
                 {!scannerOpen && !drawerVisible && !orderDrawerVisible && !customerModalOpen && (
                     <button
                         type="button"
-                        className="m-cart-fab"
+                        className={`m-cart-fab${showOrderPanel ? '' : ' m-cart-fab--inactive'}`}
                         aria-label={t.activeOrder}
                         onClick={() => {
                             if (activeOrder) {

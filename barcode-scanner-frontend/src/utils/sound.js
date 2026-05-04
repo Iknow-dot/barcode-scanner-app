@@ -47,3 +47,22 @@ export const playNotFoundSound = () => {
     playTone(audio, {frequency: 220.0, duration: 0.18, startAt: now,        type: 'square', gain: 0.12});
     playTone(audio, {frequency: 164.81, duration: 0.28, startAt: now + 0.16, type: 'square', gain: 0.12});
 };
+
+export const playOrderCreatedSound = () => {
+    const audio = getContext();
+    if (!audio) return;
+    const now = audio.currentTime;
+    // Upbeat C-major arpeggio (C5 → E5 → G5): "fresh start".
+    playTone(audio, {frequency: 523.25, duration: 0.10, startAt: now,        gain: 0.16});
+    playTone(audio, {frequency: 659.25, duration: 0.10, startAt: now + 0.09, gain: 0.16});
+    playTone(audio, {frequency: 783.99, duration: 0.18, startAt: now + 0.18, gain: 0.16});
+};
+
+export const playOrderResumedSound = () => {
+    const audio = getContext();
+    if (!audio) return;
+    const now = audio.currentTime;
+    // Softer two-note "picking up where you left off" cue (A4 → C5).
+    playTone(audio, {frequency: 440.0,  duration: 0.12, startAt: now,        gain: 0.14});
+    playTone(audio, {frequency: 523.25, duration: 0.20, startAt: now + 0.11, gain: 0.14});
+};
