@@ -1,9 +1,11 @@
 import React, {useState, useCallback, useEffect, useMemo, useRef, useContext, memo} from 'react';
 import dayjs from 'dayjs';
 import {useLanguage} from '../../i18n/LanguageContext';
-import {orderService} from '../../api';
+import {orderService, productService} from '../../api';
 import AuthContext from '../Auth/AuthContext';
 import groupItemsBySku from './groupItemsBySku';
+import distributeStock from './distributeStock';
+import inheritFromGroup from './inheritFromGroup';
 import {
     Card,
     Steps,
@@ -20,7 +22,6 @@ import {
     Input,
     DatePicker,
     TimePicker,
-    Divider,
     Collapse,
     Select,
     Dropdown,
@@ -39,6 +40,8 @@ import {
     MinusOutlined,
     PlusOutlined,
     MoreOutlined,
+    UndoOutlined,
+    WarningOutlined,
 } from '@ant-design/icons';
 
 const {Text, Title} = Typography;
@@ -93,7 +96,7 @@ const useDebouncedField = (initialValue, onSave, delay = 600) => {
     return [localValue, handleChange, flush];
 };
 
-const WarehouseSubRow = memo(({item, orderId, onLocalOrderUpdate, notify, t}) => {
+const WarehouseSubRow = memo(({item, stock, assigned, orderId, onLocalOrderUpdate, notify, t}) => {
     const [overrideOpen, setOverrideOpen] = useState(false);
 
     const handleQuantityChange = useCallback(async (newQuantity) => {
@@ -112,10 +115,22 @@ const WarehouseSubRow = memo(({item, orderId, onLocalOrderUpdate, notify, t}) =>
         else notify.error(t.orderError, result.error);
     }, [orderId, item.id, onLocalOrderUpdate, notify, t]);
 
+    const handleResetPrice = useCallback(async () => {
+        const result = await orderService.updateOrderItem(orderId, item.id, {
+            discounted_price: null,
+            discount_percent: 0,
+        });
+        if (result.success) onLocalOrderUpdate(result.data);
+        else notify.error(t.orderError, result.error);
+    }, [orderId, item.id, onLocalOrderUpdate, notify, t]);
+
+    const hasOverride = item.discounted_price != null || parseFloat(item.discount_percent || 0) > 0;
+
     return (
         <Flex align="center" wrap="wrap" gap={8} className="m-warehouse-subrow">
-            <Tag color="blue" style={{fontSize: 10, marginInlineEnd: 0}}>
+            <Tag color={assigned ? 'green' : 'blue'} style={{fontSize: 10, marginInlineEnd: 0}}>
                 {item.warehouse_name}
+                {assigned && <span style={{marginLeft: 4}}>✓</span>}
             </Tag>
 
             <div className="m-qty-stepper">
@@ -132,6 +147,12 @@ const WarehouseSubRow = memo(({item, orderId, onLocalOrderUpdate, notify, t}) =>
                         className="m-qty-btn"/>
             </div>
 
+            {stock != null && (
+                <Text type="secondary" style={{fontSize: 11}}>
+                    {t.stockRemaining}: {stock}
+                </Text>
+            )}
+
             <Text type="secondary" style={{fontSize: 12}}>
                 @ {item.effective_price} ₾
             </Text>
@@ -142,6 +163,11 @@ const WarehouseSubRow = memo(({item, orderId, onLocalOrderUpdate, notify, t}) =>
             <Button type="link" size="small" onClick={() => setOverrideOpen((v) => !v)}>
                 {overrideOpen ? (t.cancel || 'Cancel') : (t.overridePrice || 'Override price')}
             </Button>
+
+            {hasOverride && (
+                <Button type="text" size="small" icon={<UndoOutlined/>} onClick={handleResetPrice}
+                        title={t.resetPrice} aria-label={t.resetPrice}/>
+            )}
 
             {overrideOpen && (
                 <InputNumber
@@ -165,7 +191,7 @@ const WarehouseSubRow = memo(({item, orderId, onLocalOrderUpdate, notify, t}) =>
 
 WarehouseSubRow.displayName = 'WarehouseSubRow';
 
-const SharedDiscountControl = memo(({group, maxDiscountPercent, applyBulk, t}) => {
+const SharedDiscountControl = memo(({group, maxDiscountPercent, applyBulk, onResetGroup, t}) => {
     const [mode, setMode] = useState(
         group.sharedDiscountedPrice != null ? 'price' : 'percent'
     );
@@ -190,6 +216,11 @@ const SharedDiscountControl = memo(({group, maxDiscountPercent, applyBulk, t}) =
             val == null ? '—' : `${val} ₾`,
         );
     };
+
+    const hasGroupOverride =
+        group.isMixedDiscount ||
+        (group.sharedDiscountedPrice != null) ||
+        (parseFloat(group.sharedDiscountPercent || 0) > 0);
 
     return (
         <Flex align="center" gap={4}>
@@ -226,6 +257,11 @@ const SharedDiscountControl = memo(({group, maxDiscountPercent, applyBulk, t}) =
                     controls={false} inputMode="decimal" addonAfter="₾"
                 />
             )}
+            {hasGroupOverride && (
+                <Button type="text" size="small" icon={<UndoOutlined/>}
+                        onClick={onResetGroup}
+                        title={t.resetPrice} aria-label={t.resetPrice}/>
+            )}
         </Flex>
     );
 });
@@ -240,12 +276,42 @@ const OrderItemGroupCard = memo(({
     t,
     unitOptions,
     discountConfig,
+    assignedCodes,
 }) => {
     const [expanded, setExpanded] = useState(false);
     const {canApplyDiscount, maxDiscountPercent} = discountConfig;
 
-    // itemIds and applyBulk must be declared before the early return so that
-    // useCallback is always called unconditionally (React hooks rules).
+    // Lazy-loaded stock for this SKU. null = not yet fetched, [] = fetched empty,
+    // 'error' = fetch failed.
+    const [stock, setStock] = useState(null);
+    const [stockLoading, setStockLoading] = useState(false);
+    const ensureStock = useCallback(async () => {
+        if (stock != null || stockLoading) return;
+        setStockLoading(true);
+        const result = await productService.searchProduct({
+            sku: group.sku,
+            searchType: 'article',
+            warehouseCodes: [],
+            includeImages: false,
+        });
+        setStockLoading(false);
+        if (result.success && Array.isArray(result.data?.stock)) {
+            setStock(result.data.stock);
+        } else {
+            setStock('error');
+        }
+    }, [group.sku, stock, stockLoading]);
+
+    const stockByCode = useMemo(() => {
+        if (!Array.isArray(stock)) return new Map();
+        return new Map(stock.map((s) => [s.warehouse, Number(s.quantity || 0)]));
+    }, [stock]);
+
+    const totalStock = useMemo(() => {
+        if (!Array.isArray(stock)) return null;
+        return stock.reduce((acc, s) => acc + Number(s.quantity || 0), 0);
+    }, [stock]);
+
     const itemIds = useMemo(
         () => group.items.map((i) => i.id),
         [group.items],
@@ -282,28 +348,16 @@ const OrderItemGroupCard = memo(({
         await doApply();
     }, [group.items, itemIds, orderId, onLocalOrderUpdate, notify, t]);
 
-    if (group.items.length === 1) {
-        return (
-            <OrderItemCard
-                item={group.items[0]}
-                orderId={orderId}
-                onLocalOrderUpdate={onLocalOrderUpdate}
-                notify={notify}
-                t={t}
-                unitOptions={unitOptions}
-                discountConfig={discountConfig}
-            />
+    const handleResetGroup = useCallback(() => {
+        applyBulk(
+            {discount_percent: 0, discounted_price: null},
+            group.isMixedDiscount,
+            (it) => (it.discounted_price ? `${it.discounted_price} ₾` : `${it.discount_percent}%`),
+            '—',
         );
-    }
+    }, [applyBulk, group.isMixedDiscount]);
 
-    // ----- Multi-warehouse group -----
-
-    const handleRemoveGroup = async () => {
-        // Remove every line in the group; backend has no group concept, so we
-        // issue parallel deletes. Last successful response wins for the
-        // refreshed-order shape; if any fails, surface the first error and stop
-        // applying the others' refreshed-order responses (the failed ones are
-        // still surfaced via notify).
+    const handleRemoveGroup = useCallback(async () => {
         const results = await Promise.all(
             itemIds.map((id) => orderService.removeOrderItem(orderId, id))
         );
@@ -314,7 +368,80 @@ const OrderItemGroupCard = memo(({
         }
         const lastOrder = results[results.length - 1].data;
         if (lastOrder) onLocalOrderUpdate(lastOrder);
-    };
+    }, [itemIds, orderId, onLocalOrderUpdate, notify, t]);
+
+    // Auto-distribute: debounce typing in the total-qty input, compute the
+    // target distribution, diff, and apply via parallel add/update/remove.
+    const [pendingTarget, setPendingTarget] = useState(null);
+    const distributeTimerRef = useRef(null);
+    const stockRef = useRef(stock);
+    stockRef.current = stock;
+    const groupRef = useRef(group);
+    groupRef.current = group;
+
+    const applyDistribution = useCallback(async (target) => {
+        const currentStock = stockRef.current;
+        if (!Array.isArray(currentStock)) return; // stock not ready
+        const currentGroup = groupRef.current;
+        const distribution = distributeStock(target, currentStock, assignedCodes);
+        const inherited = inheritFromGroup(currentGroup, canApplyDiscount);
+
+        const itemByCode = new Map(currentGroup.items.map((it) => [it.warehouse_code, it]));
+        const calls = [];
+        for (const [code, qty] of distribution) {
+            const existing = itemByCode.get(code);
+            if (existing) {
+                if (Number(existing.quantity) !== qty) {
+                    calls.push(orderService.updateOrderItem(orderId, existing.id, {quantity: qty}));
+                }
+            } else {
+                const stockEntry = currentStock.find((s) => s.warehouse === code);
+                calls.push(orderService.addOrderItem(orderId, {
+                    sku: currentGroup.sku,
+                    sku_name: currentGroup.sku_name,
+                    article: currentGroup.article,
+                    price: stockEntry?.price ?? 0,
+                    quantity: qty,
+                    warehouse_code: code,
+                    warehouse_name: stockEntry?.warehouse_name || '',
+                    ...inherited,
+                }));
+            }
+        }
+        for (const it of currentGroup.items) {
+            if (!distribution.has(it.warehouse_code)) {
+                calls.push(orderService.removeOrderItem(orderId, it.id));
+            }
+        }
+        if (calls.length === 0) {
+            setPendingTarget(null);
+            return;
+        }
+        const results = await Promise.all(calls);
+        const failed = results.find((r) => !r.success);
+        if (failed) {
+            notify.error(t.orderError, failed.error);
+            return;
+        }
+        const last = results[results.length - 1].data;
+        if (last) onLocalOrderUpdate(last);
+        setPendingTarget(null);
+    }, [assignedCodes, canApplyDiscount, orderId, onLocalOrderUpdate, notify, t]);
+
+    const onTotalQtyChange = useCallback((val) => {
+        if (val == null) return;
+        ensureStock();
+        setPendingTarget(val);
+        if (distributeTimerRef.current) clearTimeout(distributeTimerRef.current);
+        distributeTimerRef.current = setTimeout(() => applyDistribution(val), 400);
+    }, [ensureStock, applyDistribution]);
+
+    useEffect(() => () => {
+        if (distributeTimerRef.current) clearTimeout(distributeTimerRef.current);
+    }, []);
+
+    const displayedTotalQty = pendingTarget != null ? pendingTarget : group.totalQty;
+    const exceeds = totalStock != null && displayedTotalQty > totalStock;
 
     const handleSharedPriceChange = (val) => {
         if (val == null || !Number.isFinite(val) || val < 0) return;
@@ -368,56 +495,105 @@ const OrderItemGroupCard = memo(({
         </Flex>
     );
 
+    // Render an expanded row per warehouse: union of (warehouses with order
+    // lines) and (warehouses with positive stock). Order lines first, then
+    // remaining stock-only warehouses.
+    const expandedRows = useMemo(() => {
+        const rows = group.items.map((it) => ({
+            key: `line-${it.id}`,
+            item: it,
+            stock: stockByCode.get(it.warehouse_code),
+            assigned: assignedCodes.has(it.warehouse_code),
+        }));
+        if (Array.isArray(stock)) {
+            const presentCodes = new Set(group.items.map((it) => it.warehouse_code));
+            for (const s of stock) {
+                if (presentCodes.has(s.warehouse)) continue;
+                if (Number(s.quantity || 0) <= 0) continue;
+                rows.push({
+                    key: `stock-${s.warehouse}`,
+                    item: null,
+                    stockEntry: s,
+                    stock: Number(s.quantity || 0),
+                    assigned: assignedCodes.has(s.warehouse),
+                });
+            }
+        }
+        return rows;
+    }, [group.items, stock, stockByCode, assignedCodes]);
+
+    const stopPropagation = (e) => e.stopPropagation();
+
     return (
         <div className="m-order-item-card m-order-item-group-card">
-            {/* Header: name + delete */}
-            <Flex justify="space-between" align="start" gap={8}>
-                <div style={{flex: 1, minWidth: 0}}>
-                    <Text strong style={{fontSize: 14, display: 'block'}} ellipsis>
-                        {group.sku_name || group.sku}
-                    </Text>
-                    {group.article && (
-                        <Text type="secondary" style={{fontSize: 12}}>
-                            {t.article}: {group.article}
+            {/* Clickable header zone — toggles expanded */}
+            <div
+                role="button"
+                tabIndex={0}
+                onClick={() => {
+                    setExpanded((v) => !v);
+                    ensureStock();
+                }}
+                onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        setExpanded((v) => !v);
+                        ensureStock();
+                    }
+                }}
+                style={{cursor: 'pointer'}}
+            >
+                <Flex justify="space-between" align="start" gap={8}>
+                    <div style={{flex: 1, minWidth: 0}}>
+                        <Text strong style={{fontSize: 14, display: 'block'}} ellipsis>
+                            {group.sku_name || group.sku}
                         </Text>
-                    )}
-                </div>
-                <Popconfirm
-                    title={t.removeFromAllWarehouses || 'Remove product from all warehouses?'}
-                    onConfirm={handleRemoveGroup}
-                    okText={t.yes}
-                    cancelText={t.no}
-                >
-                    <Button type="text" danger size="small" icon={<DeleteOutlined/>} className="m-item-delete-btn"/>
-                </Popconfirm>
-            </Flex>
+                        {group.article && (
+                            <Text type="secondary" style={{fontSize: 12}}>
+                                {t.article}: {group.article}
+                            </Text>
+                        )}
+                    </div>
+                    <Popconfirm
+                        title={t.removeFromAllWarehouses || t.confirmDelete || 'Remove product?'}
+                        onConfirm={handleRemoveGroup}
+                        okText={t.yes}
+                        cancelText={t.no}
+                    >
+                        <Button type="text" danger size="small" icon={<DeleteOutlined/>}
+                                onClick={stopPropagation}
+                                className="m-item-delete-btn"/>
+                    </Popconfirm>
+                </Flex>
 
-            {/* Warehouse summary row */}
-            <Flex align="center" wrap="wrap" gap={6} style={{marginTop: 6}}>
-                {group.items.map((it) => (
-                    <Tag key={it.id} color="blue" style={{fontSize: 10}}>
-                        {it.warehouse_name}
-                    </Tag>
-                ))}
-                <Button type="link" size="small" onClick={() => setExpanded((v) => !v)} style={{padding: 0}}>
-                    {expanded
-                        ? (t.collapse || 'Collapse')
-                        : (t.expandWarehouses || `Expand (${group.items.length} warehouses)`)}
-                </Button>
-            </Flex>
+                {/* Warehouse summary tags */}
+                <Flex align="center" wrap="wrap" gap={6} style={{marginTop: 6}}>
+                    {group.items.map((it) => (
+                        <Tag key={it.id} color={assignedCodes.has(it.warehouse_code) ? 'green' : 'blue'} style={{fontSize: 10}}>
+                            {it.warehouse_name}
+                        </Tag>
+                    ))}
+                </Flex>
+            </div>
 
-            {/* Price + total qty row */}
+            {/* Controls zone — does not toggle expand */}
             <Flex align="center" gap={8} style={{marginTop: 8}}>
                 <Text type="secondary" style={{fontSize: 12}}>{t.price}:</Text>
                 {priceArea}
-                <Divider type="vertical"/>
-                <Text type="secondary" style={{fontSize: 12}}>
-                    {t.total || 'Total'}: {group.totalQty} {group.sharedUnit || ''}
-                </Text>
             </Flex>
 
-            {/* Shared unit + shared discount controls */}
             <Flex gap={8} wrap="wrap" align="center" style={{marginTop: 10}}>
+                <Text type="secondary" style={{fontSize: 12}}>{t.totalQuantity}:</Text>
+                <InputNumber
+                    min={0}
+                    value={displayedTotalQty}
+                    size="small"
+                    onChange={onTotalQtyChange}
+                    onFocus={ensureStock}
+                    controls={false}
+                    inputMode="numeric"
+                    style={{width: 90}}
+                />
                 <Select
                     value={group.sharedUnit || undefined}
                     size="small"
@@ -438,12 +614,21 @@ const OrderItemGroupCard = memo(({
                         group={group}
                         maxDiscountPercent={maxDiscountPercent}
                         applyBulk={applyBulk}
+                        onResetGroup={handleResetGroup}
                         t={t}
                     />
                 )}
             </Flex>
 
-            {/* Line total */}
+            {exceeds && (
+                <Flex align="center" gap={4} style={{marginTop: 6}}>
+                    <WarningOutlined style={{color: '#faad14', fontSize: 12}}/>
+                    <Text type="warning" style={{fontSize: 11}}>
+                        {t.exceedsStock(totalStock)}
+                    </Text>
+                </Flex>
+            )}
+
             <Flex justify="end" style={{marginTop: 8}}>
                 <Text strong style={{color: '#52c41a', fontSize: 15}}>
                     {group.groupLineTotal} ₾
@@ -452,15 +637,34 @@ const OrderItemGroupCard = memo(({
 
             {expanded && (
                 <div className="m-order-item-group-expanded">
-                    {group.items.map((it) => (
+                    {stockLoading && stock == null && (
+                        <Text type="secondary" style={{fontSize: 11}}>…</Text>
+                    )}
+                    {stock === 'error' && (
+                        <Text type="secondary" style={{fontSize: 11}}>{t.stockRemaining}: —</Text>
+                    )}
+                    {expandedRows.map((row) => row.item ? (
                         <WarehouseSubRow
-                            key={it.id}
-                            item={it}
+                            key={row.key}
+                            item={row.item}
+                            stock={row.stock}
+                            assigned={row.assigned}
                             orderId={orderId}
                             onLocalOrderUpdate={onLocalOrderUpdate}
                             notify={notify}
                             t={t}
                         />
+                    ) : (
+                        <Flex key={row.key} align="center" gap={8} className="m-warehouse-subrow"
+                              style={{opacity: 0.6}}>
+                            <Tag color={row.assigned ? 'green' : 'blue'} style={{fontSize: 10}}>
+                                {row.stockEntry.warehouse_name}
+                                {row.assigned && <span style={{marginLeft: 4}}>✓</span>}
+                            </Tag>
+                            <Text type="secondary" style={{fontSize: 11}}>
+                                {t.stockRemaining}: {row.stock}
+                            </Text>
+                        </Flex>
                     ))}
                 </div>
             )}
@@ -469,223 +673,6 @@ const OrderItemGroupCard = memo(({
 });
 
 OrderItemGroupCard.displayName = 'OrderItemGroupCard';
-
-// Memoized order item card component
-const OrderItemCard = memo(({
-    item,
-    orderId,
-    onLocalOrderUpdate,
-    notify,
-    t,
-    unitOptions,
-    discountConfig,
-}) => {
-    const {canApplyDiscount, maxDiscountPercent} = discountConfig;
-    // Track discount mode locally — default to "price" if a manual price
-    // override is set, otherwise default to percent. This lets the user
-    // switch modes mid-edit without losing their input.
-    const [discountMode, setDiscountMode] = useState(
-        item.discounted_price != null ? 'price' : 'percent'
-    );
-    const handleQuantityChange = useCallback(async (newQuantity) => {
-        if (newQuantity < 1) return;
-        const result = await orderService.updateOrderItem(orderId, item.id, {quantity: newQuantity});
-        if (result.success) {
-            onLocalOrderUpdate(result.data);
-        } else {
-            notify.error(t.orderError, result.error);
-        }
-    }, [orderId, item.id, onLocalOrderUpdate, notify, t]);
-
-    const handleUnitChange = useCallback(async (newUnit) => {
-        const result = await orderService.updateOrderItem(orderId, item.id, {unit: newUnit || ''});
-        if (result.success) {
-            onLocalOrderUpdate(result.data);
-        } else {
-            notify.error(t.orderError, result.error);
-        }
-    }, [orderId, item.id, onLocalOrderUpdate, notify, t]);
-
-    const handleDiscountChange = useCallback(async (field, value) => {
-        const data = {};
-        if (field === 'discount_percent') {
-            data.discount_percent = value || 0;
-            data.discounted_price = null;
-        } else if (field === 'discounted_price') {
-            data.discounted_price = value || null;
-            data.discount_percent = 0;
-        }
-        const result = await orderService.updateOrderItem(orderId, item.id, data);
-        if (result.success) {
-            onLocalOrderUpdate(result.data);
-        } else {
-            notify.error(t.orderError, result.error);
-        }
-    }, [orderId, item.id, onLocalOrderUpdate, notify, t]);
-
-    const handleRemoveItem = useCallback(async () => {
-        const result = await orderService.removeOrderItem(orderId, item.id);
-        if (result.success) {
-            onLocalOrderUpdate(result.data);
-        } else {
-            notify.error(t.orderError, result.error);
-        }
-    }, [orderId, item.id, onLocalOrderUpdate, notify, t]);
-
-    return (
-        <div className="m-order-item-card">
-            {/* Item header: name + delete */}
-            <Flex justify="space-between" align="start" gap={8}>
-                <div style={{flex: 1, minWidth: 0}}>
-                    <Text strong style={{fontSize: 14, display: 'block'}} ellipsis>
-                        {item.sku_name || item.sku}
-                    </Text>
-                    {item.article && (
-                        <Text type="secondary" style={{fontSize: 12}}>
-                            {t.article}: {item.article}
-                        </Text>
-                    )}
-                    {item.warehouse_name && (
-                        <div style={{marginTop: 2}}>
-                            <Tag style={{fontSize: 10}} color="blue">
-                                {item.warehouse_name}
-                            </Tag>
-                        </div>
-                    )}
-                </div>
-                <Popconfirm
-                    title={t.confirmDelete}
-                    onConfirm={handleRemoveItem}
-                    okText={t.yes}
-                    cancelText={t.no}
-                >
-                    <Button
-                        type="text"
-                        danger
-                        size="small"
-                        icon={<DeleteOutlined/>}
-                        className="m-item-delete-btn"
-                    />
-                </Popconfirm>
-            </Flex>
-
-            {/* Price row */}
-            <Flex align="center" gap={8} style={{marginTop: 8}}>
-                <Text type="secondary" style={{fontSize: 12}}>{t.price}:</Text>
-                {item.effective_price && parseFloat(item.effective_price) !== parseFloat(item.price) ? (
-                    <Flex align="center" gap={4}>
-                        <Text delete type="secondary" style={{fontSize: 12}}>{item.price} ₾</Text>
-                        <Text strong style={{color: '#52c41a', fontSize: 13}}>{item.effective_price} ₾</Text>
-                    </Flex>
-                ) : (
-                    <Text style={{fontWeight: 500, fontSize: 13}}>{item.price} ₾</Text>
-                )}
-            </Flex>
-
-            {/* Controls row: quantity, unit, discount */}
-            <Flex gap={8} wrap="wrap" align="center" style={{marginTop: 10}}>
-                {/* Quantity stepper */}
-                <div className="m-qty-stepper">
-                    <Button
-                        size="small"
-                        icon={<MinusOutlined/>}
-                        onClick={() => handleQuantityChange(item.quantity - 1)}
-                        disabled={item.quantity <= 1}
-                        className="m-qty-btn"
-                    />
-                    <InputNumber
-                        min={1}
-                        value={item.quantity}
-                        size="small"
-                        onChange={handleQuantityChange}
-                        className="m-qty-input"
-                        controls={false}
-                        inputMode="numeric"
-                        pattern="[0-9]*"
-                    />
-                    <Button
-                        size="small"
-                        icon={<PlusOutlined/>}
-                        onClick={() => handleQuantityChange(item.quantity + 1)}
-                        className="m-qty-btn"
-                    />
-                </div>
-
-                {/* Unit select */}
-                <Select
-                    value={item.unit || undefined}
-                    size="small"
-                    allowClear
-                    showSearch
-                    placeholder={t.unit}
-                    onChange={handleUnitChange}
-                    className="m-unit-select"
-                    options={unitOptions}
-                />
-
-                {/* Discount — only visible to users with the discount permission */}
-                {canApplyDiscount && maxDiscountPercent > 0 && (
-                    <Flex align="center" gap={4}>
-                        <Select
-                            value={discountMode}
-                            onChange={(mode) => {
-                                setDiscountMode(mode);
-                                // Switching mode clears the other side so the
-                                // backend doesn't see two competing values.
-                                if (mode === 'percent') {
-                                    handleDiscountChange('discounted_price', null);
-                                } else {
-                                    handleDiscountChange('discount_percent', 0);
-                                }
-                            }}
-                            options={[
-                                {label: '%', value: 'percent'},
-                                {label: '₾', value: 'price'},
-                            ]}
-                            size="small"
-                            className="m-discount-mode"
-                        />
-                        {discountMode === 'percent' ? (
-                            <InputNumber
-                                min={0}
-                                max={Math.min(100, maxDiscountPercent)}
-                                value={item.discount_percent || 0}
-                                size="small"
-                                onChange={(val) => handleDiscountChange('discount_percent', val)}
-                                className="m-discount-input"
-                                controls={false}
-                                inputMode="decimal"
-                                addonAfter="%"
-                            />
-                        ) : (
-                            <InputNumber
-                                min={parseFloat(item.price || 0) * (1 - maxDiscountPercent / 100)}
-                                max={parseFloat(item.price || 0)}
-                                value={item.discounted_price ?? item.price}
-                                size="small"
-                                onChange={(val) => handleDiscountChange('discounted_price', val)}
-                                className="m-discount-input"
-                                controls={false}
-                                inputMode="decimal"
-                                addonAfter="₾"
-                                placeholder={t.setPrice}
-                            />
-                        )}
-                    </Flex>
-                )}
-            </Flex>
-
-            {/* Line total */}
-            <Flex justify="end" style={{marginTop: 8}}>
-                <Text strong style={{color: '#52c41a', fontSize: 15}}>
-                    {item.line_total} ₾
-                </Text>
-            </Flex>
-        </div>
-    );
-});
-
-OrderItemCard.displayName = 'OrderItemCard';
 
 // Memoized delivery section component with local state for text inputs
 const DeliverySection = memo(({order, onLocalOrderUpdate, notify, t, deliveryExpanded, setDeliveryExpanded}) => {
@@ -899,6 +886,10 @@ const OrderPanel = ({order: initialOrder, onSaveForLater, onProceedToPayment, on
         canApplyDiscount: !!authData?.user?.can_apply_discount,
         maxDiscountPercent: parseFloat(authData?.user?.max_discount_percent || 0),
     }), [authData?.user?.can_apply_discount, authData?.user?.max_discount_percent]);
+    const assignedCodes = useMemo(
+        () => new Set((authData?.user?.warehouses || []).map((w) => w.code)),
+        [authData?.user?.warehouses],
+    );
     // Keep order state LOCAL so updates don't re-render the parent (and the Drawer)
     const [localOrder, setLocalOrder] = useState(initialOrder);
     const [step, setStep] = useState(1);
@@ -1068,6 +1059,7 @@ const OrderPanel = ({order: initialOrder, onSaveForLater, onProceedToPayment, on
                                     t={t}
                                     unitOptions={unitOptions}
                                     discountConfig={discountConfig}
+                                    assignedCodes={assignedCodes}
                                 />
                             ))}
                         </div>
