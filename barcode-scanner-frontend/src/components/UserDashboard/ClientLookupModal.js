@@ -26,6 +26,7 @@ import {
     SearchOutlined,
     EnvironmentOutlined,
     LoadingOutlined,
+    ArrowLeftOutlined,
 } from '@ant-design/icons';
 
 const {Text} = Typography;
@@ -41,7 +42,7 @@ const ERROR_CODE_MESSAGES = {
 const STEP_LOOKUP = 'lookup';
 const STEP_CREATE = 'create';
 
-const AUTO_LOOKUP_ID_LENGTH = 11;
+const AUTO_LOOKUP_DEBOUNCE_MS = 1500;
 const ADDRESS_SEARCH_MIN_CHARS = 3;
 const ADDRESS_SEARCH_DEBOUNCE_MS = 300;
 
@@ -60,9 +61,9 @@ const ClientLookupModal = ({open, onSelect, onClose}) => {
     const [addressOptions, setAddressOptions] = useState([]);
     const [addressSearching, setAddressSearching] = useState(false);
     const lastAutoLookupId = useRef('');
+    const autoLookupTimer = useRef(null);
     const addressSearchTimer = useRef(null);
     const addressSearchSeq = useRef(0);
-    const lookupIdValue = Form.useWatch('identification_number', lookupForm);
 
     useEffect(() => {
         if (open) {
@@ -73,6 +74,10 @@ const ClientLookupModal = ({open, onSelect, onClose}) => {
             setAddressOptions([]);
             setAddressSearching(false);
             lastAutoLookupId.current = '';
+            if (autoLookupTimer.current) {
+                clearTimeout(autoLookupTimer.current);
+                autoLookupTimer.current = null;
+            }
             if (addressSearchTimer.current) {
                 clearTimeout(addressSearchTimer.current);
                 addressSearchTimer.current = null;
@@ -88,6 +93,9 @@ const ClientLookupModal = ({open, onSelect, onClose}) => {
 
     useEffect(() => {
         return () => {
+            if (autoLookupTimer.current) {
+                clearTimeout(autoLookupTimer.current);
+            }
             if (addressSearchTimer.current) {
                 clearTimeout(addressSearchTimer.current);
             }
@@ -154,22 +162,27 @@ const ClientLookupModal = ({open, onSelect, onClose}) => {
         );
     };
 
-    // Auto-trigger lookup once the personal number reaches 11 characters.
-    // Re-fires only when the value changes; dropping below 11 chars resets
-    // the guard so re-entering the same number works.
-    useEffect(() => {
-        if (!open || step !== STEP_LOOKUP || lookupLoading) return;
-        const value = (lookupIdValue || '').trim();
-        if (value.length < AUTO_LOOKUP_ID_LENGTH) {
+    // Debounced auto-lookup keyed off real user input only — using onValuesChange
+    // (not Form.useWatch) avoids a spurious re-fire when the lookup step
+    // remounts after the user backs out of the create step.
+    const handleLookupValuesChange = (changed) => {
+        if (!('identification_number' in changed)) return;
+        if (autoLookupTimer.current) {
+            clearTimeout(autoLookupTimer.current);
+            autoLookupTimer.current = null;
+        }
+        const value = (changed.identification_number || '').trim();
+        if (!value) {
             lastAutoLookupId.current = '';
             return;
         }
-        if (value.length === AUTO_LOOKUP_ID_LENGTH && lastAutoLookupId.current !== value) {
+        if (lastAutoLookupId.current === value) return;
+        autoLookupTimer.current = setTimeout(() => {
+            autoLookupTimer.current = null;
             lastAutoLookupId.current = value;
             performLookup(value, '');
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [lookupIdValue, open, step]);
+        }, AUTO_LOOKUP_DEBOUNCE_MS);
+    };
 
     const handleRsGeLookup = async () => {
         const idNumber = createForm.getFieldValue('identification_number')?.trim();
@@ -302,6 +315,7 @@ const ClientLookupModal = ({open, onSelect, onClose}) => {
                 form={lookupForm}
                 layout="vertical"
                 onFinish={handleLookup}
+                onValuesChange={handleLookupValuesChange}
             >
                 <Text type="secondary" style={{display: 'block', marginBottom: 12}}>
                     {t.enterIdOrPhone}
@@ -400,6 +414,17 @@ const ClientLookupModal = ({open, onSelect, onClose}) => {
 
     const renderCreateStep = () => (
         <>
+            <Flex justify="start" style={{marginBottom: 12}}>
+                <Button
+                    type="text"
+                    icon={<ArrowLeftOutlined/>}
+                    onClick={() => setStep(STEP_LOOKUP)}
+                    style={{paddingLeft: 0}}
+                >
+                    {t.backToSearch}
+                </Button>
+            </Flex>
+
             <Alert
                 message={t.clientNotFoundCreate}
                 type="info"
