@@ -36,6 +36,7 @@ from core.serializers import (
     PurchaseOrderListSerializer,
     PurchaseOrderItemSerializer,
     AddOrderItemSerializer,
+    BulkUpdateOrderItemsSerializer,
     RSGeLookupSerializer,
     CheckClientRequestSerializer,
     CheckClientResponseSerializer,
@@ -625,6 +626,7 @@ class InvoiceTokensAPIView(APIView):
     add_item=extend_schema(tags=['Purchase Orders']),
     remove_item=extend_schema(tags=['Purchase Orders']),
     update_item=extend_schema(tags=['Purchase Orders']),
+    bulk_update_items=extend_schema(tags=['Purchase Orders']),
     invoice=extend_schema(tags=['Purchase Orders']),
     invoice_preview=extend_schema(tags=['Purchase Orders']),
 )
@@ -831,6 +833,65 @@ class PurchaseOrderViewSet(ModelViewSet):
             pass
         order_serializer = PurchaseOrderSerializer(order)
         return Response(order_serializer.data)
+
+    @action(detail=True, methods=['patch'], url_path='items/bulk-update')
+    def bulk_update_items(self, request, pk=None):
+        """Apply a partial update to multiple line items atomically.
+
+        Body: {"item_ids": [int, ...], "data": {price?, discount_percent?,
+        discounted_price?, unit?}}. Items not belonging to this order are
+        silently filtered. Permission denial on any item rolls back the
+        whole batch.
+        """
+        from django.db import transaction
+
+        order = self.get_object()
+        serializer = BulkUpdateOrderItemsSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        item_ids = serializer.validated_data['item_ids']
+        data = serializer.validated_data['data']
+
+        items = list(order.items.filter(pk__in=item_ids))
+
+        with transaction.atomic():
+            for item in items:
+                is_changing_discount = (
+                    'discount_percent' in data or 'discounted_price' in data
+                )
+                if is_changing_discount:
+                    discount_percent = data.get(
+                        'discount_percent', item.discount_percent,
+                    )
+                    discounted_price = data.get(
+                        'discounted_price', item.discounted_price,
+                    )
+                    denied = _enforce_discount_permission(
+                        request.user,
+                        base_price=data.get('price', item.price),
+                        discount_percent=discount_percent,
+                        discounted_price=discounted_price,
+                    )
+                    if denied is not None:
+                        # Annotate with which item triggered the denial so the
+                        # frontend can surface it. transaction.atomic() rolls
+                        # back any earlier item updates.
+                        body = dict(denied.data)
+                        body['failed_item_id'] = item.id
+                        transaction.set_rollback(True)
+                        return Response(body, status=denied.status_code)
+
+                item_serializer = PurchaseOrderItemSerializer(
+                    item, data=data, partial=True,
+                )
+                item_serializer.is_valid(raise_exception=True)
+                item_serializer.save()
+
+        order.refresh_from_db()
+        try:
+            del order._prefetched_objects_cache
+        except AttributeError:
+            pass
+        return Response(PurchaseOrderSerializer(order).data)
 
     @action(
         detail=True,

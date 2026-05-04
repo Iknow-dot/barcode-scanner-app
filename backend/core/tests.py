@@ -1546,3 +1546,78 @@ class BulkUpdateOrderItemsSerializerTests(TestCase):
         })
         self.assertFalse(s.is_valid())
         self.assertIn('data', s.errors)
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
+class PurchaseOrderBulkUpdateTests(TestCase):
+    def setUp(self):
+        self.org = _make_organization()
+        self.user = User.objects.create_user(
+            username='consultant', password='p',
+            role=User.Role.COMPANY_USER, organization=self.org,
+            can_apply_discount=True, max_discount_percent=20,
+        )
+        self.order = PurchaseOrder.objects.create(
+            organization=self.org, created_by=self.user,
+            customer_name='Cust',
+        )
+        self.item_a = PurchaseOrderItem.objects.create(
+            order=self.order, sku='SKU1', sku_name='Widget',
+            price='100.00', quantity=2, warehouse_code='WHA',
+            warehouse_name='WH-A',
+        )
+        self.item_b = PurchaseOrderItem.objects.create(
+            order=self.order, sku='SKU1', sku_name='Widget',
+            price='100.00', quantity=3, warehouse_code='WHB',
+            warehouse_name='WH-B',
+        )
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.user)
+        self.url = f'/api/v1/orders/{self.order.id}/items/bulk-update/'
+
+    def test_bulk_update_price_applies_to_listed_items(self):
+        response = self.client.patch(
+            self.url,
+            {'item_ids': [self.item_a.id, self.item_b.id],
+             'data': {'price': '90.00'}},
+            format='json',
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        self.item_a.refresh_from_db()
+        self.item_b.refresh_from_db()
+        self.assertEqual(str(self.item_a.price), '90.00')
+        self.assertEqual(str(self.item_b.price), '90.00')
+
+    def test_bulk_update_returns_refreshed_order_with_recomputed_total(self):
+        response = self.client.patch(
+            self.url,
+            {'item_ids': [self.item_a.id, self.item_b.id],
+             'data': {'price': '50.00'}},
+            format='json',
+        )
+        self.assertEqual(response.status_code, 200)
+        # 2 * 50 + 3 * 50 = 250
+        self.assertEqual(str(response.data['total']), '250.00')
+        self.assertEqual(len(response.data['items']), 2)
+        for item in response.data['items']:
+            self.assertEqual(str(item['price']), '50.00')
+
+    def test_bulk_update_silently_skips_ids_not_in_this_order(self):
+        # An item from a *different* order in the same org — must NOT be touched.
+        other_order = PurchaseOrder.objects.create(
+            organization=self.org, created_by=self.user, customer_name='Other',
+        )
+        other_item = PurchaseOrderItem.objects.create(
+            order=other_order, sku='SKU2', price='999.00', quantity=1,
+        )
+        response = self.client.patch(
+            self.url,
+            {'item_ids': [self.item_a.id, other_item.id],
+             'data': {'price': '11.00'}},
+            format='json',
+        )
+        self.assertEqual(response.status_code, 200)
+        self.item_a.refresh_from_db()
+        other_item.refresh_from_db()
+        self.assertEqual(str(self.item_a.price), '11.00')
+        self.assertEqual(str(other_item.price), '999.00')
