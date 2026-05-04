@@ -25,7 +25,7 @@ import {
     Modal,
     Popconfirm,
     Result,
-    Select,
+    Segmented,
     Spin,
     Switch,
     Tag,
@@ -878,13 +878,13 @@ const UserDashboard = () => {
                         initialValue="barcode"
                         rules={[{required: true, message: t.selectSearchType}]}
                     >
-                        <Select
+                        <Segmented
                             size="large"
-                            style={{borderRadius: 10}}
+                            block
                             options={[
                                 {
                                     label: (
-                                        <Flex align="center" gap={8}>
+                                        <Flex align="center" justify="center" gap={8}>
                                             <BarcodeOutlined/> {t.barcode}
                                         </Flex>
                                     ),
@@ -892,7 +892,7 @@ const UserDashboard = () => {
                                 },
                                 {
                                     label: (
-                                        <Flex align="center" gap={8}>
+                                        <Flex align="center" justify="center" gap={8}>
                                             <NumberOutlined/> {t.article}
                                         </Flex>
                                     ),
