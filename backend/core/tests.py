@@ -1491,3 +1491,46 @@ class InvoicePreviewEndpointTests(TestCase):
             data={'invoice_template_html': '<p>x</p>'}, format='json',
         )
         self.assertEqual(resp.status_code, 404)
+
+
+# ---------------------------------------------------------------------------
+# Bulk update order items
+# ---------------------------------------------------------------------------
+
+class BulkUpdateOrderItemsSerializerTests(TestCase):
+    def test_rejects_empty_item_ids(self):
+        from core.serializers import BulkUpdateOrderItemsSerializer
+        s = BulkUpdateOrderItemsSerializer(data={'item_ids': [], 'data': {'price': '10.00'}})
+        self.assertFalse(s.is_valid())
+        self.assertIn('item_ids', s.errors)
+
+    def test_rejects_missing_item_ids(self):
+        from core.serializers import BulkUpdateOrderItemsSerializer
+        s = BulkUpdateOrderItemsSerializer(data={'data': {'price': '10.00'}})
+        self.assertFalse(s.is_valid())
+        self.assertIn('item_ids', s.errors)
+
+    def test_rejects_empty_data(self):
+        from core.serializers import BulkUpdateOrderItemsSerializer
+        s = BulkUpdateOrderItemsSerializer(data={'item_ids': [1, 2], 'data': {}})
+        self.assertFalse(s.is_valid())
+        self.assertIn('data', s.errors)
+
+    def test_accepts_valid_payload(self):
+        from core.serializers import BulkUpdateOrderItemsSerializer
+        s = BulkUpdateOrderItemsSerializer(data={
+            'item_ids': [1, 2, 3],
+            'data': {'price': '12.50', 'unit': 'piece', 'discount_percent': '5.00'},
+        })
+        self.assertTrue(s.is_valid(), s.errors)
+        self.assertEqual(s.validated_data['item_ids'], [1, 2, 3])
+        self.assertEqual(s.validated_data['data']['unit'], 'piece')
+
+    def test_accepts_discounted_price_null(self):
+        from core.serializers import BulkUpdateOrderItemsSerializer
+        s = BulkUpdateOrderItemsSerializer(data={
+            'item_ids': [1],
+            'data': {'discounted_price': None, 'discount_percent': '0'},
+        })
+        self.assertTrue(s.is_valid(), s.errors)
+        self.assertIsNone(s.validated_data['data']['discounted_price'])

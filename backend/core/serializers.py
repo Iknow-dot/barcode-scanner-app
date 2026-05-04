@@ -360,6 +360,42 @@ class AddOrderItemSerializer(serializers.Serializer):
     discounted_price = serializers.DecimalField(max_digits=10, decimal_places=2, required=False, allow_null=True, default=None)
 
 
+class BulkUpdateOrderItemsDataSerializer(serializers.Serializer):
+    """Whitelisted fields the bulk-update endpoint may set on each item.
+
+    All fields are optional; at least one must be provided (validated by the
+    parent serializer).
+    """
+    price = serializers.DecimalField(
+        max_digits=10, decimal_places=2, required=False,
+    )
+    quantity = serializers.IntegerField(min_value=1, required=False)
+    unit = serializers.CharField(max_length=50, required=False, allow_blank=True)
+    discount_percent = serializers.DecimalField(
+        max_digits=5, decimal_places=2, required=False,
+    )
+    discounted_price = serializers.DecimalField(
+        max_digits=10, decimal_places=2, required=False, allow_null=True,
+    )
+
+
+class BulkUpdateOrderItemsSerializer(serializers.Serializer):
+    """Input for the bulk-update action: a non-empty list of item ids and a
+    non-empty whitelisted data dict applied to every listed item."""
+    item_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        allow_empty=False,
+    )
+    data = BulkUpdateOrderItemsDataSerializer()
+
+    def validate_data(self, value):
+        if not value:
+            raise serializers.ValidationError(
+                'At least one field must be provided.'
+            )
+        return value
+
+
 # ---------------------------------------------------------------------------
 # Purchase Order
 # ---------------------------------------------------------------------------
