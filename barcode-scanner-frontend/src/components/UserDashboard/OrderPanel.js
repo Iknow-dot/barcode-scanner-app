@@ -3,6 +3,7 @@ import dayjs from 'dayjs';
 import {useLanguage} from '../../i18n/LanguageContext';
 import {orderService} from '../../api';
 import AuthContext from '../Auth/AuthContext';
+import groupItemsBySku from './groupItemsBySku';
 import {
     Card,
     Tag,
@@ -90,6 +91,39 @@ const useDebouncedField = (initialValue, onSave, delay = 600) => {
 
     return [localValue, handleChange, flush];
 };
+
+const OrderItemGroupCard = memo(({
+    group,
+    orderId,
+    onLocalOrderUpdate,
+    notify,
+    t,
+    unitOptions,
+    discountConfig,
+}) => {
+    if (group.items.length === 1) {
+        return (
+            <OrderItemCard
+                item={group.items[0]}
+                orderId={orderId}
+                onLocalOrderUpdate={onLocalOrderUpdate}
+                notify={notify}
+                t={t}
+                unitOptions={unitOptions}
+                discountConfig={discountConfig}
+            />
+        );
+    }
+    // Multi-warehouse rendering lands in Task 7.
+    return (
+        <div className="m-order-item-card">
+            <Text strong>{group.sku_name || group.sku}</Text>
+            <Text type="secondary"> · {group.items.length} {t.warehouses || 'warehouses'}</Text>
+        </div>
+    );
+});
+
+OrderItemGroupCard.displayName = 'OrderItemGroupCard';
 
 // Memoized order item card component
 const OrderItemCard = memo(({
@@ -563,6 +597,11 @@ const OrderPanel = ({order: initialOrder, onSaveForLater, onProceedToPayment, on
 
     const unitOptions = t.unitOptions || UNIT_OPTIONS;
 
+    const groups = useMemo(
+        () => groupItemsBySku(localOrder?.items || []),
+        [localOrder?.items],
+    );
+
     if (!localOrder) return null;
 
     const hasItems = localOrder.items && localOrder.items.length > 0;
@@ -655,10 +694,10 @@ const OrderPanel = ({order: initialOrder, onSaveForLater, onProceedToPayment, on
             {hasItems ? (
                 <>
                     <div className="m-order-items-list">
-                        {localOrder.items.map((item) => (
-                            <OrderItemCard
-                                key={item.id}
-                                item={item}
+                        {groups.map((group) => (
+                            <OrderItemGroupCard
+                                key={group.sku}
+                                group={group}
                                 orderId={localOrder.id}
                                 onLocalOrderUpdate={handleLocalOrderUpdate}
                                 notify={notify}
