@@ -21,9 +21,18 @@ describe('distributeStock', () => {
         expect([...result.entries()]).toEqual([['W1', 10], ['W3', 10]]);
     });
 
-    test('target exceeds total stock — returns max allocatable', () => {
+    test('target exceeds total stock — surplus goes to first-priority warehouse', () => {
+        // Assigned tier: W1 (10). Non-assigned: W2 (5). Total stock 15, target 50.
+        // Walk: take 10 from W1, 5 from W2, 35 remaining.
+        // Surplus 35 is dumped on the first-walked warehouse (W1).
         const result = distributeStock(50, [wh('W1', 10), wh('W2', 5)], new Set(['W1']));
-        expect([...result.entries()]).toEqual([['W1', 10], ['W2', 5]]);
+        expect([...result.entries()]).toEqual([['W1', 45], ['W2', 5]]);
+    });
+
+    test('target exceeds total stock with no positive stock returns empty map', () => {
+        // Defensive: when the upstream returns nothing, the caller decides.
+        const result = distributeStock(50, [wh('W1', 0)], new Set(['W1']));
+        expect([...result.entries()]).toEqual([]);
     });
 
     test('zero / negative target returns empty map', () => {

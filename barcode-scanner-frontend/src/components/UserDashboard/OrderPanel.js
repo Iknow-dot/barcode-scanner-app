@@ -96,7 +96,7 @@ const useDebouncedField = (initialValue, onSave, delay = 600) => {
     return [localValue, handleChange, flush];
 };
 
-const WarehouseSubRow = memo(({item, stock, assigned, orderId, onLocalOrderUpdate, notify, t}) => {
+const WarehouseSubRow = memo(({item, stockText, assigned, orderId, onLocalOrderUpdate, notify, t}) => {
     const [overrideOpen, setOverrideOpen] = useState(false);
 
     const handleQuantityChange = useCallback(async (newQuantity) => {
@@ -147,9 +147,9 @@ const WarehouseSubRow = memo(({item, stock, assigned, orderId, onLocalOrderUpdat
                         className="m-qty-btn"/>
             </div>
 
-            {stock != null && (
+            {stockText != null && (
                 <Text type="secondary" style={{fontSize: 11}}>
-                    {t.stockRemaining}: {stock}
+                    {t.stockRemaining}: {stockText}
                 </Text>
             )}
 
@@ -279,28 +279,37 @@ const OrderItemGroupCard = memo(({
     assignedCodes,
 }) => {
     const [expanded, setExpanded] = useState(false);
+    const [showOtherWarehouses, setShowOtherWarehouses] = useState(false);
     const {canApplyDiscount, maxDiscountPercent} = discountConfig;
 
-    // Lazy-loaded stock for this SKU. null = not yet fetched, [] = fetched empty,
-    // 'error' = fetch failed.
+    // Lazy-loaded stock for this SKU. null = not yet fetched, array = fetched data,
+    // 'error' = fetch failed. ensureStock returns a Promise so callers can await
+    // the in-flight fetch instead of racing against it.
     const [stock, setStock] = useState(null);
     const [stockLoading, setStockLoading] = useState(false);
-    const ensureStock = useCallback(async () => {
-        if (stock != null || stockLoading) return;
+    const stockPromiseRef = useRef(null);
+    const ensureStock = useCallback(() => {
+        if (stock != null) return Promise.resolve(stock);
+        if (stockPromiseRef.current) return stockPromiseRef.current;
         setStockLoading(true);
-        const result = await productService.searchProduct({
+        const promise = productService.searchProduct({
             sku: group.sku,
             searchType: 'article',
             warehouseCodes: [],
             includeImages: false,
-        });
-        setStockLoading(false);
-        if (result.success && Array.isArray(result.data?.stock)) {
-            setStock(result.data.stock);
-        } else {
+        }).then((result) => {
+            setStockLoading(false);
+            stockPromiseRef.current = null;
+            if (result.success && Array.isArray(result.data?.stock)) {
+                setStock(result.data.stock);
+                return result.data.stock;
+            }
             setStock('error');
-        }
-    }, [group.sku, stock, stockLoading]);
+            return 'error';
+        });
+        stockPromiseRef.current = promise;
+        return promise;
+    }, [group.sku, stock]);
 
     const stockByCode = useMemo(() => {
         if (!Array.isArray(stock)) return new Map();
@@ -374,18 +383,29 @@ const OrderItemGroupCard = memo(({
     // target distribution, diff, and apply via parallel add/update/remove.
     const [pendingTarget, setPendingTarget] = useState(null);
     const distributeTimerRef = useRef(null);
-    const stockRef = useRef(stock);
-    stockRef.current = stock;
     const groupRef = useRef(group);
     groupRef.current = group;
 
     const applyDistribution = useCallback(async (target) => {
-        const currentStock = stockRef.current;
-        if (!Array.isArray(currentStock)) return; // stock not ready
+        // Await the in-flight stock fetch so we never race with it.
+        const stockResult = await ensureStock();
+        const currentStock = Array.isArray(stockResult) ? stockResult : null;
         const currentGroup = groupRef.current;
-        const distribution = distributeStock(target, currentStock, assignedCodes);
-        const inherited = inheritFromGroup(currentGroup, canApplyDiscount);
+        if (currentGroup.items.length === 0) {
+            setPendingTarget(null);
+            return;
+        }
 
+        let distribution;
+        if (currentStock && currentStock.some((s) => Number(s.quantity) > 0)) {
+            distribution = distributeStock(target, currentStock, assignedCodes);
+        } else {
+            // No stock data (fetch failed or empty). Fall back: apply the
+            // typed value to the first existing line; leave others alone.
+            distribution = new Map([[currentGroup.items[0].warehouse_code, target]]);
+        }
+
+        const inherited = inheritFromGroup(currentGroup, canApplyDiscount);
         const itemByCode = new Map(currentGroup.items.map((it) => [it.warehouse_code, it]));
         const calls = [];
         for (const [code, qty] of distribution) {
@@ -395,12 +415,12 @@ const OrderItemGroupCard = memo(({
                     calls.push(orderService.updateOrderItem(orderId, existing.id, {quantity: qty}));
                 }
             } else {
-                const stockEntry = currentStock.find((s) => s.warehouse === code);
+                const stockEntry = currentStock?.find((s) => s.warehouse === code);
                 calls.push(orderService.addOrderItem(orderId, {
                     sku: currentGroup.sku,
                     sku_name: currentGroup.sku_name,
                     article: currentGroup.article,
-                    price: stockEntry?.price ?? 0,
+                    price: stockEntry?.price ?? currentGroup.items[0].price ?? 0,
                     quantity: qty,
                     warehouse_code: code,
                     warehouse_name: stockEntry?.warehouse_name || '',
@@ -408,9 +428,13 @@ const OrderItemGroupCard = memo(({
                 }));
             }
         }
-        for (const it of currentGroup.items) {
-            if (!distribution.has(it.warehouse_code)) {
-                calls.push(orderService.removeOrderItem(orderId, it.id));
+        // Only remove items when we have real stock data — the fallback path
+        // (no stock) must NOT delete the user's existing lines.
+        if (currentStock) {
+            for (const it of currentGroup.items) {
+                if (!distribution.has(it.warehouse_code)) {
+                    calls.push(orderService.removeOrderItem(orderId, it.id));
+                }
             }
         }
         if (calls.length === 0) {
@@ -426,7 +450,7 @@ const OrderItemGroupCard = memo(({
         const last = results[results.length - 1].data;
         if (last) onLocalOrderUpdate(last);
         setPendingTarget(null);
-    }, [assignedCodes, canApplyDiscount, orderId, onLocalOrderUpdate, notify, t]);
+    }, [ensureStock, assignedCodes, canApplyDiscount, orderId, onLocalOrderUpdate, notify, t]);
 
     const onTotalQtyChange = useCallback((val) => {
         if (val == null) return;
@@ -495,32 +519,39 @@ const OrderItemGroupCard = memo(({
         </Flex>
     );
 
-    // Render an expanded row per warehouse: union of (warehouses with order
-    // lines) and (warehouses with positive stock). Order lines first, then
-    // remaining stock-only warehouses.
-    const expandedRows = useMemo(() => {
-        const rows = group.items.map((it) => ({
+    // Render an expanded row per existing order line. The "other warehouses"
+    // (stock-positive but not in the order yet) are kept behind an explicit
+    // toggle so the cart card stays focused on the user's current cart.
+    const stockTextFor = useCallback((code) => {
+        if (stockLoading && stock == null) return '…';
+        if (stock === 'error') return '—';
+        if (!Array.isArray(stock)) return null; // not yet fetched + not loading
+        const k = stockByCode.get(code);
+        return k != null ? String(k) : '—';
+    }, [stock, stockLoading, stockByCode]);
+
+    const lineRows = useMemo(
+        () => group.items.map((it) => ({
             key: `line-${it.id}`,
             item: it,
-            stock: stockByCode.get(it.warehouse_code),
+            stockText: null, // resolved at render time via stockTextFor
             assigned: assignedCodes.has(it.warehouse_code),
-        }));
-        if (Array.isArray(stock)) {
-            const presentCodes = new Set(group.items.map((it) => it.warehouse_code));
-            for (const s of stock) {
-                if (presentCodes.has(s.warehouse)) continue;
-                if (Number(s.quantity || 0) <= 0) continue;
-                rows.push({
-                    key: `stock-${s.warehouse}`,
-                    item: null,
-                    stockEntry: s,
-                    stock: Number(s.quantity || 0),
-                    assigned: assignedCodes.has(s.warehouse),
-                });
-            }
-        }
-        return rows;
-    }, [group.items, stock, stockByCode, assignedCodes]);
+        })),
+        [group.items, assignedCodes],
+    );
+
+    const otherWarehouses = useMemo(() => {
+        if (!Array.isArray(stock)) return [];
+        const presentCodes = new Set(group.items.map((it) => it.warehouse_code));
+        return stock
+            .filter((s) => !presentCodes.has(s.warehouse) && Number(s.quantity || 0) > 0)
+            .map((s) => ({
+                key: `stock-${s.warehouse}`,
+                stockEntry: s,
+                stock: Number(s.quantity || 0),
+                assigned: assignedCodes.has(s.warehouse),
+            }));
+    }, [stock, group.items, assignedCodes]);
 
     const stopPropagation = (e) => e.stopPropagation();
 
@@ -637,24 +668,33 @@ const OrderItemGroupCard = memo(({
 
             {expanded && (
                 <div className="m-order-item-group-expanded">
-                    {stockLoading && stock == null && (
-                        <Text type="secondary" style={{fontSize: 11}}>…</Text>
-                    )}
-                    {stock === 'error' && (
-                        <Text type="secondary" style={{fontSize: 11}}>{t.stockRemaining}: —</Text>
-                    )}
-                    {expandedRows.map((row) => row.item ? (
+                    {lineRows.map((row) => (
                         <WarehouseSubRow
                             key={row.key}
                             item={row.item}
-                            stock={row.stock}
+                            stockText={stockTextFor(row.item.warehouse_code)}
                             assigned={row.assigned}
                             orderId={orderId}
                             onLocalOrderUpdate={onLocalOrderUpdate}
                             notify={notify}
                             t={t}
                         />
-                    ) : (
+                    ))}
+
+                    {otherWarehouses.length > 0 && (
+                        <Button
+                            type="link"
+                            size="small"
+                            onClick={() => setShowOtherWarehouses((v) => !v)}
+                            style={{padding: 0, marginTop: 4}}
+                        >
+                            {showOtherWarehouses
+                                ? t.hideOtherWarehouses
+                                : t.showOtherWarehouses(otherWarehouses.length)}
+                        </Button>
+                    )}
+
+                    {showOtherWarehouses && otherWarehouses.map((row) => (
                         <Flex key={row.key} align="center" gap={8} className="m-warehouse-subrow"
                               style={{opacity: 0.6}}>
                             <Tag color={row.assigned ? 'green' : 'blue'} style={{fontSize: 10}}>
