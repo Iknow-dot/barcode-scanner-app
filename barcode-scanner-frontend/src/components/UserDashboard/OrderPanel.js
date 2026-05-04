@@ -101,6 +101,9 @@ const OrderItemGroupCard = memo(({
     unitOptions,
     discountConfig,
 }) => {
+    const [expanded, setExpanded] = useState(false);
+    const {canApplyDiscount, maxDiscountPercent} = discountConfig;
+
     if (group.items.length === 1) {
         return (
             <OrderItemCard
@@ -114,11 +117,124 @@ const OrderItemGroupCard = memo(({
             />
         );
     }
-    // Multi-warehouse rendering lands in Task 7.
+
+    // ----- Multi-warehouse group -----
+    const itemIds = group.items.map((i) => i.id);
+
+    const handleRemoveGroup = async () => {
+        // Remove every line in the group; backend has no group concept, so we
+        // issue parallel deletes. Last successful response wins for the
+        // refreshed-order shape.
+        let lastOrder = null;
+        for (const id of itemIds) {
+            const res = await orderService.removeOrderItem(orderId, id);
+            if (res.success) {
+                lastOrder = res.data;
+            } else {
+                notify.error(t.orderError, res.error);
+                return;
+            }
+        }
+        if (lastOrder) onLocalOrderUpdate(lastOrder);
+    };
+
+    const priceDisplay = group.isMixedPrice ? (
+        <Flex align="center" gap={6}>
+            <Text strong style={{fontSize: 13}}>
+                {group.minPrice} ₾ – {group.maxPrice} ₾
+            </Text>
+            <Tag color="orange" style={{fontSize: 10, marginInlineEnd: 0}}>
+                {t.mixed || 'Mixed'}
+            </Tag>
+        </Flex>
+    ) : (
+        <Text strong style={{fontSize: 13}}>{group.sharedPrice} ₾</Text>
+    );
+
     return (
-        <div className="m-order-item-card">
-            <Text strong>{group.sku_name || group.sku}</Text>
-            <Text type="secondary"> · {group.items.length} {t.warehouses || 'warehouses'}</Text>
+        <div className="m-order-item-card m-order-item-group-card">
+            {/* Header: name + delete */}
+            <Flex justify="space-between" align="start" gap={8}>
+                <div style={{flex: 1, minWidth: 0}}>
+                    <Text strong style={{fontSize: 14, display: 'block'}} ellipsis>
+                        {group.sku_name || group.sku}
+                    </Text>
+                    {group.article && (
+                        <Text type="secondary" style={{fontSize: 12}}>
+                            {t.article}: {group.article}
+                        </Text>
+                    )}
+                </div>
+                <Popconfirm
+                    title={t.removeFromAllWarehouses || 'Remove product from all warehouses?'}
+                    onConfirm={handleRemoveGroup}
+                    okText={t.yes}
+                    cancelText={t.no}
+                >
+                    <Button type="text" danger size="small" icon={<DeleteOutlined/>} className="m-item-delete-btn"/>
+                </Popconfirm>
+            </Flex>
+
+            {/* Warehouse summary row */}
+            <Flex align="center" wrap="wrap" gap={6} style={{marginTop: 6}}>
+                {group.items.map((it) => (
+                    <Tag key={it.id} color="blue" style={{fontSize: 10}}>
+                        {it.warehouse_name}
+                    </Tag>
+                ))}
+                <Button type="link" size="small" onClick={() => setExpanded((v) => !v)} style={{padding: 0}}>
+                    {expanded
+                        ? (t.collapse || 'Collapse')
+                        : (t.expandWarehouses || `Expand (${group.items.length} warehouses)`)}
+                </Button>
+            </Flex>
+
+            {/* Price + total qty row */}
+            <Flex align="center" gap={8} style={{marginTop: 8}}>
+                <Text type="secondary" style={{fontSize: 12}}>{t.price}:</Text>
+                {priceDisplay}
+                <Divider type="vertical"/>
+                <Text type="secondary" style={{fontSize: 12}}>
+                    {t.total || 'Total'}: {group.totalQty} {group.sharedUnit || ''}
+                </Text>
+            </Flex>
+
+            {/* Shared unit + shared discount controls — wired in Task 9. For now,
+                disabled placeholders so the layout is visible end-to-end. */}
+            <Flex gap={8} wrap="wrap" align="center" style={{marginTop: 10}}>
+                <Select
+                    value={group.sharedUnit || undefined}
+                    size="small"
+                    allowClear
+                    showSearch
+                    placeholder={group.isMixedUnit ? (t.mixed || 'Mixed') : t.unit}
+                    className="m-unit-select"
+                    options={unitOptions}
+                    disabled
+                />
+                {canApplyDiscount && maxDiscountPercent > 0 && (
+                    <Tag color="default" style={{fontSize: 10}}>
+                        {group.isMixedDiscount
+                            ? (t.mixed || 'Mixed')
+                            : `${group.sharedDiscountPercent || 0}%`}
+                    </Tag>
+                )}
+            </Flex>
+
+            {/* Line total */}
+            <Flex justify="end" style={{marginTop: 8}}>
+                <Text strong style={{color: '#52c41a', fontSize: 15}}>
+                    {group.groupLineTotal} ₾
+                </Text>
+            </Flex>
+
+            {/* Expanded section — fleshed out in Task 8. */}
+            {expanded && (
+                <div className="m-order-item-group-expanded">
+                    {/* Stub — replaced in Task 8. */}
+                    <Text type="secondary">{t.expandedComingSoon || ''}</Text>
+                </div>
+            )}
         </div>
     );
 });
