@@ -92,6 +92,78 @@ const useDebouncedField = (initialValue, onSave, delay = 600) => {
     return [localValue, handleChange, flush];
 };
 
+const WarehouseSubRow = memo(({item, orderId, onLocalOrderUpdate, notify, t}) => {
+    const [overrideOpen, setOverrideOpen] = useState(false);
+
+    const handleQuantityChange = useCallback(async (newQuantity) => {
+        if (newQuantity < 1) return;
+        const result = await orderService.updateOrderItem(orderId, item.id, {quantity: newQuantity});
+        if (result.success) onLocalOrderUpdate(result.data);
+        else notify.error(t.orderError, result.error);
+    }, [orderId, item.id, onLocalOrderUpdate, notify, t]);
+
+    const handleOverrideSave = useCallback(async (val) => {
+        const result = await orderService.updateOrderItem(orderId, item.id, {
+            discounted_price: val == null ? null : val,
+            discount_percent: 0,
+        });
+        if (result.success) onLocalOrderUpdate(result.data);
+        else notify.error(t.orderError, result.error);
+    }, [orderId, item.id, onLocalOrderUpdate, notify, t]);
+
+    return (
+        <Flex align="center" wrap="wrap" gap={8} className="m-warehouse-subrow">
+            <Tag color="blue" style={{fontSize: 10, marginInlineEnd: 0}}>
+                {item.warehouse_name}
+            </Tag>
+
+            <div className="m-qty-stepper">
+                <Button size="small" icon={<MinusOutlined/>}
+                        onClick={() => handleQuantityChange(item.quantity - 1)}
+                        disabled={item.quantity <= 1}
+                        className="m-qty-btn"/>
+                <InputNumber min={1} value={item.quantity} size="small"
+                             onChange={handleQuantityChange}
+                             className="m-qty-input"
+                             controls={false} inputMode="numeric" pattern="[0-9]*"/>
+                <Button size="small" icon={<PlusOutlined/>}
+                        onClick={() => handleQuantityChange(item.quantity + 1)}
+                        className="m-qty-btn"/>
+            </div>
+
+            <Text type="secondary" style={{fontSize: 12}}>
+                @ {item.effective_price} ₾
+            </Text>
+            <Text strong style={{fontSize: 13, color: '#52c41a'}}>
+                = {item.line_total} ₾
+            </Text>
+
+            <Button type="link" size="small" onClick={() => setOverrideOpen((v) => !v)}>
+                {overrideOpen ? (t.cancel || 'Cancel') : (t.overridePrice || 'Override price')}
+            </Button>
+
+            {overrideOpen && (
+                <InputNumber
+                    min={0}
+                    max={parseFloat(item.price || 0)}
+                    defaultValue={parseFloat(item.discounted_price ?? item.price)}
+                    size="small"
+                    addonAfter="₾"
+                    controls={false}
+                    inputMode="decimal"
+                    onBlur={(e) => {
+                        const v = parseFloat(e.target.value);
+                        handleOverrideSave(Number.isFinite(v) ? v : null);
+                        setOverrideOpen(false);
+                    }}
+                />
+            )}
+        </Flex>
+    );
+});
+
+WarehouseSubRow.displayName = 'WarehouseSubRow';
+
 const OrderItemGroupCard = memo(({
     group,
     orderId,
@@ -228,11 +300,18 @@ const OrderItemGroupCard = memo(({
                 </Text>
             </Flex>
 
-            {/* Expanded section — fleshed out in Task 8. */}
             {expanded && (
                 <div className="m-order-item-group-expanded">
-                    {/* Stub — replaced in Task 8. */}
-                    <Text type="secondary">{t.expandedComingSoon || ''}</Text>
+                    {group.items.map((it) => (
+                        <WarehouseSubRow
+                            key={it.id}
+                            item={it}
+                            orderId={orderId}
+                            onLocalOrderUpdate={onLocalOrderUpdate}
+                            notify={notify}
+                            t={t}
+                        />
+                    ))}
                 </div>
             )}
         </div>
