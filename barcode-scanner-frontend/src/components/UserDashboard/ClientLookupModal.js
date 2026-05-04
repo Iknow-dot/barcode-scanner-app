@@ -162,6 +162,23 @@ const ClientLookupModal = ({open, onSelect, onClose}) => {
         );
     };
 
+    const handleCreateNewClient = () => {
+        if (autoLookupTimer.current) {
+            clearTimeout(autoLookupTimer.current);
+            autoLookupTimer.current = null;
+        }
+        const values = lookupForm.getFieldsValue();
+        const idNumber = (values.identification_number || '').trim();
+        const phone = (values.phone || '').trim();
+        setLookupSeed({identification_number: idNumber, phone});
+        createForm.setFieldsValue({
+            identification_number: idNumber,
+            phone,
+            is_phys: true,
+        });
+        setStep(STEP_CREATE);
+    };
+
     // Debounced auto-lookup keyed off real user input only — using onValuesChange
     // (not Form.useWatch) avoids a spurious re-fire when the lookup step
     // remounts after the user backs out of the create step.
@@ -346,7 +363,14 @@ const ClientLookupModal = ({open, onSelect, onClose}) => {
                         type="tel"
                     />
                 </Form.Item>
-                <Flex justify="end">
+                <Flex justify="space-between" gap={8}>
+                    <Button
+                        icon={<UserAddOutlined/>}
+                        onClick={handleCreateNewClient}
+                        disabled={lookupLoading}
+                    >
+                        {t.createCustomer}
+                    </Button>
                     <Button
                         type="primary"
                         htmlType="submit"
