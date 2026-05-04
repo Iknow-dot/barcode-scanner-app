@@ -24,6 +24,7 @@ const API_ENDPOINTS = {
     client_create: "api/v1/clients/create/",
     rs_ge_lookup: "api/v1/clients/rs-ge-lookup/",
     client_reverse_geocode: "api/v1/clients/reverse-geocode/",
+    client_search_addresses: "api/v1/clients/search-addresses/",
 
     // Purchase Orders
     orders: "api/v1/orders/",

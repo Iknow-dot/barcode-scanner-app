@@ -42,6 +42,7 @@ from core.serializers import (
     CheckClientResponseSerializer,
     CreateClientRequestSerializer,
     ReverseGeocodeRequestSerializer,
+    SearchAddressesRequestSerializer,
 )
 from core.services.consult_web_exchange import (
     ConsultWebExchangeClient,
@@ -50,6 +51,7 @@ from core.services.consult_web_exchange import (
     _normalize_client_response,
 )
 from core.services.nominatim import NominatimError, reverse_geocode
+from core.services.photon import PhotonError, search_addresses
 from users.models import User, AllowedIP
 
 
@@ -533,6 +535,50 @@ class ReverseGeocodeAPIView(APIView):
 
         cache.set(cache_key, address, self.CACHE_TTL_SECONDS)
         return Response({"address": address})
+
+
+@extend_schema(tags=['Clients'])
+class SearchAddressesAPIView(APIView):
+    """Forward-geocode a free-text query into a list of address suggestions.
+
+    Drives the address autocomplete on the new-client form. Results are
+    cached for 6 h keyed by lower-cased query + limit so repeated typing
+    of the same prefix doesn't burn the upstream quota. Backed by Photon
+    rather than Nominatim (Nominatim's public /search rejects typeahead
+    traffic with 403).
+    """
+
+    permission_classes = [IsCompanyUserOrAdmin]
+    serializer_class = SearchAddressesRequestSerializer
+    http_method_names = ["post"]
+
+    CACHE_TTL_SECONDS = 60 * 60 * 6
+    MIN_QUERY_LENGTH = 3
+
+    def post(self, request: Request) -> Response:
+        serializer = self.serializer_class(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        query = serializer.validated_data["q"].strip()
+        limit = serializer.validated_data.get("limit", 8)
+
+        if len(query) < self.MIN_QUERY_LENGTH:
+            return Response({"suggestions": []})
+
+        cache_key = f"photon:search:{query.lower()}:{limit}"
+        cached = cache.get(cache_key)
+        if cached is not None:
+            return Response({"suggestions": cached})
+
+        try:
+            suggestions = search_addresses(query, limit=limit)
+        except PhotonError as exc:
+            body: dict = {"code": exc.code, "detail": exc.detail}
+            if exc.upstream_status is not None:
+                body["external_service_status_code"] = exc.upstream_status
+            return Response(body, status=exc.http_status)
+
+        cache.set(cache_key, suggestions, self.CACHE_TTL_SECONDS)
+        return Response({"suggestions": suggestions})
 
 
 @extend_schema(tags=['Invoice Templates'])

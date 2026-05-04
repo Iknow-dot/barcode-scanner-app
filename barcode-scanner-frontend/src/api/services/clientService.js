@@ -48,3 +48,19 @@ export const lookupRsGe = (identificationNumber) => {
 export const reverseGeocode = ({lat, lng}) => {
     return api.post(API_ENDPOINTS.client_reverse_geocode, {lat, lng});
 };
+
+/**
+ * Forward-geocode a typed address fragment into a list of suggestions
+ * via the backend's Nominatim proxy. Drives the address autocomplete on
+ * the new-client form. Backend short-circuits queries shorter than 3
+ * characters with an empty list.
+ *
+ * @param {string} query
+ * @param {{limit?: number}} [opts]
+ */
+export const searchAddresses = (query, {limit} = {}) => {
+    return api.post(API_ENDPOINTS.client_search_addresses, {
+        q: query,
+        ...(limit ? {limit} : {}),
+    });
+};

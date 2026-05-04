@@ -10,6 +10,7 @@ from core.views import (
     CheckClientAPIView,
     CreateClientAPIView,
     ReverseGeocodeAPIView,
+    SearchAddressesAPIView,
     InvoiceTokensAPIView,
     InvoiceSampleValuesAPIView,
 )
@@ -26,6 +27,7 @@ urlpatterns = [
     path('clients/create/', CreateClientAPIView.as_view(), name='client-create'),
     path('clients/rs-ge-lookup/', RSGeLookupAPIView.as_view(), name='rs-ge-lookup'),
     path('clients/reverse-geocode/', ReverseGeocodeAPIView.as_view(), name='client-reverse-geocode'),
+    path('clients/search-addresses/', SearchAddressesAPIView.as_view(), name='client-search-addresses'),
     path('product/search/', ProductSearchAPIView.as_view(), name='product-search'),
     path('', include(router.urls)),
 ]

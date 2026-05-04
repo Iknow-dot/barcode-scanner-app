@@ -1,10 +1,11 @@
-import React, {useState, useEffect, useRef} from 'react';
+import React, {useState, useEffect, useRef, useCallback} from 'react';
 import {clientService} from '../../api';
 import {useLanguage} from '../../i18n/LanguageContext';
 import AddressMapPicker from './AddressMapPicker';
 import {
     Modal,
     Input,
+    AutoComplete,
     Button,
     Form,
     Divider,
@@ -41,6 +42,8 @@ const STEP_LOOKUP = 'lookup';
 const STEP_CREATE = 'create';
 
 const AUTO_LOOKUP_ID_LENGTH = 11;
+const ADDRESS_SEARCH_MIN_CHARS = 3;
+const ADDRESS_SEARCH_DEBOUNCE_MS = 300;
 
 const ClientLookupModal = ({open, onSelect, onClose}) => {
     const {t} = useLanguage();
@@ -53,7 +56,11 @@ const ClientLookupModal = ({open, onSelect, onClose}) => {
     const [resolvingAddress, setResolvingAddress] = useState(false);
     const [foundClients, setFoundClients] = useState([]);
     const [lookupSeed, setLookupSeed] = useState({identification_number: '', phone: ''});
+    const [addressOptions, setAddressOptions] = useState([]);
+    const [addressSearching, setAddressSearching] = useState(false);
     const lastAutoLookupId = useRef('');
+    const addressSearchTimer = useRef(null);
+    const addressSearchSeq = useRef(0);
     const lookupIdValue = Form.useWatch('identification_number', lookupForm);
 
     useEffect(() => {
@@ -61,12 +68,29 @@ const ClientLookupModal = ({open, onSelect, onClose}) => {
             setStep(STEP_LOOKUP);
             setFoundClients([]);
             setLookupSeed({identification_number: '', phone: ''});
+            setAddressOptions([]);
+            setAddressSearching(false);
             lastAutoLookupId.current = '';
+            if (addressSearchTimer.current) {
+                clearTimeout(addressSearchTimer.current);
+                addressSearchTimer.current = null;
+            }
+            // Bump the sequence so any in-flight search resolves into a stale
+            // request and is dropped.
+            addressSearchSeq.current += 1;
             lookupForm.resetFields();
             createForm.resetFields();
             createForm.setFieldsValue({is_phys: true});
         }
     }, [open, lookupForm, createForm]);
+
+    useEffect(() => {
+        return () => {
+            if (addressSearchTimer.current) {
+                clearTimeout(addressSearchTimer.current);
+            }
+        };
+    }, []);
 
     const showErrorMessage = (code, fallback) => {
         const key = ERROR_CODE_MESSAGES[code];
@@ -221,6 +245,46 @@ const ClientLookupModal = ({open, onSelect, onClose}) => {
 
     const handleAddressResolved = (address) => {
         createForm.setFieldsValue({address_line: address});
+    };
+
+    const runAddressSearch = useCallback(async (query) => {
+        const trimmed = (query || '').trim();
+        if (trimmed.length < ADDRESS_SEARCH_MIN_CHARS) {
+            setAddressOptions([]);
+            setAddressSearching(false);
+            return;
+        }
+        const requestId = ++addressSearchSeq.current;
+        setAddressSearching(true);
+        const result = await clientService.searchAddresses(trimmed);
+        // A newer search has already been kicked off (or the modal closed) —
+        // drop this response so we don't flicker stale options into the list.
+        if (requestId !== addressSearchSeq.current) return;
+        if (result.success) {
+            const suggestions = Array.isArray(result.data?.suggestions)
+                ? result.data.suggestions
+                : [];
+            setAddressOptions(suggestions.map((s) => ({value: s, label: s})));
+        } else {
+            setAddressOptions([]);
+        }
+        setAddressSearching(false);
+    }, []);
+
+    const handleAddressSearch = (value) => {
+        if (addressSearchTimer.current) {
+            clearTimeout(addressSearchTimer.current);
+        }
+        const trimmed = (value || '').trim();
+        if (trimmed.length < ADDRESS_SEARCH_MIN_CHARS) {
+            addressSearchSeq.current += 1;
+            setAddressOptions([]);
+            setAddressSearching(false);
+            return;
+        }
+        addressSearchTimer.current = setTimeout(() => {
+            runAddressSearch(trimmed);
+        }, ADDRESS_SEARCH_DEBOUNCE_MS);
     };
 
     const renderLookupStep = () => (
@@ -420,14 +484,31 @@ const ClientLookupModal = ({open, onSelect, onClose}) => {
                 <Form.Item
                     name="address_line"
                     label={t.addressLine}
-                    extra={t.clickMapToPickAddress}
+                    extra={t.addressSearchHint || t.clickMapToPickAddress}
                 >
-                    <Input
-                        size="large"
-                        placeholder={t.addressLine}
-                        prefix={<EnvironmentOutlined style={{opacity: 0.4}}/>}
-                        suffix={resolvingAddress ? <LoadingOutlined/> : null}
-                    />
+                    <AutoComplete
+                        options={addressOptions}
+                        onSearch={handleAddressSearch}
+                        notFoundContent={
+                            addressSearching
+                                ? (t.addressSearching || t.search)
+                                : null
+                        }
+                        filterOption={false}
+                        allowClear
+                        popupMatchSelectWidth={false}
+                    >
+                        <Input
+                            size="large"
+                            placeholder={t.addressLine}
+                            prefix={<EnvironmentOutlined style={{opacity: 0.4}}/>}
+                            suffix={
+                                resolvingAddress || addressSearching ? (
+                                    <LoadingOutlined/>
+                                ) : null
+                            }
+                        />
+                    </AutoComplete>
                 </Form.Item>
 
                 <div style={{marginBottom: 16}}>

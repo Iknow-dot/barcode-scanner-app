@@ -480,6 +480,22 @@ class ReverseGeocodeRequestSerializer(serializers.Serializer):
     lng = serializers.FloatField(min_value=-180, max_value=180)
 
 
+class SearchAddressesRequestSerializer(serializers.Serializer):
+    """Forward address search query for the `clients/search-addresses/` endpoint."""
+
+    q = serializers.CharField(
+        max_length=200,
+        help_text="Free-text address fragment to search for.",
+    )
+    limit = serializers.IntegerField(
+        required=False,
+        min_value=1,
+        max_value=15,
+        default=8,
+        help_text="Maximum number of suggestions to return (1–15, default 8).",
+    )
+
+
 # ---------------------------------------------------------------------------
 # Product Search
 # ---------------------------------------------------------------------------

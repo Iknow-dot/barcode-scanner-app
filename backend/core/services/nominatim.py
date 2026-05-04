@@ -9,6 +9,11 @@ The public Nominatim instance is rate-limited (1 req/sec per the usage
 policy), and the response is cached by the calling view at 4-decimal
 coordinate precision (~10 m) for 24 h, so volume on the upstream stays low.
 
+Forward (typeahead) address search lives in `photon.py` instead — the
+public Nominatim instance is restrictive about /search use and frequently
+returns 403, while Photon (built on the same OSM data) is purpose-built
+for autocomplete.
+
 Errors are funneled through `NominatimError`, which mirrors the shape of
 `ConsultWebExchangeError` so the view layer can use the same error
 envelope (`{"code": "EXTERNAL_SERVICE_*", "detail": "..."}`).
