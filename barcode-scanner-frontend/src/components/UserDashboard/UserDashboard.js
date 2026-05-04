@@ -984,6 +984,7 @@ const UserDashboard = () => {
                 onClose={closeOrderDrawer}
                 height="85vh"
                 className="m-order-drawer"
+                destroyOnHidden
                 styles={{
                     body: {padding: 0, overflow: 'hidden'},
                 }}
