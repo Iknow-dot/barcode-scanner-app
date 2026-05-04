@@ -72,6 +72,20 @@ export const updateOrderItem = (orderId, itemId, data) => {
 };
 
 /**
+ * Bulk-update multiple line items in a single atomic request.
+ * @param {number} orderId
+ * @param {number[]} itemIds - Line item IDs to update; ids not belonging to the order are ignored server-side.
+ * @param {object} data - Fields to apply to every listed item: { price?, unit?, discount_percent?, discounted_price? }
+ * @returns The refreshed order in {success, data, error} envelope.
+ */
+export const bulkUpdateOrderItems = (orderId, itemIds, data) => {
+    return api.patch(API_ENDPOINTS.order_items_bulk_update(orderId), {
+        item_ids: itemIds,
+        data,
+    });
+};
+
+/**
  * Fetch the printable invoice HTML for an order.
  * Returns the standard {success, data, error} envelope; data is the raw HTML string.
  * @param {number} orderId
