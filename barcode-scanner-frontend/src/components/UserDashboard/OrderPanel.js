@@ -96,7 +96,7 @@ const useDebouncedField = (initialValue, onSave, delay = 600) => {
     return [localValue, handleChange, flush];
 };
 
-const WarehouseSubRow = memo(({item, stockText, assigned, orderId, onLocalOrderUpdate, notify, t}) => {
+const WarehouseSubRow = memo(({item, stockText, stockNumber, assigned, orderId, onLocalOrderUpdate, notify, t}) => {
     const [overrideOpen, setOverrideOpen] = useState(false);
 
     const handleQuantityChange = useCallback(async (newQuantity) => {
@@ -125,6 +125,8 @@ const WarehouseSubRow = memo(({item, stockText, assigned, orderId, onLocalOrderU
     }, [orderId, item.id, onLocalOrderUpdate, notify, t]);
 
     const hasOverride = item.discounted_price != null || parseFloat(item.discount_percent || 0) > 0;
+    const exceedsLocal =
+        Number.isFinite(stockNumber) && Number(item.quantity) > Number(stockNumber);
 
     return (
         <Flex align="center" wrap="wrap" gap={8} className="m-warehouse-subrow">
@@ -151,6 +153,14 @@ const WarehouseSubRow = memo(({item, stockText, assigned, orderId, onLocalOrderU
                 <Text type="secondary" style={{fontSize: 11}}>
                     {t.stockRemaining}: {stockText}
                 </Text>
+            )}
+            {exceedsLocal && (
+                <Flex align="center" gap={2}>
+                    <WarningOutlined style={{color: '#faad14', fontSize: 11}}/>
+                    <Text type="warning" style={{fontSize: 11}}>
+                        {t.exceedsStock(stockNumber)}
+                    </Text>
+                </Flex>
             )}
 
             <Text type="secondary" style={{fontSize: 12}}>
@@ -685,6 +695,7 @@ const OrderItemGroupCard = memo(({
                             key={row.key}
                             item={row.item}
                             stockText={stockTextFor(row.item.warehouse_code)}
+                            stockNumber={Array.isArray(stock) ? stockByCode.get(row.item.warehouse_code) : null}
                             assigned={row.assigned}
                             orderId={orderId}
                             onLocalOrderUpdate={onLocalOrderUpdate}
