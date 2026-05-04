@@ -164,6 +164,75 @@ const WarehouseSubRow = memo(({item, orderId, onLocalOrderUpdate, notify, t}) =>
 
 WarehouseSubRow.displayName = 'WarehouseSubRow';
 
+const SharedDiscountControl = memo(({group, maxDiscountPercent, applyBulk, t}) => {
+    const [mode, setMode] = useState(
+        group.sharedDiscountedPrice != null ? 'price' : 'percent'
+    );
+    const sharedPercent = parseFloat(group.sharedDiscountPercent || 0);
+    const sharedPrice = group.sharedDiscountedPrice
+        ? parseFloat(group.sharedDiscountedPrice)
+        : null;
+
+    const onPercentChange = (val) => {
+        applyBulk(
+            {discount_percent: val || 0, discounted_price: null},
+            group.isMixedDiscount,
+            t.discount || 'Discount',
+            (it) => `${it.discount_percent}%`,
+            `${val || 0}%`,
+        );
+    };
+    const onPriceChange = (val) => {
+        applyBulk(
+            {discounted_price: val ?? null, discount_percent: 0},
+            group.isMixedDiscount,
+            t.discount || 'Discount',
+            (it) => (it.discounted_price ? `${it.discounted_price} ₾` : `${it.discount_percent}%`),
+            val == null ? '—' : `${val} ₾`,
+        );
+    };
+
+    return (
+        <Flex align="center" gap={4}>
+            <Select
+                value={mode}
+                onChange={(m) => {
+                    setMode(m);
+                    if (m === 'percent') onPriceChange(null);
+                    else onPercentChange(0);
+                }}
+                options={[{label: '%', value: 'percent'}, {label: '₾', value: 'price'}]}
+                size="small"
+                className="m-discount-mode"
+            />
+            {mode === 'percent' ? (
+                <InputNumber
+                    min={0}
+                    max={Math.min(100, maxDiscountPercent)}
+                    value={group.isMixedDiscount ? undefined : sharedPercent}
+                    placeholder={group.isMixedDiscount ? (t.mixed || 'Mixed') : undefined}
+                    size="small"
+                    onChange={onPercentChange}
+                    className="m-discount-input"
+                    controls={false} inputMode="decimal" addonAfter="%"
+                />
+            ) : (
+                <InputNumber
+                    min={0}
+                    value={group.isMixedDiscount ? undefined : sharedPrice}
+                    placeholder={group.isMixedDiscount ? (t.mixed || 'Mixed') : t.setPrice}
+                    size="small"
+                    onChange={onPriceChange}
+                    className="m-discount-input"
+                    controls={false} inputMode="decimal" addonAfter="₾"
+                />
+            )}
+        </Flex>
+    );
+});
+
+SharedDiscountControl.displayName = 'SharedDiscountControl';
+
 const OrderItemGroupCard = memo(({
     group,
     orderId,
@@ -175,6 +244,38 @@ const OrderItemGroupCard = memo(({
 }) => {
     const [expanded, setExpanded] = useState(false);
     const {canApplyDiscount, maxDiscountPercent} = discountConfig;
+
+    // itemIds and applyBulk must be declared before the early return so that
+    // useCallback is always called unconditionally (React hooks rules).
+    const itemIds = group.items.map((i) => i.id);
+
+    const applyBulk = useCallback(async (data, mixedFlag, fieldLabel, formatCurrent, formatNew) => {
+        const doApply = async () => {
+            const result = await orderService.bulkUpdateOrderItems(orderId, itemIds, data);
+            if (result.success) onLocalOrderUpdate(result.data);
+            else notify.error(t.orderError, result.error);
+        };
+
+        if (mixedFlag) {
+            const lines = group.items.map((it) =>
+                `${it.warehouse_name}: ${formatCurrent(it)} → ${formatNew}`
+            ).join('\n');
+            Modal.confirm({
+                title: t.confirmOverwriteTitle || 'Apply to all warehouses?',
+                content: (
+                    <div>
+                        <div>{t.confirmOverwriteBody || 'The following warehouses will change:'}</div>
+                        <pre style={{fontSize: 12, whiteSpace: 'pre-wrap', marginTop: 6}}>{lines}</pre>
+                    </div>
+                ),
+                okText: t.yes,
+                cancelText: t.no,
+                onOk: doApply,
+            });
+            return;
+        }
+        await doApply();
+    }, [group.items, itemIds, orderId, onLocalOrderUpdate, notify, t]);
 
     if (group.items.length === 1) {
         return (
@@ -191,7 +292,6 @@ const OrderItemGroupCard = memo(({
     }
 
     // ----- Multi-warehouse group -----
-    const itemIds = group.items.map((i) => i.id);
 
     const handleRemoveGroup = async () => {
         // Remove every line in the group; backend has no group concept, so we
@@ -210,17 +310,57 @@ const OrderItemGroupCard = memo(({
         if (lastOrder) onLocalOrderUpdate(lastOrder);
     };
 
-    const priceDisplay = group.isMixedPrice ? (
+    const handleSharedPriceChange = (val) => {
+        if (val == null) return;
+        applyBulk(
+            {discounted_price: val, discount_percent: 0},
+            group.isMixedPrice,
+            t.price,
+            (it) => `${it.effective_price} ₾`,
+            `${val} ₾`,
+        );
+    };
+
+    const priceArea = (
         <Flex align="center" gap={6}>
-            <Text strong style={{fontSize: 13}}>
-                {group.minPrice} ₾ – {group.maxPrice} ₾
-            </Text>
-            <Tag color="orange" style={{fontSize: 10, marginInlineEnd: 0}}>
-                {t.mixed || 'Mixed'}
-            </Tag>
+            {group.isMixedPrice ? (
+                <>
+                    <Text type="secondary" style={{fontSize: 12}}>
+                        {group.minPrice} ₾ – {group.maxPrice} ₾
+                    </Text>
+                    <Tag color="orange" style={{fontSize: 10, marginInlineEnd: 0}}>
+                        {t.mixed || 'Mixed'}
+                    </Tag>
+                    <InputNumber
+                        size="small"
+                        placeholder={t.setPrice}
+                        controls={false}
+                        addonAfter="₾"
+                        onPressEnter={(e) => handleSharedPriceChange(parseFloat(e.target.value))}
+                        onBlur={(e) => {
+                            const v = parseFloat(e.target.value);
+                            if (Number.isFinite(v)) handleSharedPriceChange(v);
+                        }}
+                        style={{width: 100}}
+                    />
+                </>
+            ) : (
+                <InputNumber
+                    size="small"
+                    value={parseFloat(group.sharedPrice)}
+                    controls={false}
+                    addonAfter="₾"
+                    onPressEnter={(e) => handleSharedPriceChange(parseFloat(e.target.value))}
+                    onBlur={(e) => {
+                        const v = parseFloat(e.target.value);
+                        if (Number.isFinite(v) && v.toFixed(2) !== Number(group.sharedPrice).toFixed(2)) {
+                            handleSharedPriceChange(v);
+                        }
+                    }}
+                    style={{width: 100}}
+                />
+            )}
         </Flex>
-    ) : (
-        <Text strong style={{fontSize: 13}}>{group.sharedPrice} ₾</Text>
     );
 
     return (
@@ -264,15 +404,14 @@ const OrderItemGroupCard = memo(({
             {/* Price + total qty row */}
             <Flex align="center" gap={8} style={{marginTop: 8}}>
                 <Text type="secondary" style={{fontSize: 12}}>{t.price}:</Text>
-                {priceDisplay}
+                {priceArea}
                 <Divider type="vertical"/>
                 <Text type="secondary" style={{fontSize: 12}}>
                     {t.total || 'Total'}: {group.totalQty} {group.sharedUnit || ''}
                 </Text>
             </Flex>
 
-            {/* Shared unit + shared discount controls — wired in Task 9. For now,
-                disabled placeholders so the layout is visible end-to-end. */}
+            {/* Shared unit + shared discount controls */}
             <Flex gap={8} wrap="wrap" align="center" style={{marginTop: 10}}>
                 <Select
                     value={group.sharedUnit || undefined}
@@ -282,14 +421,21 @@ const OrderItemGroupCard = memo(({
                     placeholder={group.isMixedUnit ? (t.mixed || 'Mixed') : t.unit}
                     className="m-unit-select"
                     options={unitOptions}
-                    disabled
+                    onChange={(val) => applyBulk(
+                        {unit: val || ''},
+                        group.isMixedUnit,
+                        t.unit,
+                        (it) => (it.unit || '—'),
+                        (val || '—'),
+                    )}
                 />
                 {canApplyDiscount && maxDiscountPercent > 0 && (
-                    <Tag color="default" style={{fontSize: 10}}>
-                        {group.isMixedDiscount
-                            ? (t.mixed || 'Mixed')
-                            : `${group.sharedDiscountPercent || 0}%`}
-                    </Tag>
+                    <SharedDiscountControl
+                        group={group}
+                        maxDiscountPercent={maxDiscountPercent}
+                        applyBulk={applyBulk}
+                        t={t}
+                    />
                 )}
             </Flex>
 
