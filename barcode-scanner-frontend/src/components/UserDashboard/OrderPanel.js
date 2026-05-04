@@ -292,8 +292,12 @@ const OrderItemGroupCard = memo(({
         if (stock != null) return Promise.resolve(stock);
         if (stockPromiseRef.current) return stockPromiseRef.current;
         setStockLoading(true);
+        // Upstream's GetStockAndPrices keys off the user-typed article (or
+        // a barcode); the canonical `sku` returned in scan responses isn't
+        // always a valid lookup key. Prefer `article`, fall back to `sku`.
+        const lookupKey = group.article || group.sku;
         const promise = productService.searchProduct({
-            sku: group.sku,
+            sku: lookupKey,
             searchType: 'article',
             warehouseCodes: [],
             includeImages: false,
@@ -304,12 +308,14 @@ const OrderItemGroupCard = memo(({
                 setStock(result.data.stock);
                 return result.data.stock;
             }
+            // eslint-disable-next-line no-console
+            console.warn('[cart] stock fetch failed for', lookupKey, result);
             setStock('error');
             return 'error';
         });
         stockPromiseRef.current = promise;
         return promise;
-    }, [group.sku, stock]);
+    }, [group.article, group.sku, stock]);
 
     const stockByCode = useMemo(() => {
         if (!Array.isArray(stock)) return new Map();
@@ -463,6 +469,12 @@ const OrderItemGroupCard = memo(({
     useEffect(() => () => {
         if (distributeTimerRef.current) clearTimeout(distributeTimerRef.current);
     }, []);
+
+    // Eager-fetch stock once per card mount so the in-stock captions and
+    // the auto-distribute path are ready before the user types or expands.
+    useEffect(() => {
+        ensureStock();
+    }, [ensureStock]);
 
     const displayedTotalQty = pendingTarget != null ? pendingTarget : group.totalQty;
     const exceeds = totalStock != null && displayedTotalQty > totalStock;
