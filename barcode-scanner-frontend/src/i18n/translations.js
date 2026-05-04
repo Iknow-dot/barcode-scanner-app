@@ -462,6 +462,17 @@ const translations = {
 
         // ===== Footer =====
         footer: '© 2026 iFlow.ge Powered by IKnow LTD. All rights reserved.',
+
+        // ===== Cart group view =====
+        mixed: 'შერეული',
+        expandWarehouses: 'საწყობების ჩვენება',
+        collapse: 'დახურვა',
+        total: 'სულ',
+        confirmOverwriteTitle: 'გავრცელდეს ყველა საწყობზე?',
+        confirmOverwriteBody: 'შემდეგი საწყობები შეიცვლება:',
+        overridePrice: 'ფასის გადაფარვა',
+        removeFromAllWarehouses: 'წაიშალოს პროდუქტი ყველა საწყობიდან?',
+        cancel: 'გაუქმება',
     },
 
     en: {
@@ -927,6 +938,17 @@ const translations = {
 
         // ===== Footer =====
         footer: '© 2026 iFlow.ge Powered by IKnow LTD. All rights reserved.',
+
+        // ===== Cart group view =====
+        mixed: 'Mixed',
+        expandWarehouses: 'Expand warehouses',
+        collapse: 'Collapse',
+        total: 'Total',
+        confirmOverwriteTitle: 'Apply to all warehouses?',
+        confirmOverwriteBody: 'The following warehouses will change:',
+        overridePrice: 'Override price',
+        removeFromAllWarehouses: 'Remove product from all warehouses?',
+        cancel: 'Cancel',
     },
 };
 
