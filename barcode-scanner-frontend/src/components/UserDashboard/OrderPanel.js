@@ -6,6 +6,7 @@ import AuthContext from '../Auth/AuthContext';
 import groupItemsBySku from './groupItemsBySku';
 import {
     Card,
+    Steps,
     Tag,
     Typography,
     Flex,
@@ -900,6 +901,7 @@ const OrderPanel = ({order: initialOrder, onSaveForLater, onProceedToPayment, on
     }), [authData?.user?.can_apply_discount, authData?.user?.max_discount_percent]);
     // Keep order state LOCAL so updates don't re-render the parent (and the Drawer)
     const [localOrder, setLocalOrder] = useState(initialOrder);
+    const [step, setStep] = useState(1);
     const [deliveryExpanded, setDeliveryExpanded] = useState(
         initialOrder?.delivery_type === 'delivery' ? ['delivery'] : []
     );
@@ -919,6 +921,7 @@ const OrderPanel = ({order: initialOrder, onSaveForLater, onProceedToPayment, on
             setLocalOrder(initialOrder);
             lastOrderIdRef.current = initialOrder?.id;
             lastItemCountRef.current = initialOrder?.items?.length || 0;
+            setStep(1);
             return;
         }
         // Sync if items were added from outside (item count increased externally)
@@ -1034,81 +1037,123 @@ const OrderPanel = ({order: initialOrder, onSaveForLater, onProceedToPayment, on
                 </Flex>
             )}
 
-            {/* Items */}
-            {hasItems ? (
-                <>
-                    <div className="m-order-items-list">
-                        {groups.map((group) => (
-                            <OrderItemGroupCard
-                                key={group.sku}
-                                group={group}
-                                orderId={localOrder.id}
-                                onLocalOrderUpdate={handleLocalOrderUpdate}
-                                notify={notify}
-                                t={t}
-                                unitOptions={unitOptions}
-                                discountConfig={discountConfig}
-                            />
-                        ))}
-                    </div>
+            {/* Step indicator */}
+            <Steps
+                current={step - 1}
+                size="small"
+                onChange={(idx) => {
+                    const target = idx + 1;
+                    if (target === 2 && !hasItems) return;
+                    setStep(target);
+                }}
+                items={[
+                    {title: t.stepProducts},
+                    {title: t.stepDelivery, disabled: !hasItems},
+                ]}
+                style={{margin: '8px 0 12px'}}
+            />
 
-                    {/* Order Total */}
-                    <div className="m-order-total-bar">
-                        <Text style={{fontSize: 15}}>{t.orderTotal}:</Text>
-                        <Title level={4} style={{margin: 0, color: '#52c41a'}}>
-                            {localOrder.total} ₾
-                        </Title>
-                    </div>
-                </>
-            ) : (
-                <Empty
-                    image={Empty.PRESENTED_IMAGE_SIMPLE}
-                    description={
-                        <span style={{opacity: 0.6}}>{t.scanToAddProduct}</span>
-                    }
-                    style={{margin: '24px 0'}}
-                />
+            {/* Step 1 — Products */}
+            {step === 1 && (
+                hasItems ? (
+                    <>
+                        <div className="m-order-items-list">
+                            {groups.map((group) => (
+                                <OrderItemGroupCard
+                                    key={group.sku}
+                                    group={group}
+                                    orderId={localOrder.id}
+                                    onLocalOrderUpdate={handleLocalOrderUpdate}
+                                    notify={notify}
+                                    t={t}
+                                    unitOptions={unitOptions}
+                                    discountConfig={discountConfig}
+                                />
+                            ))}
+                        </div>
+
+                        {/* Order Total */}
+                        <div className="m-order-total-bar">
+                            <Text style={{fontSize: 15}}>{t.orderTotal}:</Text>
+                            <Title level={4} style={{margin: 0, color: '#52c41a'}}>
+                                {localOrder.total} ₾
+                            </Title>
+                        </div>
+                    </>
+                ) : (
+                    <Empty
+                        image={Empty.PRESENTED_IMAGE_SIMPLE}
+                        description={
+                            <span style={{opacity: 0.6}}>{t.scanToAddProduct}</span>
+                        }
+                        style={{margin: '24px 0'}}
+                    />
+                )
             )}
 
-            {/* Delivery Conditions */}
-            <Divider style={{margin: '12px 0 8px'}}/>
-            <DeliverySection
-                order={localOrder}
-                onLocalOrderUpdate={handleLocalOrderUpdate}
-                notify={notify}
-                t={t}
-                deliveryExpanded={deliveryExpanded}
-                setDeliveryExpanded={setDeliveryExpanded}
-            />
+            {/* Step 2 — Delivery + Notes */}
+            {step === 2 && (
+                <>
+                    <DeliverySection
+                        order={localOrder}
+                        onLocalOrderUpdate={handleLocalOrderUpdate}
+                        notify={notify}
+                        t={t}
+                        deliveryExpanded={deliveryExpanded}
+                        setDeliveryExpanded={setDeliveryExpanded}
+                    />
 
-            {/* Order Notes */}
-            <NotesSection
-                order={localOrder}
-                onLocalOrderUpdate={handleLocalOrderUpdate}
-                notify={notify}
-                t={t}
-            />
+                    {/* Order Notes */}
+                    <NotesSection
+                        order={localOrder}
+                        onLocalOrderUpdate={handleLocalOrderUpdate}
+                        notify={notify}
+                        t={t}
+                    />
+                </>
+            )}
 
-            {/* Primary CTA — Save / Delete are in the actions menu (top-right) */}
+            {/* Action bar — step-aware */}
             <div className="m-order-actions">
-                <Popconfirm
-                    title={t.confirmProceedToPayment}
-                    onConfirm={onProceedToPayment}
-                    okText={t.yes}
-                    cancelText={t.no}
-                    disabled={!hasItems}
-                >
+                {step === 1 ? (
                     <Button
                         type="primary"
-                        icon={<DollarOutlined/>}
                         disabled={!hasItems}
+                        onClick={() => setStep(2)}
                         className="m-order-action-btn"
                         size="large"
                         block
                     >
-                        {t.proceedToPayment}
+                        {t.nextStep} →
                     </Button>
-                </Popconfirm>
+                ) : (
+                    <Flex gap={8}>
+                        <Button
+                            onClick={() => setStep(1)}
+                            size="large"
+                            style={{flex: 1}}
+                        >
+                            ← {t.backStep}
+                        </Button>
+                        <Popconfirm
+                            title={t.confirmProceedToPayment}
+                            onConfirm={onProceedToPayment}
+                            okText={t.yes}
+                            cancelText={t.no}
+                            disabled={!hasItems}
+                        >
+                            <Button
+                                type="primary"
+                                icon={<DollarOutlined/>}
+                                disabled={!hasItems}
+                                size="large"
+                                style={{flex: 2}}
+                            >
+                                {t.proceedToPayment}
+                            </Button>
+                        </Popconfirm>
+                    </Flex>
+                )}
             </div>
         </div>
     );
