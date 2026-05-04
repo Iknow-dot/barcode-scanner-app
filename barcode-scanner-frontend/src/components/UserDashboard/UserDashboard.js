@@ -295,6 +295,10 @@ const UserDashboard = () => {
             activeOrderRef.current = result.data;
             setActiveOrder(result.data);
             setOrderMode(true);
+            // Drop the user straight into the scan/product tab so they can
+            // start adding items without an extra tap — mirrors the resume
+            // flow in handleContinueOrder.
+            setActiveTab('scan');
             // Backend returns 200 (instead of 201) when it resumed an existing
             // open draft for this client — surface that so the user knows
             // they're continuing rather than starting fresh.
