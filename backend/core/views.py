@@ -50,8 +50,7 @@ from core.services.consult_web_exchange import (
     _extract_client_list,
     _normalize_client_response,
 )
-from core.services.nominatim import NominatimError, reverse_geocode
-from core.services.photon import PhotonError, search_addresses
+from core.services.photon import PhotonError, reverse_geocode, search_addresses
 from users.models import User, AllowedIP
 
 
@@ -501,11 +500,10 @@ class CreateClientAPIView(APIView):
 
 @extend_schema(tags=['Clients'])
 class ReverseGeocodeAPIView(APIView):
-    """Reverse-geocode a lat/lng to a formatted address via OSM Nominatim.
+    """Reverse-geocode a lat/lng to a formatted address via Photon.
 
     Used by the frontend address-map picker. Results are cached for 24 h
-    keyed at 4-decimal precision (~10 m) to keep usage well under the
-    public Nominatim 1 req/sec policy.
+    keyed at 4-decimal precision (~10 m).
     """
 
     permission_classes = [IsCompanyUserOrAdmin]
@@ -522,7 +520,7 @@ class ReverseGeocodeAPIView(APIView):
         lng = serializer.validated_data["lng"]
 
         cache_key = (
-            f"nominatim:rev:{round(lat, self.CACHE_PRECISION)}:"
+            f"photon:rev:{round(lat, self.CACHE_PRECISION)}:"
             f"{round(lng, self.CACHE_PRECISION)}"
         )
         cached = cache.get(cache_key)
@@ -531,7 +529,7 @@ class ReverseGeocodeAPIView(APIView):
 
         try:
             address = reverse_geocode(lat, lng)
-        except NominatimError as exc:
+        except PhotonError as exc:
             body: dict = {"code": exc.code, "detail": exc.detail}
             if exc.upstream_status is not None:
                 body["external_service_status_code"] = exc.upstream_status

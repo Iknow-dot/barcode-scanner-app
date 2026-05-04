@@ -25,8 +25,7 @@ from core.services.consult_web_exchange import (
     ConsultWebExchangeError,
     _normalize_client_response,
 )
-from core.services.nominatim import NominatimError, reverse_geocode
-from core.services.photon import PhotonError, search_addresses
+from core.services.photon import PhotonError, reverse_geocode, search_addresses
 from users.models import User
 
 
@@ -598,7 +597,7 @@ class ProductSearchIncludeImagesTests(TestCase):
 
 
 # ---------------------------------------------------------------------------
-# Reverse Geocode (Nominatim)
+# Reverse Geocode (Photon)
 # ---------------------------------------------------------------------------
 
 def _mock_httpx_response(status_code: int, body: object = None, json_raises: bool = False):
@@ -611,13 +610,31 @@ def _mock_httpx_response(status_code: int, body: object = None, json_raises: boo
     return resp
 
 
-class NominatimServiceTests(TestCase):
-    def test_returns_display_name_on_200(self):
-        with mock.patch(
-            'httpx.get',
-            return_value=_mock_httpx_response(200, {'display_name': 'Tbilisi, GE'}),
-        ):
-            self.assertEqual(reverse_geocode(41.7, 44.8), 'Tbilisi, GE')
+def _photon_feature(**props) -> dict:
+    return {
+        'type': 'Feature',
+        'geometry': {'type': 'Point', 'coordinates': [0, 0]},
+        'properties': props,
+    }
+
+
+def _photon_collection(*features) -> dict:
+    return {'type': 'FeatureCollection', 'features': list(features)}
+
+
+class PhotonReverseServiceTests(TestCase):
+    def test_returns_first_formatted_feature_on_200(self):
+        body = _photon_collection(
+            _photon_feature(
+                street='Pekini Avenue', housenumber='12',
+                city='Tbilisi', country='Georgia',
+            ),
+        )
+        with mock.patch('httpx.get', return_value=_mock_httpx_response(200, body)):
+            self.assertEqual(
+                reverse_geocode(41.7, 44.8),
+                'Pekini Avenue 12, Tbilisi, Georgia',
+            )
 
     def test_uses_user_agent_from_settings(self):
         captured: dict = {}
@@ -626,52 +643,52 @@ class NominatimServiceTests(TestCase):
             captured['url'] = url
             captured['headers'] = kwargs.get('headers')
             captured['params'] = kwargs.get('params')
-            return _mock_httpx_response(200, {'display_name': 'X'})
+            return _mock_httpx_response(
+                200, _photon_collection(_photon_feature(name='X')),
+            )
 
         with override_settings(NOMINATIM_USER_AGENT='TestAgent/9.9'):
             with mock.patch('httpx.get', side_effect=fake_get):
                 reverse_geocode(41.7, 44.8)
 
+        self.assertEqual(captured['url'], 'https://photon.komoot.io/reverse')
         self.assertEqual(captured['headers']['User-Agent'], 'TestAgent/9.9')
-        self.assertIn('lat', captured['params'])
-        self.assertIn('lon', captured['params'])
-        self.assertEqual(captured['params']['format'], 'json')
+        self.assertEqual(captured['params']['lat'], 41.7)
+        self.assertEqual(captured['params']['lon'], 44.8)
 
-    def test_raises_not_found_on_error_payload(self):
+    def test_raises_not_found_on_empty_features(self):
         with mock.patch(
             'httpx.get',
-            return_value=_mock_httpx_response(200, {'error': 'Unable to geocode'}),
+            return_value=_mock_httpx_response(200, _photon_collection()),
         ):
-            with self.assertRaises(NominatimError) as ctx:
+            with self.assertRaises(PhotonError) as ctx:
                 reverse_geocode(0, 0)
         self.assertEqual(ctx.exception.code, 'REVERSE_GEOCODE_NOT_FOUND')
         self.assertEqual(ctx.exception.http_status, 404)
 
-    def test_raises_not_found_on_empty_display_name(self):
-        with mock.patch(
-            'httpx.get',
-            return_value=_mock_httpx_response(200, {'display_name': ''}),
-        ):
-            with self.assertRaises(NominatimError) as ctx:
+    def test_raises_not_found_when_features_have_no_usable_props(self):
+        body = _photon_collection(_photon_feature())
+        with mock.patch('httpx.get', return_value=_mock_httpx_response(200, body)):
+            with self.assertRaises(PhotonError) as ctx:
                 reverse_geocode(0, 0)
         self.assertEqual(ctx.exception.code, 'REVERSE_GEOCODE_NOT_FOUND')
 
     def test_maps_timeout_to_external_service_timeout(self):
         with mock.patch('httpx.get', side_effect=httpx.TimeoutException('boom')):
-            with self.assertRaises(NominatimError) as ctx:
+            with self.assertRaises(PhotonError) as ctx:
                 reverse_geocode(41.7, 44.8)
         self.assertEqual(ctx.exception.code, 'EXTERNAL_SERVICE_TIMEOUT')
         self.assertEqual(ctx.exception.http_status, 504)
 
     def test_maps_connect_error_to_external_service_unavailable(self):
         with mock.patch('httpx.get', side_effect=httpx.ConnectError('boom')):
-            with self.assertRaises(NominatimError) as ctx:
+            with self.assertRaises(PhotonError) as ctx:
                 reverse_geocode(41.7, 44.8)
         self.assertEqual(ctx.exception.code, 'EXTERNAL_SERVICE_UNAVAILABLE')
 
     def test_maps_non_200_to_external_service_error(self):
         with mock.patch('httpx.get', return_value=_mock_httpx_response(503)):
-            with self.assertRaises(NominatimError) as ctx:
+            with self.assertRaises(PhotonError) as ctx:
                 reverse_geocode(41.7, 44.8)
         self.assertEqual(ctx.exception.code, 'EXTERNAL_SERVICE_ERROR')
         self.assertEqual(ctx.exception.upstream_status, 503)
@@ -701,15 +718,18 @@ class ReverseGeocodeAPIViewTests(TestCase):
         self.assertIn(response.status_code, (401, 403))
 
     def test_happy_path_returns_address(self):
+        body = _photon_collection(
+            _photon_feature(name='Tbilisi', country='Georgia'),
+        )
         with mock.patch(
             'httpx.get',
-            return_value=_mock_httpx_response(200, {'display_name': 'Tbilisi, GE'}),
+            return_value=_mock_httpx_response(200, body),
         ):
             response = self.client_api.post(
                 self.url, {'lat': 41.7, 'lng': 44.8}, format='json',
             )
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.data, {'address': 'Tbilisi, GE'})
+        self.assertEqual(response.data, {'address': 'Tbilisi, Georgia'})
 
     def test_validation_rejects_out_of_range_lat(self):
         response = self.client_api.post(
@@ -735,7 +755,7 @@ class ReverseGeocodeAPIViewTests(TestCase):
     def test_not_found_returns_404_envelope(self):
         with mock.patch(
             'httpx.get',
-            return_value=_mock_httpx_response(200, {'error': 'Unable to geocode'}),
+            return_value=_mock_httpx_response(200, _photon_collection()),
         ):
             response = self.client_api.post(
                 self.url, {'lat': 0, 'lng': 0}, format='json',
@@ -748,7 +768,9 @@ class ReverseGeocodeAPIViewTests(TestCase):
 
         def fake_get(url, **kwargs):
             call_count['n'] += 1
-            return _mock_httpx_response(200, {'display_name': 'cached'})
+            return _mock_httpx_response(
+                200, _photon_collection(_photon_feature(name='cached')),
+            )
 
         with mock.patch('httpx.get', side_effect=fake_get):
             r1 = self.client_api.post(
@@ -763,18 +785,6 @@ class ReverseGeocodeAPIViewTests(TestCase):
         self.assertEqual(r2.status_code, 200)
         self.assertEqual(r1.data['address'], 'cached')
         self.assertEqual(call_count['n'], 1)
-
-
-def _photon_feature(**props) -> dict:
-    return {
-        'type': 'Feature',
-        'geometry': {'type': 'Point', 'coordinates': [0, 0]},
-        'properties': props,
-    }
-
-
-def _photon_collection(*features) -> dict:
-    return {'type': 'FeatureCollection', 'features': list(features)}
 
 
 class PhotonServiceTests(TestCase):

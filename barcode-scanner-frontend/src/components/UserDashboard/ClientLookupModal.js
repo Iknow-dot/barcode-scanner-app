@@ -531,7 +531,14 @@ const ClientLookupModal = ({open, onSelect, onClose}) => {
                     extra={t.addressSearchHint || t.clickMapToPickAddress}
                 >
                     <AutoComplete
-                        options={addressOptions}
+                        options={addressOptions.map((opt) => ({
+                            value: opt.value,
+                            label: (
+                                <span style={{whiteSpace: 'normal', wordBreak: 'break-word'}}>
+                                    {opt.label}
+                                </span>
+                            ),
+                        }))}
                         onSearch={handleAddressSearch}
                         notFoundContent={
                             addressSearching
@@ -540,7 +547,6 @@ const ClientLookupModal = ({open, onSelect, onClose}) => {
                         }
                         filterOption={false}
                         allowClear
-                        popupMatchSelectWidth={false}
                     >
                         <Input
                             size="large"

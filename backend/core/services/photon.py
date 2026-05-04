@@ -1,18 +1,18 @@
 """
-Photon (komoot) forward-geocode client.
+Photon (komoot) geocode client (forward + reverse).
 
-Used by `SearchAddressesAPIView` to power the address autocomplete on the
-new-client form. We use Photon rather than Nominatim's `/search` endpoint
-because the public Nominatim instance is restrictive about typeahead-style
-traffic and frequently returns 403 on /search even with a custom
-User-Agent. Photon (https://photon.komoot.io) is built on the same OSM
-data and is purpose-built for autocomplete with no strict policy.
+Used by `SearchAddressesAPIView` (forward / typeahead) and
+`ReverseGeocodeAPIView` (reverse / map pin). We use Photon rather than
+Nominatim because the public Nominatim instance is restrictive about
+this kind of traffic and frequently returns 403 on `/search` and
+`/reverse` even with a custom User-Agent. Photon (https://photon.komoot.io)
+is built on the same OSM data and has no such policy.
 
 The view layer caches results, so volume on the upstream stays low.
 
-Errors are funneled through `PhotonError`, which mirrors the shape of
-`NominatimError` / `ConsultWebExchangeError` so the view layer can use
-the same `{"code": "EXTERNAL_SERVICE_*", "detail": "..."}` envelope.
+Errors are funneled through `PhotonError` so the view layer can use the
+same `{"code": "EXTERNAL_SERVICE_*", "detail": "..."}` envelope used by
+the other external integrations.
 """
 
 from __future__ import annotations
@@ -27,6 +27,7 @@ logger = logging.getLogger(__name__)
 
 
 PHOTON_SEARCH_URL = "https://photon.komoot.io/api/"
+PHOTON_REVERSE_URL = "https://photon.komoot.io/reverse"
 DEFAULT_TIMEOUT = 15.0
 DEFAULT_USER_AGENT = "BarcodeScannerApp/1.0"
 SEARCH_DEFAULT_LIMIT = 8
@@ -182,3 +183,94 @@ def search_addresses(
             seen.add(formatted)
             suggestions.append(formatted)
     return suggestions
+
+
+def reverse_geocode(
+    lat: float,
+    lng: float,
+    *,
+    lang: str = "en",
+    timeout: float | None = None,
+) -> str:
+    """Return a single formatted address string for the given coordinates.
+
+    Calls Photon's `/reverse` endpoint (same FeatureCollection shape as
+    `/api`) and formats the first feature with `_format_feature`.
+
+    Raises `PhotonError` with code `EXTERNAL_SERVICE_*` on transport /
+    upstream failure, or `REVERSE_GEOCODE_NOT_FOUND` when Photon returns
+    no usable feature for the coordinates.
+    """
+    user_agent = getattr(settings, "PHOTON_USER_AGENT", None) or getattr(
+        settings, "NOMINATIM_USER_AGENT", DEFAULT_USER_AGENT
+    )
+    headers = {
+        "User-Agent": user_agent,
+        "Accept": "application/json",
+    }
+    params: dict[str, Any] = {"lat": lat, "lon": lng, "lang": lang}
+
+    try:
+        response = httpx.get(
+            PHOTON_REVERSE_URL,
+            params=params,
+            headers=headers,
+            timeout=timeout if timeout is not None else DEFAULT_TIMEOUT,
+        )
+    except httpx.TimeoutException as exc:
+        logger.error("Photon reverse timeout lat=%s lng=%s: %s", lat, lng, exc)
+        raise PhotonError(
+            code="EXTERNAL_SERVICE_TIMEOUT",
+            detail="Timeout while contacting the reverse geocoder.",
+            http_status=504,
+        ) from exc
+    except httpx.ConnectError as exc:
+        logger.error("Photon reverse connect error lat=%s lng=%s: %s", lat, lng, exc)
+        raise PhotonError(
+            code="EXTERNAL_SERVICE_UNAVAILABLE",
+            detail="Could not connect to the reverse geocoder.",
+            http_status=502,
+        ) from exc
+    except httpx.RequestError as exc:
+        logger.error("Photon reverse request error lat=%s lng=%s: %s", lat, lng, exc)
+        raise PhotonError(
+            code="EXTERNAL_SERVICE_ERROR",
+            detail="Communication error with the reverse geocoder.",
+            http_status=502,
+        ) from exc
+
+    if response.status_code != 200:
+        logger.warning(
+            "Photon reverse non-200 lat=%s lng=%s status=%s",
+            lat, lng, response.status_code,
+        )
+        raise PhotonError(
+            code="EXTERNAL_SERVICE_ERROR",
+            detail="Unexpected response from the reverse geocoder.",
+            http_status=502,
+            upstream_status=response.status_code,
+        )
+
+    try:
+        body: Any = response.json()
+    except ValueError as exc:
+        raise PhotonError(
+            code="EXTERNAL_SERVICE_ERROR",
+            detail="Reverse geocoder returned a non-JSON response.",
+            http_status=502,
+        ) from exc
+
+    features = body.get("features") if isinstance(body, dict) else None
+    if isinstance(features, list):
+        for feature in features:
+            if not isinstance(feature, dict):
+                continue
+            formatted = _format_feature(feature)
+            if formatted:
+                return formatted
+
+    raise PhotonError(
+        code="REVERSE_GEOCODE_NOT_FOUND",
+        detail="No address could be resolved for the given coordinates.",
+        http_status=404,
+    )
