@@ -55,6 +55,7 @@ const ClientLookupModal = ({open, onSelect, onClose}) => {
     const [rsGeLookupLoading, setRsGeLookupLoading] = useState(false);
     const [resolvingAddress, setResolvingAddress] = useState(false);
     const [foundClients, setFoundClients] = useState([]);
+    const [foundClientsFilter, setFoundClientsFilter] = useState('');
     const [lookupSeed, setLookupSeed] = useState({identification_number: '', phone: ''});
     const [addressOptions, setAddressOptions] = useState([]);
     const [addressSearching, setAddressSearching] = useState(false);
@@ -67,6 +68,7 @@ const ClientLookupModal = ({open, onSelect, onClose}) => {
         if (open) {
             setStep(STEP_LOOKUP);
             setFoundClients([]);
+            setFoundClientsFilter('');
             setLookupSeed({identification_number: '', phone: ''});
             setAddressOptions([]);
             setAddressSearching(false);
@@ -104,6 +106,7 @@ const ClientLookupModal = ({open, onSelect, onClose}) => {
         }
         setLookupLoading(true);
         setFoundClients([]);
+        setFoundClientsFilter('');
         try {
             const result = await clientService.checkClient({
                 identification_number: idNumber,
@@ -237,15 +240,21 @@ const ClientLookupModal = ({open, onSelect, onClose}) => {
         }
     };
 
-    const handleUseFound = (client) => {
-        if (client) {
-            onSelect(client);
-        }
-    };
-
     const handleAddressResolved = (address) => {
         createForm.setFieldsValue({address_line: address});
     };
+
+    const filteredFoundClients = (() => {
+        const q = foundClientsFilter.trim().toLowerCase();
+        if (!q) return foundClients;
+        return foundClients.filter((c) => {
+            const haystack = [c.name, c.address, c.phone]
+                .filter(Boolean)
+                .join(' ')
+                .toLowerCase();
+            return haystack.includes(q);
+        });
+    })();
 
     const runAddressSearch = useCallback(async (query) => {
         const trimmed = (query || '').trim();
@@ -338,41 +347,51 @@ const ClientLookupModal = ({open, onSelect, onClose}) => {
             {foundClients.length > 0 && (
                 <>
                     <Divider/>
+                    {foundClients.length > 1 && (
+                        <Input
+                            size="large"
+                            allowClear
+                            placeholder={t.filterClientsPlaceholder}
+                            prefix={<SearchOutlined style={{opacity: 0.4}}/>}
+                            value={foundClientsFilter}
+                            onChange={(e) => setFoundClientsFilter(e.target.value)}
+                            style={{marginBottom: 12}}
+                        />
+                    )}
                     <Flex vertical gap={12}>
-                        {foundClients.map((client, index) => (
-                            <Card
-                                key={index}
-                                size="small"
-                                style={{borderColor: '#52c41a', borderRadius: 12}}
-                                styles={{body: {padding: 16}}}
-                            >
-                                <Descriptions
-                                    column={1}
+                        {filteredFoundClients.length === 0 ? (
+                            <Text type="secondary" style={{textAlign: 'center', padding: '12px 0'}}>
+                                {t.noClientsMatchFilter}
+                            </Text>
+                        ) : (
+                            filteredFoundClients.map((client, index) => (
+                                <Card
+                                    key={index}
                                     size="small"
-                                    colon
-                                    labelStyle={{width: 120, fontWeight: 500}}
+                                    hoverable
+                                    onClick={() => onSelect(client)}
+                                    style={{borderColor: '#52c41a', borderRadius: 12}}
+                                    styles={{body: {padding: 16}}}
                                 >
-                                    <Descriptions.Item label={t.customerName}>
-                                        {client.name || '—'}
-                                    </Descriptions.Item>
-                                    <Descriptions.Item label={t.customerAddress}>
-                                        {client.address || '—'}
-                                    </Descriptions.Item>
-                                    <Descriptions.Item label={t.customerPhone}>
-                                        {client.phone || '—'}
-                                    </Descriptions.Item>
-                                </Descriptions>
-                                <Flex justify="end" style={{marginTop: 12}}>
-                                    <Button
-                                        type="primary"
-                                        icon={<UserOutlined/>}
-                                        onClick={() => handleUseFound(client)}
+                                    <Descriptions
+                                        column={1}
+                                        size="small"
+                                        colon
+                                        labelStyle={{width: 120, fontWeight: 500}}
                                     >
-                                        {t.useThisClient}
-                                    </Button>
-                                </Flex>
-                            </Card>
-                        ))}
+                                        <Descriptions.Item label={t.customerName}>
+                                            {client.name || '—'}
+                                        </Descriptions.Item>
+                                        <Descriptions.Item label={t.customerAddress}>
+                                            {client.address || '—'}
+                                        </Descriptions.Item>
+                                        <Descriptions.Item label={t.customerPhone}>
+                                            {client.phone || '—'}
+                                        </Descriptions.Item>
+                                    </Descriptions>
+                                </Card>
+                            ))
+                        )}
                     </Flex>
                 </>
             )}
