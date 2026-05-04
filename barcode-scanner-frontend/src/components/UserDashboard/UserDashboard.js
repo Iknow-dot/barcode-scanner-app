@@ -4,6 +4,7 @@ import BarcodeScanner from './BarcodeScanner';
 import ClientLookupModal from './ClientLookupModal';
 import OrderPanel from './OrderPanel';
 import subNavContext from "../../contexts/SubNavContext";
+import AuthContext from "../Auth/AuthContext";
 import useAppNotification from "../../hooks/useAppNotification";
 import {useLanguage} from '../../i18n/LanguageContext';
 import {playFoundSound, playNotFoundSound} from '../../utils/sound';
@@ -66,6 +67,7 @@ const UserDashboard = () => {
     const [loading, setLoading] = useState(false);
     const [disableScan, setDisableScan] = useState(false);
     const {setSubNav} = useContext(subNavContext);
+    const {authData} = useContext(AuthContext);
     const [scannerOpen, setScannerOpen] = useState(false);
     const [balances, setBalances] = useState([]);
     const [userWarehouses, setUserWarehouses] = useState([]);
@@ -444,21 +446,27 @@ const UserDashboard = () => {
         const groups = groupItemsBySku(order.items);
         const group = groups.find((g) => g.sku === sku);
         if (!group) return {};
-        // Only inherit when the group is genuinely shared. Mixed → start fresh
-        // at the warehouse's catalog price.
+        // Only inherit when the group is genuinely shared. Mixed → start
+        // fresh at the warehouse's catalog price.
         const inherited = {};
-        if (!group.isMixedPrice && group.sharedDiscountedPrice != null) {
-            inherited.discounted_price = group.sharedDiscountedPrice;
+        const canApplyDiscount = !!authData?.user?.can_apply_discount;
+        if (canApplyDiscount) {
+            if (!group.isMixedPrice && group.sharedDiscountedPrice != null) {
+                inherited.discounted_price = group.sharedDiscountedPrice;
+            }
+            if (!group.isMixedDiscount && parseFloat(group.sharedDiscountPercent || 0) > 0) {
+                inherited.discount_percent = group.sharedDiscountPercent;
+            }
         }
-        if (!group.isMixedDiscount && parseFloat(group.sharedDiscountPercent || 0) > 0) {
-            inherited.discount_percent = group.sharedDiscountPercent;
-        }
+        // unit inherits regardless of discount permission
         if (!group.isMixedUnit && group.sharedUnit) {
             inherited.unit = group.sharedUnit;
         }
         // Note: we deliberately don't inherit `price` (the line's catalog
-        // price); only the override fields (discounted_price/discount_percent)
-        // and unit.
+        // price); only the override fields and unit. When the user has lost
+        // discount permission, we drop those override fields too — the new
+        // line is added at catalog price and the group will read as
+        // "mixed", which is the right visible feedback.
         return inherited;
     };
 
