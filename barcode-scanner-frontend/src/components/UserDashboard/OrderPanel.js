@@ -288,7 +288,6 @@ const OrderItemGroupCard = memo(({
     discountConfig,
     assignedCodes,
 }) => {
-    const [expanded, setExpanded] = useState(false);
     const [showOtherWarehouses, setShowOtherWarehouses] = useState(false);
     const {canApplyDiscount, maxDiscountPercent} = discountConfig;
 
@@ -575,59 +574,29 @@ const OrderItemGroupCard = memo(({
             }));
     }, [stock, group.items, assignedCodes]);
 
-    const stopPropagation = (e) => e.stopPropagation();
-
     return (
         <div className="m-order-item-card m-order-item-group-card">
-            {/* Clickable header zone — toggles expanded */}
-            <div
-                role="button"
-                tabIndex={0}
-                onClick={() => {
-                    setExpanded((v) => !v);
-                    ensureStock();
-                }}
-                onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        setExpanded((v) => !v);
-                        ensureStock();
-                    }
-                }}
-                style={{cursor: 'pointer'}}
-            >
-                <Flex justify="space-between" align="start" gap={8}>
-                    <div style={{flex: 1, minWidth: 0}}>
-                        <Text strong style={{fontSize: 14, display: 'block'}} ellipsis>
-                            {group.sku_name || group.sku}
+            <Flex justify="space-between" align="start" gap={8}>
+                <div style={{flex: 1, minWidth: 0}}>
+                    <Text strong style={{fontSize: 14, display: 'block'}} ellipsis>
+                        {group.sku_name || group.sku}
+                    </Text>
+                    {group.article && (
+                        <Text type="secondary" style={{fontSize: 12}}>
+                            {t.article}: {group.article}
                         </Text>
-                        {group.article && (
-                            <Text type="secondary" style={{fontSize: 12}}>
-                                {t.article}: {group.article}
-                            </Text>
-                        )}
-                    </div>
-                    <Popconfirm
-                        title={t.removeFromAllWarehouses || t.confirmDelete || 'Remove product?'}
-                        onConfirm={handleRemoveGroup}
-                        okText={t.yes}
-                        cancelText={t.no}
-                    >
-                        <Button type="text" danger size="small" icon={<DeleteOutlined/>}
-                                onClick={stopPropagation}
-                                className="m-item-delete-btn"/>
-                    </Popconfirm>
-                </Flex>
-
-                {/* Warehouse summary tags */}
-                <Flex align="center" wrap="wrap" gap={6} style={{marginTop: 6}}>
-                    {group.items.map((it) => (
-                        <Tag key={it.id} color={assignedCodes.has(it.warehouse_code) ? 'green' : 'blue'} style={{fontSize: 10}}>
-                            {it.warehouse_name}
-                        </Tag>
-                    ))}
-                </Flex>
-            </div>
+                    )}
+                </div>
+                <Popconfirm
+                    title={t.removeFromAllWarehouses || t.confirmDelete || 'Remove product?'}
+                    onConfirm={handleRemoveGroup}
+                    okText={t.yes}
+                    cancelText={t.no}
+                >
+                    <Button type="text" danger size="small" icon={<DeleteOutlined/>}
+                            className="m-item-delete-btn"/>
+                </Popconfirm>
+            </Flex>
 
             {/* Controls zone — does not toggle expand */}
             <Flex align="center" gap={8} style={{marginTop: 8}}>
@@ -688,49 +657,47 @@ const OrderItemGroupCard = memo(({
                 </Text>
             </Flex>
 
-            {expanded && (
-                <div className="m-order-item-group-expanded">
-                    {lineRows.map((row) => (
-                        <WarehouseSubRow
-                            key={row.key}
-                            item={row.item}
-                            stockText={stockTextFor(row.item.warehouse_code)}
-                            stockNumber={Array.isArray(stock) ? stockByCode.get(row.item.warehouse_code) : null}
-                            assigned={row.assigned}
-                            orderId={orderId}
-                            onLocalOrderUpdate={onLocalOrderUpdate}
-                            notify={notify}
-                            t={t}
-                        />
-                    ))}
+            <div className="m-order-item-group-expanded">
+                {lineRows.map((row) => (
+                    <WarehouseSubRow
+                        key={row.key}
+                        item={row.item}
+                        stockText={stockTextFor(row.item.warehouse_code)}
+                        stockNumber={Array.isArray(stock) ? stockByCode.get(row.item.warehouse_code) : null}
+                        assigned={row.assigned}
+                        orderId={orderId}
+                        onLocalOrderUpdate={onLocalOrderUpdate}
+                        notify={notify}
+                        t={t}
+                    />
+                ))}
 
-                    {otherWarehouses.length > 0 && (
-                        <Button
-                            type="link"
-                            size="small"
-                            onClick={() => setShowOtherWarehouses((v) => !v)}
-                            style={{padding: 0, marginTop: 4}}
-                        >
-                            {showOtherWarehouses
-                                ? t.hideOtherWarehouses
-                                : t.showOtherWarehouses(otherWarehouses.length)}
-                        </Button>
-                    )}
+                {otherWarehouses.length > 0 && (
+                    <Button
+                        type="link"
+                        size="small"
+                        onClick={() => setShowOtherWarehouses((v) => !v)}
+                        style={{padding: 0, marginTop: 4}}
+                    >
+                        {showOtherWarehouses
+                            ? t.hideOtherWarehouses
+                            : t.showOtherWarehouses(otherWarehouses.length)}
+                    </Button>
+                )}
 
-                    {showOtherWarehouses && otherWarehouses.map((row) => (
-                        <Flex key={row.key} align="center" gap={8} className="m-warehouse-subrow"
-                              style={{opacity: 0.6}}>
-                            <Tag color={row.assigned ? 'green' : 'blue'} style={{fontSize: 10}}>
-                                {row.stockEntry.warehouse_name}
-                                {row.assigned && <span style={{marginLeft: 4}}>✓</span>}
-                            </Tag>
-                            <Text type="secondary" style={{fontSize: 11}}>
-                                {t.stockRemaining}: {row.stock}
-                            </Text>
-                        </Flex>
-                    ))}
-                </div>
-            )}
+                {showOtherWarehouses && otherWarehouses.map((row) => (
+                    <Flex key={row.key} align="center" gap={8} className="m-warehouse-subrow"
+                          style={{opacity: 0.6}}>
+                        <Tag color={row.assigned ? 'green' : 'blue'} style={{fontSize: 10}}>
+                            {row.stockEntry.warehouse_name}
+                            {row.assigned && <span style={{marginLeft: 4}}>✓</span>}
+                        </Tag>
+                        <Text type="secondary" style={{fontSize: 11}}>
+                            {t.stockRemaining}: {row.stock}
+                        </Text>
+                    </Flex>
+                ))}
+            </div>
         </div>
     );
 });
