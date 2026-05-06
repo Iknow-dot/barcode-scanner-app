@@ -49,7 +49,6 @@ import {
     ShoppingCartOutlined,
     InboxOutlined,
     QrcodeOutlined,
-    EditOutlined,
     PlusOutlined,
     PlusCircleOutlined,
     PrinterOutlined,
