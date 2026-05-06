@@ -1,4 +1,4 @@
-import {recordScan, getTodayScans, getTodaySummary, _resetForTest} from './scanLog';
+import {recordScan, getTodayScans, getTodaySummary} from './scanLog';
 
 const STORAGE_KEY = 'barcode-scanner.scanLog';
 
@@ -17,7 +17,6 @@ const mkScan = (overrides) => ({
 describe('scanLog', () => {
     beforeEach(() => {
         window.localStorage.clear();
-        _resetForTest();
     });
 
     describe('with empty storage', () => {
@@ -52,11 +51,15 @@ describe('scanLog', () => {
         });
     });
 
-    describe('day scoping', () => {
+    describe('day scoping (getTodayScans)', () => {
         it('excludes entries from yesterday', () => {
             const yesterday = Date.now() - 25 * 60 * 60 * 1000;
-            recordScan(mkScan({search: 'old', scanned_at: yesterday}));
-            recordScan(mkScan({search: 'new'}));
+            // Write directly to bypass recordScan's calendar-day pruning so we
+            // can prove getTodayScans filters by isSameDay on read.
+            window.localStorage.setItem(STORAGE_KEY, JSON.stringify([
+                mkScan({search: 'new'}),
+                mkScan({search: 'old', scanned_at: yesterday}),
+            ]));
             const scans = getTodayScans();
             expect(scans).toHaveLength(1);
             expect(scans[0].search).toBe('new');
@@ -64,9 +67,11 @@ describe('scanLog', () => {
 
         it('summary counts only today', () => {
             const yesterday = Date.now() - 25 * 60 * 60 * 1000;
-            recordScan(mkScan({scanned_at: yesterday}));
-            recordScan(mkScan({found: true}));
-            recordScan(mkScan({found: false}));
+            window.localStorage.setItem(STORAGE_KEY, JSON.stringify([
+                mkScan({scanned_at: yesterday, found: true}),
+                mkScan({found: true}),
+                mkScan({found: false}),
+            ]));
             expect(getTodaySummary()).toEqual({count: 2, foundCount: 1, notFoundCount: 1});
         });
     });
@@ -80,15 +85,15 @@ describe('scanLog', () => {
             expect(JSON.parse(raw)).toHaveLength(50);
         });
 
-        it('prunes entries older than 24h on write', () => {
-            const old = Date.now() - 48 * 60 * 60 * 1000;
+        it('drops non-today entries on write', () => {
+            const yesterday = Date.now() - 25 * 60 * 60 * 1000;
             window.localStorage.setItem(STORAGE_KEY, JSON.stringify([
-                mkScan({search: 'old', scanned_at: old}),
+                mkScan({search: 'yesterday', scanned_at: yesterday}),
             ]));
-            recordScan(mkScan({search: 'new'}));
+            recordScan(mkScan({search: 'today'}));
             const raw = JSON.parse(window.localStorage.getItem(STORAGE_KEY));
             expect(raw).toHaveLength(1);
-            expect(raw[0].search).toBe('new');
+            expect(raw[0].search).toBe('today');
         });
     });
 
@@ -96,8 +101,11 @@ describe('scanLog', () => {
         it('does not throw when localStorage.setItem fails', () => {
             const original = window.localStorage.setItem;
             window.localStorage.setItem = () => { throw new Error('quota exceeded'); };
-            expect(() => recordScan(mkScan())).not.toThrow();
-            window.localStorage.setItem = original;
+            try {
+                expect(() => recordScan(mkScan())).not.toThrow();
+            } finally {
+                window.localStorage.setItem = original;
+            }
         });
     });
 });

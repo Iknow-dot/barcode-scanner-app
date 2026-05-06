@@ -1,6 +1,5 @@
 const STORAGE_KEY = 'barcode-scanner.scanLog';
 const MAX_ENTRIES = 50;
-const MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
 const isSameDay = (ts) => {
     const a = new Date(ts);
@@ -34,7 +33,7 @@ export const recordScan = (entry) => {
     const now = Date.now();
     const next = [{...entry, scanned_at: entry.scanned_at || now}, ...safeRead()];
     const pruned = next
-        .filter((e) => now - e.scanned_at < MAX_AGE_MS)
+        .filter((e) => isSameDay(e.scanned_at))
         .slice(0, MAX_ENTRIES);
     safeWrite(pruned);
 };
@@ -52,7 +51,3 @@ export const getTodaySummary = () => {
         notFoundCount: today.length - foundCount,
     };
 };
-
-// Test-only: lets tests reset any module-level cache. Currently there is no
-// cache, but exporting this keeps the test contract stable if one is added.
-export const _resetForTest = () => {};
