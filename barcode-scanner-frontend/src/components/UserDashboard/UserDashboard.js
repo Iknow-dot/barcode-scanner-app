@@ -14,6 +14,9 @@ import {
     playOrderResumedSound,
 } from '../../utils/sound';
 import {printInvoice} from '../../utils/printInvoice';
+import {recordScan} from '../../utils/scanLog';
+import useDailySnapshot from '../../hooks/useDailySnapshot';
+import DailySnapshot from './DailySnapshot';
 import groupItemsBySku from './groupItemsBySku';
 import inheritFromGroup from './inheritFromGroup';
 import {
@@ -130,6 +133,12 @@ const UserDashboard = () => {
 
     // Scoped to current user; the customer-search effect below omits this filter on purpose so colleagues' drafts stay findable.
     const currentUserId = authData?.user?.id;
+    const {
+        scansSummary: snapshotScans,
+        recentScans: snapshotRecent,
+        ordersSummary: snapshotOrders,
+        refresh: refreshSnapshot,
+    } = useDailySnapshot(currentUserId);
     const fetchIncompleteOrders = useCallback(async () => {
         if (!currentUserId) return;
         setIncompleteOrdersLoading(true);
@@ -204,6 +213,18 @@ const UserDashboard = () => {
             if (result.success && result.data?.stock) {
                 playFoundSound();
                 setBalances(result.data.stock);
+                recordScan({
+                    search,
+                    searchType,
+                    found: true,
+                    sku: result.data.sku,
+                    sku_name: result.data.sku_name,
+                    price: result.data.price,
+                    total_qty: (result.data.stock || []).reduce(
+                        (sum, b) => sum + (Number(b.quantity) || 0), 0,
+                    ),
+                });
+                refreshSnapshot();
                 setProductInfo({
                     sku_name: result.data.sku_name,
                     article: result.data.article,
@@ -222,6 +243,8 @@ const UserDashboard = () => {
                 setProductInfo({sku_name: '', article: '', price: '', images: []});
                 setSearchedAllWarehouses(false);
 
+                const isExternalServiceError = result.code && result.code.startsWith('EXTERNAL_SERVICE_');
+
                 if (!result.success) {
                     const errorMessages = {
                         'PRODUCT_NOT_FOUND': t.productNotFound,
@@ -231,19 +254,31 @@ const UserDashboard = () => {
                         'EXTERNAL_SERVICE_UNAUTHORIZED': t.externalServiceUnauthorized,
                     };
 
-                    const isExternalServiceError = result.code && result.code.startsWith('EXTERNAL_SERVICE_');
                     const title = isExternalServiceError ? t.webServiceError : t.error;
                     const errorMessage = errorMessages[result.code] || t.productSearchError;
                     notify.error(title, errorMessage);
                 } else {
                     notify.warning(t.result, t.productNotFoundOrNoBalance);
                 }
+
+                if (!isExternalServiceError) {
+                    recordScan({
+                        search,
+                        searchType,
+                        found: false,
+                        sku: null,
+                        sku_name: null,
+                        price: null,
+                        total_qty: null,
+                    });
+                    refreshSnapshot();
+                }
             }
         } finally {
             setLoading(false);
             isSearchingRef.current = false;
         }
-    }, [userWarehouses, t, notify]);
+    }, [userWarehouses, t, notify, refreshSnapshot]);
 
     const handleScanResult = useCallback((decodedText) => {
         setScannerOpen(false);
@@ -261,6 +296,14 @@ const UserDashboard = () => {
             allWarehouses: true,
         });
     }, [handleSearch]);
+
+    const handleResearchFromHistory = useCallback((entry) => {
+        handleSearch({
+            search: entry.search,
+            searchType: entry.searchType,
+            allWarehouses: form.getFieldValue('allWarehouses'),
+        });
+    }, [handleSearch, form]);
 
     const handleOpenScanner = () => {
         setDrawerVisible(false);
@@ -345,6 +388,7 @@ const UserDashboard = () => {
         setActiveOrder(null);
         setOrderDrawerVisible(false);
         fetchIncompleteOrders();
+        refreshSnapshot();
         Modal.confirm({
             title: t.orderConfirmedSuccess,
             content: t.orderConfirmedPrintPrompt(orderId),
@@ -528,42 +572,15 @@ const UserDashboard = () => {
                 </div>
             )}
 
-            {/* Empty product state */}
+            {/* Empty product state — daily snapshot */}
             {showEmptyProductState && (
-                <Spin spinning={loading} tip={t.searchingProduct} size="large">
-                    <div className="m-empty-state">
-                        <div className="m-empty-icon">
-                            <QrcodeOutlined/>
-                        </div>
-                        <Title level={4} style={{margin: '16px 0 8px', fontWeight: 700}}>
-                            {t.productSearch}
-                        </Title>
-                        <Text type="secondary" style={{fontSize: 14, display: 'block', marginBottom: 28}}>
-                            {t.productSearchSubtitle}
-                        </Text>
-                        <Flex vertical gap={12} style={{width: '100%', maxWidth: 320, margin: '0 auto'}}>
-                            <Button
-                                type="primary"
-                                size="large"
-                                icon={<QrcodeOutlined style={{fontSize: 20}}/>}
-                                onClick={handleOpenScanner}
-                                className="m-scan-btn-primary"
-                                block
-                            >
-                                {t.scan}
-                            </Button>
-                            <Button
-                                size="large"
-                                icon={<EditOutlined/>}
-                                onClick={handleOpenSearch}
-                                className="m-search-btn"
-                                block
-                            >
-                                {t.manualSearch || t.search}
-                            </Button>
-                        </Flex>
-                    </div>
-                </Spin>
+                <DailySnapshot
+                    username={authData?.user?.username}
+                    scansSummary={snapshotScans}
+                    recentScans={snapshotRecent}
+                    ordersSummary={snapshotOrders}
+                    onResearch={handleResearchFromHistory}
+                />
             )}
 
             {/* Product Results */}
