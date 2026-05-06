@@ -22,8 +22,6 @@ import inheritFromGroup from './inheritFromGroup';
 import {
     Badge,
     Button,
-    Card,
-    Carousel,
     Collapse,
     Drawer,
     Empty,
@@ -61,13 +59,16 @@ import {
     CheckCircleFilled,
 } from "@ant-design/icons";
 
-const {Title, Text} = Typography;
+const {Text} = Typography;
 
 const ORDER_STATUS_COLOR = {
     draft: 'blue',
     confirmed: 'green',
     cancelled: 'red',
 };
+
+const LOW_STOCK_THRESHOLD = 5;
+const MAX_STOCK_FOR_FULL_BAR = 15;
 
 const UserDashboard = () => {
     const [drawerVisible, setDrawerVisible] = useState(false);
@@ -303,6 +304,77 @@ const UserDashboard = () => {
             allWarehouses: form.getFieldValue('allWarehouses'),
         });
     }, [handleSearch, form]);
+
+    const renderWarehouseRow = (item, isMine) => {
+        const qty = Number(item.quantity) || 0;
+        const isEmpty = qty === 0;
+        const isLow = qty > 0 && qty <= LOW_STOCK_THRESHOLD;
+        const fillPct = Math.min(100, (qty / MAX_STOCK_FOR_FULL_BAR) * 100);
+        const qtyClass = isEmpty ? 'empty' : isLow ? 'low' : '';
+        const fillClass = isEmpty ? 'empty' : isLow ? 'low' : '';
+
+        return (
+            <div
+                key={`${item.warehouse}-${item.warehouse_name}`}
+                className={`m-balance-card ${isMine ? 'm-balance-card-highlight' : ''}`}
+            >
+                <Flex justify="space-between" align="flex-start" gap={12}>
+                    <div style={{flex: 1, minWidth: 0}}>
+                        <Text
+                            strong={isMine}
+                            className="m-balance-warehouse"
+                            ellipsis
+                        >
+                            {item.warehouse_name}
+                        </Text>
+                        <Text type="secondary" style={{fontSize: 12, display: 'block', marginTop: 2}}>
+                            {item.price} ₾
+                        </Text>
+                    </div>
+                    <Flex align="center" gap={8}>
+                        <span className={`m-balance-qty-num ${qtyClass}`}>{qty}</span>
+                        {showOrderPanel && (
+                            <Button
+                                type="primary"
+                                size="middle"
+                                icon={<PlusCircleOutlined/>}
+                                onClick={(e) => handleAddToOrderFromWarehouse(item, e)}
+                                disabled={qty <= 0}
+                                className="m-add-to-order-btn"
+                            />
+                        )}
+                    </Flex>
+                </Flex>
+                <div className="m-stock-meter">
+                    <div
+                        className={`fill ${fillClass}`}
+                        style={isEmpty ? undefined : {width: `${fillPct}%`}}
+                    />
+                </div>
+                {isLow && (
+                    <div className="m-low-stock-label">{t.lowStock}</div>
+                )}
+            </div>
+        );
+    };
+
+    const renderWarehouseSection = (items, isMine) => {
+        if (items.length === 0) return null;
+        return (
+            <>
+                <div className={`m-warehouse-section-header ${isMine ? 'mine' : ''}`}>
+                    {isMine ? '⭐ ' : '🏬 '}
+                    <Text strong style={{fontSize: 13, color: 'inherit'}}>
+                        {isMine ? t.myWarehouses : t.otherWarehouses}
+                    </Text>
+                    <Tag style={{marginLeft: 4}}>{items.length}</Tag>
+                </div>
+                <div className="m-balance-list">
+                    {items.map((item) => renderWarehouseRow(item, isMine))}
+                </div>
+            </>
+        );
+    };
 
     const handleOpenScanner = () => {
         setDrawerVisible(false);
@@ -586,114 +658,70 @@ const UserDashboard = () => {
             {!scannerOpen && hasResults && (
                 <Spin spinning={loading} tip={t.searchingProduct} size="large">
                     <div className="m-product-results">
-                        {/* Product Info Card */}
-                        <Card className="m-product-card" bordered={false}>
-                            {/* Product Images */}
-                            {productInfo.images && productInfo.images.length > 0 && (
-                                <div className="m-product-carousel">
-                                    <Carousel
-                                        arrows
-                                        infinite
-                                    >
-                                        {productInfo.images.map((img, index) => (
-                                            <div key={index}>
-                                                <img
-                                                    src={getImageSrc(img)}
-                                                    alt={`Product ${index + 1}`}
-                                                    className="m-product-image"
-                                                />
-                                            </div>
-                                        ))}
-                                    </Carousel>
-                                </div>
+                        {/* Product Hero */}
+                        <div className="m-product-hero">
+                            {productInfo.images && productInfo.images.length > 0 ? (
+                                <img
+                                    src={getImageSrc(productInfo.images[0])}
+                                    alt={productInfo.sku_name || ''}
+                                    className="m-product-hero-img"
+                                />
+                            ) : (
+                                <div className="m-product-hero-img placeholder"/>
                             )}
-
-                            {/* Product Details */}
-                            <div className="m-product-info">
-                                <Title level={4} style={{margin: '0 0 8px 0', fontSize: 17}}>
-                                    {productInfo.sku_name}
-                                </Title>
-                                <Flex gap={8} wrap="wrap">
-                                    <Tag color="blue" className="m-product-tag">
+                            <div className="m-product-hero-body">
+                                <div style={{flex: 1, minWidth: 0}}>
+                                    <div className="m-product-hero-title">
+                                        {productInfo.sku_name}
+                                    </div>
+                                    <div className="m-product-hero-article">
                                         {t.article}: {productInfo.article}
-                                    </Tag>
-                                    {productInfo.price && (
-                                        <Tag color="green" className="m-product-tag">
-                                            {productInfo.price} ₾
-                                        </Tag>
-                                    )}
-                                </Flex>
+                                    </div>
+                                </div>
+                                {productInfo.price && (
+                                    <div className="m-product-hero-price">
+                                        {productInfo.price} ₾
+                                    </div>
+                                )}
                             </div>
-                        </Card>
-
-                        {/* Balance Cards (mobile-friendly list) */}
-                        <div className="m-balance-section">
-                            <Flex align="center" gap={8} className="m-section-header">
-                                <InboxOutlined style={{color: '#1677ff', fontSize: 16}}/>
-                                <Text strong style={{fontSize: 15}}>{t.balance}</Text>
-                                <Tag style={{marginLeft: 4}}>{balances.length}</Tag>
-                            </Flex>
-
-                            <div className="m-balance-list">
-                                {balances.map((item, idx) => {
-                                    const isUserWarehouse = userWarehouses.map(wh => wh.name).includes(item.warehouse_name);
-                                    return (
-                                        <div
-                                            key={idx}
-                                            className={`m-balance-card ${isUserWarehouse ? 'm-balance-card-highlight' : ''}`}
-                                        >
-                                            <Flex justify="space-between" align="center" gap={12}>
-                                                <div style={{flex: 1, minWidth: 0}}>
-                                                    <Text
-                                                        strong={isUserWarehouse}
-                                                        className="m-balance-warehouse"
-                                                        ellipsis
-                                                    >
-                                                        {item.warehouse_name}
-                                                    </Text>
-                                                    <div className="m-balance-price">
-                                                        {item.price}
-                                                        <span className="m-balance-price-unit">₾</span>
-                                                    </div>
-                                                </div>
-                                                <Flex align="center" gap={8}>
-                                                    <Tag
-                                                        color={item.quantity > 0 ? 'green' : 'default'}
-                                                        className="m-balance-qty"
-                                                    >
-                                                        {item.quantity}
-                                                    </Tag>
-                                                    {showOrderPanel && (
-                                                        <Button
-                                                            type="primary"
-                                                            size="middle"
-                                                            icon={<PlusCircleOutlined/>}
-                                                            onClick={(e) => handleAddToOrderFromWarehouse(item, e)}
-                                                            disabled={item.quantity <= 0}
-                                                            className="m-add-to-order-btn"
-                                                        />
-                                                    )}
-                                                </Flex>
-                                            </Flex>
-                                        </div>
-                                    );
-                                })}
-                            </div>
-
-                            {!searchedAllWarehouses && userWarehouses.length > 0 && lastSearchRef.current && (
-                                <Button
-                                    type="default"
-                                    size="large"
-                                    icon={<AppstoreOutlined/>}
-                                    onClick={handleShowOtherWarehouses}
-                                    loading={loading}
-                                    block
-                                    className="m-show-other-warehouses-btn"
-                                >
-                                    {t.showOtherWarehouses}
-                                </Button>
-                            )}
                         </div>
+
+                        {/* Warehouse Sections */}
+                        {(() => {
+                            const userWarehouseNames = userWarehouses.map((w) => w.name);
+                            const hasUserWarehouses = userWarehouseNames.length > 0;
+                            if (!hasUserWarehouses) {
+                                return (
+                                    <div className="m-balance-section">
+                                        <div className="m-balance-list">
+                                            {balances.map((item) => renderWarehouseRow(item, false))}
+                                        </div>
+                                    </div>
+                                );
+                            }
+                            const mine = balances.filter((b) => userWarehouseNames.includes(b.warehouse_name));
+                            const others = balances.filter((b) => !userWarehouseNames.includes(b.warehouse_name));
+                            return (
+                                <div className="m-balance-section">
+                                    {renderWarehouseSection(mine, true)}
+                                    {renderWarehouseSection(others, false)}
+                                </div>
+                            );
+                        })()}
+
+                        {!searchedAllWarehouses && userWarehouses.length > 0 && lastSearchRef.current && (
+                            <Button
+                                type="default"
+                                size="large"
+                                icon={<AppstoreOutlined/>}
+                                onClick={handleShowOtherWarehouses}
+                                loading={loading}
+                                block
+                                className="m-show-other-warehouses-btn"
+                            >
+                                {t.seeAllWarehouses}
+                            </Button>
+                        )}
                     </div>
                 </Spin>
             )}
