@@ -46,6 +46,7 @@ import {
     ShoppingOutlined,
     ShoppingCartOutlined,
     InboxOutlined,
+    PictureOutlined,
     QrcodeOutlined,
     PlusOutlined,
     PlusCircleOutlined,
@@ -683,7 +684,10 @@ const UserDashboard = () => {
                                     className="m-product-hero-img"
                                 />
                             ) : (
-                                <div className="m-product-hero-img placeholder"/>
+                                <div className="m-product-hero-img placeholder">
+                                    <PictureOutlined/>
+                                    <span>{t.noImage}</span>
+                                </div>
                             )}
                             <div className="m-product-hero-body">
                                 <div style={{flex: 1, minWidth: 0}}>
