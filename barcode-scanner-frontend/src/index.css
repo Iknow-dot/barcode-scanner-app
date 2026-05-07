@@ -1027,6 +1027,10 @@
   background: #1a1a1a;
 }
 
+.dark-theme .m-product-hero-article {
+  color: rgba(255, 255, 255, 0.5);
+}
+
 .dark-theme .m-stock-meter {
   background: rgba(255, 255, 255, 0.08);
 }
