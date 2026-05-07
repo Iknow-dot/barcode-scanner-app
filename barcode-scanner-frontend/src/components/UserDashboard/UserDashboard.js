@@ -55,6 +55,7 @@ import {
     UserOutlined,
     CalendarOutlined,
     RightOutlined,
+    LeftOutlined,
     AppstoreOutlined,
     CheckCircleFilled,
 } from "@ant-design/icons";
@@ -304,6 +305,13 @@ const UserDashboard = () => {
             allWarehouses: form.getFieldValue('allWarehouses'),
         });
     }, [handleSearch, form]);
+
+    const handleBackToDashboard = useCallback(() => {
+        setBalances([]);
+        setProductInfo({sku_name: '', article: '', price: '', images: []});
+        setSearchedAllWarehouses(false);
+        lastSearchRef.current = null;
+    }, []);
 
     const renderWarehouseRow = (item, isMine) => {
         const qty = Number(item.quantity) || 0;
@@ -658,6 +666,14 @@ const UserDashboard = () => {
             {!scannerOpen && hasResults && (
                 <Spin spinning={loading} tip={t.searchingProduct} size="large">
                     <div className="m-product-results">
+                        <Button
+                            type="text"
+                            icon={<LeftOutlined/>}
+                            onClick={handleBackToDashboard}
+                            className="m-back-to-dashboard-btn"
+                        >
+                            {t.back}
+                        </Button>
                         {/* Product Hero */}
                         <div className="m-product-hero">
                             {productInfo.images && productInfo.images.length > 0 ? (

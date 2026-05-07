@@ -611,6 +611,21 @@
   margin-top: 4px;
 }
 
+.m-back-to-dashboard-btn {
+  margin-bottom: 6px;
+  padding-left: 4px !important;
+  padding-right: 8px !important;
+  height: 32px !important;
+  font-size: 13px !important;
+  color: rgba(0, 0, 0, 0.55) !important;
+}
+
+.m-back-to-dashboard-btn:hover,
+.m-back-to-dashboard-btn:focus {
+  color: #1677ff !important;
+  background: rgba(22, 119, 255, 0.06) !important;
+}
+
 .m-product-info {
   padding: 4px 0;
 }
@@ -1014,6 +1029,16 @@
 
 .dark-theme .m-stock-meter {
   background: rgba(255, 255, 255, 0.08);
+}
+
+.dark-theme .m-back-to-dashboard-btn {
+  color: rgba(255, 255, 255, 0.55) !important;
+}
+
+.dark-theme .m-back-to-dashboard-btn:hover,
+.dark-theme .m-back-to-dashboard-btn:focus {
+  color: #4096ff !important;
+  background: rgba(64, 150, 255, 0.1) !important;
 }
 
 /* ===== Empty State ===== */
