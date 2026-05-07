@@ -89,6 +89,7 @@ const UserDashboard = () => {
     const [orderMode, setOrderMode] = useState(false);
     const [activeOrder, setActiveOrder] = useState(null);
     const [customerModalOpen, setCustomerModalOpen] = useState(false);
+    const [changeCustomerOpen, setChangeCustomerOpen] = useState(false);
 
     // Incomplete orders state
     const [incompleteOrders, setIncompleteOrders] = useState([]);
@@ -420,6 +421,27 @@ const UserDashboard = () => {
             handleSaveForLater();
         }
         setCustomerModalOpen(true);
+    };
+
+    const handleChangeCustomerSelected = async (client) => {
+        setChangeCustomerOpen(false);
+        if (!activeOrder) return;
+        const fullName = (client.name || '').trim()
+            || [client.first_name, client.last_name].filter(Boolean).join(' ').trim();
+        const payload = {
+            customer_name: fullName || client.identification_number || client.phone || t.client,
+            customer_phone: client.phone || '',
+            customer_identification_number: client.identification_number || '',
+            external_client_id: client.external_client_id || '',
+        };
+        const result = await orderService.updateOrder(activeOrder.id, payload);
+        if (result.success) {
+            activeOrderRef.current = result.data;
+            setActiveOrder(result.data);
+            notify.success(t.success, t.customerChanged);
+        } else {
+            notify.error(t.orderError, result.error);
+        }
     };
 
     const handleClientSelected = async (client) => {
@@ -909,6 +931,15 @@ const UserDashboard = () => {
         <>
             {contextHolder}
 
+            {/* Change-customer modal — reuses ClientLookupModal but PATCHes the
+                active order's denormalized customer fields instead of creating
+                a new order. */}
+            <ClientLookupModal
+                open={changeCustomerOpen}
+                onSelect={handleChangeCustomerSelected}
+                onClose={() => setChangeCustomerOpen(false)}
+            />
+
             {/* Client Lookup Modal — CheckClient → CreateClient via 1C ConsultWebExchange */}
             <ClientLookupModal
                 open={customerModalOpen}
@@ -1074,6 +1105,7 @@ const UserDashboard = () => {
                             onSaveForLater={handleSaveForLater}
                             onProceedToPayment={handleProceedToPayment}
                             onDeleteOrder={handleDeleteActiveOrder}
+                            onChangeCustomer={() => setChangeCustomerOpen(true)}
                             notify={notify}
                             isMobileDrawer={true}
                         />

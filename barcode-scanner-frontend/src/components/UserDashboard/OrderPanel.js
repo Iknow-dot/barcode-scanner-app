@@ -31,6 +31,7 @@ import {
     ShoppingCartOutlined,
     DeleteOutlined,
     UserOutlined,
+    UserSwitchOutlined,
     SaveOutlined,
     DollarOutlined,
     CarOutlined,
@@ -927,7 +928,7 @@ const NotesSection = memo(({order, onLocalOrderUpdate, notify, t}) => {
 
 NotesSection.displayName = 'NotesSection';
 
-const OrderPanel = ({order: initialOrder, onSaveForLater, onProceedToPayment, onDeleteOrder, onOrderUpdate, notify, isMobileDrawer}) => {
+const OrderPanel = ({order: initialOrder, onSaveForLater, onProceedToPayment, onDeleteOrder, onOrderUpdate, onChangeCustomer, notify, isMobileDrawer}) => {
     const {t} = useLanguage();
     const {authData} = useContext(AuthContext);
     const discountConfig = useMemo(() => ({
@@ -1004,6 +1005,14 @@ const OrderPanel = ({order: initialOrder, onSaveForLater, onProceedToPayment, on
 
     const orderActionsMenu = {
         items: [
+            ...(onChangeCustomer
+                ? [{
+                    key: 'change-customer',
+                    label: t.changeCustomer,
+                    icon: <UserSwitchOutlined/>,
+                    onClick: onChangeCustomer,
+                }]
+                : []),
             {
                 key: 'delete',
                 label: t.deleteOrder || t.delete || 'Delete',
