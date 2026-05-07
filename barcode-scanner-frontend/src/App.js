@@ -115,7 +115,7 @@ const MainContentView = ({children, isDark, toggleTheme}) => {
 
     return (
         <Layout style={{minHeight: "100vh", overflowX: "hidden"}}>
-            {screens.lg && (
+            {screens.lg && subNav?.length > 0 && (
                 <Sider
                     breakpoint="lg"
                     theme={isDarkMode ? "dark" : "light"}
