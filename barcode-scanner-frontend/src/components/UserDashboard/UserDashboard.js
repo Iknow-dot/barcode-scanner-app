@@ -509,8 +509,10 @@ const UserDashboard = () => {
             activeOrderRef.current = result.data;
             setActiveOrder(result.data);
             setOrderMode(true);
-            // Switch to scan tab so user can start scanning
+            // Land on the scan tab and open the cart drawer so the user sees
+            // what's already in the resumed order before scanning more.
             setActiveTab('scan');
+            setOrderDrawerVisible(true);
             playOrderResumedSound();
         } else {
             notify.error(t.orderError, result.error);
