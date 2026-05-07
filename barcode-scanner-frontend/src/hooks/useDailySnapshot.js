@@ -12,6 +12,24 @@ const formatTodayISO = () => {
     return `${y}-${m}-${d}`;
 };
 
+// Builds the recent-scans list shown on the dashboard:
+//  - Drops not-found scans (those still count toward the KPI but the user
+//    has no product to revisit).
+//  - Keeps only the most recent scan per SKU so a single product scanned
+//    five times doesn't crowd out the rest of the day's history.
+const buildRecentScansView = (scans, limit) => {
+    const seen = new Set();
+    const out = [];
+    for (const scan of scans) {
+        if (!scan.found || !scan.sku) continue;
+        if (seen.has(scan.sku)) continue;
+        seen.add(scan.sku);
+        out.push(scan);
+        if (out.length >= limit) break;
+    }
+    return out;
+};
+
 const useDailySnapshot = (currentUserId) => {
     const [refreshTick, setRefreshTick] = useState(0);
     const [scansSummary, setScansSummary] = useState({count: 0, foundCount: 0, notFoundCount: 0});
@@ -20,7 +38,7 @@ const useDailySnapshot = (currentUserId) => {
 
     useEffect(() => {
         setScansSummary(getTodaySummary());
-        setRecentScans(getTodayScans().slice(0, RECENT_SCANS_LIMIT));
+        setRecentScans(buildRecentScansView(getTodayScans(), RECENT_SCANS_LIMIT));
     }, [refreshTick]);
 
     useEffect(() => {
