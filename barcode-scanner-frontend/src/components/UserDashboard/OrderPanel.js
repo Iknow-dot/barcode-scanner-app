@@ -954,13 +954,20 @@ const OrderPanel = ({order: initialOrder, onSaveForLater, onProceedToPayment, on
     // (e.g., when a product is added to the order from the scan tab)
     const lastOrderIdRef = useRef(initialOrder?.id);
     const lastItemCountRef = useRef(initialOrder?.items?.length || 0);
+    // The panel never edits customer info itself, so any change in either
+    // identifier is by definition an external update — sync immediately.
+    const lastCustomerKeyRef = useRef(
+        `${initialOrder?.external_client_id || ''}|${initialOrder?.customer_name || ''}`,
+    );
 
     useEffect(() => {
+        const newCustomerKey = `${initialOrder?.external_client_id || ''}|${initialOrder?.customer_name || ''}`;
         // Always sync if order ID changed (different order loaded)
         if (initialOrder?.id !== lastOrderIdRef.current) {
             setLocalOrder(initialOrder);
             lastOrderIdRef.current = initialOrder?.id;
             lastItemCountRef.current = initialOrder?.items?.length || 0;
+            lastCustomerKeyRef.current = newCustomerKey;
             setStep(1);
             return;
         }
@@ -969,6 +976,13 @@ const OrderPanel = ({order: initialOrder, onSaveForLater, onProceedToPayment, on
         if (newItemCount !== lastItemCountRef.current) {
             setLocalOrder(initialOrder);
             lastItemCountRef.current = newItemCount;
+        }
+        // Sync if the customer was changed externally (e.g. via "Change
+        // customer" in the actions menu — the parent PATCHes the order and
+        // pushes the new data through props).
+        if (newCustomerKey !== lastCustomerKeyRef.current) {
+            setLocalOrder(initialOrder);
+            lastCustomerKeyRef.current = newCustomerKey;
         }
     }, [initialOrder]);
 
