@@ -195,6 +195,10 @@ const UserDashboard = () => {
     // button can re-run it with the warehouse filter dropped.
     const lastSearchRef = useRef(null);
     const [searchedAllWarehouses, setSearchedAllWarehouses] = useState(false);
+    // When true, the "Other warehouses" section is collapsed in the UI even
+    // though the data exists in `balances`. Lets the user fetch-then-hide
+    // without paying for another round-trip.
+    const [othersCollapsed, setOthersCollapsed] = useState(true);
 
     const handleSearch = useCallback(async ({search, searchType, allWarehouses}) => {
         if (isSearchingRef.current) return;
@@ -236,6 +240,7 @@ const UserDashboard = () => {
                 });
                 lastSearchRef.current = {search, searchType};
                 setSearchedAllWarehouses(!!allWarehouses);
+                setOthersCollapsed(!allWarehouses);
                 setDrawerVisible(false);
                 // Switch to scan tab to show results
                 setActiveTab('scan');
@@ -311,8 +316,19 @@ const UserDashboard = () => {
         setBalances([]);
         setProductInfo({sku_name: '', article: '', price: '', images: []});
         setSearchedAllWarehouses(false);
+        setOthersCollapsed(true);
         lastSearchRef.current = null;
     }, []);
+
+    const handleToggleOthers = useCallback(() => {
+        // First time the user wants to see other warehouses — fetch them.
+        // Subsequent toggles just flip visibility without another round-trip.
+        if (othersCollapsed && !searchedAllWarehouses && lastSearchRef.current) {
+            handleShowOtherWarehouses();
+        } else {
+            setOthersCollapsed((prev) => !prev);
+        }
+    }, [othersCollapsed, searchedAllWarehouses, handleShowOtherWarehouses]);
 
     const renderWarehouseRow = (item, isMine) => {
         const qty = Number(item.quantity) || 0;
@@ -726,23 +742,25 @@ const UserDashboard = () => {
                             return (
                                 <div className="m-balance-section">
                                     {renderWarehouseSection(mine, true)}
-                                    {renderWarehouseSection(others, false)}
+                                    {!othersCollapsed && renderWarehouseSection(others, false)}
                                 </div>
                             );
                         })()}
 
-                        {!searchedAllWarehouses && userWarehouses.length > 0 && lastSearchRef.current && (
-                            <Button
-                                type="default"
-                                size="large"
-                                icon={<AppstoreOutlined/>}
-                                onClick={handleShowOtherWarehouses}
-                                loading={loading}
-                                block
-                                className="m-show-other-warehouses-btn"
-                            >
-                                {t.seeAllWarehouses}
-                            </Button>
+                        {userWarehouses.length > 0 && lastSearchRef.current && (
+                            (!searchedAllWarehouses || balances.some((b) => !userWarehouses.map((w) => w.name).includes(b.warehouse_name))) && (
+                                <Button
+                                    type="default"
+                                    size="large"
+                                    icon={<AppstoreOutlined/>}
+                                    onClick={handleToggleOthers}
+                                    loading={loading}
+                                    block
+                                    className="m-show-other-warehouses-btn"
+                                >
+                                    {othersCollapsed ? t.seeAllWarehouses : t.hideOtherWarehouses}
+                                </Button>
+                            )
                         )}
                     </div>
                 </Spin>
