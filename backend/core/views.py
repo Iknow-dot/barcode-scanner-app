@@ -79,6 +79,19 @@ def _enforce_discount_permission(user, *, base_price, discount_percent, discount
     base = Decimal(base_price or 0)
     set_price = Decimal(discounted_price) if discounted_price is not None else None
 
+    # Reject markups disguised as discounts: setting `discounted_price`
+    # higher than `base_price` would otherwise slip past the discount check
+    # below (it isn't a "discount") yet still inflate the line total via
+    # PurchaseOrderItem.effective_price. This was producing invoices whose
+    # total exceeded the product price.
+    if set_price is not None and base > 0 and set_price > base:
+        return Response(
+            {"code": "DISCOUNTED_PRICE_ABOVE_BASE",
+             "detail": "The amount cannot exceed the base product price.",
+             "base_price": str(base)},
+            status=http_status.HTTP_400_BAD_REQUEST,
+        )
+
     set_price_is_discount = (
         set_price is not None and base > 0 and set_price < base
     )

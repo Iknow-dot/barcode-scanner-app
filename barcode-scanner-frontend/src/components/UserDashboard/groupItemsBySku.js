@@ -44,6 +44,11 @@ const groupItemsBySku = (items) => {
         const isMixedPrice = !allEqual(effectivePrices);
         const sharedPrice = isMixedPrice ? null : effectivePrices[0];
         const [minPrice, maxPrice] = minMax(lines, 'effective_price');
+        // Highest *undiscounted* price across the group's lines — used as the
+        // upper bound for the shared price input so users can't enter a value
+        // above the base product price (which would be a markup, not a
+        // discount, and would inflate the order total).
+        const [, maxBasePrice] = minMax(lines, 'price');
 
         const discountSignatures = lines.map((l) => `${l.discount_percent}|${l.discounted_price ?? ''}`);
         const isMixedDiscount = !allEqual(discountSignatures);
@@ -62,6 +67,7 @@ const groupItemsBySku = (items) => {
             sharedPrice,
             minPrice,
             maxPrice,
+            maxBasePrice,
             isMixedPrice,
             sharedDiscountPercent,
             sharedDiscountedPrice,

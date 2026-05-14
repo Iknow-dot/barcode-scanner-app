@@ -46,6 +46,23 @@ const AUTO_LOOKUP_DEBOUNCE_MS = 1500;
 const ADDRESS_SEARCH_MIN_CHARS = 3;
 const ADDRESS_SEARCH_DEBOUNCE_MS = 300;
 
+// Georgian personal IDs are exactly 11 digits. Anything else is almost
+// certainly a phone typed into the wrong field — reject before contacting 1C
+// so we don't return a false-positive client match against the phone column.
+const PERSONAL_ID_RE = /^\d{11}$/;
+// Georgian mobile numbers are 9 digits beginning with 5 (the operator prefix).
+// Strip a leading +995 / 995 / 0 if the user pasted an international form.
+const normalizePhone = (raw) => {
+    let v = (raw || '').replace(/[\s()-]/g, '');
+    if (v.startsWith('+995')) v = v.slice(4);
+    else if (v.startsWith('995')) v = v.slice(3);
+    else if (v.startsWith('0')) v = v.slice(1);
+    return v;
+};
+const MOBILE_RE = /^5\d{8}$/;
+const isValidPersonalId = (v) => PERSONAL_ID_RE.test(v || '');
+const isValidPhone = (v) => MOBILE_RE.test(normalizePhone(v));
+
 const ClientLookupModal = ({open, onSelect, onClose}) => {
     const {t} = useLanguage();
     const [step, setStep] = useState(STEP_LOOKUP);
@@ -104,14 +121,31 @@ const ClientLookupModal = ({open, onSelect, onClose}) => {
         };
     }, []);
 
-    const showErrorMessage = (code, fallback) => {
+    const showErrorMessage = (code, fallback, detail) => {
         const key = ERROR_CODE_MESSAGES[code];
-        message.error((key && t[key]) || fallback);
+        // Prefer a translated message keyed off the error code; fall back to
+        // the backend-supplied detail (DRF field errors / `detail` strings)
+        // before the generic fallback so registration failures aren't
+        // swallowed behind an opaque "Error creating client" toast.
+        const text = (key && t[key]) || detail || fallback;
+        message.error(text);
     };
 
     const performLookup = async (idNumber, phone) => {
         if (!idNumber && !phone) {
             message.warning(t.enterIdOrPhone);
+            return;
+        }
+        // Reject the lookup unless the typed values look like the right kind
+        // of identifier. Without this guard, a personal number entered into
+        // the phone field (or vice-versa) is forwarded to 1C as `IDPhone`,
+        // which matches against either column and returns a misleading hit.
+        if (idNumber && !isValidPersonalId(idNumber)) {
+            message.warning(t.invalidPersonalId);
+            return;
+        }
+        if (phone && !isValidPhone(phone)) {
+            message.warning(t.invalidPhone);
             return;
         }
         setLookupLoading(true);
@@ -150,7 +184,7 @@ const ClientLookupModal = ({open, onSelect, onClose}) => {
                 });
                 setStep(STEP_CREATE);
             } else {
-                showErrorMessage(result.code, t.clientLookupError);
+                showErrorMessage(result.code, t.clientLookupError, result.error);
             }
         } finally {
             setLookupLoading(false);
@@ -195,6 +229,10 @@ const ClientLookupModal = ({open, onSelect, onClose}) => {
             lastAutoLookupId.current = '';
             return;
         }
+        // Don't auto-trigger lookups for partial / wrong-format values — they
+        // either return nothing or, worse, match against the phone column
+        // when the user is mid-typing a phone-shaped value.
+        if (!isValidPersonalId(value)) return;
         if (lastAutoLookupId.current === value) return;
         autoLookupTimer.current = setTimeout(() => {
             autoLookupTimer.current = null;
@@ -265,7 +303,7 @@ const ClientLookupModal = ({open, onSelect, onClose}) => {
                     address: result.data?.address || values.address_line || '',
                 });
             } else {
-                showErrorMessage(result.code, t.clientCreateError);
+                showErrorMessage(result.code, t.clientCreateError, result.error);
             }
         } finally {
             setCreateLoading(false);

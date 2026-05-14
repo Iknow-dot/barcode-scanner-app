@@ -219,7 +219,12 @@ const UserDashboard = () => {
 
             if (result.success && result.data?.stock) {
                 playFoundSound();
-                setBalances(result.data.stock);
+                // Drop warehouses with a negative balance — they're an upstream
+                // accounting artefact, not stock the user can actually sell.
+                const visibleStock = (result.data.stock || []).filter(
+                    (b) => (Number(b.quantity) || 0) >= 0
+                );
+                setBalances(visibleStock);
                 recordScan({
                     search,
                     searchType,
@@ -227,7 +232,7 @@ const UserDashboard = () => {
                     sku: result.data.sku,
                     sku_name: result.data.sku_name,
                     price: result.data.price,
-                    total_qty: (result.data.stock || []).reduce(
+                    total_qty: visibleStock.reduce(
                         (sum, b) => sum + (Number(b.quantity) || 0), 0,
                     ),
                 });

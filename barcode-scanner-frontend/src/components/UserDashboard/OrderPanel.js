@@ -333,8 +333,13 @@ const OrderItemGroupCard = memo(({
             setStockLoading(false);
             stockPromiseRef.current = null;
             if (result.success && Array.isArray(result.data?.stock)) {
-                setStock(result.data.stock);
-                return result.data.stock;
+                // Mirror the scan view: hide warehouses with negative balance
+                // — they're upstream accounting artefacts, not sellable stock.
+                const visibleStock = result.data.stock.filter(
+                    (s) => (Number(s.quantity) || 0) >= 0
+                );
+                setStock(visibleStock);
+                return visibleStock;
             }
             // eslint-disable-next-line no-console
             console.warn('[cart] stock fetch failed for', lookupKey, result);
@@ -507,8 +512,17 @@ const OrderItemGroupCard = memo(({
     const displayedTotalQty = pendingTarget != null ? pendingTarget : group.totalQty;
     const exceeds = totalStock != null && displayedTotalQty > totalStock;
 
+    const priceCap = parseFloat(group.maxBasePrice || 0);
+
     const handleSharedPriceChange = (val) => {
         if (val == null || !Number.isFinite(val) || val < 0) return;
+        // Hard-cap on the frontend to match the backend's
+        // DISCOUNTED_PRICE_ABOVE_BASE check — prevents the user from inflating
+        // the line total by entering a value above the product's base price.
+        if (priceCap > 0 && val > priceCap) {
+            notify.error(t.orderError, t.discountedPriceAboveBase);
+            return;
+        }
         applyBulk(
             {discounted_price: val, discount_percent: 0},
             group.isMixedPrice,
@@ -532,6 +546,7 @@ const OrderItemGroupCard = memo(({
                         placeholder={t.setPrice}
                         controls={false}
                         addonAfter="₾"
+                        max={priceCap > 0 ? priceCap : undefined}
                         onPressEnter={(e) => handleSharedPriceChange(parseFloat(e.target.value))}
                         onBlur={(e) => {
                             const v = parseFloat(e.target.value);
@@ -546,6 +561,7 @@ const OrderItemGroupCard = memo(({
                     value={parseFloat(group.sharedPrice)}
                     controls={false}
                     addonAfter="₾"
+                    max={priceCap > 0 ? priceCap : undefined}
                     onPressEnter={(e) => handleSharedPriceChange(parseFloat(e.target.value))}
                     onBlur={(e) => {
                         const v = parseFloat(e.target.value);
@@ -755,7 +771,8 @@ const DeliverySection = memo(({order, onLocalOrderUpdate, notify, t, deliveryExp
     }, [order.id, onLocalOrderUpdate, notify, t]);
 
     const handleDeliveryDateChange = useCallback(async (date, dateString) => {
-        const result = await orderService.updateOrder(order.id, {delivery_date: dateString || ''});
+        // DRF DateField rejects empty strings; send null when the user clears.
+        const result = await orderService.updateOrder(order.id, {delivery_date: dateString || null});
         if (result.success) {
             onLocalOrderUpdate(result.data);
         } else {
@@ -764,7 +781,7 @@ const DeliverySection = memo(({order, onLocalOrderUpdate, notify, t, deliveryExp
     }, [order.id, onLocalOrderUpdate, notify, t]);
 
     const handleDeliveryTimeFromChange = useCallback(async (time, timeString) => {
-        const result = await orderService.updateOrder(order.id, {delivery_time_from: timeString || ''});
+        const result = await orderService.updateOrder(order.id, {delivery_time_from: timeString || null});
         if (result.success) {
             onLocalOrderUpdate(result.data);
         } else {
@@ -773,7 +790,7 @@ const DeliverySection = memo(({order, onLocalOrderUpdate, notify, t, deliveryExp
     }, [order.id, onLocalOrderUpdate, notify, t]);
 
     const handleDeliveryTimeToChange = useCallback(async (time, timeString) => {
-        const result = await orderService.updateOrder(order.id, {delivery_time_to: timeString || ''});
+        const result = await orderService.updateOrder(order.id, {delivery_time_to: timeString || null});
         if (result.success) {
             onLocalOrderUpdate(result.data);
         } else {

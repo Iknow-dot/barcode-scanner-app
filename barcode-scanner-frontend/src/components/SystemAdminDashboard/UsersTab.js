@@ -9,11 +9,9 @@ import {CheckOutlined, CloseOutlined, ClearOutlined, SearchOutlined} from "@ant-
 import useAppNotification from "../../hooks/useAppNotification";
 import {useLanguage} from '../../i18n/LanguageContext';
 import dayjs from 'dayjs';
-import relativeTime from 'dayjs/plugin/relativeTime';
 import 'dayjs/locale/ka';
 import 'dayjs/locale/en';
-
-dayjs.extend(relativeTime);
+import formatRelativeTime from '../../utils/formatRelativeTime';
 
 const {Text} = Typography;
 
@@ -43,13 +41,21 @@ const initialsFor = (user) => {
 const ROLE_RANK = {internal_admin: 0, company_admin: 1, company_user: 2};
 
 // Format a user's last_login in the active language. Recent values become
-// "5 minutes ago" / "3 days ago"; older than 30 days falls back to the
-// absolute date so the relative noise stops being useful.
+// "5 minutes ago" / "3 days ago" via the shared formatRelativeTime util;
+// older than 30 days falls back to the absolute date so the relative noise
+// stops being useful.
+//
+// We render relative time from the translations table rather than dayjs's
+// built-in `fromNow` because the dayjs `ka` locale ships awkward strings
+// ("3 დღის განმავლობაში წინ", "თვის წინ" without a count) — see ClickUp
+// 86c9p6vhg.
 const formatLastLogin = (iso, language, t) => {
     if (!iso) return <span style={{opacity: 0.45}}>{t.neverLoggedIn}</span>;
     const d = dayjs(iso).locale(language === 'ka' ? 'ka' : 'en');
     const diffDays = dayjs().diff(d, 'day');
-    const text = diffDays > 30 ? d.format('MMM D, YYYY') : d.fromNow();
+    const text = diffDays > 30
+        ? d.format('MMM D, YYYY')
+        : formatRelativeTime(d.valueOf(), t);
     return <span title={d.format('YYYY-MM-DD HH:mm')}>{text}</span>;
 };
 

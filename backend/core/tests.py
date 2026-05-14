@@ -2018,6 +2018,23 @@ class PurchaseOrderBulkUpdateTests(TestCase):
         self.assertIsNone(self.item_a.discounted_price)
         self.assertIsNone(self.item_b.discounted_price)
 
+    def test_rejects_discounted_price_above_base(self):
+        # Regression for ClickUp 86c9n9exd: setting `discounted_price` higher
+        # than `price` previously slipped past the discount-cap check (since
+        # it isn't a "discount") and inflated the line total via
+        # PurchaseOrderItem.effective_price, producing invoices whose total
+        # exceeded the product price. The validator now rejects it with 400.
+        response = self.client.patch(
+            self.url,
+            {'item_ids': [self.item_a.id],
+             'data': {'discounted_price': '150.00', 'discount_percent': '0'}},
+            format='json',
+        )
+        self.assertEqual(response.status_code, 400, response.data)
+        self.assertEqual(response.data['code'], 'DISCOUNTED_PRICE_ABOVE_BASE')
+        self.item_a.refresh_from_db()
+        self.assertIsNone(self.item_a.discounted_price)
+
     def test_other_org_order_returns_404(self):
         other_org = _make_organization(name='Other', identification_number='999')
         other_user = User.objects.create_user(
