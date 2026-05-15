@@ -1,6 +1,6 @@
 import React, {useContext, useEffect, useMemo, useRef, useState} from 'react';
 import {userService, organizationService} from '../../api';
-import {Avatar, Button, Col, Empty, Flex, Input, Popconfirm, Progress, Row, Select, Space, Tag, Tooltip, Typography} from "antd";
+import {Avatar, Button, Col, Empty, Flex, Input, Popconfirm, Progress, Row, Select, Space, Tag, theme, Tooltip, Typography} from "antd";
 import DataTab from "../DataTab";
 import AuthContext from "../Auth/AuthContext";
 import AddUserModal from "../User/AddUserModal";
@@ -77,6 +77,7 @@ const UsersTab = ({initialUsers, initialLoading = false, addModalExtraProps, han
 
     const isInternalAdmin = authData?.role === 'internal_admin';
     const isCompanyAdmin = authData?.role === 'company_admin';
+    const {token} = theme.useToken();
 
     const roleLabels = useMemo(() => ({
         internal_admin: t.roleInternalAdmin,
@@ -339,7 +340,7 @@ const UsersTab = ({initialUsers, initialLoading = false, addModalExtraProps, han
                 styles={{image: {height: 56, marginTop: 24}}}
                 description={
                     <div style={{padding: '4px 0 12px'}}>
-                        <div style={{fontWeight: 500, color: 'rgba(0,0,0,0.75)', marginBottom: 4}}>
+                        <div style={{fontWeight: 500, color: token.colorText, marginBottom: 4}}>
                             {filtered ? t.noFilterMatchTitle : t.noUsersTitle}
                         </div>
                         <Text type="secondary" style={{fontSize: 13}}>
@@ -361,15 +362,15 @@ const UsersTab = ({initialUsers, initialLoading = false, addModalExtraProps, han
 
             {isInternalAdmin && filtersEnabled && orgsByPressure.length > 0 && (
                 <div style={{
-                    background: 'rgba(0, 0, 0, 0.02)',
-                    border: '1px solid rgba(0, 0, 0, 0.06)',
+                    background: token.colorFillQuaternary,
+                    border: `1px solid ${token.colorBorderSecondary}`,
                     borderRadius: 8,
                     padding: 12,
                     marginBottom: 12,
                 }}>
                     <div style={{
                         fontSize: 11,
-                        color: 'rgba(0, 0, 0, 0.55)',
+                        color: token.colorTextSecondary,
                         fontWeight: 600,
                         textTransform: 'uppercase',
                         letterSpacing: 0.5,
@@ -392,12 +393,13 @@ const UsersTab = ({initialUsers, initialLoading = false, addModalExtraProps, han
                                         onClick={() => handleOrgChange(active ? null : org.id)}
                                         style={{
                                             width: '100%',
-                                            background: active ? 'rgba(22, 119, 255, 0.06)' : '#fff',
-                                            border: `1px solid ${active ? '#1677ff' : 'rgba(0, 0, 0, 0.08)'}`,
+                                            background: active ? 'rgba(22, 119, 255, 0.06)' : token.colorBgContainer,
+                                            border: `1px solid ${active ? '#1677ff' : token.colorBorder}`,
                                             borderRadius: 6,
                                             padding: '8px 10px',
                                             textAlign: 'left',
                                             cursor: 'pointer',
+                                            color: token.colorText,
                                             transition: 'background 0.15s, border-color 0.15s',
                                         }}
                                     >
@@ -408,11 +410,11 @@ const UsersTab = ({initialUsers, initialLoading = false, addModalExtraProps, han
                                                 overflow: 'hidden',
                                                 textOverflow: 'ellipsis',
                                                 whiteSpace: 'nowrap',
-                                                color: 'rgba(0, 0, 0, 0.85)',
+                                                color: token.colorText,
                                             }}>{org.name}</span>
                                             <span style={{
                                                 fontSize: 12,
-                                                color: full ? '#ff4d4f' : 'rgba(0, 0, 0, 0.55)',
+                                                color: full ? '#ff4d4f' : token.colorTextSecondary,
                                                 fontWeight: 500,
                                                 fontVariantNumeric: 'tabular-nums',
                                                 flexShrink: 0,
@@ -560,7 +562,7 @@ const UsersTab = ({initialUsers, initialLoading = false, addModalExtraProps, han
                                     {(fullName || user.email) && (
                                         <div style={{
                                             fontSize: 12,
-                                            color: 'rgba(0, 0, 0, 0.45)',
+                                            color: token.colorTextTertiary,
                                             lineHeight: 1.3,
                                             marginTop: 2,
                                             overflow: 'hidden',

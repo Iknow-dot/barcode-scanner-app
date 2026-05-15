@@ -1057,6 +1057,10 @@
   background: rgba(255, 255, 255, 0.08);
 }
 
+.dark-theme .m-balance-qty-num.empty {
+  color: rgba(255, 255, 255, 0.3);
+}
+
 .dark-theme .m-back-to-dashboard-btn {
   color: rgba(255, 255, 255, 0.55) !important;
 }

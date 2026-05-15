@@ -1,6 +1,6 @@
 import React, {useEffect, useState} from 'react';
 import {organizationService} from '../../api';
-import {Flex, Progress} from "antd";
+import {Flex, Progress, theme} from "antd";
 import DataTab from "../DataTab";
 import AddOrganization from "../Organization/AddOrganization";
 import EditOrganization from "../Organization/EditOrganization";
@@ -9,6 +9,7 @@ import useAppNotification from "../../hooks/useAppNotification";
 import {useLanguage} from '../../i18n/LanguageContext';
 
 const QuotaCell = ({org}) => {
+    const {token} = theme.useToken();
     const used = (org.users || []).filter(u => u.role === 'company_user').length;
     const limit = org.employees_count || 0;
     const pct = limit > 0 ? Math.min(100, Math.round((used / limit) * 100)) : 0;
@@ -19,7 +20,7 @@ const QuotaCell = ({org}) => {
             <Flex align="center" justify="space-between" gap={8} style={{marginBottom: 4}}>
                 <span style={{
                     fontSize: 12,
-                    color: full ? '#ff4d4f' : 'rgba(0, 0, 0, 0.65)',
+                    color: full ? '#ff4d4f' : token.colorTextSecondary,
                     fontWeight: 500,
                     fontVariantNumeric: 'tabular-nums',
                 }}>

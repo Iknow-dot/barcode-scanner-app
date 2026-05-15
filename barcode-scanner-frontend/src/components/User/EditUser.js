@@ -1,7 +1,7 @@
 import React, {useState, useEffect, useContext} from 'react';
 import {userService, organizationService, warehouseService} from '../../api';
 import AuthContext from '../Auth/AuthContext';
-import {Button, Divider, Flex, Form, Input, InputNumber, Select, Space, Switch, Tag, Tooltip} from "antd";
+import {Button, Divider, Flex, Form, Input, InputNumber, Select, Space, Switch, Tag, theme, Tooltip} from "antd";
 import ModalForm, {RenderOption, useModalFormLoading} from "../ModalForm";
 import {SaveOutlined, UserOutlined, LockOutlined, MailOutlined, SafetyCertificateOutlined, PercentageOutlined} from "@ant-design/icons";
 import {useLanguage} from '../../i18n/LanguageContext';
@@ -11,21 +11,25 @@ const roleTagColors = {
     company_user: 'geekblue',
 };
 
-const RoleOption = ({label, desc}) => (
-    <div style={{padding: '2px 0'}}>
-        <div style={{fontWeight: 500, lineHeight: 1.3}}>{label}</div>
-        {desc && (
-            <div style={{fontSize: 12, color: 'rgba(0, 0, 0, 0.45)', marginTop: 2, lineHeight: 1.3}}>
-                {desc}
-            </div>
-        )}
-    </div>
-);
+const RoleOption = ({label, desc}) => {
+    const {token} = theme.useToken();
+    return (
+        <div style={{padding: '2px 0'}}>
+            <div style={{fontWeight: 500, lineHeight: 1.3}}>{label}</div>
+            {desc && (
+                <div style={{fontSize: 12, color: token.colorTextTertiary, marginTop: 2, lineHeight: 1.3}}>
+                    {desc}
+                </div>
+            )}
+        </div>
+    );
+};
 
 const EditUserForm = ({object, hasExistingIps}) => {
     const {authData} = useContext(AuthContext);
     const {t} = useLanguage();
     const {loading} = useModalFormLoading();
+    const {token} = theme.useToken();
 
     const [IPOptions, setIPOptions] = useState([]);
     const [organizations, setOrganizations] = useState([]);
@@ -220,7 +224,7 @@ const EditUserForm = ({object, hasExistingIps}) => {
                     <SafetyCertificateOutlined style={{color: '#1677ff', fontSize: 16}}/>
                     <span style={{fontWeight: 500}}>{t.restrictByIp}</span>
                     <Tooltip title={t.restrictByIpHint}>
-                        <span style={{fontSize: 12, color: 'rgba(0,0,0,0.45)', cursor: 'help'}}>?</span>
+                        <span style={{fontSize: 12, color: token.colorTextTertiary, cursor: 'help'}}>?</span>
                     </Tooltip>
                 </Space>
                 <Switch
@@ -259,7 +263,7 @@ const EditUserForm = ({object, hasExistingIps}) => {
                     <PercentageOutlined style={{color: '#1677ff', fontSize: 16}}/>
                     <span style={{fontWeight: 500}}>{t.canApplyDiscount}</span>
                     <Tooltip title={t.canApplyDiscountHint}>
-                        <span style={{fontSize: 12, color: 'rgba(0,0,0,0.45)', cursor: 'help'}}>?</span>
+                        <span style={{fontSize: 12, color: token.colorTextTertiary, cursor: 'help'}}>?</span>
                     </Tooltip>
                 </Space>
                 <Form.Item
