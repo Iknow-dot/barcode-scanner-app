@@ -77,6 +77,13 @@
     {% if order.customer_identification_number %}<p>ID: {{ order.customer_identification_number }}</p>{% endif %}
     {% if order.customer_phone %}<p>{{ order.customer_phone }}</p>{% endif %}
   </div>
+  {% if order.recipient_is_different %}
+  <div class="meta-block">
+    <h3>Recipient</h3>
+    <p>{{ order.recipient_first_name }} {{ order.recipient_last_name }}</p>
+    {% if order.recipient_phone %}<p>{{ order.recipient_phone }}</p>{% endif %}
+  </div>
+  {% endif %}
   <div class="meta-block">
     <h3>Delivery</h3>
     <p>{{ order.get_delivery_type_display }}</p>

@@ -143,6 +143,13 @@ class PurchaseOrder(models.Model):
     delivery_time_to = models.TimeField(null=True, blank=True)
     delivery_notes = models.TextField(blank=True, default='')
 
+    # Recipient: when False, the buyer (customer_*) receives the product.
+    # When True, the recipient_* fields below hold a third-party recipient.
+    recipient_is_different = models.BooleanField(default=False)
+    recipient_first_name = models.CharField(max_length=128, blank=True, default='')
+    recipient_last_name = models.CharField(max_length=128, blank=True, default='')
+    recipient_phone = models.CharField(max_length=50, blank=True, default='')
+
     # General notes / comments
     notes = models.TextField(blank=True, default='')
 

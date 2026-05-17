@@ -415,6 +415,8 @@ class PurchaseOrderSerializer(serializers.ModelSerializer):
             'created_by', 'created_by_username',
             'status', 'delivery_type', 'delivery_address', 'delivery_date',
             'delivery_time_from', 'delivery_time_to', 'delivery_notes',
+            'recipient_is_different', 'recipient_first_name',
+            'recipient_last_name', 'recipient_phone',
             'notes', 'items', 'total', 'created_at', 'updated_at',
         ]
         read_only_fields = ['id', 'created_by', 'created_by_username', 'created_at', 'updated_at', 'total']

@@ -59,6 +59,14 @@ TOKEN_CATALOG: Dict[str, Dict[str, Callable]] = {
         'customer_name': lambda order: order.customer_name or '',
         'customer_identification_number': lambda order: order.customer_identification_number or '',
         'customer_phone': lambda order: order.customer_phone or '',
+        'recipient_is_different': lambda order: 'yes' if getattr(order, 'recipient_is_different', False) else '',
+        'recipient_first_name': lambda order: getattr(order, 'recipient_first_name', '') or '',
+        'recipient_last_name': lambda order: getattr(order, 'recipient_last_name', '') or '',
+        'recipient_full_name': lambda order: (
+            f"{getattr(order, 'recipient_first_name', '') or ''} "
+            f"{getattr(order, 'recipient_last_name', '') or ''}"
+        ).strip(),
+        'recipient_phone': lambda order: getattr(order, 'recipient_phone', '') or '',
         'delivery_type': lambda order: order.get_delivery_type_display(),
         'delivery_address': lambda order: getattr(order, 'delivery_address', '') or '',
         'delivery_date': lambda order: order.delivery_date.strftime('%Y-%m-%d') if getattr(order, 'delivery_date', None) else '',
