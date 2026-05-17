@@ -41,9 +41,14 @@ export const ModalForm = ({visible, setVisible, onFinish, title, name, object = 
       >
         <ModalFormContext.Provider value={{loading}}>
           <Form
+              // Remount per-object so the persistent `form` instance from
+              // useForm() can't leak field values from the previous edit
+              // into the first render of the next edit.
+              key={object?.id ?? 'new'}
               form={form}
               name={name}
               layout="vertical"
+              initialValues={object || undefined}
               style={{
                 maxWidth: "none",
                 width: "100%"
