@@ -4,8 +4,6 @@ import {useLanguage} from '../../i18n/LanguageContext';
 import {orderService, productService} from '../../api';
 import AuthContext from '../Auth/AuthContext';
 import groupItemsBySku from './groupItemsBySku';
-import distributeStock from './distributeStock';
-import inheritFromGroup from './inheritFromGroup';
 import {
     Card,
     Steps,
@@ -23,9 +21,9 @@ import {
     DatePicker,
     TimePicker,
     Collapse,
-    Select,
     Dropdown,
     Modal,
+    Segmented,
 } from 'antd';
 import {
     ShoppingCartOutlined,
@@ -41,7 +39,6 @@ import {
     MinusOutlined,
     PlusOutlined,
     MoreOutlined,
-    UndoOutlined,
     WarningOutlined,
 } from '@ant-design/icons';
 
@@ -97,8 +94,19 @@ const useDebouncedField = (initialValue, onSave, delay = 600) => {
     return [localValue, handleChange, flush];
 };
 
-const WarehouseSubRow = memo(({item, stockText, stockNumber, assigned, orderId, onLocalOrderUpdate, notify, t}) => {
-    const [overrideOpen, setOverrideOpen] = useState(false);
+const CartTableRow = memo(({
+    item,
+    stockNumber,
+    assigned,
+    orderId,
+    onLocalOrderUpdate,
+    notify,
+    t,
+    canApplyDiscount,
+    maxDiscountPercent,
+}) => {
+    const [editingPrice, setEditingPrice] = useState(false);
+    const [editingDiscount, setEditingDiscount] = useState(false);
 
     const handleQuantityChange = useCallback(async (newQuantity) => {
         if (newQuantity < 1) return;
@@ -107,7 +115,7 @@ const WarehouseSubRow = memo(({item, stockText, stockNumber, assigned, orderId, 
         else notify.error(t.orderError, result.error);
     }, [orderId, item.id, onLocalOrderUpdate, notify, t]);
 
-    const handleOverrideSave = useCallback(async (val) => {
+    const handlePriceSave = useCallback(async (val) => {
         const result = await orderService.updateOrderItem(orderId, item.id, {
             discounted_price: val == null ? null : val,
             discount_percent: 0,
@@ -116,186 +124,167 @@ const WarehouseSubRow = memo(({item, stockText, stockNumber, assigned, orderId, 
         else notify.error(t.orderError, result.error);
     }, [orderId, item.id, onLocalOrderUpdate, notify, t]);
 
-    const handleResetPrice = useCallback(async () => {
+    const handleDiscountSave = useCallback(async (val) => {
         const result = await orderService.updateOrderItem(orderId, item.id, {
+            discount_percent: val == null ? 0 : val,
             discounted_price: null,
-            discount_percent: 0,
         });
         if (result.success) onLocalOrderUpdate(result.data);
         else notify.error(t.orderError, result.error);
     }, [orderId, item.id, onLocalOrderUpdate, notify, t]);
 
-    const hasOverride = item.discounted_price != null || parseFloat(item.discount_percent || 0) > 0;
+    const handleRemoveLine = useCallback(async () => {
+        const result = await orderService.removeOrderItem(orderId, item.id);
+        if (result.success) onLocalOrderUpdate(result.data);
+        else notify.error(t.orderError, result.error);
+    }, [orderId, item.id, onLocalOrderUpdate, notify, t]);
+
     const exceedsLocal =
         Number.isFinite(stockNumber) && Number(item.quantity) > Number(stockNumber);
     const hasDiscount =
         item.effective_price && parseFloat(item.effective_price) !== parseFloat(item.price);
+    const discountPct = parseFloat(item.discount_percent || 0);
+    const priceCap = parseFloat(item.price || 0);
 
     return (
-        <Flex vertical gap={6} className="m-warehouse-subrow">
-            {/* Line 1 — warehouse name */}
-            <Tag color={assigned ? 'green' : 'blue'} style={{fontSize: 11, alignSelf: 'flex-start'}}>
-                {item.warehouse_name}
-                {assigned && <span style={{marginLeft: 4}}>✓</span>}
-            </Tag>
-
-            {/* Line 2 — stock (with warning if needed) */}
-            <Flex align="center" gap={6} wrap="wrap">
-                {stockText != null && (
-                    <Text type="secondary" style={{fontSize: 12}}>
-                        {t.stockRemaining}: {stockText}
+        <div className="m-cart-row">
+            <div className="m-cart-cell m-cart-cell-warehouse" data-label={t.warehouse}>
+                <Tag color={assigned ? 'green' : 'blue'} style={{fontSize: 11, margin: 0}}>
+                    {item.warehouse_name}
+                    {assigned && <span style={{marginLeft: 4}}>✓</span>}
+                </Tag>
+                {Number.isFinite(stockNumber) && (
+                    <Text type={exceedsLocal ? 'warning' : 'secondary'} style={{fontSize: 11, marginLeft: 6}}>
+                        {exceedsLocal && <WarningOutlined style={{marginRight: 2}}/>}
+                        {t.stockRemaining}: {stockNumber}
                     </Text>
                 )}
-                {exceedsLocal && (
-                    <Flex align="center" gap={2}>
-                        <WarningOutlined style={{color: '#faad14', fontSize: 12}}/>
-                        <Text type="warning" style={{fontSize: 12}}>
-                            {t.exceedsStock(stockNumber)}
-                        </Text>
-                    </Flex>
-                )}
-            </Flex>
-
-            {/* Line 3 — qty stepper */}
-            <div className="m-qty-stepper" style={{alignSelf: 'flex-start'}}>
-                <Button size="small" icon={<MinusOutlined/>}
-                        onClick={() => handleQuantityChange(item.quantity - 1)}
-                        disabled={item.quantity <= 1}
-                        className="m-qty-btn"/>
-                <InputNumber min={1} value={item.quantity} size="small"
-                             onChange={handleQuantityChange}
-                             className="m-qty-input"
-                             controls={false} inputMode="numeric" pattern="[0-9]*"/>
-                <Button size="small" icon={<PlusOutlined/>}
-                        onClick={() => handleQuantityChange(item.quantity + 1)}
-                        className="m-qty-btn"/>
             </div>
 
-            {/* Line 4 — unit price + line total */}
-            <Flex align="center" gap={6} wrap="wrap">
-                {hasDiscount ? (
-                    <>
-                        <Text delete type="secondary" style={{fontSize: 12}}>{item.price} ₾</Text>
-                        <Text style={{fontSize: 13, fontWeight: 500}}>{item.effective_price} ₾</Text>
-                    </>
-                ) : (
-                    <Text style={{fontSize: 13, fontWeight: 500}}>{item.price} ₾</Text>
-                )}
-                <Text type="secondary" style={{fontSize: 12}}>· {t.total || 'Total'}:</Text>
-                <Text strong style={{fontSize: 14, color: '#52c41a'}}>
-                    {item.line_total} ₾
-                </Text>
-            </Flex>
+            <div className="m-cart-cell m-cart-cell-qty" data-label={t.quantity}>
+                <div className="m-qty-stepper">
+                    <Button size="small" icon={<MinusOutlined/>}
+                            onClick={() => handleQuantityChange(item.quantity - 1)}
+                            disabled={item.quantity <= 1}
+                            className="m-qty-btn"/>
+                    <InputNumber min={1} value={item.quantity} size="small"
+                                 onChange={handleQuantityChange}
+                                 className="m-qty-input"
+                                 controls={false} inputMode="numeric" pattern="[0-9]*"/>
+                    <Button size="small" icon={<PlusOutlined/>}
+                            onClick={() => handleQuantityChange(item.quantity + 1)}
+                            className="m-qty-btn"/>
+                </div>
+            </div>
 
-            {/* Line 5 — override price */}
-            <Flex align="center" gap={6} wrap="wrap">
-                <Button type="link" size="small" onClick={() => setOverrideOpen((v) => !v)}
-                        style={{padding: 0}}>
-                    {overrideOpen ? (t.cancel || 'Cancel') : (t.overridePrice || 'Override price')}
-                </Button>
-                {overrideOpen && (
+            <div className="m-cart-cell m-cart-cell-price" data-label={t.price}>
+                {editingPrice ? (
                     <InputNumber
-                        min={0}
-                        max={parseFloat(item.price || 0)}
-                        defaultValue={parseFloat(item.discounted_price ?? item.price)}
+                        autoFocus
                         size="small"
+                        min={0}
+                        max={priceCap > 0 ? priceCap : undefined}
+                        defaultValue={parseFloat(item.effective_price ?? item.price)}
                         addonAfter="₾"
                         controls={false}
                         inputMode="decimal"
+                        style={{width: 110}}
+                        onPressEnter={(e) => {
+                            const v = parseFloat(e.target.value);
+                            handlePriceSave(Number.isFinite(v) ? v : null);
+                            setEditingPrice(false);
+                        }}
                         onBlur={(e) => {
                             const v = parseFloat(e.target.value);
-                            handleOverrideSave(Number.isFinite(v) ? v : null);
-                            setOverrideOpen(false);
+                            handlePriceSave(Number.isFinite(v) ? v : null);
+                            setEditingPrice(false);
                         }}
                     />
+                ) : (
+                    <button
+                        type="button"
+                        className="m-cart-inline-edit"
+                        onClick={() => setEditingPrice(true)}
+                        title={t.overridePrice}
+                    >
+                        {hasDiscount ? (
+                            <>
+                                <Text delete type="secondary" style={{fontSize: 11, marginRight: 4}}>
+                                    {item.price} ₾
+                                </Text>
+                                <Text style={{fontSize: 13, fontWeight: 500}}>
+                                    {item.effective_price} ₾
+                                </Text>
+                            </>
+                        ) : (
+                            <Text style={{fontSize: 13, fontWeight: 500}}>{item.price} ₾</Text>
+                        )}
+                    </button>
                 )}
-                {hasOverride && (
-                    <Button type="text" size="small" icon={<UndoOutlined/>} onClick={handleResetPrice}
-                            title={t.resetPrice} aria-label={t.resetPrice}/>
+            </div>
+
+            <div className="m-cart-cell m-cart-cell-discount" data-label={t.discountPercent}>
+                {canApplyDiscount && editingDiscount ? (
+                    <InputNumber
+                        autoFocus
+                        size="small"
+                        min={0}
+                        max={Math.min(100, maxDiscountPercent || 100)}
+                        defaultValue={discountPct || 0}
+                        addonAfter="%"
+                        controls={false}
+                        inputMode="decimal"
+                        style={{width: 90}}
+                        onPressEnter={(e) => {
+                            const v = parseFloat(e.target.value);
+                            handleDiscountSave(Number.isFinite(v) ? v : 0);
+                            setEditingDiscount(false);
+                        }}
+                        onBlur={(e) => {
+                            const v = parseFloat(e.target.value);
+                            handleDiscountSave(Number.isFinite(v) ? v : 0);
+                            setEditingDiscount(false);
+                        }}
+                    />
+                ) : (
+                    <button
+                        type="button"
+                        className="m-cart-inline-edit"
+                        onClick={() => canApplyDiscount && setEditingDiscount(true)}
+                        disabled={!canApplyDiscount}
+                        title={canApplyDiscount ? t.discountPercent : undefined}
+                    >
+                        {discountPct > 0 ? (
+                            <Text style={{fontSize: 13}}>{discountPct}%</Text>
+                        ) : (
+                            <Text type="secondary" style={{fontSize: 13}}>—</Text>
+                        )}
+                    </button>
                 )}
-            </Flex>
-        </Flex>
+            </div>
+
+            <div className="m-cart-cell m-cart-cell-total" data-label={t.total}>
+                <Text strong style={{fontSize: 14, color: '#52c41a'}}>
+                    {item.line_total} ₾
+                </Text>
+            </div>
+
+            <div className="m-cart-cell m-cart-cell-action">
+                <Popconfirm
+                    title={t.removeFromAllWarehouses || t.confirmDelete || 'Remove?'}
+                    onConfirm={handleRemoveLine}
+                    okText={t.yes}
+                    cancelText={t.no}
+                >
+                    <Button type="text" danger size="small" icon={<DeleteOutlined/>}
+                            aria-label={t.delete}/>
+                </Popconfirm>
+            </div>
+        </div>
     );
 });
 
-WarehouseSubRow.displayName = 'WarehouseSubRow';
-
-const SharedDiscountControl = memo(({group, maxDiscountPercent, applyBulk, onResetGroup, t}) => {
-    const [mode, setMode] = useState(
-        group.sharedDiscountedPrice != null ? 'price' : 'percent'
-    );
-    const sharedPercent = parseFloat(group.sharedDiscountPercent || 0);
-    const sharedPrice = group.sharedDiscountedPrice
-        ? parseFloat(group.sharedDiscountedPrice)
-        : null;
-
-    const onPercentChange = (val) => {
-        applyBulk(
-            {discount_percent: val || 0, discounted_price: null},
-            group.isMixedDiscount,
-            (it) => `${it.discount_percent}%`,
-            `${val || 0}%`,
-        );
-    };
-    const onPriceChange = (val) => {
-        applyBulk(
-            {discounted_price: val ?? null, discount_percent: 0},
-            group.isMixedDiscount,
-            (it) => (it.discounted_price ? `${it.discounted_price} ₾` : `${it.discount_percent}%`),
-            val == null ? '—' : `${val} ₾`,
-        );
-    };
-
-    const hasGroupOverride =
-        group.isMixedDiscount ||
-        (group.sharedDiscountedPrice != null) ||
-        (parseFloat(group.sharedDiscountPercent || 0) > 0);
-
-    return (
-        <Flex align="center" gap={4}>
-            <Select
-                value={mode}
-                onChange={(m) => {
-                    setMode(m);
-                    if (m === 'percent') onPriceChange(null);
-                    else onPercentChange(0);
-                }}
-                options={[{label: '%', value: 'percent'}, {label: '₾', value: 'price'}]}
-                size="small"
-                className="m-discount-mode"
-            />
-            {mode === 'percent' ? (
-                <InputNumber
-                    min={0}
-                    max={Math.min(100, maxDiscountPercent)}
-                    value={group.isMixedDiscount ? undefined : sharedPercent}
-                    placeholder={group.isMixedDiscount ? (t.mixed || 'Mixed') : undefined}
-                    size="small"
-                    onChange={onPercentChange}
-                    className="m-discount-input"
-                    controls={false} inputMode="decimal" addonAfter="%"
-                />
-            ) : (
-                <InputNumber
-                    min={0}
-                    value={group.isMixedDiscount ? undefined : sharedPrice}
-                    placeholder={group.isMixedDiscount ? (t.mixed || 'Mixed') : t.setPrice}
-                    size="small"
-                    onChange={onPriceChange}
-                    className="m-discount-input"
-                    controls={false} inputMode="decimal" addonAfter="₾"
-                />
-            )}
-            {hasGroupOverride && (
-                <Button type="text" size="small" icon={<UndoOutlined/>}
-                        onClick={onResetGroup}
-                        title={t.resetPrice} aria-label={t.resetPrice}/>
-            )}
-        </Flex>
-    );
-});
-
-SharedDiscountControl.displayName = 'SharedDiscountControl';
+CartTableRow.displayName = 'CartTableRow';
 
 const OrderItemGroupCard = memo(({
     group,
@@ -303,6 +292,7 @@ const OrderItemGroupCard = memo(({
     onLocalOrderUpdate,
     notify,
     t,
+    // eslint-disable-next-line no-unused-vars
     unitOptions,
     discountConfig,
     assignedCodes,
@@ -314,12 +304,10 @@ const OrderItemGroupCard = memo(({
     // 'error' = fetch failed. ensureStock returns a Promise so callers can await
     // the in-flight fetch instead of racing against it.
     const [stock, setStock] = useState(null);
-    const [stockLoading, setStockLoading] = useState(false);
     const stockPromiseRef = useRef(null);
     const ensureStock = useCallback(() => {
         if (stock != null) return Promise.resolve(stock);
         if (stockPromiseRef.current) return stockPromiseRef.current;
-        setStockLoading(true);
         // Upstream's GetStockAndPrices keys off the user-typed article (or
         // a barcode); the canonical `sku` returned in scan responses isn't
         // always a valid lookup key. Prefer `article`, fall back to `sku`.
@@ -330,7 +318,6 @@ const OrderItemGroupCard = memo(({
             warehouseCodes: [],
             includeImages: false,
         }).then((result) => {
-            setStockLoading(false);
             stockPromiseRef.current = null;
             if (result.success && Array.isArray(result.data?.stock)) {
                 // Mirror the scan view: hide warehouses with negative balance
@@ -365,46 +352,6 @@ const OrderItemGroupCard = memo(({
         [group.items],
     );
 
-    const applyBulk = useCallback(async (data, mixedFlag, formatCurrent, formatNew) => {
-        const doApply = async () => {
-            const result = await orderService.bulkUpdateOrderItems(orderId, itemIds, data);
-            if (result.success) onLocalOrderUpdate(result.data);
-            else notify.error(t.orderError, result.error);
-        };
-
-        if (mixedFlag) {
-            const lines = group.items.map((it) => ({
-                key: it.id,
-                text: `${it.warehouse_name}: ${formatCurrent(it)} → ${formatNew}`,
-            }));
-            Modal.confirm({
-                title: t.confirmOverwriteTitle || 'Apply to all warehouses?',
-                content: (
-                    <div>
-                        <div>{t.confirmOverwriteBody || 'The following warehouses will change:'}</div>
-                        <ul style={{fontSize: 12, marginTop: 6, paddingInlineStart: 18}}>
-                            {lines.map(({key, text}) => <li key={key}>{text}</li>)}
-                        </ul>
-                    </div>
-                ),
-                okText: t.yes,
-                cancelText: t.no,
-                onOk: doApply,
-            });
-            return;
-        }
-        await doApply();
-    }, [group.items, itemIds, orderId, onLocalOrderUpdate, notify, t]);
-
-    const handleResetGroup = useCallback(() => {
-        applyBulk(
-            {discount_percent: 0, discounted_price: null},
-            group.isMixedDiscount,
-            (it) => (it.discounted_price ? `${it.discounted_price} ₾` : `${it.discount_percent}%`),
-            '—',
-        );
-    }, [applyBulk, group.isMixedDiscount]);
-
     const handleRemoveGroup = useCallback(async () => {
         const results = await Promise.all(
             itemIds.map((id) => orderService.removeOrderItem(orderId, id))
@@ -418,179 +365,18 @@ const OrderItemGroupCard = memo(({
         if (lastOrder) onLocalOrderUpdate(lastOrder);
     }, [itemIds, orderId, onLocalOrderUpdate, notify, t]);
 
-    // Auto-distribute: debounce typing in the total-qty input, compute the
-    // target distribution, diff, and apply via parallel add/update/remove.
-    const [pendingTarget, setPendingTarget] = useState(null);
-    const distributeTimerRef = useRef(null);
-    const groupRef = useRef(group);
-    groupRef.current = group;
-
-    const applyDistribution = useCallback(async (target) => {
-        // Await the in-flight stock fetch so we never race with it.
-        const stockResult = await ensureStock();
-        const currentStock = Array.isArray(stockResult) ? stockResult : null;
-        const currentGroup = groupRef.current;
-        if (currentGroup.items.length === 0) {
-            setPendingTarget(null);
-            return;
-        }
-
-        let distribution;
-        if (currentStock && currentStock.some((s) => Number(s.quantity) > 0)) {
-            distribution = distributeStock(target, currentStock, assignedCodes);
-        } else {
-            // No stock data (fetch failed or empty). Fall back: apply the
-            // typed value to the first existing line; leave others alone.
-            distribution = new Map([[currentGroup.items[0].warehouse_code, target]]);
-        }
-
-        const inherited = inheritFromGroup(currentGroup, canApplyDiscount);
-        const itemByCode = new Map(currentGroup.items.map((it) => [it.warehouse_code, it]));
-        const calls = [];
-        for (const [code, qty] of distribution) {
-            const existing = itemByCode.get(code);
-            if (existing) {
-                if (Number(existing.quantity) !== qty) {
-                    calls.push(orderService.updateOrderItem(orderId, existing.id, {quantity: qty}));
-                }
-            } else {
-                const stockEntry = currentStock?.find((s) => s.warehouse === code);
-                calls.push(orderService.addOrderItem(orderId, {
-                    sku: currentGroup.sku,
-                    sku_name: currentGroup.sku_name,
-                    article: currentGroup.article,
-                    price: stockEntry?.price ?? currentGroup.items[0].price ?? 0,
-                    quantity: qty,
-                    warehouse_code: code,
-                    warehouse_name: stockEntry?.warehouse_name || '',
-                    ...inherited,
-                }));
-            }
-        }
-        // Only remove items when we have real stock data — the fallback path
-        // (no stock) must NOT delete the user's existing lines.
-        if (currentStock) {
-            for (const it of currentGroup.items) {
-                if (!distribution.has(it.warehouse_code)) {
-                    calls.push(orderService.removeOrderItem(orderId, it.id));
-                }
-            }
-        }
-        if (calls.length === 0) {
-            setPendingTarget(null);
-            return;
-        }
-        const results = await Promise.all(calls);
-        const failed = results.find((r) => !r.success);
-        if (failed) {
-            notify.error(t.orderError, failed.error);
-            return;
-        }
-        const last = results[results.length - 1].data;
-        if (last) onLocalOrderUpdate(last);
-        setPendingTarget(null);
-    }, [ensureStock, assignedCodes, canApplyDiscount, orderId, onLocalOrderUpdate, notify, t]);
-
-    const onTotalQtyChange = useCallback((val) => {
-        if (val == null) return;
-        ensureStock();
-        setPendingTarget(val);
-        if (distributeTimerRef.current) clearTimeout(distributeTimerRef.current);
-        distributeTimerRef.current = setTimeout(() => applyDistribution(val), 400);
-    }, [ensureStock, applyDistribution]);
-
-    useEffect(() => () => {
-        if (distributeTimerRef.current) clearTimeout(distributeTimerRef.current);
-    }, []);
-
-    // Eager-fetch stock once per card mount so the in-stock captions and
-    // the auto-distribute path are ready before the user types or expands.
+    // Eager-fetch stock once per card mount so the per-row stock captions
+    // (and the "other warehouses" toggle) are ready when the card renders.
     useEffect(() => {
         ensureStock();
     }, [ensureStock]);
 
-    const displayedTotalQty = pendingTarget != null ? pendingTarget : group.totalQty;
-    const exceeds = totalStock != null && displayedTotalQty > totalStock;
-
-    const priceCap = parseFloat(group.maxBasePrice || 0);
-
-    const handleSharedPriceChange = (val) => {
-        if (val == null || !Number.isFinite(val) || val < 0) return;
-        // Hard-cap on the frontend to match the backend's
-        // DISCOUNTED_PRICE_ABOVE_BASE check — prevents the user from inflating
-        // the line total by entering a value above the product's base price.
-        if (priceCap > 0 && val > priceCap) {
-            notify.error(t.orderError, t.discountedPriceAboveBase);
-            return;
-        }
-        applyBulk(
-            {discounted_price: val, discount_percent: 0},
-            group.isMixedPrice,
-            (it) => `${it.effective_price} ₾`,
-            `${val} ₾`,
-        );
-    };
-
-    const priceArea = (
-        <Flex align="center" gap={6}>
-            {group.isMixedPrice ? (
-                <>
-                    <Text type="secondary" style={{fontSize: 12}}>
-                        {group.minPrice} ₾ – {group.maxPrice} ₾
-                    </Text>
-                    <Tag color="orange" style={{fontSize: 10, marginInlineEnd: 0}}>
-                        {t.mixed || 'Mixed'}
-                    </Tag>
-                    <InputNumber
-                        size="small"
-                        placeholder={t.setPrice}
-                        controls={false}
-                        addonAfter="₾"
-                        max={priceCap > 0 ? priceCap : undefined}
-                        onPressEnter={(e) => handleSharedPriceChange(parseFloat(e.target.value))}
-                        onBlur={(e) => {
-                            const v = parseFloat(e.target.value);
-                            if (Number.isFinite(v)) handleSharedPriceChange(v);
-                        }}
-                        style={{width: 100}}
-                    />
-                </>
-            ) : (
-                <InputNumber
-                    size="small"
-                    value={parseFloat(group.sharedPrice)}
-                    controls={false}
-                    addonAfter="₾"
-                    max={priceCap > 0 ? priceCap : undefined}
-                    onPressEnter={(e) => handleSharedPriceChange(parseFloat(e.target.value))}
-                    onBlur={(e) => {
-                        const v = parseFloat(e.target.value);
-                        if (Number.isFinite(v) && v.toFixed(2) !== Number(group.sharedPrice).toFixed(2)) {
-                            handleSharedPriceChange(v);
-                        }
-                    }}
-                    style={{width: 100}}
-                />
-            )}
-        </Flex>
-    );
-
-    // Render an expanded row per existing order line. The "other warehouses"
-    // (stock-positive but not in the order yet) are kept behind an explicit
-    // toggle so the cart card stays focused on the user's current cart.
-    const stockTextFor = useCallback((code) => {
-        if (stockLoading && stock == null) return '…';
-        if (stock === 'error') return '—';
-        if (!Array.isArray(stock)) return null; // not yet fetched + not loading
-        const k = stockByCode.get(code);
-        return k != null ? String(k) : '—';
-    }, [stock, stockLoading, stockByCode]);
+    const cardExceeds = totalStock != null && group.totalQty > totalStock;
 
     const lineRows = useMemo(
         () => group.items.map((it) => ({
             key: `line-${it.id}`,
             item: it,
-            stockText: null, // resolved at render time via stockTextFor
             assigned: assignedCodes.has(it.warehouse_code),
         })),
         [group.items, assignedCodes],
@@ -610,17 +396,18 @@ const OrderItemGroupCard = memo(({
     }, [stock, group.items, assignedCodes]);
 
     return (
-        <div className="m-order-item-card m-order-item-group-card">
-            <Flex justify="space-between" align="start" gap={8}>
-                <div style={{flex: 1, minWidth: 0}}>
+        <div className="m-order-item-card m-cart-card">
+            <div className="m-cart-card-header">
+                <div className="m-cart-card-thumb" aria-hidden="true">
+                    <ShopOutlined/>
+                </div>
+                <div className="m-cart-card-title">
                     <Text strong style={{fontSize: 14, display: 'block'}} ellipsis>
                         {group.sku_name || group.sku}
                     </Text>
-                    {group.article && (
-                        <Text type="secondary" style={{fontSize: 12}}>
-                            {t.article}: {group.article}
-                        </Text>
-                    )}
+                    <Text type="secondary" style={{fontSize: 12}}>
+                        {t.article}: {group.article || group.sku}
+                    </Text>
                 </div>
                 <Popconfirm
                     title={t.removeFromAllWarehouses || t.confirmDelete || 'Remove product?'}
@@ -629,56 +416,38 @@ const OrderItemGroupCard = memo(({
                     cancelText={t.no}
                 >
                     <Button type="text" danger size="small" icon={<DeleteOutlined/>}
-                            className="m-item-delete-btn"/>
+                            className="m-item-delete-btn" aria-label={t.delete}/>
                 </Popconfirm>
-            </Flex>
+            </div>
 
-            {/* Controls zone — does not toggle expand */}
-            <Flex align="center" gap={8} style={{marginTop: 8}}>
-                <Text type="secondary" style={{fontSize: 12}}>{t.price}:</Text>
-                {priceArea}
-            </Flex>
+            <div className="m-cart-table">
+                <div className="m-cart-row m-cart-row-header" aria-hidden="true">
+                    <div className="m-cart-cell">{t.warehouse}</div>
+                    <div className="m-cart-cell">{t.quantity}</div>
+                    <div className="m-cart-cell">{t.price}</div>
+                    <div className="m-cart-cell">{t.discountPercent}</div>
+                    <div className="m-cart-cell">{t.total}</div>
+                    <div className="m-cart-cell"></div>
+                </div>
 
-            <Flex gap={8} wrap="wrap" align="center" style={{marginTop: 10}}>
-                <Text type="secondary" style={{fontSize: 12}}>{t.totalQuantity}:</Text>
-                <InputNumber
-                    min={0}
-                    value={displayedTotalQty}
-                    size="small"
-                    onChange={onTotalQtyChange}
-                    onFocus={ensureStock}
-                    controls={false}
-                    inputMode="numeric"
-                    style={{width: 90}}
-                />
-                <Select
-                    value={group.sharedUnit || undefined}
-                    size="small"
-                    allowClear
-                    showSearch
-                    placeholder={group.isMixedUnit ? (t.mixed || 'Mixed') : t.unit}
-                    className="m-unit-select"
-                    options={unitOptions}
-                    onChange={(val) => applyBulk(
-                        {unit: val || ''},
-                        group.isMixedUnit,
-                        (it) => (it.unit || '—'),
-                        (val || '—'),
-                    )}
-                />
-                {canApplyDiscount && maxDiscountPercent > 0 && (
-                    <SharedDiscountControl
-                        group={group}
-                        maxDiscountPercent={maxDiscountPercent}
-                        applyBulk={applyBulk}
-                        onResetGroup={handleResetGroup}
+                {lineRows.map((row) => (
+                    <CartTableRow
+                        key={row.key}
+                        item={row.item}
+                        stockNumber={Array.isArray(stock) ? stockByCode.get(row.item.warehouse_code) : null}
+                        assigned={row.assigned}
+                        orderId={orderId}
+                        onLocalOrderUpdate={onLocalOrderUpdate}
+                        notify={notify}
                         t={t}
+                        canApplyDiscount={canApplyDiscount}
+                        maxDiscountPercent={maxDiscountPercent}
                     />
-                )}
-            </Flex>
+                ))}
+            </div>
 
-            {exceeds && (
-                <Flex align="center" gap={4} style={{marginTop: 6}}>
+            {cardExceeds && (
+                <Flex align="center" gap={4} className="m-cart-card-warning">
                     <WarningOutlined style={{color: '#faad14', fontSize: 12}}/>
                     <Text type="warning" style={{fontSize: 11}}>
                         {t.exceedsStock(totalStock)}
@@ -686,53 +455,38 @@ const OrderItemGroupCard = memo(({
                 </Flex>
             )}
 
-            <Flex justify="end" style={{marginTop: 8}}>
-                <Text strong style={{color: '#52c41a', fontSize: 15}}>
+            <div className="m-cart-card-footer">
+                <Text type="secondary" style={{fontSize: 12}}>{t.total}:</Text>
+                <Text strong style={{color: '#52c41a', fontSize: 16, marginLeft: 8}}>
                     {group.groupLineTotal} ₾
                 </Text>
-            </Flex>
+            </div>
 
-            <div className="m-order-item-group-expanded">
-                {lineRows.map((row) => (
-                    <WarehouseSubRow
-                        key={row.key}
-                        item={row.item}
-                        stockText={stockTextFor(row.item.warehouse_code)}
-                        stockNumber={Array.isArray(stock) ? stockByCode.get(row.item.warehouse_code) : null}
-                        assigned={row.assigned}
-                        orderId={orderId}
-                        onLocalOrderUpdate={onLocalOrderUpdate}
-                        notify={notify}
-                        t={t}
-                    />
-                ))}
-
-                {otherWarehouses.length > 0 && (
+            {otherWarehouses.length > 0 && (
+                <div className="m-cart-card-others">
                     <Button
                         type="link"
                         size="small"
                         onClick={() => setShowOtherWarehouses((v) => !v)}
-                        style={{padding: 0, marginTop: 4}}
+                        style={{padding: 0}}
                     >
                         {showOtherWarehouses
                             ? t.hideOtherWarehouses
                             : t.showOtherWarehouses(otherWarehouses.length)}
                     </Button>
-                )}
-
-                {showOtherWarehouses && otherWarehouses.map((row) => (
-                    <Flex key={row.key} align="center" gap={8} className="m-warehouse-subrow"
-                          style={{opacity: 0.6}}>
-                        <Tag color={row.assigned ? 'green' : 'blue'} style={{fontSize: 10}}>
-                            {row.stockEntry.warehouse_name}
-                            {row.assigned && <span style={{marginLeft: 4}}>✓</span>}
-                        </Tag>
-                        <Text type="secondary" style={{fontSize: 11}}>
-                            {t.stockRemaining}: {row.stock}
-                        </Text>
-                    </Flex>
-                ))}
-            </div>
+                    {showOtherWarehouses && otherWarehouses.map((row) => (
+                        <Flex key={row.key} align="center" gap={8} style={{marginTop: 4, opacity: 0.6}}>
+                            <Tag color={row.assigned ? 'green' : 'blue'} style={{fontSize: 10}}>
+                                {row.stockEntry.warehouse_name}
+                                {row.assigned && <span style={{marginLeft: 4}}>✓</span>}
+                            </Tag>
+                            <Text type="secondary" style={{fontSize: 11}}>
+                                {t.stockRemaining}: {row.stock}
+                            </Text>
+                        </Flex>
+                    ))}
+                </div>
+            )}
         </div>
     );
 });
@@ -808,8 +562,110 @@ const DeliverySection = memo(({order, onLocalOrderUpdate, notify, t, deliveryExp
         saveDeliveryNotes
     );
 
+    // ===== Recipient (same / different) =====
+    const saveRecipientField = useCallback(async (patch) => {
+        const result = await orderService.updateOrder(order.id, patch);
+        if (result.success) onLocalOrderUpdate(result.data);
+        else notify.error(t.orderError, result.error);
+    }, [order.id, onLocalOrderUpdate, notify, t]);
+
+    const handleRecipientTypeChange = useCallback((value) => {
+        const isDifferent = value === 'different';
+        const patch = {recipient_is_different: isDifferent};
+        if (!isDifferent) {
+            // Switching back to "same" clears any stray recipient fields so the
+            // saved state matches what the user sees.
+            patch.recipient_first_name = '';
+            patch.recipient_last_name = '';
+            patch.recipient_phone = '';
+        }
+        saveRecipientField(patch);
+    }, [saveRecipientField]);
+
+    const [recipientFirst, setRecipientFirst, flushRecipientFirst] = useDebouncedField(
+        order.recipient_first_name || '',
+        (v) => saveRecipientField({recipient_first_name: v || ''}),
+    );
+    const [recipientLast, setRecipientLast, flushRecipientLast] = useDebouncedField(
+        order.recipient_last_name || '',
+        (v) => saveRecipientField({recipient_last_name: v || ''}),
+    );
+    const [recipientPhone, setRecipientPhone, flushRecipientPhone] = useDebouncedField(
+        order.recipient_phone || '',
+        (v) => saveRecipientField({recipient_phone: v || ''}),
+    );
+
+    const recipientIsDifferent = !!order.recipient_is_different;
+    // +995 + 9 digits, or 9 digits, or empty
+    const phoneValid = !recipientPhone || /^(\+995)?\d{9}$/.test(recipientPhone.replace(/\s+/g, ''));
+
     return (
         <div style={{marginBottom: 12}}>
+            <Flex align="center" gap={8} style={{marginBottom: 8}}>
+                <UserOutlined style={{color: '#1677ff'}}/>
+                <Text strong>{t.recipient}</Text>
+            </Flex>
+            <Segmented
+                block
+                size="middle"
+                value={recipientIsDifferent ? 'different' : 'same'}
+                onChange={handleRecipientTypeChange}
+                options={[
+                    {label: t.recipientSame, value: 'same'},
+                    {label: t.recipientDifferent, value: 'different'},
+                ]}
+                style={{marginBottom: 8}}
+            />
+            {recipientIsDifferent ? (
+                <Space direction="vertical" style={{width: '100%', marginBottom: 12}} size={8}>
+                    <Flex gap={8}>
+                        <Input
+                            placeholder={t.firstName}
+                            value={recipientFirst}
+                            onChange={(e) => setRecipientFirst(e.target.value)}
+                            onBlur={flushRecipientFirst}
+                            size="large"
+                            style={{flex: 1}}
+                        />
+                        <Input
+                            placeholder={t.lastName}
+                            value={recipientLast}
+                            onChange={(e) => setRecipientLast(e.target.value)}
+                            onBlur={flushRecipientLast}
+                            size="large"
+                            style={{flex: 1}}
+                        />
+                    </Flex>
+                    <Input
+                        placeholder={t.phone}
+                        value={recipientPhone}
+                        onChange={(e) => setRecipientPhone(e.target.value)}
+                        onBlur={flushRecipientPhone}
+                        size="large"
+                        status={!phoneValid ? 'error' : ''}
+                    />
+                    {!phoneValid && (
+                        <Text type="danger" style={{fontSize: 12}}>{t.phoneInvalid}</Text>
+                    )}
+                </Space>
+            ) : (
+                <div style={{
+                    padding: '8px 12px',
+                    background: 'rgba(0,0,0,0.03)',
+                    borderRadius: 8,
+                    marginBottom: 12,
+                }}>
+                    <Text style={{fontSize: 13, display: 'block'}}>
+                        {order.customer_name || '—'}
+                    </Text>
+                    {order.customer_phone && (
+                        <Text type="secondary" style={{fontSize: 12}}>
+                            {order.customer_phone}
+                        </Text>
+                    )}
+                </div>
+            )}
+
             <Flex align="center" gap={8} style={{marginBottom: 8}}>
                 <CarOutlined style={{color: '#1677ff'}}/>
                 <Text strong>{t.deliveryType}</Text>
