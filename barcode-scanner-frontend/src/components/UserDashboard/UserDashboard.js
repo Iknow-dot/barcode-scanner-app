@@ -3,6 +3,7 @@ import {warehouseService, productService, orderService} from '../../api';
 import BarcodeScanner from './BarcodeScanner';
 import ClientLookupModal from './ClientLookupModal';
 import OrderPanel from './OrderPanel';
+import AddToCartSheet from './AddToCartSheet';
 import subNavContext from "../../contexts/SubNavContext";
 import AuthContext from "../Auth/AuthContext";
 import useAppNotification from "../../hooks/useAppNotification";
@@ -109,6 +110,12 @@ const UserDashboard = () => {
     // Order drawer for mobile (shows active order)
     const [orderDrawerVisible, setOrderDrawerVisible] = useState(false);
     const orderDrawerSwipeRef = useRef({startY: 0, fired: false});
+
+    // Add-to-cart sheet (quantity + warehouse picker)
+    const [addToCartOpen, setAddToCartOpen] = useState(false);
+    const [addToCartInitialWh, setAddToCartInitialWh] = useState(null);
+    const [addToCartConfirming, setAddToCartConfirming] = useState(false);
+    const addToCartSourceRef = useRef(null);
 
     // Ref to track activeOrder without causing callback recreation
     const activeOrderRef = useRef(null);
@@ -636,28 +643,47 @@ const UserDashboard = () => {
         return inheritFromGroup(group, !!authData?.user?.can_apply_discount);
     };
 
-    const handleAddToOrderFromWarehouse = async (warehouseRecord, e) => {
+    const handleAddToOrderFromWarehouse = (warehouseRecord, e) => {
         if (!activeOrder) return;
-        if (e?.currentTarget) {
-            animateAddToCart(e.currentTarget);
+        addToCartSourceRef.current = e?.currentTarget || null;
+        setAddToCartInitialWh(warehouseRecord?.warehouse || null);
+        setAddToCartOpen(true);
+    };
+
+    const handleConfirmAddToCart = async ({quantity, warehouse_code, warehouse_name, price}) => {
+        if (!activeOrder) return;
+        setAddToCartConfirming(true);
+        try {
+            if (addToCartSourceRef.current) {
+                animateAddToCart(addToCartSourceRef.current);
+            }
+            const inherited = inheritFromExistingGroup(productInfo.sku);
+            const addResult = await orderService.addOrderItem(activeOrder.id, {
+                sku: productInfo.sku,
+                sku_name: productInfo.sku_name || '',
+                article: productInfo.article || '',
+                price: price || 0,
+                quantity,
+                warehouse_code: warehouse_code || '',
+                warehouse_name: warehouse_name || '',
+                ...inherited,
+            });
+            if (addResult.success) {
+                activeOrderRef.current = addResult.data;
+                setActiveOrder(addResult.data);
+                setAddToCartOpen(false);
+                addToCartSourceRef.current = null;
+            } else {
+                notify.error(t.orderError, addResult.error);
+            }
+        } finally {
+            setAddToCartConfirming(false);
         }
-        const inherited = inheritFromExistingGroup(productInfo.sku);
-        const addResult = await orderService.addOrderItem(activeOrder.id, {
-            sku: productInfo.sku,
-            sku_name: productInfo.sku_name || '',
-            article: productInfo.article || '',
-            price: warehouseRecord.price || 0,
-            quantity: 1,
-            warehouse_code: warehouseRecord.warehouse || '',
-            warehouse_name: warehouseRecord.warehouse_name || '',
-            ...inherited,
-        });
-        if (addResult.success) {
-            activeOrderRef.current = addResult.data;
-            setActiveOrder(addResult.data);
-        } else {
-            notify.error(t.orderError, addResult.error);
-        }
+    };
+
+    const handleCancelAddToCart = () => {
+        setAddToCartOpen(false);
+        addToCartSourceRef.current = null;
     };
 
     const getImageSrc = (img) => {
@@ -1117,6 +1143,17 @@ const UserDashboard = () => {
                     </div>
                 )}
             </Drawer>
+
+            <AddToCartSheet
+                open={addToCartOpen}
+                productInfo={productInfo}
+                balances={balances}
+                initialWarehouseCode={addToCartInitialWh}
+                unit={inheritFromExistingGroup(productInfo.sku)?.unit}
+                confirming={addToCartConfirming}
+                onConfirm={handleConfirmAddToCart}
+                onClose={handleCancelAddToCart}
+            />
 
             {/* ===== Mobile-First Layout ===== */}
             <div className="m-dashboard">
