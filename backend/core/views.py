@@ -974,7 +974,11 @@ class PurchaseOrderViewSet(ModelViewSet):
         org = order.organization
         template_html = org.invoice_template_html or DEFAULT_INVOICE_TEMPLATE_HTML
         body = render_invoice_template(template_html, org=org, order=order)
-        wrapped = wrap_in_skeleton(body, draft=order.status != 'confirmed')
+        wrapped = wrap_in_skeleton(
+            body,
+            draft=order.status != 'confirmed',
+            logo_data_url=order.organization.invoice_logo or '',
+        )
         return Response(wrapped, content_type='text/html')
 
     @action(
@@ -1004,5 +1008,9 @@ class PurchaseOrderViewSet(ModelViewSet):
                 content_type='application/json',
             )
         body = render_invoice_template(sanitized, org=order.organization, order=order)
-        wrapped = wrap_in_skeleton(body, draft=order.status != 'confirmed')
+        wrapped = wrap_in_skeleton(
+            body,
+            draft=order.status != 'confirmed',
+            logo_data_url=order.organization.invoice_logo or '',
+        )
         return Response(wrapped, content_type='text/html')

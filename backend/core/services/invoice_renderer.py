@@ -52,10 +52,17 @@ table.items td.num, table.items th.num { text-align: right; }
 .draft-watermark { position: fixed; top: 40%; left: 0; width: 100%; text-align: center;
                    font-size: 120px; font-weight: 700; color: rgba(220, 0, 0, 0.12);
                    transform: rotate(-25deg); pointer-events: none; z-index: 0; }
+.logo-watermark { position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+                  display: flex; align-items: center; justify-content: center;
+                  pointer-events: none; z-index: 0;
+                  print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+.logo-watermark img { max-width: 45vw; max-height: 45vh; opacity: 0.13;
+                      object-fit: contain; }
 @media print {
   body { margin: 0; }
   .no-print { display: none; }
   @page { size: A4; margin: 16mm; }
+  .logo-watermark img { max-width: 50%; max-height: 50%; }
 }
 """.strip()
 
@@ -212,10 +219,14 @@ def render_invoice_template(template_html: str, *, org, order) -> str:
     return inner
 
 
-def wrap_in_skeleton(body_html: str, *, draft: bool) -> str:
+def wrap_in_skeleton(body_html: str, *, draft: bool, logo_data_url: str = '') -> str:
     """Wrap body HTML in the print skeleton (<html>/<head>/<body>, print CSS,
-    print button, optional DRAFT watermark)."""
+    print button, optional DRAFT + organization-logo watermarks)."""
     draft_html = '<div class="draft-watermark">DRAFT</div>' if draft else ''
+    watermark_html = (
+        f'<div class="logo-watermark"><img alt="" src="{escape(logo_data_url)}"></div>'
+        if logo_data_url else ''
+    )
     return f"""<!DOCTYPE html>
 <html lang="ka">
 <head>
@@ -224,6 +235,7 @@ def wrap_in_skeleton(body_html: str, *, draft: bool) -> str:
 <style>{_PAGE_CSS}</style>
 </head>
 <body>
+{watermark_html}
 {draft_html}
 <div class="no-print"><button onclick="window.print()">Print</button></div>
 {body_html}
