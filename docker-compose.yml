@@ -7,7 +7,7 @@ services:
              python manage.py collectstatic --noinput &&
              python manage.py runserver 0.0.0.0:8080"
     ports:
-      - "8080:8080"
+      - "8180:8080"
     depends_on:
       - db
     volumes:
@@ -18,7 +18,7 @@ services:
       - DATABASE_SSL_REQUIRE=False
       - DEBUG=True
       - ALLOWED_HOSTS=localhost,127.0.0.1
-      - CORS_ALLOWED_ORIGINS=http://localhost:3000
+      - CORS_ALLOWED_ORIGINS=http://localhost:3100
       - FERNET_KEY=MO69AxjxiFlmlCCZiZ1Bm3gOnlAa9iVKgnc67BV0jPA=
 
   db:
@@ -28,7 +28,7 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: postgres
     ports:
-      - "5432:5432"
+      - "5532:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
@@ -39,10 +39,10 @@ services:
       - ./barcode-scanner-frontend:/app
       - /app/node_modules
     ports:
-      - "3000:3000"
+      - "3100:3000"
     environment:
       - NODE_ENV=development
-      - REACT_APP_API_BASE_URL=http://localhost:8080
+      - REACT_APP_API_BASE_URL=http://localhost:8180
       - CHOKIDAR_USEPOLLING=true
       - WATCHPACK_POLLING=true
       - REACT_APP_PUBLIC_POSTHOG_KEY=phc_yg5k071dOq3uRdhBL0rSMh6SXjsuE6WkEq6Et5A7bYP
