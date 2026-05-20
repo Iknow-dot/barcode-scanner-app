@@ -208,7 +208,7 @@ const UserDashboard = () => {
     // without paying for another round-trip.
     const [othersCollapsed, setOthersCollapsed] = useState(true);
 
-    const handleSearch = useCallback(async ({search, searchType, allWarehouses}) => {
+    const handleSearch = useCallback(async ({search, searchType, allWarehouses, fromScan}) => {
         if (isSearchingRef.current) return;
         isSearchingRef.current = true;
         setLoading(true);
@@ -257,6 +257,16 @@ const UserDashboard = () => {
                 setDrawerVisible(false);
                 // Switch to scan tab to show results
                 setActiveTab('scan');
+                // Single-step add: when scanning inside an active order, open
+                // the quantity sheet immediately so the user can confirm a
+                // qty without a separate tap. Skip if nothing is sellable —
+                // sheet would have no warehouse to default to.
+                const sellable = visibleStock.filter((b) => (Number(b.quantity) || 0) > 0);
+                if (fromScan && activeOrderRef.current && sellable.length > 0) {
+                    addToCartSourceRef.current = null;
+                    setAddToCartInitialWh(null);
+                    setAddToCartOpen(true);
+                }
             } else {
                 playNotFoundSound();
                 setBalances([]);
@@ -305,7 +315,8 @@ const UserDashboard = () => {
         handleSearch({
             search: decodedText,
             searchType: 'barcode',
-            allWarehouses: form.getFieldValue('allWarehouses')
+            allWarehouses: form.getFieldValue('allWarehouses'),
+            fromScan: true,
         });
     }, [handleSearch, form]);
 
