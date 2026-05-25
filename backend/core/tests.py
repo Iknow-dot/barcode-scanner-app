@@ -2189,3 +2189,21 @@ class InvoiceCustomerNameTokenTests(TestCase):
         resolver = TOKEN_CATALOG['order']['customer_name']
         self.assertEqual(resolver(retail), 'საცალო მომხმარებელი')
         self.assertEqual(resolver(normal), 'Nino Beridze')
+
+
+class IsCompanyAdminOrInternalAdminTests(TestCase):
+    def test_admins_allowed_company_user_blocked(self):
+        from types import SimpleNamespace
+        from core.permissions import IsCompanyAdminOrInternalAdmin
+        org = _make_organization()
+        company_admin = User.objects.create_user(
+            username='ca-perm', password='p',
+            role=User.Role.COMPANY_ADMIN, organization=org,
+        )
+        company_user = User.objects.create_user(
+            username='cu-perm', password='p',
+            role=User.Role.COMPANY_USER, organization=org,
+        )
+        perm = IsCompanyAdminOrInternalAdmin()
+        self.assertTrue(perm.has_permission(SimpleNamespace(user=company_admin), None))
+        self.assertFalse(perm.has_permission(SimpleNamespace(user=company_user), None))

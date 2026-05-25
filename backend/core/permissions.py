@@ -77,6 +77,20 @@ class IsCompanyUserOrAdmin(BasePermission):
                 )
         )
 
+
+class IsCompanyAdminOrInternalAdmin(BasePermission):
+    """Access for company admins and internal admins only (not company users)."""
+
+    def has_permission(self, request, view):
+        return bool(
+            request.user
+            and request.user.is_authenticated
+            and request.user.role in (
+                User.Role.INTERNAL_ADMIN,
+                User.Role.COMPANY_ADMIN,
+            )
+        )
+
 class CompanyUserPermission(BasePermission):
     """
     - Internal admins: full access.
