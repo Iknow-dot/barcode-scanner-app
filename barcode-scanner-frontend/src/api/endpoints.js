@@ -37,6 +37,7 @@ const API_ENDPOINTS = {
     order_invoice_preview: orderId => `api/v1/orders/${orderId}/invoice-preview/`,
     invoice_tokens: "api/v1/invoice-tokens/",
     invoice_token_sample_values: "api/v1/invoice-tokens/sample-values/",
+    analytics_orders: "api/v1/analytics/orders/",
 };
 
 export default API_ENDPOINTS;
