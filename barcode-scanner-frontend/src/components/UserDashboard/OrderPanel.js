@@ -657,7 +657,7 @@ const DeliverySection = memo(({order, onLocalOrderUpdate, notify, t, deliveryExp
                     marginBottom: 12,
                 }}>
                     <Text style={{fontSize: 13, display: 'block'}}>
-                        {order.customer_name || '—'}
+                        {displayCustomerName(order, t) || '—'}
                     </Text>
                     {order.customer_phone && (
                         <Text type="secondary" style={{fontSize: 12}}>

@@ -3,6 +3,7 @@ import {orderService} from '../../api';
 import {useLanguage} from '../../i18n/LanguageContext';
 import useAppNotification from '../../hooks/useAppNotification';
 import {printInvoice} from '../../utils/printInvoice';
+import displayCustomerName from '../../utils/orderDisplay';
 import {
     Table,
     Tag,
@@ -161,10 +162,10 @@ const OrdersTab = () => {
             title: t.customer,
             dataIndex: 'customer_name',
             key: 'customer_name',
-            render: (name) => (
+            render: (name, record) => (
                 <Flex align="center" gap={6}>
                     <UserOutlined style={{opacity: 0.4}}/>
-                    <Text>{name}</Text>
+                    <Text>{displayCustomerName(record, t)}</Text>
                 </Flex>
             ),
         },
@@ -505,7 +506,7 @@ const OrdersTab = () => {
                             <Descriptions.Item label={t.customer}>
                                 <Flex align="center" gap={6}>
                                     <UserOutlined style={{opacity: 0.4}}/>
-                                    <Text strong>{selectedOrder.customer_name}</Text>
+                                    <Text strong>{displayCustomerName(selectedOrder, t)}</Text>
                                 </Flex>
                             </Descriptions.Item>
                             <Descriptions.Item label={t.createdBy}>
