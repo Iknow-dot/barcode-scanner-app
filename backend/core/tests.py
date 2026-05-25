@@ -2176,3 +2176,16 @@ class RetailOrderListSerializerTests(TestCase):
         results = response.data['results'] if 'results' in response.data else response.data
         self.assertIn('is_retail', results[0])
         self.assertTrue(results[0]['is_retail'])
+
+
+class InvoiceCustomerNameTokenTests(TestCase):
+    def test_retail_order_resolves_to_georgian_retail_label(self):
+        from core.services.invoice_tokens import TOKEN_CATALOG
+        org = _make_organization()
+        retail = PurchaseOrder.objects.create(organization=org, is_retail=True)
+        normal = PurchaseOrder.objects.create(
+            organization=org, customer_name='Nino Beridze',
+        )
+        resolver = TOKEN_CATALOG['order']['customer_name']
+        self.assertEqual(resolver(retail), 'საცალო მომხმარებელი')
+        self.assertEqual(resolver(normal), 'Nino Beridze')

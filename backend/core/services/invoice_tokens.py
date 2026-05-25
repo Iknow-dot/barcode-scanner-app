@@ -14,6 +14,11 @@ as `[invalid:item.<name>]`.
 
 from typing import Callable, Dict
 
+# Retail/clientless orders have a blank customer_name. The backend renderer has
+# no per-viewer language, so the invoice uses the Georgian label (invoices are
+# single-language documents).
+RETAIL_CUSTOMER_LABEL_KA = 'საცალო მომხმარებელი'
+
 
 def _format_delivery_time_window(order) -> str:
     start = getattr(order, 'delivery_time_from', None)
@@ -56,7 +61,10 @@ TOKEN_CATALOG: Dict[str, Dict[str, Callable]] = {
         'created_at': lambda order: order.created_at.strftime('%Y-%m-%d %H:%M') if order.created_at else '',
         'status': lambda order: order.get_status_display(),
         'total': lambda order: str(order.total) if getattr(order, 'total', None) is not None else '',
-        'customer_name': lambda order: order.customer_name or '',
+        'customer_name': lambda order: (
+            RETAIL_CUSTOMER_LABEL_KA if getattr(order, 'is_retail', False)
+            else order.customer_name
+        ) or '',
         'customer_identification_number': lambda order: order.customer_identification_number or '',
         'customer_phone': lambda order: order.customer_phone or '',
         'recipient_is_different': lambda order: 'yes' if getattr(order, 'recipient_is_different', False) else '',
