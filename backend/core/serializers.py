@@ -471,7 +471,7 @@ class PurchaseOrderListSerializer(serializers.ModelSerializer):
         fields = [
             'id',
             'external_client_id', 'customer_name', 'customer_phone',
-            'customer_identification_number',
+            'customer_identification_number', 'is_retail',
             'created_by', 'created_by_username',
             'status', 'delivery_type', 'total', 'items_count', 'created_at', 'updated_at',
         ]

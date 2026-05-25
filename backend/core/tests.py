@@ -2158,3 +2158,21 @@ class RetailOrderAPITests(TestCase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data['customer_name'], 'Giorgi Beridze')
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
+class RetailOrderListSerializerTests(TestCase):
+    def test_list_response_includes_is_retail(self):
+        org = _make_organization()
+        user = User.objects.create_user(
+            username='list-u', password='p',
+            role=User.Role.COMPANY_USER, organization=org,
+        )
+        PurchaseOrder.objects.create(organization=org, created_by=user, is_retail=True)
+        api = APIClient()
+        api.force_authenticate(user)
+        response = api.get(reverse('order-list'))
+        self.assertEqual(response.status_code, 200)
+        results = response.data['results'] if 'results' in response.data else response.data
+        self.assertIn('is_retail', results[0])
+        self.assertTrue(results[0]['is_retail'])
