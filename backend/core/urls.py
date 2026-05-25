@@ -13,6 +13,7 @@ from core.views import (
     SearchAddressesAPIView,
     InvoiceTokensAPIView,
     InvoiceSampleValuesAPIView,
+    OrderAnalyticsAPIView,
 )
 
 router = DefaultRouter()
@@ -29,5 +30,6 @@ urlpatterns = [
     path('clients/reverse-geocode/', ReverseGeocodeAPIView.as_view(), name='client-reverse-geocode'),
     path('clients/search-addresses/', SearchAddressesAPIView.as_view(), name='client-search-addresses'),
     path('product/search/', ProductSearchAPIView.as_view(), name='product-search'),
+    path('analytics/orders/', OrderAnalyticsAPIView.as_view(), name='order-analytics'),
     path('', include(router.urls)),
 ]

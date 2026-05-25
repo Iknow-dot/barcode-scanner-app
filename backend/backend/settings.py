@@ -252,6 +252,7 @@ SPECTACULAR_SETTINGS = {
         {'name': 'Purchase Orders', 'description': 'Purchase order CRUD and item management'},
         {'name': 'Network', 'description': 'Network utility endpoints (IP detection)'},
         {'name': 'Invoice Templates', 'description': 'Invoice token catalog and template preview'},
+        {'name': 'Analytics', 'description': 'Admin analytics (per-consultant order stats)'},
     ],
 }
 
