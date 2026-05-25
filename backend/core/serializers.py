@@ -411,7 +411,7 @@ class PurchaseOrderSerializer(serializers.ModelSerializer):
         fields = [
             'id',
             'external_client_id', 'customer_name', 'customer_phone',
-            'customer_identification_number',
+            'customer_identification_number', 'is_retail',
             'created_by', 'created_by_username',
             'status', 'delivery_type', 'delivery_address', 'delivery_date',
             'delivery_time_from', 'delivery_time_to', 'delivery_notes',
@@ -421,11 +421,34 @@ class PurchaseOrderSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['id', 'created_by', 'created_by_username', 'created_at', 'updated_at', 'total']
         extra_kwargs = {
-            'customer_name': {'required': True, 'allow_blank': False},
+            'customer_name': {'required': False, 'allow_blank': True},
             'customer_phone': {'required': False, 'allow_blank': True},
             'customer_identification_number': {'required': False, 'allow_blank': True},
             'external_client_id': {'required': False, 'allow_blank': True},
         }
+
+    def validate(self, attrs):
+        is_retail = attrs.get('is_retail')
+        if is_retail is None:
+            is_retail = getattr(self.instance, 'is_retail', False)
+        if is_retail:
+            # Retail orders map to the 1C retail counterparty and carry no
+            # client data — blank the client fields server-side so a stray
+            # value from the request can't leak in.
+            for field in (
+                'customer_name', 'customer_phone',
+                'customer_identification_number', 'external_client_id',
+            ):
+                attrs[field] = ''
+        else:
+            name = attrs.get('customer_name')
+            if name is None:
+                name = getattr(self.instance, 'customer_name', '')
+            if not (name or '').strip():
+                raise serializers.ValidationError(
+                    {'customer_name': 'This field is required for non-retail orders.'}
+                )
+        return attrs
 
     def get_created_by_username(self, obj):
         return obj.created_by.username if obj.created_by else ''

@@ -707,7 +707,10 @@ class PurchaseOrderViewSet(ModelViewSet):
         """Create an order, or return the existing open draft for the same
         client. A client can only have one open (draft) order at a time —
         match first by external_client_id, then fall back to the local
-        identification number."""
+        identification number.
+
+        Retail orders (is_retail=true) carry blank client ids, so neither
+        match runs and every retail order is created as its own fresh draft."""
         org = request.user.organization
         external_client_id = (request.data.get('external_client_id') or '').strip()
         identification_number = (request.data.get('customer_identification_number') or '').strip()

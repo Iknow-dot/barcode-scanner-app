@@ -2088,3 +2088,63 @@ class PurchaseOrderRetailFieldTests(TestCase):
         org = _make_organization()
         order = PurchaseOrder.objects.create(organization=org)
         self.assertFalse(order.is_retail)
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
+class RetailOrderAPITests(TestCase):
+    def setUp(self):
+        self.org = _make_organization()
+        self.user = User.objects.create_user(
+            username='retail-u', password='p',
+            role=User.Role.COMPANY_USER, organization=self.org,
+        )
+        self.api = APIClient()
+        self.api.force_authenticate(self.user)
+        self.url = reverse('order-list')
+
+    def test_retail_order_created_without_customer_name(self):
+        response = self.api.post(self.url, {'is_retail': True}, format='json')
+        self.assertEqual(response.status_code, 201)
+        self.assertTrue(response.data['is_retail'])
+        order = PurchaseOrder.objects.get(pk=response.data['id'])
+        self.assertTrue(order.is_retail)
+        self.assertEqual(order.customer_name, '')
+        self.assertEqual(order.external_client_id, '')
+
+    def test_non_retail_order_still_requires_customer_name(self):
+        response = self.api.post(self.url, {'customer_phone': '555123456'}, format='json')
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('customer_name', response.data)
+
+    def test_retail_order_blanks_stray_customer_fields(self):
+        response = self.api.post(
+            self.url,
+            {'is_retail': True, 'customer_name': 'Should Be Dropped',
+             'customer_identification_number': '99999'},
+            format='json',
+        )
+        self.assertEqual(response.status_code, 201)
+        order = PurchaseOrder.objects.get(pk=response.data['id'])
+        self.assertEqual(order.customer_name, '')
+        self.assertEqual(order.customer_identification_number, '')
+
+    def test_two_retail_orders_are_distinct_drafts(self):
+        r1 = self.api.post(self.url, {'is_retail': True}, format='json')
+        r2 = self.api.post(self.url, {'is_retail': True}, format='json')
+        self.assertEqual(r1.status_code, 201)
+        self.assertEqual(r2.status_code, 201)
+        self.assertNotEqual(r1.data['id'], r2.data['id'])
+
+    def test_attaching_client_clears_retail_flag(self):
+        created = self.api.post(self.url, {'is_retail': True}, format='json')
+        order_id = created.data['id']
+        detail_url = reverse('order-detail', kwargs={'pk': order_id})
+        response = self.api.patch(
+            detail_url,
+            {'customer_name': 'Nino Beridze', 'is_retail': False},
+            format='json',
+        )
+        self.assertEqual(response.status_code, 200)
+        order = PurchaseOrder.objects.get(pk=order_id)
+        self.assertFalse(order.is_retail)
+        self.assertEqual(order.customer_name, 'Nino Beridze')
