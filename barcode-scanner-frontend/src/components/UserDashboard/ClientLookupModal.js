@@ -63,7 +63,7 @@ const MOBILE_RE = /^5\d{8}$/;
 const isValidPersonalId = (v) => PERSONAL_ID_RE.test(v || '');
 const isValidPhone = (v) => MOBILE_RE.test(normalizePhone(v));
 
-const ClientLookupModal = ({open, onSelect, onClose}) => {
+const ClientLookupModal = ({open, onSelect, onClose, onRetail}) => {
     const {t} = useLanguage();
     const [step, setStep] = useState(STEP_LOOKUP);
     const [lookupForm] = Form.useForm();
@@ -430,6 +430,17 @@ const ClientLookupModal = ({open, onSelect, onClose}) => {
                     </Button>
                 </Flex>
             </Form>
+
+            {onRetail && (
+                <Button
+                    type="link"
+                    block
+                    onClick={onRetail}
+                    style={{marginTop: 4}}
+                >
+                    {t.continueWithoutClient}
+                </Button>
+            )}
 
             {foundClients.length > 0 && (
                 <>
