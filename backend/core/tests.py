@@ -2296,3 +2296,7 @@ class OrderAnalyticsAPITests(TestCase):
         self.assertNotIn('c3', usernames)            # other org NOT leaked
         by_id = {c['user_id']: c for c in resp.data['consultants']}
         self.assertIn(self.c1.id, by_id)             # own org still present
+
+    def test_anonymous_forbidden(self):
+        resp = APIClient().get(self.url)
+        self.assertIn(resp.status_code, (401, 403))
