@@ -7,7 +7,8 @@ import UsersTab from './UsersTab';
 import OrdersTab from './OrdersTab';
 import ExternalServiceSettings from '../Organization/ExternalServiceSettings';
 import InvoiceTemplateSettings from '../Organization/InvoiceTemplateSettings';
-import {AppstoreOutlined, BankOutlined, FileImageOutlined, GlobalOutlined, ShoppingOutlined, TeamOutlined, UserOutlined} from "@ant-design/icons";
+import AnalyticsTab from './AnalyticsTab';
+import {AppstoreOutlined, BarChartOutlined, BankOutlined, FileImageOutlined, GlobalOutlined, ShoppingOutlined, TeamOutlined, UserOutlined} from "@ant-design/icons";
 import SubNavContext from "../../contexts/SubNavContext";
 import {useLanguage} from '../../i18n/LanguageContext';
 import {Typography} from "antd";
@@ -27,6 +28,7 @@ const tabMeta = (t, role) => ({
     4: {title: t.externalServiceSettings, subtitle: t.externalServiceSubtitle || '', icon: <GlobalOutlined style={{color: '#1677ff', fontSize: 22}}/>},
     5: {title: t.purchaseOrders, subtitle: t.ordersTabSubtitle || '', icon: <ShoppingOutlined style={{color: '#1677ff', fontSize: 22}}/>},
     6: {title: t.invoiceTemplateSettings, subtitle: t.invoiceTemplateSubtitle || '', icon: <FileImageOutlined style={{color: '#1677ff', fontSize: 22}}/>},
+    7: {title: t.analytics, subtitle: t.analyticsSubtitle || '', icon: <BarChartOutlined style={{color: '#1677ff', fontSize: 22}}/>},
 });
 
 const SystemAdminDashboard = () => {
@@ -77,6 +79,12 @@ const SystemAdminDashboard = () => {
                 label: t.invoiceTemplateSettings,
                 onClick: () => setActiveTab(6)
             }),
+            (userRole === userRoles.company_admin || userRole === userRoles.internal_admin) && ({
+                key: '7',
+                icon: <BarChartOutlined/>,
+                label: t.analytics,
+                onClick: () => setActiveTab(7)
+            }),
         ].filter(Boolean));
     }, [userRole, setSubNav, t]);
 
@@ -121,6 +129,9 @@ const SystemAdminDashboard = () => {
             break;
         case 6:
             ActiveTabPane = <InvoiceTemplateSettings/>;
+            break;
+        case 7:
+            ActiveTabPane = <AnalyticsTab/>;
             break;
         default:
             ActiveTabPane = null;
