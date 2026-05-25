@@ -456,6 +456,8 @@ const UserDashboard = () => {
             customer_phone: client.phone || '',
             customer_identification_number: client.identification_number || '',
             external_client_id: client.external_client_id || '',
+            // Attaching a client converts a retail order into a normal one.
+            is_retail: false,
         };
         const result = await orderService.updateOrder(activeOrder.id, payload);
         if (result.success) {
@@ -500,6 +502,23 @@ const UserDashboard = () => {
             } else {
                 playOrderCreatedSound();
             }
+        } else {
+            notify.error(t.orderError, result.error);
+        }
+    };
+
+    // Start an order with no client (retail). Mirrors handleClientSelected but
+    // sends only is_retail; the backend always creates a fresh draft (no client
+    // id to dedupe against), so there is no 200/resume branch.
+    const handleStartRetailOrder = async () => {
+        setCustomerModalOpen(false);
+        const result = await orderService.createOrder({is_retail: true});
+        if (result.success) {
+            activeOrderRef.current = result.data;
+            setActiveOrder(result.data);
+            setOrderMode(true);
+            setActiveTab('scan');
+            playOrderCreatedSound();
         } else {
             notify.error(t.orderError, result.error);
         }
@@ -986,6 +1005,7 @@ const UserDashboard = () => {
             <ClientLookupModal
                 open={customerModalOpen}
                 onSelect={handleClientSelected}
+                onRetail={handleStartRetailOrder}
                 onClose={() => setCustomerModalOpen(false)}
             />
 
