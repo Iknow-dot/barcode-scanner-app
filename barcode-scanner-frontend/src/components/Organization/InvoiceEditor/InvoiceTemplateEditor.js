@@ -25,6 +25,7 @@ import * as orderService from '../../../api/services/orderService';
 import {organizationService} from '../../../api';
 import useAppNotification from '../../../hooks/useAppNotification';
 import {useLanguage} from '../../../i18n/LanguageContext';
+import displayCustomerName from '../../../utils/orderDisplay';
 import './InvoiceTemplateEditor.css';
 
 const IMAGE_SIZE_LIMIT = 1_048_576; // 1 MB
@@ -394,7 +395,7 @@ const InvoiceTemplateEditor = () => {
     {value: null, label: t.sampleDataAuto || 'Auto (most recent)'},
     ...sampleOrderOptions.map((o) => ({
       value: o.id,
-      label: `#${o.id} — ${o.customer_name || ''}`,
+      label: `#${o.id} — ${displayCustomerName(o, t)}`,
     })),
   ];
 

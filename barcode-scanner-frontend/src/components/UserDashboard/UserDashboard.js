@@ -20,6 +20,7 @@ import useDailySnapshot from '../../hooks/useDailySnapshot';
 import DailySnapshot from './DailySnapshot';
 import groupItemsBySku from './groupItemsBySku';
 import inheritFromGroup from './inheritFromGroup';
+import displayCustomerName from '../../utils/orderDisplay';
 import {
     Badge,
     Button,
@@ -741,7 +742,7 @@ const UserDashboard = () => {
                             <ShoppingCartOutlined style={{fontSize: 18, color: '#fff'}}/>
                         </Badge>
                         <Text className="m-order-indicator-text" ellipsis>
-                            {t.activeOrder} #{activeOrder.id} · {activeOrder.customer_name}
+                            {t.activeOrder} #{activeOrder.id} · {displayCustomerName(activeOrder, t)}
                         </Text>
                     </Flex>
                     <Flex align="center" gap={4}>
@@ -881,7 +882,7 @@ const UserDashboard = () => {
                             <Flex align="center" gap={4}>
                                 <UserOutlined style={{fontSize: 11, opacity: 0.5}}/>
                                 <Text type="secondary" style={{fontSize: 13}}>
-                                    {order.customer_name}
+                                    {displayCustomerName(order, t)}
                                 </Text>
                             </Flex>
                             <Flex align="center" gap={4} wrap="wrap">

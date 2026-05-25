@@ -4,6 +4,7 @@ import {useLanguage} from '../../i18n/LanguageContext';
 import {orderService, productService} from '../../api';
 import AuthContext from '../Auth/AuthContext';
 import groupItemsBySku from './groupItemsBySku';
+import displayCustomerName from '../../utils/orderDisplay';
 import {
     Card,
     Steps,
@@ -959,7 +960,7 @@ const OrderPanel = ({order: initialOrder, onSaveForLater, onProceedToPayment, on
                     {/* Customer info */}
                     <Flex align="center" gap={8} className="m-customer-bar">
                         <UserOutlined style={{color: '#1677ff'}}/>
-                        <Text strong>{localOrder.customer_name}</Text>
+                        <Text strong>{displayCustomerName(localOrder, t)}</Text>
                     </Flex>
                 </Card>
             )}
@@ -968,7 +969,7 @@ const OrderPanel = ({order: initialOrder, onSaveForLater, onProceedToPayment, on
             {isMobileDrawer && (
                 <Flex align="center" gap={8} className="m-customer-bar">
                     <UserOutlined style={{color: '#1677ff'}}/>
-                    <Text strong>{localOrder.customer_name}</Text>
+                    <Text strong>{displayCustomerName(localOrder, t)}</Text>
                 </Flex>
             )}
 
