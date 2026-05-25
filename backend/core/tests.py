@@ -2148,3 +2148,13 @@ class RetailOrderAPITests(TestCase):
         order = PurchaseOrder.objects.get(pk=order_id)
         self.assertFalse(order.is_retail)
         self.assertEqual(order.customer_name, 'Nino Beridze')
+
+    def test_delivery_only_patch_on_normal_order_keeps_customer(self):
+        created = self.api.post(self.url, {'customer_name': 'Giorgi Beridze'}, format='json')
+        order_id = created.data['id']
+        detail_url = reverse('order-detail', kwargs={'pk': order_id})
+        response = self.api.patch(
+            detail_url, {'delivery_notes': 'call before arriving'}, format='json',
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['customer_name'], 'Giorgi Beridze')
