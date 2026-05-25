@@ -119,6 +119,9 @@ class PurchaseOrder(models.Model):
     external_client_id = models.CharField(
         max_length=128, blank=True, default='', db_index=True,
     )
+    # True when the order has no client and maps to the 1C retail counterparty
+    # (საცალო კონტრაგენტი). Client fields above stay blank for retail orders.
+    is_retail = models.BooleanField(default=False)
     created_by = models.ForeignKey(
         User,
         on_delete=models.SET_NULL,

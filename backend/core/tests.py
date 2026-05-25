@@ -2081,3 +2081,10 @@ class PurchaseOrderBulkUpdateTests(TestCase):
         self.assertEqual(self.item_b.unit, 'box')
         # The pre-existing discount must survive — we only touched unit.
         self.assertEqual(str(self.item_a.discount_percent), '15.00')
+
+
+class PurchaseOrderRetailFieldTests(TestCase):
+    def test_is_retail_defaults_false(self):
+        org = _make_organization()
+        order = PurchaseOrder.objects.create(organization=org)
+        self.assertFalse(order.is_retail)
