@@ -2285,3 +2285,14 @@ class OrderAnalyticsAPITests(TestCase):
         resp = self.api.get(self.url)
         by_id = {c['user_id']: c for c in resp.data['consultants']}
         self.assertNotIn(self.c2.id, by_id)
+
+    def test_company_admin_cannot_escape_org_via_param(self):
+        # Even if a company_admin passes ?organization=<other org>, the endpoint
+        # must stay scoped to their OWN org (no cross-tenant leak).
+        self.api.force_authenticate(self.admin)
+        resp = self.api.get(self.url, {'organization': self.other_org.id})
+        self.assertEqual(resp.status_code, 200)
+        usernames = [c['username'] for c in resp.data['consultants']]
+        self.assertNotIn('c3', usernames)            # other org NOT leaked
+        by_id = {c['user_id']: c for c in resp.data['consultants']}
+        self.assertIn(self.c1.id, by_id)             # own org still present
