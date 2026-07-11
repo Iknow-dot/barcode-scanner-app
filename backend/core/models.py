@@ -1,4 +1,5 @@
 import os
+import secrets
 
 from cryptography.fernet import Fernet
 from django.db import models
@@ -18,6 +19,9 @@ class Organization(models.Model):
     web_service_url = models.URLField(max_length=255)
     web_service_username = models.CharField(max_length=255, null=True, blank=True)
     web_service_password = models.CharField(max_length=255, null=True, blank=True)
+    webhook_token = models.CharField(
+        max_length=64, unique=True, db_index=True, default=secrets.token_urlsafe,
+    )
     employees_count = models.PositiveIntegerField()
 
     # Invoice template — rendered into the printable invoice HTML.
@@ -67,6 +71,10 @@ class Organization(models.Model):
             raise ValueError("FERNET_KEY is not set or is invalid")
         cipher_suite = Fernet(key)
         return cipher_suite.decrypt(self.web_service_password.encode()).decode()
+
+    def rotate_webhook_token(self) -> None:
+        self.webhook_token = secrets.token_urlsafe()
+        self.save(update_fields=["webhook_token"])
 
     def __str__(self):
         return self.name
