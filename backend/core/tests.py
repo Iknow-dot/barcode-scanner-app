@@ -2460,6 +2460,31 @@ class IngestUpsertTests(TestCase):
         self._push([{"sku": "S1", "name": "Candle 2"}])
         self.assertTrue(Product.objects.get(organization=self.org, sku="S1").is_active)
 
+    def test_reactivates_on_identical_repush(self):
+        payload = [{"sku": "S1", "name": "Candle", "barcodes": ["123"], "image_urls": []}]
+        self._push(payload)
+        Product.objects.filter(organization=self.org, sku="S1").update(is_active=False, deactivated_at=timezone.now())
+        r = self._push(payload)  # identical payload, unchanged row_hash
+        self.assertEqual(r.json(), {"received": 1, "upserted": 1, "skipped": 0})  # NOT skipped despite matching hash
+        p = Product.objects.get(organization=self.org, sku="S1")
+        self.assertTrue(p.is_active)
+        self.assertIsNone(p.deactivated_at)
+
+    def test_push_is_isolated_per_org(self):
+        other = Organization.objects.create(
+            name="Other", identification_number="ORG2", web_service_url="https://y", employees_count=5,
+        )
+        self.client.post(
+            self.url, {"products": [{"sku": "S1", "name": "A-candle"}]},
+            format="json", HTTP_X_WEBHOOK_TOKEN=self.org.webhook_token,
+        )
+        self.client.post(
+            self.url, {"products": [{"sku": "S1", "name": "B-candle"}]},
+            format="json", HTTP_X_WEBHOOK_TOKEN=other.webhook_token,
+        )
+        self.assertEqual(Product.objects.get(organization=self.org, sku="S1").name, "A-candle")
+        self.assertEqual(Product.objects.get(organization=other, sku="S1").name, "B-candle")
+
     def test_bad_token_rejected(self):
         r = self.client.post(self.url, {"products": []}, format="json", HTTP_X_WEBHOOK_TOKEN="nope")
         self.assertIn(r.status_code, (401, 403))
