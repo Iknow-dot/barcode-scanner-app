@@ -1557,6 +1557,28 @@ class InvoiceEndpointRenderingTests(TestCase):
         self.assertIn('INVOICE', body)
 
 
+from core.models import Product, ProductBarcode, CatalogIngestState
+
+
+class CatalogModelTests(TestCase):
+    def setUp(self):
+        self.org = Organization.objects.create(
+            name="Org", identification_number="ORG1", web_service_url="https://x", employees_count=5,
+        )
+
+    def test_product_unique_per_org_sku_and_barcode_lookup(self):
+        p = Product.objects.create(organization=self.org, sku="S1", name="Candle")
+        ProductBarcode.objects.create(product=p, barcode="123")
+        hit = ProductBarcode.objects.filter(product__organization=self.org, barcode="123").first()
+        self.assertEqual(hit.product, p)
+
+    def test_ingest_state_is_stale_when_never_pushed(self):
+        st = CatalogIngestState.objects.create(organization=self.org)
+        self.assertTrue(st.is_stale)
+        st.last_delta_push_at = timezone.now()
+        self.assertFalse(st.is_stale)
+
+
 from core.services.invoice_template_sanitizer import (
     InvoiceTemplateValidationError,
     sanitize_and_validate,

@@ -80,6 +80,52 @@ class Organization(models.Model):
         return self.name
 
 
+class Product(models.Model):
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name="products")
+    sku = models.CharField(max_length=255)
+    article = models.CharField(max_length=255, blank=True, default="")
+    name = models.CharField(max_length=512)
+    price = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    image_urls = models.JSONField(default=list, blank=True)
+    row_hash = models.CharField(max_length=64, blank=True, default="")
+    is_active = models.BooleanField(default=True)
+    deactivated_at = models.DateTimeField(null=True, blank=True)
+    pushed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["organization", "sku"], name="uq_product_org_sku")]
+
+    def __str__(self):
+        return f"{self.name} ({self.sku})"
+
+
+class ProductBarcode(models.Model):
+    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="barcodes")
+    barcode = models.CharField(max_length=255, db_index=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["product", "barcode"], name="uq_barcode_per_product")]
+
+
+class CatalogIngestState(models.Model):
+    organization = models.OneToOneField(Organization, on_delete=models.CASCADE, related_name="catalog_ingest_state")
+    last_full_push_at = models.DateTimeField(null=True, blank=True)
+    last_delta_push_at = models.DateTimeField(null=True, blank=True)
+    last_delete_at = models.DateTimeField(null=True, blank=True)
+    status = models.CharField(max_length=16, default="ok")  # ok | stale | error
+    last_error = models.TextField(blank=True, default="")
+    received = models.PositiveIntegerField(default=0)      # counts of the last push
+    upserted = models.PositiveIntegerField(default=0)
+    deactivated = models.PositiveIntegerField(default=0)
+    images_failed = models.PositiveIntegerField(default=0)
+
+    STALE_AFTER = timezone.timedelta(days=2)
+
+    @property
+    def is_stale(self) -> bool:
+        last = self.last_delta_push_at or self.last_full_push_at
+        return last is None or (timezone.now() - last) > self.STALE_AFTER
+
 
 class Warehouse(models.Model):
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='warehouses')
