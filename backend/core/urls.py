@@ -14,6 +14,7 @@ from core.views import (
     InvoiceTokensAPIView,
     InvoiceSampleValuesAPIView,
     OrderAnalyticsAPIView,
+    CatalogProductIngestAPIView,
 )
 
 router = DefaultRouter()
@@ -31,5 +32,6 @@ urlpatterns = [
     path('clients/search-addresses/', SearchAddressesAPIView.as_view(), name='client-search-addresses'),
     path('product/search/', ProductSearchAPIView.as_view(), name='product-search'),
     path('analytics/orders/', OrderAnalyticsAPIView.as_view(), name='order-analytics'),
+    path('catalog/products/', CatalogProductIngestAPIView.as_view(), name='catalog-product-ingest'),
     path('', include(router.urls)),
 ]

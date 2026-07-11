@@ -16,9 +16,19 @@ from rest_framework.renderers import StaticHTMLRenderer
 from rest_framework.views import APIView
 from rest_framework.viewsets import ModelViewSet
 
-from django.db import models
+from django.db import models, transaction
 
-from core.models import Organization, Warehouse, PurchaseOrder, PurchaseOrderItem
+from core.models import (
+    Organization,
+    Warehouse,
+    PurchaseOrder,
+    PurchaseOrderItem,
+    Product,
+    ProductBarcode,
+    CatalogIngestState,
+)
+from core.catalog import row_hash
+from core.ingest_auth import organization_from_push
 from core.permissions import (
     OrganizationPermission,
     WarehousePermission,
@@ -1086,3 +1096,55 @@ class PurchaseOrderViewSet(ModelViewSet):
             logo_data_url=order.organization.invoice_logo or '',
         )
         return Response(wrapped, content_type='text/html')
+
+
+@extend_schema(tags=["Catalog Ingest"])
+class CatalogProductIngestAPIView(APIView):
+    permission_classes = []  # authenticated by per-org push token, not JWT
+    http_method_names = ["post"]
+
+    def post(self, request: Request) -> Response:
+        org = organization_from_push(request)  # raises AuthenticationFailed on bad/missing token
+        products = request.data.get("products") or []
+        is_full = bool(request.data.get("is_full"))
+        upserted = skipped = 0
+
+        with transaction.atomic():
+            for item in products:
+                sku = item.get("sku")
+                if not sku:
+                    continue
+                new_hash = row_hash(item)
+                existing = Product.objects.filter(organization=org, sku=sku).first()
+                if existing and existing.row_hash == new_hash and existing.is_active:
+                    skipped += 1
+                    continue
+                obj, _ = Product.objects.update_or_create(
+                    organization=org, sku=sku,
+                    defaults={
+                        "article": item.get("article") or "",
+                        "name": item.get("name") or "",
+                        "price": item.get("price"),
+                        "image_urls": item.get("image_urls") or [],
+                        "row_hash": new_hash,
+                        "is_active": True,
+                        "deactivated_at": None,
+                        "pushed_at": timezone.now(),
+                    },
+                )
+                obj.barcodes.all().delete()
+                ProductBarcode.objects.bulk_create(
+                    [ProductBarcode(product=obj, barcode=b) for b in (item.get("barcodes") or [])]
+                )
+                upserted += 1
+
+            state, _ = CatalogIngestState.objects.get_or_create(organization=org)
+            now = timezone.now()
+            if is_full:
+                state.last_full_push_at = now
+            else:
+                state.last_delta_push_at = now
+            state.received, state.upserted, state.status, state.last_error = len(products), upserted, "ok", ""
+            state.save()
+
+        return Response({"received": len(products), "upserted": upserted, "skipped": skipped})

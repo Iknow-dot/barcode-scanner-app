@@ -2424,3 +2424,47 @@ class PushAuthTests(TestCase):
     def test_invalid_token_raises(self):
         with self.assertRaises(AuthenticationFailed):
             organization_from_push(self._req({"X-Webhook-Token": "nope"}))
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
+class IngestUpsertTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.org = Organization.objects.create(
+            name="Org", identification_number="ORG1", web_service_url="https://x", employees_count=5,
+        )
+        self.url = "/api/v1/catalog/products/"
+
+    def _push(self, products, is_full=False):
+        return self.client.post(
+            self.url, {"products": products, "is_full": is_full},
+            format="json", HTTP_X_WEBHOOK_TOKEN=self.org.webhook_token,
+        )
+
+    def test_upsert_creates_rows_and_barcodes(self):
+        r = self._push([{"sku": "S1", "name": "Candle", "barcodes": ["123", "456"], "image_urls": ["u"]}])
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json(), {"received": 1, "upserted": 1, "skipped": 0})
+        p = Product.objects.get(organization=self.org, sku="S1")
+        self.assertEqual(set(p.barcodes.values_list("barcode", flat=True)), {"123", "456"})
+
+    def test_repush_unchanged_is_skipped(self):
+        payload = [{"sku": "S1", "name": "Candle", "barcodes": ["123"], "image_urls": []}]
+        self._push(payload)
+        r = self._push(payload)
+        self.assertEqual(r.json(), {"received": 1, "upserted": 0, "skipped": 1})
+
+    def test_reactivates_previously_deactivated(self):
+        self._push([{"sku": "S1", "name": "Candle"}])
+        Product.objects.filter(organization=self.org, sku="S1").update(is_active=False)
+        self._push([{"sku": "S1", "name": "Candle 2"}])
+        self.assertTrue(Product.objects.get(organization=self.org, sku="S1").is_active)
+
+    def test_bad_token_rejected(self):
+        r = self.client.post(self.url, {"products": []}, format="json", HTTP_X_WEBHOOK_TOKEN="nope")
+        self.assertIn(r.status_code, (401, 403))
+
+    def test_full_push_sets_watermark(self):
+        self._push([{"sku": "S1", "name": "Candle"}], is_full=True)
+        st = CatalogIngestState.objects.get(organization=self.org)
+        self.assertIsNotNone(st.last_full_push_at)

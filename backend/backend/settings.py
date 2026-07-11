@@ -254,6 +254,8 @@ SPECTACULAR_SETTINGS = {
         {'name': 'Network', 'description': 'Network utility endpoints (IP detection)'},
         {'name': 'Invoice Templates', 'description': 'Invoice token catalog and template preview'},
         {'name': 'Analytics', 'description': 'Admin analytics (per-consultant order stats)'},
+        {'name': 'Catalog Ingest'},
+        {'name': 'Catalog'},
     ],
 }
 
