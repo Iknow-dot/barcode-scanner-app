@@ -2393,3 +2393,34 @@ class CatalogHelperTests(TestCase):
             proxy_image_paths("S1", 2),
             ["catalog/products/S1/image/0/", "catalog/products/S1/image/1/"],
         )
+
+
+from types import SimpleNamespace
+from rest_framework.exceptions import AuthenticationFailed
+from core.ingest_auth import organization_from_push
+
+
+class PushAuthTests(TestCase):
+    def setUp(self):
+        self.org = Organization.objects.create(
+            name="Org", identification_number="ORG1", web_service_url="https://x", employees_count=5,
+        )
+
+    def _req(self, headers):
+        return SimpleNamespace(headers=headers)
+
+    def test_resolves_org_from_x_webhook_token(self):
+        got = organization_from_push(self._req({"X-Webhook-Token": self.org.webhook_token}))
+        self.assertEqual(got, self.org)
+
+    def test_resolves_org_from_bearer(self):
+        got = organization_from_push(self._req({"Authorization": f"Bearer {self.org.webhook_token}"}))
+        self.assertEqual(got, self.org)
+
+    def test_missing_token_raises(self):
+        with self.assertRaises(AuthenticationFailed):
+            organization_from_push(self._req({}))
+
+    def test_invalid_token_raises(self):
+        with self.assertRaises(AuthenticationFailed):
+            organization_from_push(self._req({"X-Webhook-Token": "nope"}))
