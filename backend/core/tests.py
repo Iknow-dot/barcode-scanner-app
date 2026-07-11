@@ -161,6 +161,37 @@ class CheckClientResultTests(TestCase):
         self.assertEqual(result[0]['phone'], '+995555000111')
         self.assertEqual(result[0]['raw'], body)
 
+    def test_check_client_prefers_phone_1_over_legacy_phone(self):
+        # 1C bug fix: when the response carries phone_1 (main phone) alongside
+        # the legacy `phone` field (which 1C populated from phone_2), the main
+        # phone must win.
+        client = ConsultWebExchangeClient(self.org)
+        body = {
+            'name': 'Nino Beridze',
+            'phone': '+995500000002',    # legacy field == additional phone
+            'phone_1': '+995500000001',  # main phone
+            'phone_2': '+995500000002',
+        }
+        with mock.patch('httpx.request', return_value=self._mock_response(200, body)):
+            result = client.check_client(identification_number='12345678901')
+        self.assertEqual(result[0]['phone'], '+995500000001')
+
+    def test_check_client_falls_back_to_legacy_phone_when_no_phone_1(self):
+        # No regression: responses that only carry `phone` still map it.
+        client = ConsultWebExchangeClient(self.org)
+        body = {'name': 'Nino Beridze', 'phone': '+995500000111'}
+        with mock.patch('httpx.request', return_value=self._mock_response(200, body)):
+            result = client.check_client(identification_number='12345678901')
+        self.assertEqual(result[0]['phone'], '+995500000111')
+
+    def test_check_client_ignores_empty_phone_1_and_uses_phone(self):
+        # If phone_1 comes back blank, fall back to the legacy phone field.
+        client = ConsultWebExchangeClient(self.org)
+        body = {'name': 'Nino Beridze', 'phone': '+995500000111', 'phone_1': ''}
+        with mock.patch('httpx.request', return_value=self._mock_response(200, body)):
+            result = client.check_client(identification_number='12345678901')
+        self.assertEqual(result[0]['phone'], '+995500000111')
+
     def test_check_client_unwraps_customer_wrapper(self):
         client = ConsultWebExchangeClient(self.org)
         body = {

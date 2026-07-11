@@ -55,9 +55,16 @@ CHECK_CLIENT_RESPONSE_FIELDS = {
     # fields (`name`, `address`, `phone`) plus a wrapper-level `status`.
     # Callers preserve the original lookup query (personal_number / phone)
     # if they need to attach it to a downstream record.
+    #
+    # Phone precedence: 1C historically returned a single `phone` field that
+    # it populated from the *additional* phone (phone_2) instead of the main
+    # phone. `phone_1` (main phone) is mapped last so it wins over the legacy
+    # `phone` when present, while a missing/blank `phone_1` transparently
+    # falls back to `phone` (see `_normalize_client_response`).
     "name": "name",
     "address": "address",
     "phone": "phone",
+    "phone_1": "phone",
 }
 
 # CreateClient request is built imperatively (see `create_client`) because
