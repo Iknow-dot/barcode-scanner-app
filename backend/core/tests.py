@@ -2372,3 +2372,24 @@ class WebhookTokenTests(TestCase):
         a.rotate_webhook_token()
         a.refresh_from_db()
         self.assertNotEqual(a.webhook_token, old)
+
+
+from core.catalog import row_hash, proxy_image_paths
+
+
+class CatalogHelperTests(TestCase):
+    def test_row_hash_is_order_independent_for_barcodes(self):
+        a = row_hash({"name": "X", "barcodes": ["1", "2"], "image_urls": [], "article": "", "price": "1"})
+        b = row_hash({"name": "X", "barcodes": ["2", "1"], "image_urls": [], "article": "", "price": "1"})
+        self.assertEqual(a, b)
+
+    def test_row_hash_changes_on_name_change(self):
+        a = row_hash({"name": "X", "barcodes": [], "image_urls": [], "article": "", "price": "1"})
+        b = row_hash({"name": "Y", "barcodes": [], "image_urls": [], "article": "", "price": "1"})
+        self.assertNotEqual(a, b)
+
+    def test_proxy_image_paths(self):
+        self.assertEqual(
+            proxy_image_paths("S1", 2),
+            ["catalog/products/S1/image/0/", "catalog/products/S1/image/1/"],
+        )
