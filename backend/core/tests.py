@@ -2514,3 +2514,16 @@ class IngestDeactivateTests(TestCase):
         p = Product.objects.get(organization=self.org, sku="S1")
         self.assertFalse(p.is_active)
         self.assertIsNotNone(p.deactivated_at)
+
+    def test_deactivate_is_isolated_per_org(self):
+        other = Organization.objects.create(
+            name="Other", identification_number="ORG2", web_service_url="https://y", employees_count=5,
+        )
+        Product.objects.create(organization=other, sku="S1", name="Other Candle")
+        r = self.client.post(
+            "/api/v1/catalog/products/deactivate/", {"skus": ["S1"]},
+            format="json", HTTP_X_WEBHOOK_TOKEN=self.org.webhook_token,
+        )
+        self.assertEqual(r.json(), {"deactivated": 1})
+        self.assertTrue(Product.objects.get(organization=other, sku="S1").is_active)
+        self.assertIsNone(Product.objects.get(organization=other, sku="S1").deactivated_at)
