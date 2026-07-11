@@ -2493,3 +2493,24 @@ class IngestUpsertTests(TestCase):
         self._push([{"sku": "S1", "name": "Candle"}], is_full=True)
         st = CatalogIngestState.objects.get(organization=self.org)
         self.assertIsNotNone(st.last_full_push_at)
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
+class IngestDeactivateTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.org = Organization.objects.create(
+            name="Org", identification_number="ORG1", web_service_url="https://x", employees_count=5,
+        )
+        Product.objects.create(organization=self.org, sku="S1", name="Candle")
+
+    def test_deactivate_sets_flags(self):
+        r = self.client.post(
+            "/api/v1/catalog/products/deactivate/", {"skus": ["S1"]},
+            format="json", HTTP_X_WEBHOOK_TOKEN=self.org.webhook_token,
+        )
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json(), {"deactivated": 1})
+        p = Product.objects.get(organization=self.org, sku="S1")
+        self.assertFalse(p.is_active)
+        self.assertIsNotNone(p.deactivated_at)

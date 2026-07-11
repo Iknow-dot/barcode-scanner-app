@@ -1148,3 +1148,21 @@ class CatalogProductIngestAPIView(APIView):
             state.save()
 
         return Response({"received": len(products), "upserted": upserted, "skipped": skipped})
+
+
+@extend_schema(tags=["Catalog Ingest"])
+class CatalogProductDeactivateAPIView(APIView):
+    permission_classes = []
+    http_method_names = ["post"]
+
+    def post(self, request: Request) -> Response:
+        org = organization_from_push(request)
+        skus = request.data.get("skus") or []
+        now = timezone.now()
+        count = Product.objects.filter(organization=org, sku__in=skus, is_active=True).update(
+            is_active=False, deactivated_at=now,
+        )
+        state, _ = CatalogIngestState.objects.get_or_create(organization=org)
+        state.last_delete_at, state.deactivated = now, count
+        state.save(update_fields=["last_delete_at", "deactivated"])
+        return Response({"deactivated": count})
