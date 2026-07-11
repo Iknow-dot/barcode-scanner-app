@@ -30,6 +30,7 @@ from core.models import (
 )
 from core.catalog import row_hash
 from core.ingest_auth import organization_from_push
+from core.image_proxy_safety import assert_safe_image_url, sanitized_image_content_type, UnsafeImageURL
 from core.permissions import (
     OrganizationPermission,
     WarehousePermission,
@@ -1181,9 +1182,15 @@ class CatalogProductImageAPIView(APIView):
             return Response({"code": "IMAGE_NOT_FOUND", "detail": "No such product image."}, status=404)
 
         url = _convert_to_https(product.image_urls[idx])  # from the stored row only — never a client URL
+        try:
+            assert_safe_image_url(url)
+        except UnsafeImageURL:
+            self._bump_failed(org)
+            return Response({"code": "IMAGE_FETCH_FAILED", "detail": "Image host not allowed."}, status=502)
+
         auth = (org.web_service_username, org.decrypt_password()) if org.web_service_username else None
         try:
-            upstream = httpx.get(url, auth=auth, timeout=15)
+            upstream = httpx.get(url, auth=auth, timeout=15, follow_redirects=False)
         except httpx.HTTPError:
             self._bump_failed(org)
             return Response({"code": "IMAGE_FETCH_FAILED", "detail": "Upstream image error."}, status=502)
@@ -1191,8 +1198,16 @@ class CatalogProductImageAPIView(APIView):
             self._bump_failed(org)
             return Response({"code": "IMAGE_FETCH_FAILED", "detail": "Upstream image error."}, status=502)
 
-        resp = HttpResponse(upstream.content, content_type=upstream.headers.get("Content-Type", "image/jpeg"))
+        content_type = sanitized_image_content_type(upstream.headers.get("Content-Type"))
+        if content_type is None:
+            self._bump_failed(org)
+            return Response({"code": "IMAGE_FETCH_FAILED", "detail": "Unsupported image type."}, status=502)
+
+        resp = HttpResponse(upstream.content, content_type=content_type)
         resp["Cache-Control"] = "public, max-age=31536000, immutable"
+        resp["X-Content-Type-Options"] = "nosniff"
+        resp["Content-Disposition"] = 'inline; filename="image"'
+        resp["Content-Security-Policy"] = "default-src 'none'; img-src 'self'; sandbox"
         return resp
 
     @staticmethod

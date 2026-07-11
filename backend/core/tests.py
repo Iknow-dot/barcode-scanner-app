@@ -1558,6 +1558,9 @@ class InvoiceEndpointRenderingTests(TestCase):
 
 
 from core.models import Product, ProductBarcode, CatalogIngestState
+from core.image_proxy_safety import (
+    assert_safe_image_url, sanitized_image_content_type, UnsafeImageURL, ALLOWED_IMAGE_TYPES,
+)
 
 
 class CatalogModelTests(TestCase):
@@ -2552,10 +2555,14 @@ class ImageProxyTests(TestCase):
     def test_proxies_first_image(self, mget):
         mget.return_value = mock.Mock(status_code=200, content=b"JPEGBYTES", headers={"Content-Type": "image/jpeg"})
         with mock.patch.object(Organization, "decrypt_password", return_value="pw"):
-            r = self.client.get("/api/v1/catalog/products/S1/image/0/")
+            with mock.patch("core.views.assert_safe_image_url", return_value=None):
+                r = self.client.get("/api/v1/catalog/products/S1/image/0/")
         self.assertEqual(r.status_code, 200)
         self.assertEqual(r.content, b"JPEGBYTES")
         self.assertIn("immutable", r["Cache-Control"])
+        self.assertEqual(r["X-Content-Type-Options"], "nosniff")
+        self.assertIn("inline", r["Content-Disposition"])
+        self.assertIn("default-src 'none'", r["Content-Security-Policy"])
 
     def test_out_of_range_idx_404(self):
         r = self.client.get("/api/v1/catalog/products/S1/image/9/")
@@ -2565,3 +2572,39 @@ class ImageProxyTests(TestCase):
         Product.objects.create(organization=self.other, sku="S2", name="X", image_urls=["http://1c/x.jpg"])
         r = self.client.get("/api/v1/catalog/products/S2/image/0/")
         self.assertEqual(r.status_code, 404)
+
+    def test_blocked_url_returns_502(self):
+        with mock.patch("core.views.assert_safe_image_url", side_effect=UnsafeImageURL("blocked")):
+            r = self.client.get("/api/v1/catalog/products/S1/image/0/")
+        self.assertEqual(r.status_code, 502)
+
+
+class ImageProxySafetyTests(TestCase):
+    def _addrinfo(self, ip):
+        return [(2, 1, 6, "", (ip, 443))]
+
+    def test_rejects_non_https(self):
+        with self.assertRaises(UnsafeImageURL):
+            assert_safe_image_url("http://example.com/a.jpg")
+
+    def test_rejects_private_address(self):
+        with mock.patch("core.image_proxy_safety.socket.getaddrinfo", return_value=self._addrinfo("10.0.0.5")):
+            with self.assertRaises(UnsafeImageURL):
+                assert_safe_image_url("https://internal.example/a.jpg")
+
+    def test_rejects_loopback_and_metadata(self):
+        for ip in ("127.0.0.1", "169.254.169.254"):
+            with mock.patch("core.image_proxy_safety.socket.getaddrinfo", return_value=self._addrinfo(ip)):
+                with self.assertRaises(UnsafeImageURL):
+                    assert_safe_image_url("https://x.example/a.jpg")
+
+    def test_allows_public_address(self):
+        with mock.patch("core.image_proxy_safety.socket.getaddrinfo", return_value=self._addrinfo("93.184.216.34")):
+            assert_safe_image_url("https://example.com/a.jpg")  # no raise
+
+    def test_content_type_allowlist(self):
+        self.assertEqual(sanitized_image_content_type("image/png"), "image/png")
+        self.assertEqual(sanitized_image_content_type("image/jpeg; charset=binary"), "image/jpeg")
+        self.assertIsNone(sanitized_image_content_type("image/svg+xml"))
+        self.assertIsNone(sanitized_image_content_type("text/html"))
+        self.assertIsNone(sanitized_image_content_type(None))
