@@ -2,6 +2,7 @@ import base64
 import logging
 from urllib.parse import urlparse, urlunparse
 
+from django.http import HttpResponse
 from django.template.loader import render_to_string
 from django.utils import timezone
 
@@ -1166,3 +1167,35 @@ class CatalogProductDeactivateAPIView(APIView):
         state.last_delete_at, state.deactivated = now, count
         state.save(update_fields=["last_delete_at", "deactivated"])
         return Response({"deactivated": count})
+
+
+@extend_schema(tags=["Catalog"])
+class CatalogProductImageAPIView(APIView):
+    permission_classes = [IsCompanyUserOrAdmin]
+    http_method_names = ["get"]
+
+    def get(self, request: Request, sku: str, idx: int) -> HttpResponse:
+        org = request.user.organization
+        product = Product.objects.filter(organization=org, sku=sku).first()
+        if product is None or idx >= len(product.image_urls):
+            return Response({"code": "IMAGE_NOT_FOUND", "detail": "No such product image."}, status=404)
+
+        url = _convert_to_https(product.image_urls[idx])  # from the stored row only — never a client URL
+        auth = (org.web_service_username, org.decrypt_password()) if org.web_service_username else None
+        try:
+            upstream = httpx.get(url, auth=auth, timeout=15)
+        except httpx.HTTPError:
+            self._bump_failed(org)
+            return Response({"code": "IMAGE_FETCH_FAILED", "detail": "Upstream image error."}, status=502)
+        if upstream.status_code != 200:
+            self._bump_failed(org)
+            return Response({"code": "IMAGE_FETCH_FAILED", "detail": "Upstream image error."}, status=502)
+
+        resp = HttpResponse(upstream.content, content_type=upstream.headers.get("Content-Type", "image/jpeg"))
+        resp["Cache-Control"] = "public, max-age=31536000, immutable"
+        return resp
+
+    @staticmethod
+    def _bump_failed(org) -> None:
+        state, _ = CatalogIngestState.objects.get_or_create(organization=org)
+        CatalogIngestState.objects.filter(pk=state.pk).update(images_failed=models.F("images_failed") + 1)

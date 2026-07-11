@@ -2527,3 +2527,41 @@ class IngestDeactivateTests(TestCase):
         self.assertEqual(r.json(), {"deactivated": 1})
         self.assertTrue(Product.objects.get(organization=other, sku="S1").is_active)
         self.assertIsNone(Product.objects.get(organization=other, sku="S1").deactivated_at)
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
+class ImageProxyTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.org = Organization.objects.create(
+            name="Org", identification_number="ORG1", web_service_url="https://x",
+            web_service_username="u", employees_count=5,
+        )
+        self.other = Organization.objects.create(
+            name="Other", identification_number="ORG2", web_service_url="https://y", employees_count=5,
+        )
+        self.user = User.objects.create_user(
+            username="c", password="p", role=User.Role.COMPANY_USER, organization=self.org,
+        )
+        self.client.force_authenticate(self.user)
+        self.product = Product.objects.create(
+            organization=self.org, sku="S1", name="Candle", image_urls=["http://1c/img0.jpg"],
+        )
+
+    @mock.patch("core.views.httpx.get")
+    def test_proxies_first_image(self, mget):
+        mget.return_value = mock.Mock(status_code=200, content=b"JPEGBYTES", headers={"Content-Type": "image/jpeg"})
+        with mock.patch.object(Organization, "decrypt_password", return_value="pw"):
+            r = self.client.get("/api/v1/catalog/products/S1/image/0/")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.content, b"JPEGBYTES")
+        self.assertIn("immutable", r["Cache-Control"])
+
+    def test_out_of_range_idx_404(self):
+        r = self.client.get("/api/v1/catalog/products/S1/image/9/")
+        self.assertEqual(r.status_code, 404)
+
+    def test_other_orgs_product_404(self):
+        Product.objects.create(organization=self.other, sku="S2", name="X", image_urls=["http://1c/x.jpg"])
+        r = self.client.get("/api/v1/catalog/products/S2/image/0/")
+        self.assertEqual(r.status_code, 404)
