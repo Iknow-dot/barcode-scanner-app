@@ -17,7 +17,7 @@ from rest_framework.renderers import StaticHTMLRenderer
 from rest_framework.views import APIView
 from rest_framework.viewsets import ModelViewSet
 
-from django.db import models, transaction
+from django.db import connection, models, transaction
 
 from core.models import (
     Organization,
@@ -28,7 +28,7 @@ from core.models import (
     ProductBarcode,
     CatalogIngestState,
 )
-from core.catalog import row_hash
+from core.catalog import row_hash, proxy_image_paths
 from core.ingest_auth import organization_from_push
 from core.image_proxy_safety import assert_safe_image_url, sanitized_image_content_type, UnsafeImageURL
 from core.permissions import (
@@ -58,6 +58,7 @@ from core.serializers import (
     ReverseGeocodeRequestSerializer,
     SearchAddressesRequestSerializer,
     ConsultantOrderStatsSerializer,
+    CatalogProductSerializer,
 )
 from core.services.consult_web_exchange import (
     ConsultWebExchangeClient,
@@ -1168,6 +1169,33 @@ class CatalogProductDeactivateAPIView(APIView):
         state.last_delete_at, state.deactivated = now, count
         state.save(update_fields=["last_delete_at", "deactivated"])
         return Response({"deactivated": count})
+
+
+@extend_schema(tags=["Catalog"])
+class CatalogProductSearchAPIView(APIView):
+    permission_classes = [IsCompanyUserOrAdmin]
+    http_method_names = ["get"]
+
+    def get(self, request: Request) -> Response:
+        q = (request.query_params.get("q") or "").strip()
+        if not q:
+            return Response([])
+
+        qs = Product.objects.filter(organization=request.user.organization, is_active=True)
+        if connection.vendor == "postgresql":
+            from django.contrib.postgres.search import TrigramSimilarity
+            qs = qs.annotate(rank=TrigramSimilarity("name", q)).filter(rank__gt=0.1).order_by("-rank")
+        else:  # SQLite dev fallback
+            qs = qs.filter(name__icontains=q).order_by("name")
+
+        rows = [
+            {
+                "sku": p.sku, "name": p.name, "price": p.price,
+                "image": proxy_image_paths(p.sku, len(p.image_urls))[0] if p.image_urls else None,
+            }
+            for p in qs[:20]
+        ]
+        return Response(CatalogProductSerializer(rows, many=True).data)
 
 
 @extend_schema(tags=["Catalog"])

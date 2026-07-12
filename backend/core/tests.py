@@ -2608,3 +2608,35 @@ class ImageProxySafetyTests(TestCase):
         self.assertIsNone(sanitized_image_content_type("image/svg+xml"))
         self.assertIsNone(sanitized_image_content_type("text/html"))
         self.assertIsNone(sanitized_image_content_type(None))
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
+class NameSearchTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.org = Organization.objects.create(
+            name="Org", identification_number="ORG1", web_service_url="https://x", employees_count=5,
+        )
+        self.other = Organization.objects.create(
+            name="Other", identification_number="ORG2", web_service_url="https://y", employees_count=5,
+        )
+        self.user = User.objects.create_user(
+            username="c", password="p", role=User.Role.COMPANY_USER, organization=self.org,
+        )
+        self.client.force_authenticate(self.user)
+        Product.objects.create(organization=self.org, sku="S1", name="Candle decorative", image_urls=["u"])
+        Product.objects.create(organization=self.org, sku="S2", name="Table", is_active=False)
+        Product.objects.create(organization=self.other, sku="S3", name="Candle other-org")
+
+    def test_finds_active_own_org_only(self):
+        r = self.client.get("/api/v1/catalog/products/search/?q=candle")
+        self.assertEqual(r.status_code, 200)
+        skus = {row["sku"] for row in r.json()}
+        self.assertEqual(skus, {"S1"})  # not the inactive one, not the other org's
+
+    def test_first_image_is_proxy_path(self):
+        r = self.client.get("/api/v1/catalog/products/search/?q=candle")
+        self.assertEqual(r.json()[0]["image"], "catalog/products/S1/image/0/")
+
+    def test_empty_query_returns_empty(self):
+        self.assertEqual(self.client.get("/api/v1/catalog/products/search/?q=").json(), [])

@@ -559,3 +559,14 @@ class ConsultantOrderStatsSerializer(serializers.Serializer):
     orders_created = serializers.IntegerField()
     orders_confirmed = serializers.IntegerField()
     conversion_rate = serializers.FloatField()
+
+
+# ---------------------------------------------------------------------------
+# Catalog name search
+# ---------------------------------------------------------------------------
+
+class CatalogProductSerializer(serializers.Serializer):
+    sku = serializers.CharField()
+    name = serializers.CharField()
+    price = serializers.DecimalField(max_digits=12, decimal_places=2, allow_null=True)
+    image = serializers.CharField(allow_null=True)

@@ -16,6 +16,7 @@ from core.views import (
     OrderAnalyticsAPIView,
     CatalogProductIngestAPIView,
     CatalogProductDeactivateAPIView,
+    CatalogProductSearchAPIView,
     CatalogProductImageAPIView,
 )
 
@@ -35,6 +36,7 @@ urlpatterns = [
     path('product/search/', ProductSearchAPIView.as_view(), name='product-search'),
     path('analytics/orders/', OrderAnalyticsAPIView.as_view(), name='order-analytics'),
     path('catalog/products/deactivate/', CatalogProductDeactivateAPIView.as_view(), name='catalog-product-deactivate'),
+    path('catalog/products/search/', CatalogProductSearchAPIView.as_view(), name='catalog-product-search'),
     path('catalog/products/<str:sku>/image/<int:idx>/', CatalogProductImageAPIView.as_view(), name='catalog-product-image'),
     path('catalog/products/', CatalogProductIngestAPIView.as_view(), name='catalog-product-ingest'),
     path('', include(router.urls)),
