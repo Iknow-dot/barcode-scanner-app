@@ -561,7 +561,8 @@ class PurchaseOrderDenormalizedSearchTests(TestCase):
 
 @override_settings(SECURE_SSL_REDIRECT=False)
 class ProductSearchIncludeImagesTests(TestCase):
-    """Verify include_images=False skips the slow base64 inlining loop."""
+    """Scan-miss path never inlines images anymore — it always returns proxy paths,
+    regardless of the (now-inert) include_images flag, and never calls httpx.get."""
 
     def setUp(self):
         self.org = _make_organization()
@@ -598,7 +599,7 @@ class ProductSearchIncludeImagesTests(TestCase):
             'img_url': ['https://example.invalid/img.jpg'],
         }
 
-    def test_include_images_false_skips_image_fetch(self):
+    def test_include_images_false_still_returns_proxy_paths(self):
         with mock.patch('core.views.ConsultWebExchangeClient') as cls:
             cls.return_value.get_stock_and_prices.return_value = self._stock_response()
             with mock.patch('core.views.httpx.get') as httpx_get:
@@ -609,16 +610,13 @@ class ProductSearchIncludeImagesTests(TestCase):
                     format='json',
                 )
         self.assertEqual(response.status_code, 200, response.data)
-        self.assertEqual(response.data['images'], [])
+        self.assertEqual(response.data['images'], ['catalog/products/SKU1/image/0/'])
         httpx_get.assert_not_called()
 
-    def test_include_images_default_true_fetches_images(self):
-        fake_image = mock.Mock()
-        fake_image.status_code = 200
-        fake_image.content = b'binary'
+    def test_include_images_default_true_returns_proxy_paths_without_fetching(self):
         with mock.patch('core.views.ConsultWebExchangeClient') as cls:
             cls.return_value.get_stock_and_prices.return_value = self._stock_response()
-            with mock.patch('core.views.httpx.get', return_value=fake_image) as httpx_get:
+            with mock.patch('core.views.httpx.get') as httpx_get:
                 response = self.client_api.post(
                     self.url,
                     {'sku': 'SKU1', 'is_barcode': True, 'warehouses': ['W1']},
@@ -626,7 +624,7 @@ class ProductSearchIncludeImagesTests(TestCase):
                 )
         self.assertEqual(response.status_code, 200, response.data)
         self.assertEqual(len(response.data['images']), 1)
-        httpx_get.assert_called_once()
+        httpx_get.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -2648,3 +2646,41 @@ class NameSearchTests(TestCase):
         skus = {row["sku"] for row in r.json()}
         self.assertIn("S1", skus)       # active match present
         self.assertNotIn("S4", skus)    # inactive match excluded by is_active filter, NOT by name
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
+class ScanFastPathTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.org = Organization.objects.create(
+            name="Org", identification_number="ORG1", web_service_url="https://x", employees_count=5,
+        )
+        self.user = User.objects.create_user(
+            username="c", password="p", role=User.Role.COMPANY_USER, organization=self.org,
+        )
+        self.client.force_authenticate(self.user)
+        p = Product.objects.create(
+            organization=self.org, sku="S1", name="Candle", price="9.90", image_urls=["http://1c/a.jpg"],
+        )
+        ProductBarcode.objects.create(product=p, barcode="123")
+
+    @mock.patch("core.views.ConsultWebExchangeClient.get_stock_and_prices")
+    def test_replica_hit_returns_proxy_images_and_live_stock(self, mstock):
+        mstock.return_value = {"stock": [{"warehouse": "W1", "warehouse_name": "Main", "quantity": 3, "price": "9.90"}]}
+        r = self.client.post(
+            "/api/v1/product/search/", {"sku": "123", "is_barcode": True, "warehouses": ["W1"]}, format="json",
+        )
+        self.assertEqual(r.status_code, 200)
+        body = r.json()
+        self.assertEqual(body["sku_name"], "Candle")
+        self.assertEqual(body["images"], ["catalog/products/S1/image/0/"])
+        self.assertEqual(body["stock"][0]["quantity"], 3)
+
+    @mock.patch("core.views.ConsultWebExchangeClient.get_stock_and_prices")
+    def test_stock_failure_degrades_gracefully(self, mstock):
+        mstock.side_effect = ConsultWebExchangeError(code="EXTERNAL_SERVICE_TIMEOUT", detail="t", http_status=504)
+        r = self.client.post(
+            "/api/v1/product/search/", {"sku": "123", "is_barcode": True, "warehouses": ["W1"]}, format="json",
+        )
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()["stock_status"], "unavailable")

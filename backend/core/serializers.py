@@ -539,7 +539,8 @@ class ProductSearchSerializer(serializers.Serializer):
     price = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
     sku_name = serializers.CharField(max_length=255, read_only=True)
     stock = serializers.ListField(read_only=True, child=StockSerializer())
-    images = serializers.ListField(child=serializers.URLField(), read_only=True)
+    images = serializers.ListField(child=serializers.CharField(), read_only=True)
+    stock_status = serializers.CharField(read_only=True, required=False)
 
     class Meta:
         read_only_fields = [
@@ -549,6 +550,7 @@ class ProductSearchSerializer(serializers.Serializer):
             'sku_name',
             'stock',
             'images',
+            'stock_status',
         ]
 
 

@@ -1,4 +1,3 @@
-import base64
 import logging
 from urllib.parse import urlparse, urlunparse
 
@@ -323,54 +322,64 @@ class ProductSearchAPIView(APIView):
         serializer.is_valid(raise_exception=True)
         user = self.request.user
 
-        selected_warehouses = user.warehouses.filter(code__in=warehouses)
-        if not selected_warehouses.exists():
-            selected_warehouses = ""
+        selected = user.warehouses.filter(code__in=warehouses)
+        selected_warehouses = ",".join(selected.values_list("code", flat=True)) if selected.exists() else ""
+
+        # --- replica fast-path ---
+        if is_barcode:
+            match = ProductBarcode.objects.filter(
+                product__organization=user.organization, barcode=sku, product__is_active=True,
+            ).select_related("product").first()
+            product = match.product if match else None
         else:
-            selected_warehouses = ",".join(selected_warehouses.values_list('code', flat=True))
+            product = Product.objects.filter(
+                organization=user.organization, sku=sku, is_active=True,
+            ).first()
 
         client = ConsultWebExchangeClient(user.organization)
+
+        if product is not None:
+            payload = {
+                "sku": product.sku, "article": product.article, "sku_name": product.name,
+                "price": product.price, "images": proxy_image_paths(product.sku, len(product.image_urls)),
+            }
+            try:
+                live = client.get_stock_and_prices(product.sku, is_barcode=False, warehouses=selected_warehouses)
+                payload["stock"] = live.get("stock", [])
+            except ConsultWebExchangeError:
+                payload["stock"], payload["stock_status"] = [], "unavailable"
+            return Response(self.serializer_class(payload).data)
+
+        # --- miss: today's full live path + lazy upsert self-heal ---
         try:
-            product_data = client.get_stock_and_prices(
-                sku,
-                is_barcode=bool(is_barcode),
-                warehouses=selected_warehouses,
-            )
+            product_data = client.get_stock_and_prices(sku, is_barcode=bool(is_barcode), warehouses=selected_warehouses)
         except ConsultWebExchangeError as exc:
             return _consult_error_response(exc)
 
-        # Convert img_url to Base64-encoded images. include_images defaults
-        # to True (backward-compatible); set to False from low-bandwidth
-        # callers like the cart card's stock-only fetch.
-        include_images = bool(request.data.get('include_images', True))
-        if 'img_url' in product_data:
-            if include_images:
-                base64_images = []
-                for url in product_data['img_url']:
-                    try:
-                        if not url:
-                            logging.warning(f"Empty image URL for product with barcode {sku}")
-                            continue
-                        https_url = _convert_to_https(url)
-                        image_response = httpx.get(https_url)
-                        if image_response.status_code == 200:
-                            base64_string = base64.b64encode(image_response.content).decode('utf-8')
-                            base64_images.append({
-                                "original_url": https_url,
-                                "base64": f"data:image/jpeg;base64,{base64_string}"
-                            })
-                        else:
-                            logging.warning(
-                                f"Failed to fetch image from {https_url}: Status code {image_response.status_code}")
-                    except Exception as e:
-                        logging.error(f"Error fetching image from {url}: {e}")
-                product_data['images'] = base64_images
-            else:
-                product_data['images'] = []
-            del product_data['img_url']
+        img_urls = product_data.get("img_url") or []
+        self._lazy_upsert(user.organization, sku, bool(is_barcode), product_data, img_urls)
+        product_data["images"] = proxy_image_paths(product_data.get("sku") or sku, len(img_urls))
+        product_data.pop("img_url", None)
+        return Response(self.serializer_class(product_data).data)
 
-        serializer = self.serializer_class(product_data)
-        return Response(serializer.data)
+    @staticmethod
+    def _lazy_upsert(org, scanned, is_barcode, data, img_urls):
+        resolved_sku = data.get("sku") or scanned
+        item = {
+            "article": data.get("article") or "", "name": data.get("sku_name") or "",
+            "price": data.get("price"), "image_urls": img_urls,
+            "barcodes": [scanned] if is_barcode else [],
+        }
+        obj, _ = Product.objects.update_or_create(
+            organization=org, sku=resolved_sku,
+            defaults={
+                "article": item["article"], "name": item["name"], "price": item["price"],
+                "image_urls": img_urls, "row_hash": row_hash(item), "is_active": True,
+                "deactivated_at": None, "pushed_at": timezone.now(),
+            },
+        )
+        if is_barcode:
+            ProductBarcode.objects.get_or_create(product=obj, barcode=scanned)
 
 
 # ---------------------------------------------------------------------------
