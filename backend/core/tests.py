@@ -2640,3 +2640,11 @@ class NameSearchTests(TestCase):
 
     def test_empty_query_returns_empty(self):
         self.assertEqual(self.client.get("/api/v1/catalog/products/search/?q=").json(), [])
+
+    def test_inactive_matching_product_is_excluded(self):
+        Product.objects.create(organization=self.org, sku="S4", name="Candle inactive", is_active=False)
+        r = self.client.get("/api/v1/catalog/products/search/?q=candle")
+        self.assertEqual(r.status_code, 200)
+        skus = {row["sku"] for row in r.json()}
+        self.assertIn("S1", skus)       # active match present
+        self.assertNotIn("S4", skus)    # inactive match excluded by is_active filter, NOT by name
