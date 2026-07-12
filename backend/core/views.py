@@ -7,7 +7,7 @@ from django.utils import timezone
 
 import httpx
 from django.utils.dateparse import parse_date
-from drf_spectacular.utils import extend_schema, extend_schema_view, OpenApiParameter
+from drf_spectacular.utils import extend_schema, extend_schema_view, OpenApiParameter, OpenApiExample
 from rest_framework import status as http_status
 from rest_framework.decorators import action
 from rest_framework.request import Request
@@ -59,6 +59,10 @@ from core.serializers import (
     SearchAddressesRequestSerializer,
     ConsultantOrderStatsSerializer,
     CatalogProductSerializer,
+    CatalogIngestRequestSerializer,
+    CatalogIngestResponseSerializer,
+    CatalogDeactivateRequestSerializer,
+    CatalogDeactivateResponseSerializer,
 )
 from core.services.consult_web_exchange import (
     ConsultWebExchangeClient,
@@ -1114,7 +1118,54 @@ class PurchaseOrderViewSet(ModelViewSet):
         return Response(wrapped, content_type='text/html')
 
 
-@extend_schema(tags=["Catalog Ingest"])
+_PUSH_TOKEN_PARAM = OpenApiParameter(
+    name="X-Webhook-Token",
+    location=OpenApiParameter.HEADER,
+    required=True,
+    type=str,
+    description="Per-organization push token. Alternatively send `Authorization: Bearer <token>`. The org is derived from the token; the body never names an org.",
+)
+
+
+@extend_schema(
+    tags=["Catalog Ingest"],
+    summary="Push catalog products (bulk on onboarding, deltas thereafter)",
+    description=(
+        "Upsert a batch of products into your organization's catalog replica. Send `is_full: true` "
+        "with your whole catalog on onboarding (you may page it), then push only what changed. "
+        "Idempotent: unchanged rows are skipped, and a previously deactivated SKU that is pushed "
+        "again is reactivated."
+    ),
+    request=CatalogIngestRequestSerializer,
+    responses={200: CatalogIngestResponseSerializer},
+    parameters=[_PUSH_TOKEN_PARAM],
+    examples=[
+        OpenApiExample(
+            "Full onboarding page",
+            request_only=True,
+            value={
+                "is_full": True,
+                "page": 1,
+                "products": [
+                    {
+                        "sku": "A-100",
+                        "article": "AX100",
+                        "name": "Candle, decorative",
+                        "price": "9.90",
+                        "barcodes": ["4860001234567"],
+                        "image_urls": ["https://1c.example/img/a-100-0.jpg"],
+                    }
+                ],
+            },
+        ),
+        OpenApiExample(
+            "Incremental change",
+            request_only=True,
+            value={"products": [{"sku": "A-100", "name": "Candle, decorative (new box)", "barcodes": ["4860001234567"]}]},
+        ),
+        OpenApiExample("Result", response_only=True, value={"received": 1, "upserted": 1, "skipped": 0}),
+    ],
+)
 class CatalogProductIngestAPIView(APIView):
     permission_classes = []  # authenticated by per-org push token, not JWT
     http_method_names = ["post"]
@@ -1166,7 +1217,21 @@ class CatalogProductIngestAPIView(APIView):
         return Response({"received": len(products), "upserted": upserted, "skipped": skipped})
 
 
-@extend_schema(tags=["Catalog Ingest"])
+@extend_schema(
+    tags=["Catalog Ingest"],
+    summary="Deactivate discontinued products",
+    description=(
+        "Soft-deactivate the given SKUs — they are hidden from search but kept forever, so order "
+        "history keeps resolving them. Re-pushing a SKU via `POST /catalog/products/` reactivates it."
+    ),
+    request=CatalogDeactivateRequestSerializer,
+    responses={200: CatalogDeactivateResponseSerializer},
+    parameters=[_PUSH_TOKEN_PARAM],
+    examples=[
+        OpenApiExample("Deactivate two SKUs", request_only=True, value={"skus": ["A-100", "B-205"]}),
+        OpenApiExample("Result", response_only=True, value={"deactivated": 2}),
+    ],
+)
 class CatalogProductDeactivateAPIView(APIView):
     permission_classes = []
     http_method_names = ["post"]

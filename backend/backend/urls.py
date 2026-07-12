@@ -6,6 +6,8 @@ from drf_spectacular.views import (
     SpectacularSwaggerView,
 )
 
+from core.schema import INTEGRATION_DESCRIPTION
+
 urlpatterns = [
     path('admin/', admin.site.urls),
 
@@ -13,8 +15,24 @@ urlpatterns = [
     path('api/v1/', include('core.urls')),
     path('api/v1/users/', include('users.urls')),
 
-    # Swagger / OpenAPI
+    # Swagger / OpenAPI — full internal API (JWT), consumed by our own frontend
     path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
     path('api/docs/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
     path('api/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),
+
+    # Catalog Integration API — the focused contract external systems (1C) push into.
+    # Same SpectacularAPIView, filtered to the ingest endpoints via a preprocessing hook.
+    path(
+        'api/integration/schema/',
+        SpectacularAPIView.as_view(
+            custom_settings={
+                'TITLE': 'Barcode Scanner — Catalog Integration API',
+                'DESCRIPTION': INTEGRATION_DESCRIPTION,
+                'VERSION': '1.0.0',
+                'PREPROCESSING_HOOKS': ['core.schema.integration_endpoints_only'],
+            },
+        ),
+        name='integration-schema',
+    ),
+    path('api/integration/redoc/', SpectacularRedocView.as_view(url_name='integration-schema'), name='integration-redoc'),
 ]

@@ -572,3 +572,63 @@ class CatalogProductSerializer(serializers.Serializer):
     name = serializers.CharField()
     price = serializers.DecimalField(max_digits=12, decimal_places=2, allow_null=True)
     image = serializers.CharField(allow_null=True)
+
+
+# ---------------------------------------------------------------------------
+# Catalog ingest (external integration) — documentation serializers
+#
+# These describe the request/response shapes of the 1C push endpoints for the
+# integration OpenAPI schema (see core/schema.py). The ingest views read
+# request.data directly; these serializers are for drf-spectacular only.
+# ---------------------------------------------------------------------------
+
+class CatalogIngestProductSerializer(serializers.Serializer):
+    sku = serializers.CharField(
+        help_text="Stable product identifier (1C item code). Together with the organization it is the primary key of the replica row."
+    )
+    article = serializers.CharField(
+        required=False, allow_blank=True,
+        help_text="Human-facing article / model number.",
+    )
+    name = serializers.CharField(help_text="Display name; also what name search matches against.")
+    price = serializers.DecimalField(
+        max_digits=12, decimal_places=2, required=False, allow_null=True,
+        help_text="Display fallback only. The price shown at scan time is always fetched live from 1C.",
+    )
+    barcodes = serializers.ListField(
+        child=serializers.CharField(), required=False,
+        help_text="Every barcode that maps to this product.",
+    )
+    image_urls = serializers.ListField(
+        child=serializers.CharField(), required=False,
+        help_text="Absolute image URLs on your host; served to consultants via our authenticated image proxy (never copied or stored).",
+    )
+
+
+class CatalogIngestRequestSerializer(serializers.Serializer):
+    products = CatalogIngestProductSerializer(many=True)
+    is_full = serializers.BooleanField(
+        required=False, default=False,
+        help_text="True when this batch is part of a full catalog snapshot (onboarding / re-baseline); stamps the full-push watermark. Omit or false for incremental change pushes.",
+    )
+    page = serializers.IntegerField(
+        required=False,
+        help_text="Optional 1-based page number when a full push is sent in chunks. Informational only — batches are processed independently and idempotently, in any order.",
+    )
+
+
+class CatalogIngestResponseSerializer(serializers.Serializer):
+    received = serializers.IntegerField(help_text="Number of products in the request.")
+    upserted = serializers.IntegerField(help_text="Rows created or updated (changed, or previously deactivated).")
+    skipped = serializers.IntegerField(help_text="Unchanged rows skipped because their fingerprint matched.")
+
+
+class CatalogDeactivateRequestSerializer(serializers.Serializer):
+    skus = serializers.ListField(
+        child=serializers.CharField(),
+        help_text="SKUs to soft-deactivate (hidden from search; order history preserved). Re-pushing a SKU via /catalog/products/ reactivates it.",
+    )
+
+
+class CatalogDeactivateResponseSerializer(serializers.Serializer):
+    deactivated = serializers.IntegerField(help_text="Number of active products that were deactivated.")
