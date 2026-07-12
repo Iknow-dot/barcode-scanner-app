@@ -28,7 +28,7 @@ class OrganizationPermission(BasePermission):
             return True
 
         # Company admins can manage their external service settings and invoice template
-        if view.action in ('external_service', 'invoice_template') and request.user.role == User.Role.COMPANY_ADMIN:
+        if view.action in ('external_service', 'rotate_external_service_token', 'invoice_template') and request.user.role == User.Role.COMPANY_ADMIN:
             return True
 
         # Non-admin roles: read-only actions only

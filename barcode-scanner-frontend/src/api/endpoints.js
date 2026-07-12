@@ -14,6 +14,7 @@ const API_ENDPOINTS = {
     organization_used_ips: orgId => `api/v1/organizations/${orgId}/used-ips/`,
     my_organization: "api/v1/organizations/my-organization/",
     my_organization_external_service: "api/v1/organizations/my-organization/external-service/",
+    my_organization_external_service_rotate_token: "api/v1/organizations/my-organization/external-service/rotate-token/",
     my_organization_invoice_template: "api/v1/organizations/my-organization/invoice-template/",
     warehouses: "api/v1/warehouses/",
     warehouse: warehouseId => `api/v1/warehouses/${warehouseId}/`,

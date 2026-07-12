@@ -64,6 +64,15 @@ export const updateExternalService = (payload) =>
     api.patch(API_ENDPOINTS.my_organization_external_service, payload);
 
 /**
+ * Rotate (regenerate) the organization's catalog-push token. Invalidates the
+ * previous token — the org's 1C must be updated with the new value before it
+ * can push again.
+ * @returns {Promise<{success: boolean, data?: {webhook_token: string}, error?: string}>}
+ */
+export const rotateExternalServiceToken = () =>
+    api.post(API_ENDPOINTS.my_organization_external_service_rotate_token);
+
+/**
  * Fetch the current user's organization invoice template fields.
  */
 export const getInvoiceTemplate = () =>

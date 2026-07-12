@@ -6,9 +6,11 @@ import {
     Flex,
     Form,
     Input,
+    Popconfirm,
     Spin,
     Switch,
     Tag,
+    Tooltip,
 } from 'antd';
 import {
     GlobalOutlined,
@@ -17,6 +19,9 @@ import {
     UserOutlined,
     CheckCircleOutlined,
     CloseCircleOutlined,
+    KeyOutlined,
+    CopyOutlined,
+    ReloadOutlined,
 } from '@ant-design/icons';
 import {organizationService} from '../../api';
 import useAppNotification from '../../hooks/useAppNotification';
@@ -27,6 +32,8 @@ const ExternalServiceSettings = () => {
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [hasPassword, setHasPassword] = useState(false);
+    const [pushToken, setPushToken] = useState('');
+    const [rotating, setRotating] = useState(false);
     const {notify, contextHolder} = useAppNotification();
     const {t} = useLanguage();
 
@@ -41,6 +48,7 @@ const ExternalServiceSettings = () => {
                         web_service_username: result.data.web_service_username,
                     });
                     setHasPassword(result.data.has_password);
+                    setPushToken(result.data.webhook_token || '');
                 } else {
                     notify.error(t.error, t.externalServiceFetchError);
                 }
@@ -50,6 +58,30 @@ const ExternalServiceSettings = () => {
         };
         fetchSettings();
     }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+    const handleCopyToken = async () => {
+        try {
+            await navigator.clipboard.writeText(pushToken);
+            notify.success(t.success, t.pushTokenCopied);
+        } catch {
+            notify.error(t.error, t.pushTokenCopyError);
+        }
+    };
+
+    const handleRotateToken = async () => {
+        setRotating(true);
+        try {
+            const result = await organizationService.rotateExternalServiceToken();
+            if (result.success) {
+                setPushToken(result.data.webhook_token);
+                notify.success(t.success, t.pushTokenRotated);
+            } else {
+                notify.error(t.error, result.error || t.pushTokenRotateError);
+            }
+        } finally {
+            setRotating(false);
+        }
+    };
 
     const handleSubmit = async (values) => {
         setSaving(true);
@@ -184,6 +216,45 @@ const ExternalServiceSettings = () => {
                             </Button>
                         </Form.Item>
                     </Form>
+
+                    <Divider style={{margin: '24px 0 16px'}}>
+                        <Flex align="center" gap={6} style={{opacity: 0.7, fontSize: 13}}>
+                            <KeyOutlined/>
+                            {t.pushToken}
+                        </Flex>
+                    </Divider>
+
+                    <p style={{fontSize: 12, opacity: 0.6, marginTop: 0}}>{t.pushTokenHelp}</p>
+
+                    <Input
+                        readOnly
+                        value={pushToken}
+                        prefix={<KeyOutlined style={{opacity: 0.4}}/>}
+                        addonAfter={
+                            <Tooltip title={t.pushTokenCopy}>
+                                <CopyOutlined style={{cursor: 'pointer'}} onClick={handleCopyToken}/>
+                            </Tooltip>
+                        }
+                    />
+
+                    <Popconfirm
+                        title={t.pushTokenRotate}
+                        description={t.pushTokenRotateWarning}
+                        okText={t.pushTokenRotate}
+                        cancelText={t.cancel}
+                        okButtonProps={{danger: true}}
+                        onConfirm={handleRotateToken}
+                    >
+                        <Button
+                            danger
+                            ghost
+                            loading={rotating}
+                            icon={<ReloadOutlined/>}
+                            style={{marginTop: 12}}
+                        >
+                            {t.pushTokenRotate}
+                        </Button>
+                    </Popconfirm>
                 </Card>
             </Spin>
         </>

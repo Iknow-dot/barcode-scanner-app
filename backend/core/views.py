@@ -165,6 +165,7 @@ def _consult_error_response(exc: ConsultWebExchangeError) -> Response:
     destroy=extend_schema(tags=['Organizations']),
     get_user_organization=extend_schema(tags=['Organizations']),
     external_service=extend_schema(tags=['Organizations']),
+    rotate_external_service_token=extend_schema(tags=['Organizations']),
     invoice_template=extend_schema(tags=['Organizations']),
     used_ips=extend_schema(tags=['Organizations']),
 )
@@ -222,6 +223,7 @@ class OrganizationViewSet(ModelViewSet):
                 'web_service_url': organization.web_service_url,
                 'web_service_username': organization.web_service_username,
                 'has_password': bool(organization.web_service_password),
+                'webhook_token': organization.webhook_token,
             }
             return Response(data)
 
@@ -235,6 +237,28 @@ class OrganizationViewSet(ModelViewSet):
             'has_password': bool(organization.web_service_password),
         }
         return Response(data)
+
+    @action(detail=False, methods=['post'], url_path='my-organization/external-service/rotate-token')
+    def rotate_external_service_token(self, request: Request) -> Response:
+        """POST: Rotate (regenerate) the organization's catalog-push token.
+
+        Only accessible by company admins. Invalidates the previous token — the
+        org's 1C must be reconfigured with the new value before it can push again.
+        """
+        user = request.user
+        if user.role != User.Role.COMPANY_ADMIN:
+            return Response(
+                {"detail": "Only company admins can rotate the push token."},
+                status=http_status.HTTP_403_FORBIDDEN,
+            )
+        if not user.organization:
+            return Response(
+                {"code": "NO_ORGANIZATION", "detail": "User does not belong to any organization."},
+                status=http_status.HTTP_404_NOT_FOUND,
+            )
+        organization = user.organization
+        organization.rotate_webhook_token()
+        return Response({"webhook_token": organization.webhook_token})
 
     @action(detail=False, methods=['get', 'patch'], url_path='my-organization/invoice-template')
     def invoice_template(self, request: Request) -> Response:
@@ -1129,7 +1153,7 @@ _PUSH_TOKEN_PARAM = OpenApiParameter(
 
 @extend_schema(
     tags=["Catalog Ingest"],
-    summary="Push catalog products (bulk on onboarding, deltas thereafter)",
+    summary="Push catalog products (bulk on onboarding, deltas thereafter) · პროდუქტების ატვირთვა",
     description=(
         "Upsert a batch of products into your organization's catalog replica. Send `is_full: true` "
         "with your whole catalog on onboarding (you may page it), then push only what changed. "
@@ -1219,7 +1243,7 @@ class CatalogProductIngestAPIView(APIView):
 
 @extend_schema(
     tags=["Catalog Ingest"],
-    summary="Deactivate discontinued products",
+    summary="Deactivate discontinued products · პროდუქტების დეაქტივაცია",
     description=(
         "Soft-deactivate the given SKUs — they are hidden from search but kept forever, so order "
         "history keeps resolving them. Re-pushing a SKU via `POST /catalog/products/` reactivates it."
