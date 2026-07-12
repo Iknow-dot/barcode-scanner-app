@@ -1,5 +1,5 @@
 import React, {useState, useEffect, useContext, useCallback, useRef} from 'react';
-import {warehouseService, productService, orderService} from '../../api';
+import {warehouseService, productService, orderService, catalogService} from '../../api';
 import BarcodeScanner from './BarcodeScanner';
 import ClientLookupModal from './ClientLookupModal';
 import OrderPanel from './OrderPanel';
@@ -22,6 +22,7 @@ import groupItemsBySku from './groupItemsBySku';
 import inheritFromGroup from './inheritFromGroup';
 import displayCustomerName from '../../utils/orderDisplay';
 import {
+    Alert,
     Badge,
     Button,
     Collapse,
@@ -85,7 +86,19 @@ const UserDashboard = () => {
     const [balances, setBalances] = useState([]);
     const [userWarehouses, setUserWarehouses] = useState([]);
     const [productInfo, setProductInfo] = useState({sku_name: '', article: '', price: '', images: []});
+    // True when a scan resolved the product locally but the live 1C stock
+    // lookup failed (backend returns stock: [], stock_status: 'unavailable').
+    // We still show the product — just without a balance list — instead of
+    // treating it as a not-found error.
+    const [stockUnavailable, setStockUnavailable] = useState(false);
     const {t} = useLanguage();
+
+    // Name-search (catalog) state — debounced search-as-you-type against
+    // GET /api/v1/catalog/products/search/?q=, independent of the barcode
+    // scanner / manual barcode-or-article search above.
+    const [nameQuery, setNameQuery] = useState('');
+    const [nameResults, setNameResults] = useState([]);
+    const [nameSearchLoading, setNameSearchLoading] = useState(false);
 
     // Purchase Order state
     const [orderMode, setOrderMode] = useState(false);
@@ -199,6 +212,28 @@ const UserDashboard = () => {
         return () => clearTimeout(handle);
     }, [activeTab, customerSearch]);
 
+    // Debounced catalog name search. Mirrors the customer-search debounce
+    // pattern above: fires 300ms after typing stops, clears results when
+    // the input is emptied.
+    useEffect(() => {
+        const trimmed = nameQuery.trim();
+        if (!trimmed) {
+            setNameResults([]);
+            setNameSearchLoading(false);
+            return;
+        }
+        const handle = setTimeout(async () => {
+            setNameSearchLoading(true);
+            try {
+                const result = await catalogService.searchByName(trimmed);
+                setNameResults(result.success && Array.isArray(result.data) ? result.data : []);
+            } finally {
+                setNameSearchLoading(false);
+            }
+        }, 300);
+        return () => clearTimeout(handle);
+    }, [nameQuery]);
+
     const isSearchingRef = useRef(false);
     // Remembers the last successful search so the "show other warehouses"
     // button can re-run it with the warehouse filter dropped.
@@ -233,6 +268,10 @@ const UserDashboard = () => {
                     (b) => (Number(b.quantity) || 0) >= 0
                 );
                 setBalances(visibleStock);
+                // Live 1C stock lookup failed upstream — the product itself was
+                // resolved (locally or via 1C), so still show it, just flag that
+                // the balance list can't be trusted right now.
+                setStockUnavailable(result.data.stock_status === 'unavailable');
                 recordScan({
                     search,
                     searchType,
@@ -273,6 +312,7 @@ const UserDashboard = () => {
                 setBalances([]);
                 setProductInfo({sku_name: '', article: '', price: '', images: []});
                 setSearchedAllWarehouses(false);
+                setStockUnavailable(false);
 
                 const isExternalServiceError = result.code && result.code.startsWith('EXTERNAL_SERVICE_');
 
@@ -329,6 +369,18 @@ const UserDashboard = () => {
         });
     }, [handleSearch]);
 
+    // Selecting a catalog name-search result runs the same scan flow as a
+    // manual "article" search (exact sku lookup), reusing handleSearch.
+    const handleNameResultSelect = useCallback((sku) => {
+        setNameQuery('');
+        setNameResults([]);
+        handleSearch({
+            search: sku,
+            searchType: 'article',
+            allWarehouses: form.getFieldValue('allWarehouses'),
+        });
+    }, [handleSearch, form]);
+
     const handleResearchFromHistory = useCallback((entry) => {
         handleSearch({
             search: entry.search,
@@ -342,6 +394,7 @@ const UserDashboard = () => {
         setProductInfo({sku_name: '', article: '', price: '', images: []});
         setSearchedAllWarehouses(false);
         setOthersCollapsed(true);
+        setStockUnavailable(false);
         lastSearchRef.current = null;
     }, []);
 
@@ -717,14 +770,20 @@ const UserDashboard = () => {
         addToCartSourceRef.current = null;
     };
 
+    // Scan/name-search responses now return `images`/`image` as proxy PATH
+    // STRINGS (e.g. "catalog/products/S1/image/0/"), not base64 objects —
+    // resolve them to an absolute URL via catalogService.imageUrl(). The
+    // object-shape checks are a defensive fallback for any stale/cached
+    // response shape so rendering never throws.
     const getImageSrc = (img) => {
-        if (typeof img === 'string') return img;
+        if (!img) return '';
+        if (typeof img === 'string') return catalogService.imageUrl(img);
         if (img.base64) return img.base64;
         if (img.original_url) return img.original_url;
         return '';
     };
 
-    const hasResults = balances.length > 0;
+    const hasResults = balances.length > 0 || (stockUnavailable && !!productInfo.sku);
     const showEmptyProductState = !hasResults && !scannerOpen;
     const showOrderPanel = orderMode && activeOrder;
 
@@ -751,6 +810,65 @@ const UserDashboard = () => {
                         </Text>
                         <RightOutlined style={{color: '#fff', fontSize: 12}}/>
                     </Flex>
+                </div>
+            )}
+
+            {/* Name search — search-as-you-type against the catalog by product
+                name; selecting a result runs the same scan flow as an exact
+                article lookup. */}
+            {!scannerOpen && (
+                <div className="m-name-search" style={{marginBottom: 12}}>
+                    <Input.Search
+                        placeholder={t.nameSearch}
+                        value={nameQuery}
+                        onChange={(e) => setNameQuery(e.target.value)}
+                        allowClear
+                        loading={nameSearchLoading}
+                        size="large"
+                    />
+                    {nameQuery.trim().length > 0 && (
+                        <Spin spinning={nameSearchLoading} size="small">
+                            {nameResults.length === 0 && !nameSearchLoading ? (
+                                <Empty
+                                    image={Empty.PRESENTED_IMAGE_SIMPLE}
+                                    description={<Text type="secondary" style={{fontSize: 13}}>{t.noResults}</Text>}
+                                    style={{margin: '16px 0'}}
+                                />
+                            ) : (
+                                <List
+                                    size="small"
+                                    dataSource={nameResults}
+                                    className="m-name-search-results"
+                                    renderItem={(item) => (
+                                        <List.Item
+                                            onClick={() => handleNameResultSelect(item.sku)}
+                                            style={{cursor: 'pointer'}}
+                                        >
+                                            <List.Item.Meta
+                                                avatar={
+                                                    item.image ? (
+                                                        <img
+                                                            src={getImageSrc(item.image)}
+                                                            alt={item.name}
+                                                            style={{width: 36, height: 36, objectFit: 'cover', borderRadius: 6}}
+                                                        />
+                                                    ) : (
+                                                        <PictureOutlined style={{fontSize: 24, opacity: 0.3}}/>
+                                                    )
+                                                }
+                                                title={item.name}
+                                                description={
+                                                    <Text type="secondary" style={{fontSize: 12}}>
+                                                        {item.sku}{item.price != null ? ` · ${item.price} ₾` : ''}
+                                                    </Text>
+                                                }
+                                            />
+                                        </List.Item>
+                                    )}
+                                />
+                            )}
+                        </Spin>
+                    )}
                 </div>
             )}
 
@@ -808,8 +926,19 @@ const UserDashboard = () => {
                             </div>
                         </div>
 
+                        {/* Stock unavailable — live 1C lookup failed; product info is
+                            still shown above, but there's no balance to render. */}
+                        {stockUnavailable && (
+                            <Alert
+                                type="warning"
+                                showIcon
+                                message={t.stockUnavailable}
+                                style={{margin: '12px 0'}}
+                            />
+                        )}
+
                         {/* Warehouse Sections */}
-                        {(() => {
+                        {!stockUnavailable && (() => {
                             const userWarehouseNames = userWarehouses.map((w) => w.name);
                             const hasUserWarehouses = userWarehouseNames.length > 0;
                             if (!hasUserWarehouses) {
@@ -831,7 +960,7 @@ const UserDashboard = () => {
                             );
                         })()}
 
-                        {userWarehouses.length > 0 && lastSearchRef.current && (
+                        {!stockUnavailable && userWarehouses.length > 0 && lastSearchRef.current && (
                             (!searchedAllWarehouses || balances.some((b) => !userWarehouses.map((w) => w.name).includes(b.warehouse_name))) && (
                                 <Button
                                     type="default"

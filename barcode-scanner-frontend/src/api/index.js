@@ -29,6 +29,7 @@ export {
     orderService,
     invoiceTokenService,
     analyticsService,
+    catalogService,
 } from './services';
 
 // Role constants

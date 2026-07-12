@@ -8,7 +8,9 @@ import API_ENDPOINTS from '../endpoints';
  * @param {string} params.sku - The SKU or barcode value
  * @param {string} params.searchType - 'barcode' or 'article'
  * @param {string[]|string} [params.warehouseCodes] - Warehouse codes to search in. Empty array → all warehouses.
- * @param {boolean} [params.includeImages=true] - When false, server skips the slow base64 image inlining and returns images=[].
+ * @param {boolean} [params.includeImages=true] - Deprecated/no-op: the backend now always returns `images` as
+ *   cheap proxy path strings (see catalogService.imageUrl) rather than inlined base64, so this flag no longer
+ *   changes response size or shape. Kept for backward compatibility with existing call sites.
  */
 export const searchProduct = ({sku, searchType, warehouseCodes, includeImages = true}) => {
     const is_barcode = searchType === 'barcode';
