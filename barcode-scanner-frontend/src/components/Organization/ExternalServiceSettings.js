@@ -7,6 +7,7 @@ import {
     Form,
     Input,
     Popconfirm,
+    Select,
     Spin,
     Switch,
     Tag,
@@ -22,6 +23,7 @@ import {
     KeyOutlined,
     CopyOutlined,
     ReloadOutlined,
+    SafetyOutlined,
 } from '@ant-design/icons';
 import {organizationService} from '../../api';
 import useAppNotification from '../../hooks/useAppNotification';
@@ -46,6 +48,7 @@ const ExternalServiceSettings = () => {
                     form.setFieldsValue({
                         web_service_url: result.data.web_service_url,
                         web_service_username: result.data.web_service_username,
+                        push_allowed_ips: result.data.push_allowed_ips || [],
                     });
                     setHasPassword(result.data.has_password);
                     setPushToken(result.data.webhook_token || '');
@@ -89,6 +92,7 @@ const ExternalServiceSettings = () => {
             const payload = {
                 web_service_url: values.web_service_url,
                 web_service_username: values.web_service_username || '',
+                push_allowed_ips: values.push_allowed_ips || [],
             };
 
             if (values.clear_password) {
@@ -202,6 +206,29 @@ const ExternalServiceSettings = () => {
                                 <Switch/>
                             </Form.Item>
                         </Flex>
+
+                        <Divider style={{margin: '8px 0 16px'}}>
+                            <Flex align="center" gap={6} style={{opacity: 0.7, fontSize: 13}}>
+                                <SafetyOutlined/>
+                                {t.pushAllowedIps}
+                            </Flex>
+                        </Divider>
+
+                        <Form.Item
+                            name="push_allowed_ips"
+                            extra={
+                                <span style={{fontSize: 12, opacity: 0.5}}>
+                                    {t.pushAllowedIpsHelp}
+                                </span>
+                            }
+                        >
+                            <Select
+                                mode="tags"
+                                tokenSeparators={[',', ' ']}
+                                placeholder={t.pushAllowedIpsPlaceholder}
+                                suffixIcon={<SafetyOutlined style={{opacity: 0.4}}/>}
+                            />
+                        </Form.Item>
 
                         <Form.Item style={{marginTop: 8, marginBottom: 0}}>
                             <Button

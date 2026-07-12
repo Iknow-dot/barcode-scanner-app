@@ -1556,7 +1556,7 @@ class InvoiceEndpointRenderingTests(TestCase):
         self.assertIn('INVOICE', body)
 
 
-from core.models import Product, ProductBarcode, CatalogIngestState
+from core.models import Product, ProductBarcode, CatalogIngestState, OrganizationPushAllowedIP
 from core.image_proxy_safety import (
     assert_safe_image_url, sanitized_image_content_type, UnsafeImageURL, ALLOWED_IMAGE_TYPES,
 )
@@ -2838,3 +2838,72 @@ class ExternalServiceTokenTests(TestCase):
     def test_company_user_cannot_rotate(self):
         self.client.force_authenticate(self.member)
         self.assertEqual(self.client.post(self.ROTATE).status_code, 403)
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
+class PushIPAllowlistTests(TestCase):
+    """Optional per-org source-IP allowlist for the catalog push token."""
+
+    EXT = "/api/v1/organizations/my-organization/external-service/"
+
+    def setUp(self):
+        self.client = APIClient()
+        self.org = Organization.objects.create(
+            name="Org", identification_number="ORG1", web_service_url="https://x", employees_count=5,
+        )
+        self.url = "/api/v1/catalog/products/"
+
+    def _push(self, remote_addr):
+        return self.client.post(
+            self.url, {"products": []}, format="json",
+            HTTP_X_WEBHOOK_TOKEN=self.org.webhook_token, REMOTE_ADDR=remote_addr,
+        )
+
+    def test_no_allowlist_allows_any_ip(self):
+        self.assertEqual(self._push("203.0.113.9").status_code, 200)
+
+    def test_allowlisted_cidr_passes(self):
+        OrganizationPushAllowedIP.objects.create(organization=self.org, ip_or_network="203.0.113.0/24")
+        self.assertEqual(self._push("203.0.113.9").status_code, 200)
+
+    def test_non_allowlisted_ip_forbidden(self):
+        OrganizationPushAllowedIP.objects.create(organization=self.org, ip_or_network="203.0.113.0/24")
+        self.assertEqual(self._push("198.51.100.7").status_code, 403)
+
+    def test_x_forwarded_for_first_hop_is_used(self):
+        OrganizationPushAllowedIP.objects.create(organization=self.org, ip_or_network="203.0.113.9")
+        r = self.client.post(
+            self.url, {"products": []}, format="json",
+            HTTP_X_WEBHOOK_TOKEN=self.org.webhook_token,
+            HTTP_X_FORWARDED_FOR="203.0.113.9, 10.0.0.1", REMOTE_ADDR="10.0.0.1",
+        )
+        self.assertEqual(r.status_code, 200)
+
+    def _admin(self):
+        admin = User.objects.create_user(
+            username="a", password="p", role=User.Role.COMPANY_ADMIN, organization=self.org,
+        )
+        self.client.force_authenticate(admin)
+        return admin
+
+    def test_admin_can_set_and_read_allowlist(self):
+        self._admin()
+        r = self.client.patch(self.EXT, {"push_allowed_ips": ["203.0.113.0/24", "198.51.100.7"]}, format="json")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(set(r.json()["push_allowed_ips"]), {"203.0.113.0/24", "198.51.100.7"})
+        # …and it is now enforced
+        self.client.force_authenticate(user=None)
+        self.assertEqual(self._push("10.10.10.10").status_code, 403)
+
+    def test_empty_list_clears_allowlist(self):
+        OrganizationPushAllowedIP.objects.create(organization=self.org, ip_or_network="203.0.113.0/24")
+        self._admin()
+        r = self.client.patch(self.EXT, {"push_allowed_ips": []}, format="json")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()["push_allowed_ips"], [])
+
+    def test_invalid_entry_rejected(self):
+        self._admin()
+        r = self.client.patch(self.EXT, {"push_allowed_ips": ["not-an-ip"]}, format="json")
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.json()["code"], "INVALID_IP")

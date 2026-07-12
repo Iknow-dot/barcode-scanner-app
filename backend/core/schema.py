@@ -32,6 +32,10 @@ The token *identifies your organization* — you never send an organization id i
 the body, and a token can only ever write your own catalog. Keep it secret; it
 can be rotated on request.
 
+Your organization may optionally restrict pushes to a **source-IP allowlist**. If
+configured, pushes are accepted only from the listed IP addresses or CIDR networks
+— any other source gets `403 Forbidden`. Leave it empty for no restriction.
+
 ## The two operations
 
 | Operation | Endpoint | When |
@@ -88,6 +92,10 @@ host as your web service.
 token **განსაზღვრავს თქვენს ორგანიზაციას** — თქვენ არასდროს აგზავნით ორგანიზაციის
 იდენტიფიკატორს მოთხოვნის სხეულში, და token-ს შეუძლია მხოლოდ თქვენივე კატალოგში ჩაწერა.
 შეინახეთ ის საიდუმლოდ; საჭიროებისამებრ მისი განახლება (rotate) შესაძლებელია.
+
+თქვენს ორგანიზაციას სურვილისამებრ შეუძლია ატვირთვის შეზღუდვა **IP-მისამართების
+სიით**. თუ კონფიგურირებულია, ატვირთვა დაიშვება მხოლოდ მითითებული IP-მისამართებიდან ან
+CIDR ქსელებიდან — სხვა წყაროსთვის დაბრუნდება `403 Forbidden`. ცარიელი = შეზღუდვის გარეშე.
 
 ## ორი ოპერაცია
 

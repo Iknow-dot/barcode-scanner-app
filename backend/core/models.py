@@ -80,6 +80,28 @@ class Organization(models.Model):
         return self.name
 
 
+class OrganizationPushAllowedIP(models.Model):
+    """Optional source-IP allowlist for the organization's catalog push token.
+
+    Mirrors the per-user ``users.AllowedIP`` pattern, scoped to the org and
+    enforced on the catalog-ingest endpoints. No rows → pushes are unrestricted;
+    any rows → a push is only accepted from a client IP matching one of them
+    (exact IP or CIDR network).
+    """
+    organization = models.ForeignKey(
+        Organization, on_delete=models.CASCADE, related_name='push_allowed_ips',
+    )
+    ip_or_network = models.CharField(
+        max_length=50, help_text='IP address or CIDR network allowed to push the catalog',
+    )
+
+    class Meta:
+        unique_together = ('organization', 'ip_or_network')
+
+    def __str__(self):
+        return f"{self.organization.name}: {self.ip_or_network}"
+
+
 class Product(models.Model):
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name="products")
     sku = models.CharField(max_length=255)

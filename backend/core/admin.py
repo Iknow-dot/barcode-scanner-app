@@ -4,7 +4,10 @@ from django.contrib import admin
 from django.template.response import TemplateResponse
 from django.urls import path
 
-from core.models import Organization, Warehouse, PurchaseOrder, PurchaseOrderItem, Product, CatalogIngestState
+from core.models import (
+    Organization, OrganizationPushAllowedIP, Warehouse, PurchaseOrder,
+    PurchaseOrderItem, Product, CatalogIngestState,
+)
 
 
 class WarehouseInline(admin.StackedInline):
@@ -13,12 +16,19 @@ class WarehouseInline(admin.StackedInline):
     extra = 1
 
 
+class PushAllowedIPInline(admin.TabularInline):
+    model = OrganizationPushAllowedIP
+    extra = 1
+    verbose_name = "Catalog push allowed IP"
+    verbose_name_plural = "Catalog push IP allowlist (empty = unrestricted)"
+
+
 @admin.register(Organization)
 class OrganizationAdmin(admin.ModelAdmin):
     list_display = ("name", "identification_number", "employees_count")
     search_fields = ("name", "identification_number")
 
-    inlines = [WarehouseInline]
+    inlines = [WarehouseInline, PushAllowedIPInline]
 
     readonly_fields = ("invoice_logo_preview",)
 

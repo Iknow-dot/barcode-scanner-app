@@ -20,6 +20,7 @@ from django.db import connection, models, transaction
 
 from core.models import (
     Organization,
+    OrganizationPushAllowedIP,
     Warehouse,
     PurchaseOrder,
     PurchaseOrderItem,
@@ -28,6 +29,7 @@ from core.models import (
     CatalogIngestState,
 )
 from core.catalog import row_hash, proxy_image_paths
+from core.ip_utils import is_valid_ip_or_network
 from core.ingest_auth import organization_from_push
 from core.image_proxy_safety import assert_safe_image_url, sanitized_image_content_type, UnsafeImageURL
 from core.image_urls import signed_image_paths, verify_image_sig
@@ -224,6 +226,7 @@ class OrganizationViewSet(ModelViewSet):
                 'web_service_username': organization.web_service_username,
                 'has_password': bool(organization.web_service_password),
                 'webhook_token': organization.webhook_token,
+                'push_allowed_ips': list(organization.push_allowed_ips.values_list('ip_or_network', flat=True)),
             }
             return Response(data)
 
@@ -231,10 +234,33 @@ class OrganizationViewSet(ModelViewSet):
         serializer = OrganizationExternalServiceSerializer(organization, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         serializer.save()
+
+        # Optional: replace the source-IP allowlist for the push token. Sending the
+        # full desired list replaces the set; sending [] clears it (unrestricted).
+        if 'push_allowed_ips' in request.data:
+            cleaned = []
+            for entry in (request.data.get('push_allowed_ips') or []):
+                entry = (entry or '').strip()
+                if not entry:
+                    continue
+                if not is_valid_ip_or_network(entry):
+                    return Response(
+                        {"code": "INVALID_IP", "detail": f"Invalid IP or network: {entry}"},
+                        status=http_status.HTTP_400_BAD_REQUEST,
+                    )
+                cleaned.append(entry)
+            organization.push_allowed_ips.all().delete()
+            OrganizationPushAllowedIP.objects.bulk_create([
+                OrganizationPushAllowedIP(organization=organization, ip_or_network=ip)
+                for ip in dict.fromkeys(cleaned)  # de-dupe, preserve order
+            ])
+
         data = {
             'web_service_url': organization.web_service_url,
             'web_service_username': organization.web_service_username,
             'has_password': bool(organization.web_service_password),
+            'webhook_token': organization.webhook_token,
+            'push_allowed_ips': list(organization.push_allowed_ips.values_list('ip_or_network', flat=True)),
         }
         return Response(data)
 

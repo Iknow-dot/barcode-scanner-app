@@ -119,6 +119,9 @@ const translations = {
         pushTokenRotateWarning: 'ძველი ტოკენი მაშინვე გაუქმდება. თქვენი 1C ვერ შეძლებს კატალოგის გაგზავნას, სანამ ახალ ტოკენს არ დააყენებთ.',
         pushTokenRotated: 'ტოკენი განახლდა. განაახლეთ იგი თქვენს 1C-ში.',
         pushTokenRotateError: 'ტოკენის განახლება ვერ მოხერხდა',
+        pushAllowedIps: 'ატვირთვის დაშვებული IP-ები (არასავალდებულო)',
+        pushAllowedIpsHelp: 'თუ მითითებულია, კატალოგის ატვირთვა დაიშვება მხოლოდ ამ IP-ებიდან ან ქსელებიდან (CIDR). ცარიელი = შეზღუდვის გარეშე.',
+        pushAllowedIpsPlaceholder: 'მაგ. 203.0.113.9 ან 203.0.113.0/24',
         passwordIsSet: 'პაროლი დაყენებულია',
         passwordNotSet: 'პაროლი არ არის დაყენებული',
 
@@ -676,6 +679,9 @@ const translations = {
         pushTokenRotateWarning: 'The old token is invalidated immediately. Your 1C will not be able to push the catalog until you update it with the new token.',
         pushTokenRotated: 'Token rotated. Update it in your 1C.',
         pushTokenRotateError: 'Could not rotate the token',
+        pushAllowedIps: 'Push source-IP allowlist (optional)',
+        pushAllowedIpsHelp: 'If set, catalog pushes are accepted only from these IPs or CIDR networks. Empty = unrestricted.',
+        pushAllowedIpsPlaceholder: 'e.g. 203.0.113.9 or 203.0.113.0/24',
         passwordIsSet: 'Password is set',
         passwordNotSet: 'Password is not set',
 
