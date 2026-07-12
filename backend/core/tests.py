@@ -2684,3 +2684,22 @@ class ScanFastPathTests(TestCase):
         )
         self.assertEqual(r.status_code, 200)
         self.assertEqual(r.json()["stock_status"], "unavailable")
+
+
+from io import StringIO
+from django.core.management import call_command
+
+
+class StalenessCommandTests(TestCase):
+    def setUp(self):
+        self.org = Organization.objects.create(
+            name="Org", identification_number="ORG1", web_service_url="https://x", employees_count=5,
+        )
+
+    def test_marks_stale_org(self):
+        CatalogIngestState.objects.create(organization=self.org)  # never pushed → stale
+        out = StringIO()
+        call_command("check_catalog_staleness", stdout=out)
+        self.org.catalog_ingest_state.refresh_from_db()
+        self.assertEqual(self.org.catalog_ingest_state.status, "stale")
+        self.assertIn("Org", out.getvalue())
