@@ -30,6 +30,7 @@ from core.models import (
 from core.catalog import row_hash, proxy_image_paths
 from core.ingest_auth import organization_from_push
 from core.image_proxy_safety import assert_safe_image_url, sanitized_image_content_type, UnsafeImageURL
+from core.image_urls import signed_image_paths, verify_image_sig
 from core.permissions import (
     OrganizationPermission,
     WarehousePermission,
@@ -341,7 +342,8 @@ class ProductSearchAPIView(APIView):
         if product is not None:
             payload = {
                 "sku": product.sku, "article": product.article, "sku_name": product.name,
-                "price": product.price, "images": proxy_image_paths(product.sku, len(product.image_urls)),
+                "price": product.price,
+                "images": signed_image_paths(user.organization_id, product.sku, len(product.image_urls)),
             }
             try:
                 live = client.get_stock_and_prices(product.sku, is_barcode=False, warehouses=selected_warehouses)
@@ -358,7 +360,9 @@ class ProductSearchAPIView(APIView):
 
         img_urls = product_data.get("img_url") or []
         self._lazy_upsert(user.organization, sku, bool(is_barcode), product_data, img_urls)
-        product_data["images"] = proxy_image_paths(product_data.get("sku") or sku, len(img_urls))
+        product_data["images"] = signed_image_paths(
+            user.organization_id, product_data.get("sku") or sku, len(img_urls),
+        )
         product_data.pop("img_url", None)
         return Response(self.serializer_class(product_data).data)
 
@@ -1200,7 +1204,8 @@ class CatalogProductSearchAPIView(APIView):
         rows = [
             {
                 "sku": p.sku, "name": p.name, "price": p.price,
-                "image": proxy_image_paths(p.sku, len(p.image_urls))[0] if p.image_urls else None,
+                "image": signed_image_paths(request.user.organization_id, p.sku, len(p.image_urls))[0]
+                if p.image_urls else None,
             }
             for p in qs[:20]
         ]
@@ -1209,15 +1214,23 @@ class CatalogProductSearchAPIView(APIView):
 
 @extend_schema(tags=["Catalog"])
 class CatalogProductImageAPIView(APIView):
-    permission_classes = [IsCompanyUserOrAdmin]
+    # Fetched by a native <img src> tag — no Authorization header rides along, so this
+    # endpoint is signature-gated (see core.image_urls) rather than JWT-authenticated.
+    authentication_classes = []
+    permission_classes = []
     http_method_names = ["get"]
 
     def get(self, request: Request, sku: str, idx: int) -> HttpResponse:
-        org = request.user.organization
-        product = Product.objects.filter(organization=org, sku=sku).first()
+        org_id = request.GET.get("org")
+        sig = request.GET.get("sig")
+        if not org_id or not verify_image_sig(org_id, sku, idx, sig):
+            return Response({"code": "IMAGE_FORBIDDEN", "detail": "Invalid image signature."}, status=403)
+
+        product = Product.objects.filter(organization_id=org_id, sku=sku).first()
         if product is None or idx >= len(product.image_urls):
             return Response({"code": "IMAGE_NOT_FOUND", "detail": "No such product image."}, status=404)
 
+        org = product.organization
         url = _convert_to_https(product.image_urls[idx])  # from the stored row only — never a client URL
         try:
             assert_safe_image_url(url)
@@ -1225,7 +1238,14 @@ class CatalogProductImageAPIView(APIView):
             self._bump_failed(org)
             return Response({"code": "IMAGE_FETCH_FAILED", "detail": "Image host not allowed."}, status=502)
 
-        auth = (org.web_service_username, org.decrypt_password()) if org.web_service_username else None
+        # Only attach the org's 1C credentials when the resolved image host matches the
+        # org's own web-service host — otherwise a leaked webhook_token could redirect
+        # this proxy at an attacker-controlled host and harvest the Basic-auth creds.
+        img_host = urlparse(url).hostname
+        ws_host = urlparse(org.web_service_url or "").hostname
+        auth = None
+        if org.web_service_username and org.web_service_password and img_host and img_host == ws_host:
+            auth = (org.web_service_username, org.decrypt_password())
         try:
             upstream = httpx.get(url, auth=auth, timeout=15, follow_redirects=False)
         except httpx.HTTPError:

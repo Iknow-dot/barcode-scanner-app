@@ -28,6 +28,7 @@ from core.services.consult_web_exchange import (
 from django.utils import timezone
 
 from core.services.photon import PhotonError, reverse_geocode, search_addresses
+from core.image_urls import signed_image_path, signed_image_paths, verify_image_sig, _sig
 from users.models import User
 
 
@@ -610,7 +611,7 @@ class ProductSearchIncludeImagesTests(TestCase):
                     format='json',
                 )
         self.assertEqual(response.status_code, 200, response.data)
-        self.assertEqual(response.data['images'], ['catalog/products/SKU1/image/0/'])
+        self.assertEqual(response.data['images'], [signed_image_path(self.org.id, 'SKU1', 0)])
         httpx_get.assert_not_called()
 
     def test_include_images_default_true_returns_proxy_paths_without_fetching(self):
@@ -2552,9 +2553,9 @@ class ImageProxyTests(TestCase):
     @mock.patch("core.views.httpx.get")
     def test_proxies_first_image(self, mget):
         mget.return_value = mock.Mock(status_code=200, content=b"JPEGBYTES", headers={"Content-Type": "image/jpeg"})
-        with mock.patch.object(Organization, "decrypt_password", return_value="pw"):
-            with mock.patch("core.views.assert_safe_image_url", return_value=None):
-                r = self.client.get("/api/v1/catalog/products/S1/image/0/")
+        url = "/api/v1/" + signed_image_path(self.org.id, "S1", 0)
+        with mock.patch("core.views.assert_safe_image_url", return_value=None):
+            r = self.client.get(url)
         self.assertEqual(r.status_code, 200)
         self.assertEqual(r.content, b"JPEGBYTES")
         self.assertIn("immutable", r["Cache-Control"])
@@ -2563,18 +2564,71 @@ class ImageProxyTests(TestCase):
         self.assertIn("default-src 'none'", r["Content-Security-Policy"])
 
     def test_out_of_range_idx_404(self):
-        r = self.client.get("/api/v1/catalog/products/S1/image/9/")
+        url = "/api/v1/" + signed_image_path(self.org.id, "S1", 9)
+        r = self.client.get(url)
         self.assertEqual(r.status_code, 404)
 
     def test_other_orgs_product_404(self):
         Product.objects.create(organization=self.other, sku="S2", name="X", image_urls=["http://1c/x.jpg"])
-        r = self.client.get("/api/v1/catalog/products/S2/image/0/")
+        url = "/api/v1/" + signed_image_path(self.org.id, "S2", 0)
+        r = self.client.get(url)
         self.assertEqual(r.status_code, 404)
 
     def test_blocked_url_returns_502(self):
+        url = "/api/v1/" + signed_image_path(self.org.id, "S1", 0)
         with mock.patch("core.views.assert_safe_image_url", side_effect=UnsafeImageURL("blocked")):
-            r = self.client.get("/api/v1/catalog/products/S1/image/0/")
+            r = self.client.get(url)
         self.assertEqual(r.status_code, 502)
+
+    def test_unsigned_request_is_forbidden(self):
+        r = self.client.get("/api/v1/catalog/products/S1/image/0/")  # no org/sig
+        self.assertEqual(r.status_code, 403)
+
+    @mock.patch("core.views.httpx.get")
+    def test_sends_org_auth_only_to_matching_host(self, mget):
+        # image host == web_service_url host -> auth attached
+        self.org.web_service_url = "https://imghost.example"
+        self.org.web_service_username = "u"
+        os.environ['FERNET_KEY'] = _TEST_FERNET_KEY
+        try:
+            self.org.encrypt_password("pw")
+        finally:
+            os.environ.pop('FERNET_KEY', None)
+        self.org.save()
+        self.product.image_urls = ["https://imghost.example/a.jpg"]
+        self.product.save()
+        mget.return_value = mock.Mock(status_code=200, content=b"X", headers={"Content-Type": "image/jpeg"})
+        url = "/api/v1/" + signed_image_path(self.org.id, "S1", 0)
+        os.environ['FERNET_KEY'] = _TEST_FERNET_KEY
+        try:
+            with mock.patch("core.views.assert_safe_image_url", return_value=None):
+                self.client.get(url)
+        finally:
+            os.environ.pop('FERNET_KEY', None)
+        _, kwargs = mget.call_args
+        self.assertEqual(kwargs.get("auth"), ("u", "pw"))
+
+
+class SignedImageUrlTests(TestCase):
+    def test_path_contains_org_and_sig(self):
+        p = signed_image_path(7, "S1", 0)
+        self.assertTrue(p.startswith("catalog/products/S1/image/0/?org=7&sig="))
+
+    def test_verify_roundtrip(self):
+        sig = _sig(7, "S1", 0)
+        self.assertTrue(verify_image_sig(7, "S1", 0, sig))
+
+    def test_verify_rejects_wrong_org(self):
+        sig = _sig(7, "S1", 0)               # signed for org 7
+        self.assertFalse(verify_image_sig(8, "S1", 0, sig))  # can't reuse for org 8
+
+    def test_verify_rejects_tampered_idx_and_missing_sig(self):
+        sig = _sig(7, "S1", 0)
+        self.assertFalse(verify_image_sig(7, "S1", 1, sig))
+        self.assertFalse(verify_image_sig(7, "S1", 0, None))
+
+    def test_paths_count(self):
+        self.assertEqual(len(signed_image_paths(7, "S1", 3)), 3)
 
 
 class ImageProxySafetyTests(TestCase):
@@ -2634,7 +2688,7 @@ class NameSearchTests(TestCase):
 
     def test_first_image_is_proxy_path(self):
         r = self.client.get("/api/v1/catalog/products/search/?q=candle")
-        self.assertEqual(r.json()[0]["image"], "catalog/products/S1/image/0/")
+        self.assertEqual(r.json()[0]["image"], signed_image_path(self.org.id, "S1", 0))
 
     def test_empty_query_returns_empty(self):
         self.assertEqual(self.client.get("/api/v1/catalog/products/search/?q=").json(), [])
@@ -2673,7 +2727,7 @@ class ScanFastPathTests(TestCase):
         self.assertEqual(r.status_code, 200)
         body = r.json()
         self.assertEqual(body["sku_name"], "Candle")
-        self.assertEqual(body["images"], ["catalog/products/S1/image/0/"])
+        self.assertEqual(body["images"], [signed_image_path(self.org.id, "S1", 0)])
         self.assertEqual(body["stock"][0]["quantity"], 3)
 
     @mock.patch("core.views.ConsultWebExchangeClient.get_stock_and_prices")
