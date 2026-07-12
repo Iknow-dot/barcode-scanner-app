@@ -2779,6 +2779,13 @@ class IntegrationDocsTests(TestCase):
         param_names = {p["name"] for p in post.get("parameters", [])}
         self.assertIn("X-Webhook-Token", param_names)
 
+    def test_integration_schema_tag_list_is_scoped(self):
+        # ReDoc renders top-level tags as nav sections — the integration schema
+        # must not carry the internal API's tags (Users, Organizations, …).
+        schema = self.client.get("/api/integration/schema/?format=json").json()
+        tag_names = {t["name"] for t in schema.get("tags", [])}
+        self.assertEqual(tag_names, {"Catalog Ingest"})
+
     def test_integration_redoc_renders(self):
         self.assertEqual(self.client.get("/api/integration/redoc/").status_code, 200)
 

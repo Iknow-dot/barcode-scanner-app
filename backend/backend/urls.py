@@ -30,6 +30,9 @@ urlpatterns = [
                 'DESCRIPTION': INTEGRATION_DESCRIPTION,
                 'VERSION': '1.0.0',
                 'PREPROCESSING_HOOKS': ['core.schema.integration_endpoints_only'],
+                # Scope the tag list so ReDoc doesn't render the internal API's tag
+                # groups (Users, Organizations, …) as empty nav sections.
+                'TAGS': [{'name': 'Catalog Ingest', 'description': 'Push your product catalog into the platform.'}],
             },
         ),
         name='integration-schema',
