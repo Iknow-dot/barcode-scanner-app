@@ -2907,3 +2907,33 @@ class PushIPAllowlistTests(TestCase):
         r = self.client.patch(self.EXT, {"push_allowed_ips": ["not-an-ip"]}, format="json")
         self.assertEqual(r.status_code, 400)
         self.assertEqual(r.json()["code"], "INVALID_IP")
+
+
+from django.db import IntegrityError, transaction
+from core.models import (
+    Organization, Warehouse, Product, ProductBarcode, ProductCategory,
+    ProductAttribute, CatalogIngestState,
+)
+
+
+class CatalogCategoryModelTests(TestCase):
+    def setUp(self):
+        self.org = Organization.objects.create(
+            name="Org A", identification_number="A1",
+            web_service_url="https://a.example", employees_count=5,
+        )
+
+    def test_category_unique_per_org(self):
+        ProductCategory.objects.create(organization=self.org, external_id="7", name="Cookware")
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            ProductCategory.objects.create(organization=self.org, external_id="7", name="Dup")
+
+    def test_product_gains_category_and_attributes(self):
+        p = Product.objects.create(organization=self.org, sku="A-1", name="X")
+        self.assertEqual(p.attributes, {})
+        self.assertIsNone(p.category)
+
+    def test_attribute_unique_per_org(self):
+        ProductAttribute.objects.create(organization=self.org, key="color")
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            ProductAttribute.objects.create(organization=self.org, key="color")

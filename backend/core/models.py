@@ -113,6 +113,10 @@ class Product(models.Model):
     is_active = models.BooleanField(default=True)
     deactivated_at = models.DateTimeField(null=True, blank=True)
     pushed_at = models.DateTimeField(null=True, blank=True)
+    category = models.ForeignKey(
+        "ProductCategory", null=True, blank=True, on_delete=models.SET_NULL, related_name="products",
+    )
+    attributes = models.JSONField(default=dict, blank=True)
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=["organization", "sku"], name="uq_product_org_sku")]
@@ -127,6 +131,50 @@ class ProductBarcode(models.Model):
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=["product", "barcode"], name="uq_barcode_per_product")]
+
+
+class ProductCategory(models.Model):
+    organization = models.ForeignKey(
+        Organization, on_delete=models.CASCADE, related_name="product_categories",
+    )
+    external_id = models.CharField(max_length=255)  # stable 1C category id
+    name = models.CharField(max_length=512, blank=True, default="")
+    parent = models.ForeignKey(
+        "self", null=True, blank=True, on_delete=models.SET_NULL, related_name="children",
+    )
+    path = models.CharField(max_length=1024, blank=True, default="")  # stable id-path, e.g. /7/42/
+    path_names = models.JSONField(default=list, blank=True)           # root->leaf display names
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["organization", "external_id"], name="uq_category_org_extid"),
+        ]
+
+    def __str__(self):
+        return f"{self.name} ({self.external_id})"
+
+
+class ProductAttribute(models.Model):
+    """Per-org display registry for dynamic product attributes. Metadata only —
+    holds no values; those live in Product.attributes."""
+    organization = models.ForeignKey(
+        Organization, on_delete=models.CASCADE, related_name="product_attributes",
+    )
+    key = models.CharField(max_length=128)
+    label = models.CharField(max_length=255, blank=True, default="")
+    order = models.PositiveIntegerField(default=0)
+    is_visible = models.BooleanField(default=False)  # hidden until an admin approves
+    type = models.CharField(max_length=16, blank=True, default="text")  # display hint, never enforced
+    first_seen_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["order", "key"]
+        constraints = [
+            models.UniqueConstraint(fields=["organization", "key"], name="uq_attribute_org_key"),
+        ]
+
+    def __str__(self):
+        return f"{self.key} ({self.organization_id})"
 
 
 class CatalogIngestState(models.Model):
