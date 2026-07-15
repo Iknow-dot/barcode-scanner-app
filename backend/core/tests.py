@@ -2966,3 +2966,16 @@ class CategoryChainHelperTests(TestCase):
     def test_path_names(self):
         chain = [{"id": "7", "name": "C"}, {"id": "42", "name": "P"}]
         self.assertEqual(path_names(chain), ["C", "P"])
+
+    def test_normalize_keeps_present_falsy_id(self):
+        self.assertEqual(
+            normalize_category_chain([{"id": 0, "name": "Root"}]),
+            [{"id": "0", "name": "Root"}],
+        )
+
+    def test_normalize_none_on_blank_id(self):
+        self.assertIsNone(normalize_category_chain([{"id": "  ", "name": "X"}]))
+
+    def test_path_names_empty_is_safe(self):
+        self.assertEqual(path_names([]), [])
+        self.assertEqual(path_names(None), [])

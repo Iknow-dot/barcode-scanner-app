@@ -20,7 +20,10 @@ def normalize_category_chain(chain):
     for node in chain:
         if not isinstance(node, dict):
             return None
-        cid = str(node.get("id") or "").strip()
+        cid_raw = node.get("id")
+        if cid_raw is None:
+            return None
+        cid = str(cid_raw).strip()
         if not cid or cid in seen:
             return None
         seen.add(cid)
@@ -37,4 +40,6 @@ def path_ids_string(chain):
 
 def path_names(chain):
     """Display names root -> leaf for the given (sub)chain."""
+    if not chain:
+        return []
     return [node["name"] for node in chain]
