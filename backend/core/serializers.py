@@ -541,6 +541,8 @@ class ProductSearchSerializer(serializers.Serializer):
     stock = serializers.ListField(read_only=True, child=StockSerializer())
     images = serializers.ListField(child=serializers.CharField(), read_only=True)
     stock_status = serializers.CharField(read_only=True, required=False)
+    category_path = serializers.JSONField(read_only=True, required=False)
+    attributes = serializers.JSONField(read_only=True, required=False)
 
     class Meta:
         read_only_fields = [
@@ -551,6 +553,8 @@ class ProductSearchSerializer(serializers.Serializer):
             'stock',
             'images',
             'stock_status',
+            'category_path',
+            'attributes',
         ]
 
 
@@ -572,6 +576,7 @@ class CatalogProductSerializer(serializers.Serializer):
     name = serializers.CharField()
     price = serializers.DecimalField(max_digits=12, decimal_places=2, allow_null=True)
     image = serializers.CharField(allow_null=True)
+    category_path = serializers.JSONField(required=False)
 
 
 # ---------------------------------------------------------------------------

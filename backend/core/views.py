@@ -389,20 +389,26 @@ class ProductSearchAPIView(APIView):
         if is_barcode:
             match = ProductBarcode.objects.filter(
                 product__organization=user.organization, barcode=sku, product__is_active=True,
-            ).select_related("product").first()
+            ).select_related("product", "product__category").first()
             product = match.product if match else None
         else:
             product = Product.objects.filter(
                 organization=user.organization, sku=sku, is_active=True,
-            ).first()
+            ).select_related("category").first()
 
         client = ConsultWebExchangeClient(user.organization)
 
         if product is not None:
+            visible = list(
+                ProductAttribute.objects.filter(organization=user.organization, is_visible=True)
+                .order_by("order", "key")
+            )
             payload = {
                 "sku": product.sku, "article": product.article, "sku_name": product.name,
                 "price": product.price,
                 "images": signed_image_paths(user.organization_id, product.sku, len(product.image_urls)),
+                "category_path": product.category.path_names if product.category_id else [],
+                "attributes": project_attributes(product.attributes, visible),
             }
             try:
                 live = client.get_stock_and_prices(product.sku, is_barcode=False, warehouses=selected_warehouses)
@@ -423,6 +429,8 @@ class ProductSearchAPIView(APIView):
             user.organization_id, product_data.get("sku") or sku, len(img_urls),
         )
         product_data.pop("img_url", None)
+        product_data["category_path"] = []
+        product_data["attributes"] = []
         return Response(self.serializer_class(product_data).data)
 
     @staticmethod
@@ -1333,7 +1341,9 @@ class CatalogProductSearchAPIView(APIView):
         if not q:
             return Response([])
 
-        qs = Product.objects.filter(organization=request.user.organization, is_active=True)
+        qs = Product.objects.filter(
+            organization=request.user.organization, is_active=True,
+        ).select_related("category")
         if connection.vendor == "postgresql":
             from django.contrib.postgres.search import TrigramSimilarity
             qs = qs.annotate(rank=TrigramSimilarity("name", q)).filter(rank__gt=0.1).order_by("-rank")
@@ -1345,6 +1355,7 @@ class CatalogProductSearchAPIView(APIView):
                 "sku": p.sku, "name": p.name, "price": p.price,
                 "image": signed_image_paths(request.user.organization_id, p.sku, len(p.image_urls))[0]
                 if p.image_urls else None,
+                "category_path": p.category.path_names if p.category_id else [],
             }
             for p in qs[:20]
         ]

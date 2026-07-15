@@ -3178,3 +3178,48 @@ class CatalogIngestCategoryAttributeTests(TestCase):
         resp = self._push([{"sku": "A-1", "name": "Pan", "category": [{"id": "7", "name": "A"}, {"id": "7", "name": "B"}]}])
         self.assertEqual(resp.status_code, 200)
         self.assertIsNone(Product.objects.get(organization=self.org, sku="A-1").category)
+
+
+from unittest.mock import patch
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
+class ScanResponseCategoryAttributeTests(TestCase):
+    def setUp(self):
+        self.org = Organization.objects.create(
+            name="Org A", identification_number="A1",
+            web_service_url="https://a.example", employees_count=5,
+        )
+        self.user = User.objects.create_user(
+            username="u1", password="pw", role=User.Role.COMPANY_USER, organization=self.org,
+        )
+        self.wh = Warehouse.objects.create(organization=self.org, name="Main", code="W1")
+        self.wh.users.add(self.user)
+        cat = CategoryResolver(self.org).resolve(
+            [{"id": "7", "name": "Cookware"}, {"id": "42", "name": "Pans"}]
+        )
+        self.product = Product.objects.create(
+            organization=self.org, sku="A-1", name="Pan", category=cat,
+            attributes={"color": "black", "cost_price": "9"},
+        )
+        ProductAttribute.objects.create(organization=self.org, key="color", label="Color", is_visible=True, order=0)
+        ProductAttribute.objects.create(organization=self.org, key="cost_price", label="Cost", is_visible=False, order=1)
+        self.api = APIClient()
+        self.api.force_authenticate(self.user)
+
+    @patch("core.views.ConsultWebExchangeClient.get_stock_and_prices", return_value={"stock": []})
+    def test_scan_returns_breadcrumb_and_only_visible_attributes(self, _mock):
+        resp = self.api.post(
+            reverse("product-search"),
+            {"sku": "A-1", "is_barcode": False, "warehouses": ["W1"]}, format="json",
+        )
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data["category_path"], ["Cookware", "Pans"])
+        self.assertEqual(data["attributes"], [{"key": "color", "label": "Color", "value": "black"}])
+
+    def test_name_search_returns_breadcrumb(self):
+        resp = self.api.get(reverse("catalog-product-search"), {"q": "Pan"})
+        self.assertEqual(resp.status_code, 200)
+        rows = resp.json()
+        self.assertEqual(rows[0]["category_path"], ["Cookware", "Pans"])
