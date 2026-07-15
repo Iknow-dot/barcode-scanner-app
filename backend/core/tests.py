@@ -3064,3 +3064,63 @@ class CategoryResolverTests(TestCase):
         self.assertEqual(ProductCategory.objects.filter(external_id="7").count(), 2)
         self.assertEqual(ProductCategory.objects.get(organization=self.org, external_id="7").name, "Cookware")
         self.assertEqual(ProductCategory.objects.get(organization=self.org2, external_id="7").name, "Electronics")
+
+
+from core.attributes import (
+    humanize_key, infer_type, project_attributes,
+    MAX_ATTRIBUTE_KEYS_PER_ORG, MAX_ATTRIBUTE_KEY_LEN,
+)
+from core.attribute_ingest import register_attribute_keys
+
+
+class AttributeHelperTests(TestCase):
+    def setUp(self):
+        self.org = Organization.objects.create(
+            name="Org A", identification_number="A1",
+            web_service_url="https://a.example", employees_count=5,
+        )
+
+    def test_humanize_key(self):
+        self.assertEqual(humanize_key("diameter_cm"), "Diameter Cm")
+
+    def test_infer_type(self):
+        self.assertEqual(infer_type(True), "boolean")
+        self.assertEqual(infer_type(3), "number")
+        self.assertEqual(infer_type(1.5), "number")
+        self.assertEqual(infer_type("x"), "text")
+        self.assertEqual(infer_type({"a": 1}), "json")
+
+    def test_project_includes_only_visible_keys_in_order(self):
+        ProductAttribute.objects.create(organization=self.org, key="color", label="Color", is_visible=True, order=0)
+        visible = list(ProductAttribute.objects.filter(organization=self.org, is_visible=True).order_by("order", "key"))
+        out = project_attributes({"color": "red", "cost_price": "9"}, visible)
+        self.assertEqual(out, [{"key": "color", "label": "Color", "value": "red"}])
+
+
+class AttributeRegistrationTests(TestCase):
+    def setUp(self):
+        self.org = Organization.objects.create(
+            name="Org A", identification_number="A1",
+            web_service_url="https://a.example", employees_count=5,
+        )
+
+    def test_registers_hidden_with_inferred_type(self):
+        register_attribute_keys(self.org, ["color", "weight"], {"color": "red", "weight": 1})
+        color = ProductAttribute.objects.get(organization=self.org, key="color")
+        self.assertFalse(color.is_visible)
+        self.assertEqual(color.label, "Color")
+        self.assertEqual(ProductAttribute.objects.get(organization=self.org, key="weight").type, "number")
+
+    def test_idempotent(self):
+        register_attribute_keys(self.org, ["color"], {"color": "red"})
+        register_attribute_keys(self.org, ["color"], {"color": "blue"})
+        self.assertEqual(ProductAttribute.objects.filter(organization=self.org, key="color").count(), 1)
+
+    def test_respects_key_cap(self):
+        keys = [f"k{i}" for i in range(MAX_ATTRIBUTE_KEYS_PER_ORG + 10)]
+        register_attribute_keys(self.org, keys)
+        self.assertEqual(ProductAttribute.objects.filter(organization=self.org).count(), MAX_ATTRIBUTE_KEYS_PER_ORG)
+
+    def test_skips_overlong_key(self):
+        register_attribute_keys(self.org, ["x" * (MAX_ATTRIBUTE_KEY_LEN + 1)])
+        self.assertEqual(ProductAttribute.objects.filter(organization=self.org).count(), 0)
