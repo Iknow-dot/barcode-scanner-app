@@ -3065,6 +3065,27 @@ class CategoryResolverTests(TestCase):
         self.assertEqual(ProductCategory.objects.get(organization=self.org, external_id="7").name, "Cookware")
         self.assertEqual(ProductCategory.objects.get(organization=self.org2, external_id="7").name, "Electronics")
 
+    def test_create_race_refetches_existing_node(self):
+        from unittest import mock
+        from django.db.models.query import QuerySet
+        ProductCategory.objects.create(
+            organization=self.org, external_id="7", name="Cookware",
+            path="/7/", path_names=["Cookware"],
+        )
+        original_first = QuerySet.first
+        calls = {"n": 0}
+        def flaky_first(qs):
+            calls["n"] += 1
+            if calls["n"] == 1:  # resolver's initial lookup "misses"
+                return None
+            return original_first(qs)
+        with mock.patch.object(QuerySet, "first", flaky_first):
+            leaf = CategoryResolver(self.org).resolve([{"id": "7", "name": "Cookware"}])
+        self.assertEqual(leaf.external_id, "7")
+        self.assertEqual(
+            ProductCategory.objects.filter(organization=self.org, external_id="7").count(), 1,
+        )
+
 
 from core.attributes import (
     humanize_key, infer_type, project_attributes,

@@ -615,7 +615,7 @@ class CatalogIngestProductSerializer(serializers.Serializer):
     )
     category = CatalogIngestCategoryNodeSerializer(
         many=True, required=False,
-        help_text="Full category ancestry, root→leaf; the last element is the product's own category. Omit or [] for uncategorized. Duplicate ids (a cycle) → the product is stored uncategorized.",
+        help_text="Full category ancestry, root→leaf; the last element is the product's own category. Omit or [] for uncategorized. Duplicate ids (a cycle) → the product is stored uncategorized. A push replaces the whole row, so a delta that omits this field clears the product's category — always send the current full chain, same as barcodes/price.",
     )
     attributes = serializers.DictField(
         required=False,

@@ -26,7 +26,6 @@ from core.models import (
     PurchaseOrderItem,
     Product,
     ProductBarcode,
-    ProductCategory,
     ProductAttribute,
     CatalogIngestState,
 )

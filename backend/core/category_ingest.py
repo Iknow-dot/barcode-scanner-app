@@ -1,5 +1,5 @@
 """Per-batch category upsert for catalog ingest. DB-touching; strictly org-scoped."""
-from django.db import IntegrityError
+from django.db import IntegrityError, transaction
 
 from .categories import normalize_category_chain, path_ids_string, path_names
 from .models import ProductCategory
@@ -35,10 +35,11 @@ class CategoryResolver:
         obj = ProductCategory.objects.filter(organization=self.org, external_id=external_id).first()
         if obj is None:
             try:
-                obj = ProductCategory.objects.create(
-                    organization=self.org, external_id=external_id, name=name,
-                    parent=parent, path=path, path_names=names,
-                )
+                with transaction.atomic():
+                    obj = ProductCategory.objects.create(
+                        organization=self.org, external_id=external_id, name=name,
+                        parent=parent, path=path, path_names=names,
+                    )
             except IntegrityError:  # lost a create race with a concurrent page
                 obj = ProductCategory.objects.get(organization=self.org, external_id=external_id)
                 self._apply(obj, name, parent, path, names)
