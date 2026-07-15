@@ -29,6 +29,7 @@ from django.utils import timezone
 
 from core.services.photon import PhotonError, reverse_geocode, search_addresses
 from core.image_urls import signed_image_path, signed_image_paths, verify_image_sig, _sig
+from core.categories import normalize_category_chain, path_ids_string, path_names
 from users.models import User
 
 
@@ -2937,3 +2938,31 @@ class CatalogCategoryModelTests(TestCase):
         ProductAttribute.objects.create(organization=self.org, key="color")
         with self.assertRaises(IntegrityError), transaction.atomic():
             ProductAttribute.objects.create(organization=self.org, key="color")
+
+
+class CategoryChainHelperTests(TestCase):
+    def test_normalize_cleans_and_stringifies(self):
+        chain = [{"id": 7, "name": " Cookware "}, {"id": "42", "name": "Pans"}]
+        self.assertEqual(
+            normalize_category_chain(chain),
+            [{"id": "7", "name": "Cookware"}, {"id": "42", "name": "Pans"}],
+        )
+
+    def test_normalize_none_on_empty_or_missing(self):
+        self.assertIsNone(normalize_category_chain([]))
+        self.assertIsNone(normalize_category_chain(None))
+        self.assertIsNone(normalize_category_chain("nope"))
+
+    def test_normalize_none_on_duplicate_id_cycle(self):
+        self.assertIsNone(normalize_category_chain([{"id": "7", "name": "A"}, {"id": "7", "name": "B"}]))
+
+    def test_normalize_none_on_missing_id(self):
+        self.assertIsNone(normalize_category_chain([{"name": "NoId"}]))
+
+    def test_path_ids_string(self):
+        chain = [{"id": "7", "name": "C"}, {"id": "42", "name": "P"}]
+        self.assertEqual(path_ids_string(chain), "/7/42/")
+
+    def test_path_names(self):
+        chain = [{"id": "7", "name": "C"}, {"id": "42", "name": "P"}]
+        self.assertEqual(path_names(chain), ["C", "P"])
