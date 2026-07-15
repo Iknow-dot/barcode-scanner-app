@@ -3223,3 +3223,15 @@ class ScanResponseCategoryAttributeTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         rows = resp.json()
         self.assertEqual(rows[0]["category_path"], ["Cookware", "Pans"])
+
+
+class CatalogAdminRegistrationTests(TestCase):
+    def test_new_models_are_registered(self):
+        from django.contrib import admin as dj_admin
+        self.assertIn(ProductCategory, dj_admin.site._registry)
+        self.assertIn(ProductAttribute, dj_admin.site._registry)
+
+    def test_attribute_admin_allows_editing_visibility(self):
+        from django.contrib import admin as dj_admin
+        model_admin = dj_admin.site._registry[ProductAttribute]
+        self.assertIn("is_visible", model_admin.list_editable)

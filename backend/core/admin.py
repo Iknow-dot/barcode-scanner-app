@@ -6,7 +6,8 @@ from django.urls import path
 
 from core.models import (
     Organization, OrganizationPushAllowedIP, Warehouse, PurchaseOrder,
-    PurchaseOrderItem, Product, CatalogIngestState,
+    PurchaseOrderItem, Product, CatalogIngestState, ProductCategory,
+    ProductAttribute,
 )
 
 
@@ -79,9 +80,27 @@ class PurchaseOrderAdmin(admin.ModelAdmin):
 
 @admin.register(Product)
 class ProductAdmin(admin.ModelAdmin):
-    list_display = ("sku", "name", "organization", "is_active", "pushed_at")
+    list_display = ("sku", "name", "organization", "category", "is_active", "pushed_at")
     list_filter = ("organization", "is_active")
     search_fields = ("sku", "name", "article")
+
+
+@admin.register(ProductCategory)
+class ProductCategoryAdmin(admin.ModelAdmin):
+    list_display = ("name", "external_id", "organization", "parent", "depth")
+    list_filter = ("organization",)
+    search_fields = ("name", "external_id")
+
+    def depth(self, obj):
+        return len(obj.path_names)
+
+
+@admin.register(ProductAttribute)
+class ProductAttributeAdmin(admin.ModelAdmin):
+    list_display = ("key", "label", "organization", "is_visible", "order", "type", "first_seen_at")
+    list_filter = ("organization", "is_visible")
+    list_editable = ("label", "is_visible", "order")
+    search_fields = ("key", "label")
 
 
 @admin.register(CatalogIngestState)
