@@ -2979,3 +2979,31 @@ class CategoryChainHelperTests(TestCase):
     def test_path_names_empty_is_safe(self):
         self.assertEqual(path_names([]), [])
         self.assertEqual(path_names(None), [])
+
+
+from core.catalog import row_hash
+
+
+class RowHashCategoryAttributeTests(TestCase):
+    def test_attribute_only_change_changes_hash(self):
+        a = {"sku": "A", "name": "N", "attributes": {"color": "red"}}
+        b = {"sku": "A", "name": "N", "attributes": {"color": "blue"}}
+        self.assertNotEqual(row_hash(a), row_hash(b))
+
+    def test_attribute_key_order_is_stable(self):
+        a = {"attributes": {"a": "1", "b": "2"}}
+        b = {"attributes": {"b": "2", "a": "1"}}
+        self.assertEqual(row_hash(a), row_hash(b))
+
+    def test_category_rename_changes_hash(self):
+        a = {"category": [{"id": "7", "name": "Cookware"}]}
+        b = {"category": [{"id": "7", "name": "Pots"}]}
+        self.assertNotEqual(row_hash(a), row_hash(b))
+
+    def test_reparent_changes_hash(self):
+        a = {"category": [{"id": "7", "name": "Cookware"}]}
+        b = {"category": [{"id": "9", "name": "Cookware"}]}
+        self.assertNotEqual(row_hash(a), row_hash(b))
+
+    def test_legacy_item_without_new_fields_still_hashes(self):
+        self.assertTrue(row_hash({"sku": "A", "name": "N"}))

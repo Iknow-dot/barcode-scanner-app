@@ -12,6 +12,8 @@ def row_hash(product: dict) -> str:
             "price": str(product.get("price") if product.get("price") is not None else ""),
             "barcodes": sorted(product.get("barcodes") or []),
             "image_urls": product.get("image_urls") or [],
+            "category": [[c.get("id"), c.get("name")] for c in (product.get("category") or [])],
+            "attributes": product.get("attributes") or {},
         },
         sort_keys=True, ensure_ascii=False,
     )
