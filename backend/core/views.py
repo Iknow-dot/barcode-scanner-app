@@ -26,9 +26,14 @@ from core.models import (
     PurchaseOrderItem,
     Product,
     ProductBarcode,
+    ProductCategory,
+    ProductAttribute,
     CatalogIngestState,
 )
 from core.catalog import row_hash, proxy_image_paths
+from core.category_ingest import CategoryResolver
+from core.attribute_ingest import register_attribute_keys
+from core.attributes import project_attributes
 from core.ip_utils import is_valid_ip_or_network
 from core.ingest_auth import organization_from_push
 from core.image_proxy_safety import assert_safe_image_url, sanitized_image_content_type, UnsafeImageURL
@@ -1204,6 +1209,11 @@ _PUSH_TOKEN_PARAM = OpenApiParameter(
                         "price": "9.90",
                         "barcodes": ["4860001234567"],
                         "image_urls": ["https://1c.example/img/a-100-0.jpg"],
+                        "category": [
+                            {"id": "7", "name": "Cookware"},
+                            {"id": "42", "name": "Pans"},
+                        ],
+                        "attributes": {"color": "black", "diameter_cm": "24"},
                     }
                 ],
             },
@@ -1225,12 +1235,21 @@ class CatalogProductIngestAPIView(APIView):
         products = request.data.get("products") or []
         is_full = bool(request.data.get("is_full"))
         upserted = skipped = 0
+        resolver = CategoryResolver(org)
+        seen_attr_keys = {}  # key -> a sample value, for type inference
 
         with transaction.atomic():
             for item in products:
                 sku = item.get("sku")
                 if not sku:
                     continue
+                # Resolve the category BEFORE the skip-check so an ancestor
+                # rename propagates even when the product row itself is unchanged.
+                leaf = resolver.resolve(item.get("category"))
+                attrs = item.get("attributes") or {}
+                for k, v in attrs.items():
+                    seen_attr_keys.setdefault(k, v)
+
                 new_hash = row_hash(item)
                 existing = Product.objects.filter(organization=org, sku=sku).first()
                 if existing and existing.row_hash == new_hash and existing.is_active:
@@ -1243,6 +1262,8 @@ class CatalogProductIngestAPIView(APIView):
                         "name": item.get("name") or "",
                         "price": item.get("price"),
                         "image_urls": item.get("image_urls") or [],
+                        "attributes": attrs,
+                        "category": leaf,
                         "row_hash": new_hash,
                         "is_active": True,
                         "deactivated_at": None,
@@ -1254,6 +1275,9 @@ class CatalogProductIngestAPIView(APIView):
                     [ProductBarcode(product=obj, barcode=b) for b in (item.get("barcodes") or [])]
                 )
                 upserted += 1
+
+            if seen_attr_keys:
+                register_attribute_keys(org, list(seen_attr_keys.keys()), first_seen_values=seen_attr_keys)
 
             state, _ = CatalogIngestState.objects.get_or_create(organization=org)
             now = timezone.now()

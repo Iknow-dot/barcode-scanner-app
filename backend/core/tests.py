@@ -3124,3 +3124,57 @@ class AttributeRegistrationTests(TestCase):
     def test_skips_overlong_key(self):
         register_attribute_keys(self.org, ["x" * (MAX_ATTRIBUTE_KEY_LEN + 1)])
         self.assertEqual(ProductAttribute.objects.filter(organization=self.org).count(), 0)
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
+class CatalogIngestCategoryAttributeTests(TestCase):
+    def setUp(self):
+        self.org = Organization.objects.create(
+            name="Org A", identification_number="A1",
+            web_service_url="https://a.example", employees_count=5,
+        )
+        self.api = APIClient()
+        self.url = reverse("catalog-product-ingest")
+
+    def _push(self, products, is_full=False):
+        return self.api.post(
+            self.url, {"products": products, "is_full": is_full},
+            format="json", HTTP_X_WEBHOOK_TOKEN=self.org.webhook_token,
+        )
+
+    def test_push_creates_category_and_stores_attributes(self):
+        resp = self._push([{
+            "sku": "A-1", "name": "Pan",
+            "category": [{"id": "7", "name": "Cookware"}, {"id": "42", "name": "Pans"}],
+            "attributes": {"color": "black"},
+        }])
+        self.assertEqual(resp.status_code, 200)
+        p = Product.objects.get(organization=self.org, sku="A-1")
+        self.assertEqual(p.category.external_id, "42")
+        self.assertEqual(p.attributes, {"color": "black"})
+        reg = ProductAttribute.objects.get(organization=self.org, key="color")
+        self.assertFalse(reg.is_visible)
+
+    def test_reparent_is_not_skipped(self):
+        self._push([{"sku": "A-1", "name": "Pan", "category": [{"id": "7", "name": "Cookware"}]}])
+        resp = self._push([{"sku": "A-1", "name": "Pan", "category": [{"id": "9", "name": "Bakeware"}]}])
+        self.assertEqual(resp.json()["upserted"], 1)
+        self.assertEqual(Product.objects.get(organization=self.org, sku="A-1").category.external_id, "9")
+
+    def test_attribute_only_change_is_not_skipped(self):
+        self._push([{"sku": "A-1", "name": "Pan", "attributes": {"color": "red"}}])
+        resp = self._push([{"sku": "A-1", "name": "Pan", "attributes": {"color": "blue"}}])
+        self.assertEqual(resp.json()["upserted"], 1)
+        self.assertEqual(Product.objects.get(organization=self.org, sku="A-1").attributes, {"color": "blue"})
+
+    def test_unchanged_push_is_skipped(self):
+        item = {"sku": "A-1", "name": "Pan", "attributes": {"color": "red"},
+                "category": [{"id": "7", "name": "Cookware"}]}
+        self._push([item])
+        resp = self._push([item])
+        self.assertEqual(resp.json()["skipped"], 1)
+
+    def test_cycle_chain_stores_product_uncategorized_without_aborting(self):
+        resp = self._push([{"sku": "A-1", "name": "Pan", "category": [{"id": "7", "name": "A"}, {"id": "7", "name": "B"}]}])
+        self.assertEqual(resp.status_code, 200)
+        self.assertIsNone(Product.objects.get(organization=self.org, sku="A-1").category)

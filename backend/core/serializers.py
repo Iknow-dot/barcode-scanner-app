@@ -582,6 +582,11 @@ class CatalogProductSerializer(serializers.Serializer):
 # request.data directly; these serializers are for drf-spectacular only.
 # ---------------------------------------------------------------------------
 
+class CatalogIngestCategoryNodeSerializer(serializers.Serializer):
+    id = serializers.CharField(help_text="Stable 1C category id.")
+    name = serializers.CharField(help_text="Current display name of this category node.")
+
+
 class CatalogIngestProductSerializer(serializers.Serializer):
     sku = serializers.CharField(
         help_text="Stable product identifier (1C item code). Together with the organization it is the primary key of the replica row."
@@ -602,6 +607,14 @@ class CatalogIngestProductSerializer(serializers.Serializer):
     image_urls = serializers.ListField(
         child=serializers.CharField(), required=False,
         help_text="Absolute image URLs on your host; served to consultants via our authenticated image proxy (never copied or stored).",
+    )
+    category = CatalogIngestCategoryNodeSerializer(
+        many=True, required=False,
+        help_text="Full category ancestry, root→leaf; the last element is the product's own category. Omit or [] for uncategorized. Duplicate ids (a cycle) → the product is stored uncategorized.",
+    )
+    attributes = serializers.DictField(
+        required=False,
+        help_text="Arbitrary per-org custom fields, stored verbatim. Hidden from consultants until an org admin marks a key visible.",
     )
 
 
