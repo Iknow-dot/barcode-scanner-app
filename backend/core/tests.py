@@ -3007,3 +3007,60 @@ class RowHashCategoryAttributeTests(TestCase):
 
     def test_legacy_item_without_new_fields_still_hashes(self):
         self.assertTrue(row_hash({"sku": "A", "name": "N"}))
+
+
+from core.category_ingest import CategoryResolver
+
+
+class CategoryResolverTests(TestCase):
+    def setUp(self):
+        self.org = Organization.objects.create(
+            name="Org A", identification_number="A1",
+            web_service_url="https://a.example", employees_count=5,
+        )
+        self.org2 = Organization.objects.create(
+            name="Org B", identification_number="B1",
+            web_service_url="https://b.example", employees_count=5,
+        )
+
+    def test_builds_full_chain(self):
+        leaf = CategoryResolver(self.org).resolve(
+            [{"id": "7", "name": "Cookware"}, {"id": "42", "name": "Pans"}]
+        )
+        self.assertEqual(leaf.external_id, "42")
+        self.assertEqual(leaf.path, "/7/42/")
+        self.assertEqual(leaf.path_names, ["Cookware", "Pans"])
+        root = ProductCategory.objects.get(organization=self.org, external_id="7")
+        self.assertIsNone(root.parent)
+        self.assertEqual(leaf.parent_id, root.id)
+        self.assertEqual(ProductCategory.objects.filter(organization=self.org).count(), 2)
+
+    def test_memoized_no_duplicate_ancestor(self):
+        r = CategoryResolver(self.org)
+        r.resolve([{"id": "7", "name": "Cookware"}, {"id": "42", "name": "Pans"}])
+        r.resolve([{"id": "7", "name": "Cookware"}, {"id": "99", "name": "Pots"}])
+        self.assertEqual(ProductCategory.objects.filter(organization=self.org, external_id="7").count(), 1)
+        self.assertEqual(ProductCategory.objects.filter(organization=self.org).count(), 3)
+
+    def test_rename_refreshes_descendant_not_in_chain(self):
+        r = CategoryResolver(self.org)
+        r.resolve([{"id": "7", "name": "Cookware"}, {"id": "42", "name": "Pans"}])
+        r.resolve([{"id": "7", "name": "Cookware"}, {"id": "55", "name": "Woks"}])
+        # A later push renames ancestor 7 while carrying only the 42 branch.
+        CategoryResolver(self.org).resolve([{"id": "7", "name": "Kitchen"}, {"id": "42", "name": "Pans"}])
+        node55 = ProductCategory.objects.get(organization=self.org, external_id="55")
+        self.assertEqual(node55.path_names, ["Kitchen", "Woks"])  # healed via subtree refresh
+        node42 = ProductCategory.objects.get(organization=self.org, external_id="42")
+        self.assertEqual(node42.path_names, ["Kitchen", "Pans"])
+
+    def test_cycle_returns_none_and_creates_nothing(self):
+        leaf = CategoryResolver(self.org).resolve([{"id": "7", "name": "A"}, {"id": "7", "name": "B"}])
+        self.assertIsNone(leaf)
+        self.assertEqual(ProductCategory.objects.count(), 0)
+
+    def test_same_id_isolated_across_orgs(self):
+        CategoryResolver(self.org).resolve([{"id": "7", "name": "Cookware"}])
+        CategoryResolver(self.org2).resolve([{"id": "7", "name": "Electronics"}])
+        self.assertEqual(ProductCategory.objects.filter(external_id="7").count(), 2)
+        self.assertEqual(ProductCategory.objects.get(organization=self.org, external_id="7").name, "Cookware")
+        self.assertEqual(ProductCategory.objects.get(organization=self.org2, external_id="7").name, "Electronics")
