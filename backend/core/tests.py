@@ -3008,6 +3008,13 @@ class RowHashCategoryAttributeTests(TestCase):
     def test_legacy_item_without_new_fields_still_hashes(self):
         self.assertTrue(row_hash({"sku": "A", "name": "N"}))
 
+    def test_category_id_and_name_are_normalized(self):
+        # 1C type/whitespace drift must not flip the fingerprint: int 7 vs "7",
+        # " Pans " vs "Pans" hash identically (the stored node is normalized too).
+        raw = {"category": [{"id": 7, "name": " Pans "}]}
+        clean = {"category": [{"id": "7", "name": "Pans"}]}
+        self.assertEqual(row_hash(raw), row_hash(clean))
+
 
 from core.category_ingest import CategoryResolver
 
