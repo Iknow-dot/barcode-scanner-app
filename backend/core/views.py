@@ -1274,6 +1274,36 @@ _PUSH_TOKEN_PARAM = OpenApiParameter(
                 ]
             },
         ),
+        OpenApiExample(
+            "Sibling categories — two children under one parent",
+            request_only=True,
+            description=(
+                "There is no request that creates a category tree; a parent's children emerge from "
+                "different products whose chains share the parent id, then branch. Here two products put "
+                "**Pans** (42) and **Pots** (55) under one shared **Cookware** (7) node. Non-category "
+                "fields are trimmed for clarity — real pushes must still carry each product's complete row."
+            ),
+            value={
+                "products": [
+                    {
+                        "sku": "A-100",
+                        "name": "Frying pan 24cm",
+                        "category": [
+                            {"id": "7", "name": "Cookware"},
+                            {"id": "42", "name": "Pans"},
+                        ],
+                    },
+                    {
+                        "sku": "A-200",
+                        "name": "Stock pot 5L",
+                        "category": [
+                            {"id": "7", "name": "Cookware"},
+                            {"id": "55", "name": "Pots"},
+                        ],
+                    },
+                ],
+            },
+        ),
         OpenApiExample("Result", response_only=True, value={"received": 1, "upserted": 1, "skipped": 0}),
     ],
 )
