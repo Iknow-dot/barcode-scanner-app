@@ -41,6 +41,7 @@ from core.permissions import (
     OrganizationPermission,
     WarehousePermission,
     IsCompanyUserOrAdmin,
+    IsCompanyAdmin,
     IsCompanyAdminOrInternalAdmin,
 )
 from django.core.cache import cache
@@ -65,6 +66,8 @@ from core.serializers import (
     SearchAddressesRequestSerializer,
     ConsultantOrderStatsSerializer,
     CatalogProductSerializer,
+    CatalogSyncStatusSerializer,
+    CatalogAdminProductSerializer,
     CatalogIngestRequestSerializer,
     CatalogIngestResponseSerializer,
     CatalogDeactivateRequestSerializer,
@@ -1494,3 +1497,39 @@ class CatalogProductImageAPIView(APIView):
     def _bump_failed(org) -> None:
         state, _ = CatalogIngestState.objects.get_or_create(organization=org)
         CatalogIngestState.objects.filter(pk=state.pk).update(images_failed=models.F("images_failed") + 1)
+
+
+@extend_schema(tags=["Catalog"], responses={200: CatalogSyncStatusSerializer})
+class CatalogSyncStatusAPIView(APIView):
+    permission_classes = [IsCompanyAdmin]
+    http_method_names = ["get"]
+
+    def get(self, request: Request) -> Response:
+        org = request.user.organization
+        state = CatalogIngestState.objects.filter(organization=org).first()
+        active = Product.objects.filter(organization=org, is_active=True).count()
+        total = Product.objects.filter(organization=org).count()
+        stale_after_days = CatalogIngestState.STALE_AFTER.days
+        if state is None:
+            payload = {
+                "health": "never", "has_synced": False, "status": "ok", "is_stale": True,
+                "stale_after_days": stale_after_days,
+                "last_full_push_at": None, "last_delta_push_at": None, "last_delete_at": None,
+                "received": 0, "upserted": 0, "deactivated": 0, "images_failed": 0, "last_error": "",
+                "active_product_count": active, "total_product_count": total,
+            }
+        else:
+            is_stale = state.is_stale
+            health = "error" if state.status == "error" else ("stale" if is_stale else "ok")
+            payload = {
+                "health": health, "has_synced": True, "status": state.status, "is_stale": is_stale,
+                "stale_after_days": stale_after_days,
+                "last_full_push_at": state.last_full_push_at,
+                "last_delta_push_at": state.last_delta_push_at,
+                "last_delete_at": state.last_delete_at,
+                "received": state.received, "upserted": state.upserted,
+                "deactivated": state.deactivated, "images_failed": state.images_failed,
+                "last_error": state.last_error,
+                "active_product_count": active, "total_product_count": total,
+            }
+        return Response(CatalogSyncStatusSerializer(payload).data)

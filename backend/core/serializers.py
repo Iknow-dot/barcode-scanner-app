@@ -675,3 +675,36 @@ class CatalogDeactivateRequestSerializer(serializers.Serializer):
 
 class CatalogDeactivateResponseSerializer(serializers.Serializer):
     deactivated = serializers.IntegerField(help_text="Number of active products that were deactivated.")
+
+
+class CatalogSyncStatusSerializer(serializers.Serializer):
+    """Company-admin sync-health snapshot for the org's catalog replica."""
+    health = serializers.CharField(help_text="never | error | stale | ok")
+    has_synced = serializers.BooleanField()
+    status = serializers.CharField()
+    is_stale = serializers.BooleanField()
+    stale_after_days = serializers.IntegerField()
+    last_full_push_at = serializers.DateTimeField(allow_null=True)
+    last_delta_push_at = serializers.DateTimeField(allow_null=True)
+    last_delete_at = serializers.DateTimeField(allow_null=True)
+    received = serializers.IntegerField()
+    upserted = serializers.IntegerField()
+    deactivated = serializers.IntegerField()
+    images_failed = serializers.IntegerField()
+    last_error = serializers.CharField(allow_blank=True)
+    active_product_count = serializers.IntegerField()
+    total_product_count = serializers.IntegerField()
+
+
+class CatalogAdminProductSerializer(serializers.Serializer):
+    """One product row for the company-admin catalog browser (list + drawer)."""
+    sku = serializers.CharField()
+    article = serializers.CharField(allow_blank=True)
+    name = serializers.CharField()
+    price = serializers.DecimalField(max_digits=12, decimal_places=2, allow_null=True)
+    is_active = serializers.BooleanField()
+    pushed_at = serializers.DateTimeField(allow_null=True)
+    category_path = serializers.JSONField()
+    images = serializers.ListField(child=serializers.CharField())
+    barcodes = serializers.ListField(child=serializers.CharField())
+    attributes = serializers.JSONField()

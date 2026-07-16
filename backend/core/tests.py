@@ -3263,3 +3263,76 @@ class CatalogAdminRegistrationTests(TestCase):
         from django.contrib import admin as dj_admin
         model_admin = dj_admin.site._registry[ProductAttribute]
         self.assertIn("is_visible", model_admin.list_editable)
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
+class CatalogSyncStatusTests(TestCase):
+    def setUp(self):
+        self.org = Organization.objects.create(
+            name="Org A", identification_number="A1",
+            web_service_url="https://a.example", employees_count=5,
+        )
+        self.admin = User.objects.create_user(
+            username="admin_a", password="pw", role=User.Role.COMPANY_ADMIN, organization=self.org,
+        )
+        self.api = APIClient()
+        self.api.force_authenticate(self.admin)
+        self.url = reverse("catalog-sync-status")
+
+    def test_never_synced_returns_default(self):
+        resp = self.api.get(self.url)
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data["health"], "never")
+        self.assertFalse(data["has_synced"])
+        self.assertEqual(data["active_product_count"], 0)
+        self.assertEqual(data["stale_after_days"], 2)
+
+    def test_populated_state_is_ok(self):
+        Product.objects.create(organization=self.org, sku="A-1", name="Pan", is_active=True)
+        CatalogIngestState.objects.create(
+            organization=self.org, status="ok", last_delta_push_at=timezone.now(),
+            received=10, upserted=3,
+        )
+        data = self.api.get(self.url).json()
+        self.assertEqual(data["health"], "ok")
+        self.assertTrue(data["has_synced"])
+        self.assertEqual(data["received"], 10)
+        self.assertEqual(data["active_product_count"], 1)
+
+    def test_stale_when_last_push_old(self):
+        CatalogIngestState.objects.create(
+            organization=self.org, status="ok",
+            last_delta_push_at=timezone.now() - timezone.timedelta(days=3),
+        )
+        data = self.api.get(self.url).json()
+        self.assertTrue(data["is_stale"])
+        self.assertEqual(data["health"], "stale")
+
+    def test_error_status_maps_to_error_health(self):
+        CatalogIngestState.objects.create(
+            organization=self.org, status="error", last_error="boom",
+            last_delta_push_at=timezone.now(),
+        )
+        data = self.api.get(self.url).json()
+        self.assertEqual(data["health"], "error")
+        self.assertEqual(data["last_error"], "boom")
+
+    def test_company_user_forbidden(self):
+        user = User.objects.create_user(
+            username="u_a", password="pw", role=User.Role.COMPANY_USER, organization=self.org,
+        )
+        api = APIClient()
+        api.force_authenticate(user)
+        self.assertEqual(api.get(self.url).status_code, 403)
+
+    def test_scoped_to_own_org(self):
+        org_b = Organization.objects.create(
+            name="Org B", identification_number="B1",
+            web_service_url="https://b.example", employees_count=5,
+        )
+        CatalogIngestState.objects.create(organization=org_b, status="error", last_error="B only")
+        data = self.api.get(self.url).json()
+        # Org A has no state row of its own → never synced, and never sees B's error.
+        self.assertEqual(data["health"], "never")
+        self.assertEqual(data["last_error"], "")
