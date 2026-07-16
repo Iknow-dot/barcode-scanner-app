@@ -1196,7 +1196,33 @@ _PUSH_TOKEN_PARAM = OpenApiParameter(
         "Upsert a batch of products into your organization's catalog replica. Send `is_full: true` "
         "with your whole catalog on onboarding (you may page it), then push only what changed. "
         "Idempotent: unchanged rows are skipped, and a previously deactivated SKU that is pushed "
-        "again is reactivated."
+        "again is reactivated.\n\n"
+        "### How categories map\n\n"
+        "Categories are derived entirely from the product push — there is **no separate category "
+        "endpoint**. Each product carries its full ancestry in `category`: an ordered list from root to "
+        "leaf where every element is `{\"id\", \"name\"}`.\n\n"
+        "- **Category → category (the tree).** The list is an adjacency chain: element *N*'s parent is "
+        "element *N-1*, and the root (first) element has no parent. Nodes are identified by their stable "
+        "`id` (scoped to your organization), **independent of position** — the same `id` anywhere in any "
+        "product's chain is the same shared node, so two products whose chains both contain "
+        "`{\"id\": \"7\", \"name\": \"Cookware\"}` sit under one shared node. Keep each `id` at a consistent "
+        "depth under a consistent parent: re-pushing an `id` under a different parent silently repoints "
+        "that one node (last write wins).\n"
+        "- **Category → product.** The **last** element of the chain is the product's own category. An "
+        "omitted or empty (`[]`) `category` leaves the product uncategorized.\n"
+        "- **Stable ids & renames.** `id` is stable across pushes; re-pushing an existing `id` with a new "
+        "`name` renames that node and refreshes its breadcrumb across its whole subtree, including "
+        "descendant categories not in the current push. A rename touches only category nodes — it never "
+        "rewrites other products' rows.\n"
+        "- **Full-row semantics.** Every push replaces the whole product row, so send each product's "
+        "complete current state every time — any field you omit is cleared (`category`, `price`, "
+        "`article`, `barcodes`, `image_urls`, `attributes` alike). *Incremental* means pushing fewer "
+        "products, not fewer fields.\n"
+        "- **Malformed chains.** A chain that repeats an `id` (a cycle / self-parent) or contains an "
+        "element with no `id` is rejected for that one product, which is stored uncategorized; the rest "
+        "of the batch is processed normally.\n"
+        "- **Org isolation.** Category `id`s are scoped to your organization, derived from the push token "
+        "— never from the request body."
     ),
     request=CatalogIngestRequestSerializer,
     responses={200: CatalogIngestResponseSerializer},
@@ -1226,9 +1252,27 @@ _PUSH_TOKEN_PARAM = OpenApiParameter(
             },
         ),
         OpenApiExample(
-            "Incremental change",
+            # "Incremental" = fewer products, not fewer fields: each product must
+            # carry its complete current row, or the omitted fields are cleared.
+            "Incremental change — one product, complete current row",
             request_only=True,
-            value={"products": [{"sku": "A-100", "name": "Candle, decorative (new box)", "barcodes": ["4860001234567"]}]},
+            value={
+                "products": [
+                    {
+                        "sku": "A-100",
+                        "article": "AX100",
+                        "name": "Candle, decorative (new box)",
+                        "price": "9.90",
+                        "barcodes": ["4860001234567"],
+                        "image_urls": ["https://1c.example/img/a-100-0.jpg"],
+                        "category": [
+                            {"id": "7", "name": "Cookware"},
+                            {"id": "42", "name": "Pans"},
+                        ],
+                        "attributes": {"color": "black", "diameter_cm": "24"},
+                    }
+                ]
+            },
         ),
         OpenApiExample("Result", response_only=True, value={"received": 1, "upserted": 1, "skipped": 0}),
     ],

@@ -588,8 +588,25 @@ class CatalogProductSerializer(serializers.Serializer):
 # ---------------------------------------------------------------------------
 
 class CatalogIngestCategoryNodeSerializer(serializers.Serializer):
-    id = serializers.CharField(help_text="Stable 1C category id.")
-    name = serializers.CharField(help_text="Current display name of this category node.")
+    id = serializers.CharField(
+        help_text=(
+            "Stable, per-organization 1C category id. Identity is by this id, not by name: "
+            "re-pushing an id resolves to (and updates) that same node; a new id creates a new node. "
+            "The tree is keyed by id, not by position — the same id anywhere in any product's chain is "
+            "the same shared node. Keep each id at a consistent depth under a consistent parent, because "
+            "re-pushing an id under a different parent silently repoints that one node (last write wins). "
+            "Ids only need to be unique within your own organization."
+        )
+    )
+    name = serializers.CharField(
+        help_text=(
+            "Current display name of this category node. Names are not identity and may change freely: "
+            "re-pushing an existing id with a different name renames that node and refreshes its breadcrumb "
+            "everywhere it appears, across the node's whole subtree — including descendant categories not in "
+            "this push. A rename touches only category nodes, never other products' rows. An omitted or blank "
+            "name stores an empty display name for that node."
+        )
+    )
 
 
 class CatalogIngestProductSerializer(serializers.Serializer):
@@ -615,7 +632,15 @@ class CatalogIngestProductSerializer(serializers.Serializer):
     )
     category = CatalogIngestCategoryNodeSerializer(
         many=True, required=False,
-        help_text="Full category ancestry, root→leaf; the last element is the product's own category. Omit or [] for uncategorized. Duplicate ids (a cycle) → the product is stored uncategorized. A push replaces the whole row, so a delta that omits this field clears the product's category — always send the current full chain, same as barcodes/price.",
+        help_text=(
+            "Full category ancestry for this product, ordered root→leaf. Each element's parent is the "
+            "element before it, and the last element is the product's own category; nodes are keyed by "
+            "their stable id (see the id/name fields) — categories have no separate endpoint. Omit or send "
+            "[] for uncategorized. A chain that repeats an id (a cycle) or has an element with no id stores "
+            "that one product uncategorized without failing the batch. A push replaces the whole product "
+            "row, so always send the current full chain — omitting this field clears the category, the same "
+            "as any other omitted field. See the endpoint description for the full mapping model."
+        ),
     )
     attributes = serializers.DictField(
         required=False,
