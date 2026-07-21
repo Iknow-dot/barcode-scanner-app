@@ -1,5 +1,5 @@
 import React, {useContext, useEffect, useState} from 'react';
-import {BrowserRouter as Router, Routes, Route, Navigate, Link} from 'react-router-dom';
+import {BrowserRouter as Router, Routes, Route, Navigate} from 'react-router-dom';
 import AuthContext, {AuthProvider} from './components/Auth/AuthContext';
 import PrivateRoute from './components/PrivateRoute';
 import Dashboard from './components/UserDashboard/UserDashboard';
@@ -127,14 +127,16 @@ const MainContentView = ({children, isDark, toggleTheme}) => {
                         boxShadow: isDarkMode ? 'none' : '2px 0 8px rgba(0, 0, 0, 0.03)',
                     }}
                 >
-                    <Link to={window.location.href}>
+                    {/* Plain anchor (not react-router Link) so the logo click
+                        triggers a full page reload — "app refresh". */}
+                    <a href={window.location.pathname}>
                         <img
                             src={isDarkMode ? "logo-dark.png" : "logo-light.png"}
                             alt="Logo"
                             width="75%"
                             className="sidebar-logo"
                         />
-                    </Link>
+                    </a>
                     <Menu theme={isDarkMode ? "dark" : "light"}
                           mode="inline"
                           defaultSelectedKeys={authData?.role === "internal_admin" ? ['1'] : ['2']}
@@ -155,14 +157,14 @@ const MainContentView = ({children, isDark, toggleTheme}) => {
                 }}>
                     {!screens.lg && (
                         <Flex align="center" style={{width: '100%', height: '100%', overflow: 'hidden'}}>
-                            <Link to={window.location.href} style={{flexShrink: 0}}>
+                            <a href={window.location.pathname} style={{flexShrink: 0}}>
                                 <img
                                     src={isDarkMode ? "logo-dark.png" : "logo-light.png"}
                                     alt="Logo"
                                     width="65px"
                                     style={{marginRight: 8}}
                                 />
-                            </Link>
+                            </a>
                             {authData?.organization_name && (
                                 <span className="org-name-badge" style={{
                                     color: colorText,
