@@ -19,6 +19,7 @@ from core.views import (
     CatalogProductSearchAPIView,
     CatalogProductImageAPIView,
     CatalogSyncStatusAPIView,
+    CatalogProductListAPIView,
 )
 
 router = DefaultRouter()
@@ -40,6 +41,7 @@ urlpatterns = [
     path('catalog/products/search/', CatalogProductSearchAPIView.as_view(), name='catalog-product-search'),
     path('catalog/products/<str:sku>/image/<int:idx>/', CatalogProductImageAPIView.as_view(), name='catalog-product-image'),
     path('catalog/sync-status/', CatalogSyncStatusAPIView.as_view(), name='catalog-sync-status'),
+    path('catalog/products/list/', CatalogProductListAPIView.as_view(), name='catalog-product-list'),
     path('catalog/products/', CatalogProductIngestAPIView.as_view(), name='catalog-product-ingest'),
     path('', include(router.urls)),
 ]

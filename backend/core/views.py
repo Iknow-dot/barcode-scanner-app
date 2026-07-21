@@ -15,6 +15,8 @@ from rest_framework.response import Response
 from rest_framework.renderers import StaticHTMLRenderer
 from rest_framework.views import APIView
 from rest_framework.viewsets import ModelViewSet
+from rest_framework.generics import ListAPIView
+from rest_framework.pagination import PageNumberPagination
 
 from django.db import connection, models, transaction
 
@@ -1533,3 +1535,64 @@ class CatalogSyncStatusAPIView(APIView):
                 "active_product_count": active, "total_product_count": total,
             }
         return Response(CatalogSyncStatusSerializer(payload).data)
+
+
+class CatalogProductPagination(PageNumberPagination):
+    page_size = 25
+    page_size_query_param = "page_size"
+    max_page_size = 100
+
+
+@extend_schema(
+    tags=["Catalog"],
+    parameters=[
+        OpenApiParameter("q", str, description="Search name/sku (substring) or an exact barcode."),
+        OpenApiParameter("is_active", bool, description="Filter by active flag; omit for all."),
+    ],
+    responses={200: CatalogAdminProductSerializer(many=True)},
+)
+class CatalogProductListAPIView(ListAPIView):
+    permission_classes = [IsCompanyAdmin]
+    pagination_class = CatalogProductPagination
+    serializer_class = CatalogAdminProductSerializer
+
+    def get_queryset(self):
+        org = self.request.user.organization
+        qs = (
+            Product.objects.filter(organization=org)
+            .select_related("category")
+            .prefetch_related("barcodes")
+            .order_by("name", "sku")
+        )
+        q = (self.request.query_params.get("q") or "").strip()
+        if q:
+            qs = qs.filter(
+                models.Q(name__icontains=q) | models.Q(sku__icontains=q) | models.Q(barcodes__barcode=q)
+            ).distinct()
+        is_active = self.request.query_params.get("is_active")
+        if is_active not in (None, ""):
+            qs = qs.filter(is_active=str(is_active).lower() in ("true", "1", "yes"))
+        return qs
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.filter_queryset(self.get_queryset())
+        page = self.paginate_queryset(queryset)
+        org = request.user.organization
+        visible = list(
+            ProductAttribute.objects.filter(organization=org, is_visible=True).order_by("order", "key")
+        )
+        source = page if page is not None else queryset
+        rows = [self._row(p, org, visible) for p in source]
+        data = CatalogAdminProductSerializer(rows, many=True).data
+        return self.get_paginated_response(data) if page is not None else Response(data)
+
+    @staticmethod
+    def _row(p, org, visible):
+        return {
+            "sku": p.sku, "article": p.article, "name": p.name, "price": p.price,
+            "is_active": p.is_active, "pushed_at": p.pushed_at,
+            "category_path": p.category.path_names if p.category_id else [],
+            "images": signed_image_paths(org.id, p.sku, len(p.image_urls)),
+            "barcodes": [b.barcode for b in p.barcodes.all()],
+            "attributes": project_attributes(p.attributes, visible),
+        }

@@ -3336,3 +3336,79 @@ class CatalogSyncStatusTests(TestCase):
         # Org A has no state row of its own → never synced, and never sees B's error.
         self.assertEqual(data["health"], "never")
         self.assertEqual(data["last_error"], "")
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
+class CatalogProductListTests(TestCase):
+    def setUp(self):
+        self.org = Organization.objects.create(
+            name="Org A", identification_number="A1",
+            web_service_url="https://a.example", employees_count=5,
+        )
+        self.admin = User.objects.create_user(
+            username="admin_a", password="pw", role=User.Role.COMPANY_ADMIN, organization=self.org,
+        )
+        self.api = APIClient()
+        self.api.force_authenticate(self.admin)
+        self.url = reverse("catalog-product-list")
+
+    def test_pagination_envelope(self):
+        for i in range(30):
+            Product.objects.create(organization=self.org, sku=f"S-{i:02d}", name=f"Item {i:02d}")
+        data = self.api.get(self.url).json()
+        self.assertEqual(data["count"], 30)
+        self.assertEqual(len(data["results"]), 25)  # default page_size
+        self.assertIsNotNone(data["next"])
+
+    def test_search_matches_name_sku_barcode(self):
+        p = Product.objects.create(organization=self.org, sku="PAN-1", name="Frying pan")
+        ProductBarcode.objects.create(product=p, barcode="4860001234567")
+        Product.objects.create(organization=self.org, sku="POT-1", name="Stock pot")
+        self.assertEqual(self.api.get(self.url, {"q": "pan"}).json()["count"], 1)
+        self.assertEqual(self.api.get(self.url, {"q": "POT-1"}).json()["count"], 1)
+        self.assertEqual(self.api.get(self.url, {"q": "4860001234567"}).json()["count"], 1)
+
+    def test_is_active_filter(self):
+        Product.objects.create(organization=self.org, sku="A", name="Active", is_active=True)
+        Product.objects.create(organization=self.org, sku="B", name="Gone", is_active=False)
+        self.assertEqual(self.api.get(self.url, {"is_active": "false"}).json()["count"], 1)
+        self.assertEqual(self.api.get(self.url, {"is_active": "true"}).json()["count"], 1)
+        self.assertEqual(self.api.get(self.url).json()["count"], 2)
+
+    def test_row_shape_and_attribute_projection(self):
+        cat = CategoryResolver(self.org).resolve(
+            [{"id": "7", "name": "Cookware"}, {"id": "42", "name": "Pans"}]
+        )
+        p = Product.objects.create(
+            organization=self.org, sku="A-1", name="Pan", category=cat,
+            image_urls=["https://1c.example/img.jpg"],
+            attributes={"color": "black", "cost_price": "9"},
+        )
+        ProductBarcode.objects.create(product=p, barcode="111")
+        ProductAttribute.objects.create(organization=self.org, key="color", label="Color", is_visible=True, order=0)
+        ProductAttribute.objects.create(organization=self.org, key="cost_price", label="Cost", is_visible=False, order=1)
+        row = self.api.get(self.url).json()["results"][0]
+        self.assertEqual(row["category_path"], ["Cookware", "Pans"])
+        self.assertEqual(row["barcodes"], ["111"])
+        self.assertEqual(len(row["images"]), 1)
+        self.assertEqual(row["attributes"], [{"key": "color", "label": "Color", "value": "black"}])
+
+    def test_uncategorized_product_has_empty_path(self):
+        Product.objects.create(organization=self.org, sku="A-1", name="Pan")
+        self.assertEqual(self.api.get(self.url).json()["results"][0]["category_path"], [])
+
+    def test_company_user_forbidden(self):
+        user = User.objects.create_user(
+            username="u_a", password="pw", role=User.Role.COMPANY_USER, organization=self.org,
+        )
+        api = APIClient()
+        api.force_authenticate(user)
+        self.assertEqual(api.get(self.url).status_code, 403)
+
+    def test_scoped_to_own_org(self):
+        org_b = Organization.objects.create(
+            name="Org B", identification_number="B1",
+            web_service_url="https://b.example", employees_count=5,
+        )
+        Product.objects.create(organization=org_b, sku="B-1", name="Other org product")
+        self.assertEqual(self.api.get(self.url).json()["count"], 0)
