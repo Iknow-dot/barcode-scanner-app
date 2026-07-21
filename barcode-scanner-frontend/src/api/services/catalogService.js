@@ -23,5 +23,7 @@ export function buildImageUrl(baseUrl, proxyPath) {
  */
 export const catalogService = {
     searchByName: (q) => api.get(API_ENDPOINTS.catalogProductSearch, {params: {q}}),
+    syncStatus: () => api.get(API_ENDPOINTS.catalogSyncStatus),
+    listProducts: (params) => api.get(API_ENDPOINTS.catalogProductList, {params}),
     imageUrl: (proxyPath) => buildImageUrl(`${(client.defaults.baseURL || '').replace(/\/$/, '')}/api/v1`, proxyPath),
 };

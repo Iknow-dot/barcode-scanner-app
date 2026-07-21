@@ -20,6 +20,8 @@ const API_ENDPOINTS = {
     warehouse: warehouseId => `api/v1/warehouses/${warehouseId}/`,
     product_search: "api/v1/product/search/",
     catalogProductSearch: "api/v1/catalog/products/search/",
+    catalogSyncStatus: "api/v1/catalog/sync-status/",
+    catalogProductList: "api/v1/catalog/products/list/",
 
     // Clients (1C ConsultWebExchange)
     client_check: "api/v1/clients/check/",
