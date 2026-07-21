@@ -8,7 +8,8 @@ import OrdersTab from './OrdersTab';
 import ExternalServiceSettings from '../Organization/ExternalServiceSettings';
 import InvoiceTemplateSettings from '../Organization/InvoiceTemplateSettings';
 import AnalyticsTab from './AnalyticsTab';
-import {AppstoreOutlined, BarChartOutlined, BankOutlined, FileImageOutlined, GlobalOutlined, ShoppingOutlined, TeamOutlined, UserOutlined} from "@ant-design/icons";
+import CatalogTab from './CatalogTab';
+import {AppstoreOutlined, BarChartOutlined, BankOutlined, DatabaseOutlined, FileImageOutlined, GlobalOutlined, ShoppingOutlined, TeamOutlined, UserOutlined} from "@ant-design/icons";
 import SubNavContext from "../../contexts/SubNavContext";
 import {useLanguage} from '../../i18n/LanguageContext';
 import {Typography} from "antd";
@@ -29,6 +30,7 @@ const tabMeta = (t, role) => ({
     5: {title: t.purchaseOrders, subtitle: t.ordersTabSubtitle || '', icon: <ShoppingOutlined style={{color: '#1677ff', fontSize: 22}}/>},
     6: {title: t.invoiceTemplateSettings, subtitle: t.invoiceTemplateSubtitle || '', icon: <FileImageOutlined style={{color: '#1677ff', fontSize: 22}}/>},
     7: {title: t.analytics, subtitle: t.analyticsSubtitle || '', icon: <BarChartOutlined style={{color: '#1677ff', fontSize: 22}}/>},
+    8: {title: t.catalog, subtitle: t.catalogSubtitle || '', icon: <DatabaseOutlined style={{color: '#1677ff', fontSize: 22}}/>},
 });
 
 const SystemAdminDashboard = () => {
@@ -61,6 +63,12 @@ const SystemAdminDashboard = () => {
                 label: userRole === userRoles.company_admin ? t.employees : t.users,
                 onClick: () => setActiveTab(3)
             },
+            userRole === userRoles.company_admin && ({
+                key: '8',
+                icon: <DatabaseOutlined/>,
+                label: t.catalog,
+                onClick: () => setActiveTab(8)
+            }),
             userRole === userRoles.company_admin && ({
                 key: '5',
                 icon: <ShoppingOutlined/>,
@@ -132,6 +140,9 @@ const SystemAdminDashboard = () => {
             break;
         case 7:
             ActiveTabPane = <AnalyticsTab/>;
+            break;
+        case 8:
+            ActiveTabPane = <CatalogTab/>;
             break;
         default:
             ActiveTabPane = null;
