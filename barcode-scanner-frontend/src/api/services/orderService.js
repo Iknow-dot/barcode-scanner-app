@@ -1,5 +1,33 @@
 import api from '../request';
 import API_ENDPOINTS from '../endpoints';
+import {
+    saveSnapshot, getSnapshot, enqueueOp, applyOpToSnapshot, makeTempId,
+} from '../../utils/offlineOrderQueue';
+import {markOffline, markOnline} from '../../utils/connectivity';
+
+const isNetworkError = (result) => !result.success && result.status === null;
+
+// Record the fresh server order and note that the network works.
+const trackSuccess = (orderId, result) => {
+    if (result.success && result.data?.id) {
+        saveSnapshot(orderId ?? result.data.id, result.data);
+        markOnline();
+    }
+    return result;
+};
+
+// On a network error with a known snapshot: queue the op and answer
+// optimistically so the consultant's work is preserved.
+const offlineFallback = (orderId, op, result) => {
+    if (!isNetworkError(result)) return result;
+    const snapshot = getSnapshot(orderId);
+    if (!snapshot) return result;
+    markOffline();
+    enqueueOp(orderId, op);
+    const optimistic = applyOpToSnapshot(snapshot, op);
+    saveSnapshot(orderId, optimistic);
+    return {success: true, data: optimistic, status: null, offline: true};
+};
 
 /**
  * Get all purchase orders for the current user's organization.
@@ -14,16 +42,16 @@ export const getOrders = (params) => {
  * Get a single order by ID (includes items).
  * @param {number} orderId
  */
-export const getOrder = (orderId) => {
-    return api.get(API_ENDPOINTS.order(orderId));
+export const getOrder = async (orderId) => {
+    return trackSuccess(orderId, await api.get(API_ENDPOINTS.order(orderId)));
 };
 
 /**
  * Create a new purchase order.
  * @param {object} data - { customer_name, customer_phone?, customer_identification_number?, external_client_id?, delivery_type?, delivery_address?, notes? }
  */
-export const createOrder = (data) => {
-    return api.post(API_ENDPOINTS.orders, data);
+export const createOrder = async (data) => {
+    return trackSuccess(null, await api.post(API_ENDPOINTS.orders, data));
 };
 
 /**
@@ -31,8 +59,13 @@ export const createOrder = (data) => {
  * @param {number} orderId
  * @param {object} data
  */
-export const updateOrder = (orderId, data) => {
-    return api.patch(API_ENDPOINTS.order(orderId), data);
+export const rawUpdateOrder = (orderId, data) =>
+    api.patch(API_ENDPOINTS.order(orderId), data);
+
+export const updateOrder = async (orderId, data) => {
+    const result = trackSuccess(orderId, await rawUpdateOrder(orderId, data));
+    if (data?.status === 'confirmed') return result; // never queue confirm
+    return offlineFallback(orderId, {type: 'update_order', payload: data}, result);
 };
 
 /**
@@ -48,8 +81,16 @@ export const deleteOrder = (orderId) => {
  * @param {number} orderId
  * @param {object} data - { sku, sku_name?, article?, price?, quantity?, warehouse_code?, warehouse_name?, unit?, discount_percent?, discounted_price? }
  */
-export const addOrderItem = (orderId, data) => {
-    return api.post(API_ENDPOINTS.order_items(orderId), data);
+export const rawAddOrderItem = (orderId, data) =>
+    api.post(API_ENDPOINTS.order_items(orderId), data);
+
+export const addOrderItem = async (orderId, data) => {
+    const result = trackSuccess(orderId, await rawAddOrderItem(orderId, data));
+    return offlineFallback(
+        orderId,
+        {type: 'add_item', tempId: makeTempId(), payload: data},
+        result,
+    );
 };
 
 /**
@@ -57,8 +98,12 @@ export const addOrderItem = (orderId, data) => {
  * @param {number} orderId
  * @param {number} itemId
  */
-export const removeOrderItem = (orderId, itemId) => {
-    return api.delete(API_ENDPOINTS.order_item(orderId, itemId));
+export const rawRemoveOrderItem = (orderId, itemId) =>
+    api.delete(API_ENDPOINTS.order_item(orderId, itemId));
+
+export const removeOrderItem = async (orderId, itemId) => {
+    const result = trackSuccess(orderId, await rawRemoveOrderItem(orderId, itemId));
+    return offlineFallback(orderId, {type: 'remove_item', itemId}, result);
 };
 
 /**
@@ -67,8 +112,12 @@ export const removeOrderItem = (orderId, itemId) => {
  * @param {number} itemId
  * @param {object} data
  */
-export const updateOrderItem = (orderId, itemId, data) => {
-    return api.patch(API_ENDPOINTS.order_item_update(orderId, itemId), data);
+export const rawUpdateOrderItem = (orderId, itemId, data) =>
+    api.patch(API_ENDPOINTS.order_item_update(orderId, itemId), data);
+
+export const updateOrderItem = async (orderId, itemId, data) => {
+    const result = trackSuccess(orderId, await rawUpdateOrderItem(orderId, itemId, data));
+    return offlineFallback(orderId, {type: 'update_item', itemId, payload: data}, result);
 };
 
 /**
@@ -78,11 +127,11 @@ export const updateOrderItem = (orderId, itemId, data) => {
  * @param {object} data - Fields to apply to every listed item: { price?, unit?, discount_percent?, discounted_price? }
  * @returns The refreshed order in {success, data, error} envelope.
  */
-export const bulkUpdateOrderItems = (orderId, itemIds, data) => {
-    return api.patch(API_ENDPOINTS.order_items_bulk_update(orderId), {
+export const bulkUpdateOrderItems = async (orderId, itemIds, data) => {
+    return trackSuccess(orderId, await api.patch(API_ENDPOINTS.order_items_bulk_update(orderId), {
         item_ids: itemIds,
         data,
-    });
+    }));
 };
 
 /**
