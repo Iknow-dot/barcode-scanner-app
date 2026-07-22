@@ -6,6 +6,7 @@ from django.template.loader import render_to_string
 from django.utils import timezone
 
 import httpx
+from decimal import Decimal, InvalidOperation
 from django.utils.dateparse import parse_date
 from drf_spectacular.utils import extend_schema, extend_schema_view, OpenApiParameter, OpenApiExample
 from rest_framework import status as http_status
@@ -1549,31 +1550,82 @@ class CatalogProductPagination(PageNumberPagination):
     tags=["Catalog"],
     parameters=[
         OpenApiParameter("q", str, description="Search name/sku (substring) or an exact barcode."),
-        OpenApiParameter("is_active", bool, description="Filter by active flag; omit for all."),
+        OpenApiParameter("is_active", bool, description="Filter by active flag; omit for all. Ignored for company users (always active-only)."),
+        OpenApiParameter("category", int, description="Category id; matches the node and all descendants."),
+        OpenApiParameter("price_min", str, description="Inclusive lower price bound."),
+        OpenApiParameter("price_max", str, description="Inclusive upper price bound."),
+        OpenApiParameter("article", str, description="Substring match on article."),
+        OpenApiParameter("pushed_after", str, description="ISO date; pushed_at on/after this day."),
+        OpenApiParameter("pushed_before", str, description="ISO date; pushed_at on/before this day."),
     ],
     responses={200: CatalogAdminProductSerializer(many=True)},
 )
 class CatalogProductListAPIView(ListAPIView):
-    permission_classes = [IsCompanyAdmin]
+    permission_classes = [IsCompanyUserOrAdmin]
     pagination_class = CatalogProductPagination
     serializer_class = CatalogAdminProductSerializer
 
     def get_queryset(self):
         org = self.request.user.organization
+        params = self.request.query_params
         qs = (
             Product.objects.filter(organization=org)
             .select_related("category")
             .prefetch_related("barcodes")
             .order_by("name", "sku")
         )
-        q = (self.request.query_params.get("q") or "").strip()
+        q = (params.get("q") or "").strip()
         if q:
             qs = qs.filter(
                 models.Q(name__icontains=q) | models.Q(sku__icontains=q) | models.Q(barcodes__barcode=q)
             ).distinct()
-        is_active = self.request.query_params.get("is_active")
-        if is_active not in (None, ""):
-            qs = qs.filter(is_active=str(is_active).lower() in ("true", "1", "yes"))
+
+        # Company users only ever see the active catalog; admins may filter.
+        if self.request.user.role == User.Role.COMPANY_USER:
+            qs = qs.filter(is_active=True)
+        else:
+            is_active = params.get("is_active")
+            if is_active not in (None, ""):
+                qs = qs.filter(is_active=str(is_active).lower() in ("true", "1", "yes"))
+
+        category_id = (params.get("category") or "").strip()
+        if category_id:
+            node = (
+                ProductCategory.objects.filter(organization=org, pk=category_id).first()
+                if category_id.isdigit() else None
+            )
+            qs = qs.filter(category__path__startswith=node.path) if node else qs.none()
+
+        for bound, lookup in (("price_min", "price__gte"), ("price_max", "price__lte")):
+            raw = (params.get(bound) or "").strip()
+            if raw:
+                try:
+                    qs = qs.filter(**{lookup: Decimal(raw)})
+                except InvalidOperation:
+                    pass  # invalid number → filter ignored
+
+        article = (params.get("article") or "").strip()
+        if article:
+            qs = qs.filter(article__icontains=article)
+
+        for bound, lookup in (("pushed_after", "pushed_at__date__gte"), ("pushed_before", "pushed_at__date__lte")):
+            raw = (params.get(bound) or "").strip()
+            if raw:
+                day = parse_date(raw)
+                if day:
+                    qs = qs.filter(**{lookup: day})
+
+        # attr_<key>=<value> — only org-visible attribute keys are honored, so
+        # hidden keys (e.g. cost_price) can be neither displayed nor probed.
+        attr_params = {k[5:]: v for k, v in params.items() if k.startswith("attr_") and v.strip()}
+        if attr_params:
+            visible_keys = set(
+                ProductAttribute.objects.filter(organization=org, is_visible=True)
+                .values_list("key", flat=True)
+            )
+            for key, value in attr_params.items():
+                if key in visible_keys:
+                    qs = qs.filter(**{f"attributes__{key}__icontains": value.strip()})
         return qs
 
     def list(self, request, *args, **kwargs):

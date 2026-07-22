@@ -3397,13 +3397,19 @@ class CatalogProductListTests(TestCase):
         Product.objects.create(organization=self.org, sku="A-1", name="Pan")
         self.assertEqual(self.api.get(self.url).json()["results"][0]["category_path"], [])
 
-    def test_company_user_forbidden(self):
+    def test_company_user_allowed_and_forced_active_only(self):
+        Product.objects.create(organization=self.org, sku="A", name="Active", is_active=True)
+        Product.objects.create(organization=self.org, sku="B", name="Gone", is_active=False)
         user = User.objects.create_user(
             username="u_a", password="pw", role=User.Role.COMPANY_USER, organization=self.org,
         )
         api = APIClient()
         api.force_authenticate(user)
-        self.assertEqual(api.get(self.url).status_code, 403)
+        # company_user can access the endpoint but only sees active products
+        self.assertEqual(api.get(self.url).status_code, 200)
+        self.assertEqual(api.get(self.url).json()["count"], 1)
+        # is_active param is ignored for company_user
+        self.assertEqual(api.get(self.url, {"is_active": "false"}).json()["count"], 1)
 
     def test_scoped_to_own_org(self):
         org_b = Organization.objects.create(
@@ -3412,6 +3418,106 @@ class CatalogProductListTests(TestCase):
         )
         Product.objects.create(organization=org_b, sku="B-1", name="Other org product")
         self.assertEqual(self.api.get(self.url).json()["count"], 0)
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
+class CatalogProductListFilterTests(TestCase):
+    def setUp(self):
+        self.org = Organization.objects.create(
+            name="Org A", identification_number="A1",
+            web_service_url="https://a.example", employees_count=5,
+        )
+        self.admin = User.objects.create_user(
+            username="admin_a", password="pw", role=User.Role.COMPANY_ADMIN, organization=self.org,
+        )
+        self.api = APIClient()
+        self.api.force_authenticate(self.admin)
+        self.url = reverse("catalog-product-list")
+        self.pans = CategoryResolver(self.org).resolve(
+            [{"id": "7", "name": "Cookware"}, {"id": "42", "name": "Pans"}]
+        )
+        self.cookware = self.pans.parent
+        self.textiles = CategoryResolver(self.org).resolve([{"id": "9", "name": "Textiles"}])
+        Product.objects.create(
+            organization=self.org, sku="PAN-1", name="Frying pan", article="ART-7",
+            category=self.pans, price="19.90",
+            pushed_at=timezone.now(), attributes={"color": "black", "cost_price": "9"},
+        )
+        Product.objects.create(
+            organization=self.org, sku="TOW-1", name="Towel", article="TX-1",
+            category=self.textiles, price="5.00",
+            pushed_at=timezone.now() - timezone.timedelta(days=10), attributes={"color": "red"},
+        )
+        ProductAttribute.objects.create(
+            organization=self.org, key="color", label="Color", is_visible=True, order=0,
+        )
+        ProductAttribute.objects.create(
+            organization=self.org, key="cost_price", label="Cost", is_visible=False, order=1,
+        )
+
+    def _count(self, params):
+        return self.api.get(self.url, params).json()["count"]
+
+    def test_category_filter_includes_descendants(self):
+        self.assertEqual(self._count({"category": self.cookware.id}), 1)  # parent matches child's product
+        self.assertEqual(self._count({"category": self.pans.id}), 1)
+        self.assertEqual(self._count({"category": self.textiles.id}), 1)
+
+    def test_category_filter_cross_org_or_unknown_is_empty(self):
+        org_b = Organization.objects.create(
+            name="Org B", identification_number="B1",
+            web_service_url="https://b.example", employees_count=5,
+        )
+        b_cat = CategoryResolver(org_b).resolve([{"id": "77", "name": "B cat"}])
+        self.assertEqual(self._count({"category": b_cat.id}), 0)
+        self.assertEqual(self._count({"category": 999999}), 0)
+        self.assertEqual(self._count({"category": "junk"}), 0)
+
+    def test_price_range(self):
+        self.assertEqual(self._count({"price_min": "10"}), 1)
+        self.assertEqual(self._count({"price_max": "10"}), 1)
+        self.assertEqual(self._count({"price_min": "1", "price_max": "100"}), 2)
+        self.assertEqual(self._count({"price_min": "junk"}), 2)  # invalid ignored
+
+    def test_article_filter(self):
+        self.assertEqual(self._count({"article": "art-7"}), 1)
+
+    def test_pushed_date_range(self):
+        today = timezone.now().date().isoformat()
+        self.assertEqual(self._count({"pushed_after": today}), 1)
+        self.assertEqual(self._count({"pushed_before": today}), 2)
+        self.assertEqual(self._count({"pushed_after": "junk"}), 2)  # invalid ignored
+
+    def test_attr_filter_visible_key(self):
+        self.assertEqual(self._count({"attr_color": "black"}), 1)
+        self.assertEqual(self._count({"attr_color": "re"}), 1)  # icontains
+
+    def test_attr_filter_hidden_or_unknown_key_ignored(self):
+        self.assertEqual(self._count({"attr_cost_price": "9"}), 2)  # hidden → ignored
+        self.assertEqual(self._count({"attr_nope": "x"}), 2)       # unknown → ignored
+
+    def test_filters_combine(self):
+        self.assertEqual(
+            self._count({"category": self.cookware.id, "price_min": "10", "attr_color": "black"}), 1
+        )
+        self.assertEqual(
+            self._count({"category": self.cookware.id, "attr_color": "red"}), 0
+        )
+
+    def test_company_user_allowed_and_forced_active_only(self):
+        Product.objects.create(
+            organization=self.org, sku="GONE-1", name="Deactivated", is_active=False,
+        )
+        user = User.objects.create_user(
+            username="u_a", password="pw", role=User.Role.COMPANY_USER, organization=self.org,
+        )
+        api = APIClient()
+        api.force_authenticate(user)
+        self.assertEqual(api.get(self.url).json()["count"], 2)  # GONE-1 hidden
+        # is_active param is ignored for company_user
+        self.assertEqual(api.get(self.url, {"is_active": "false"}).json()["count"], 2)
+        # admin still sees all three
+        self.assertEqual(self._count({}), 3)
 
 
 @override_settings(SECURE_SSL_REDIRECT=False)
