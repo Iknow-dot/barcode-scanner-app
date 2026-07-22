@@ -29,6 +29,7 @@ from core.models import (
     Product,
     ProductBarcode,
     ProductAttribute,
+    ProductCategory,
     CatalogIngestState,
 )
 from core.catalog import row_hash, proxy_image_paths
@@ -70,6 +71,7 @@ from core.serializers import (
     CatalogProductSerializer,
     CatalogSyncStatusSerializer,
     CatalogAdminProductSerializer,
+    CatalogCategoryNodeSerializer,
     CatalogIngestRequestSerializer,
     CatalogIngestResponseSerializer,
     CatalogDeactivateRequestSerializer,
@@ -1596,3 +1598,37 @@ class CatalogProductListAPIView(ListAPIView):
             "barcodes": [b.barcode for b in p.barcodes.all()],
             "attributes": project_attributes(p.attributes, visible),
         }
+
+
+@extend_schema(tags=["Catalog"], responses={200: CatalogCategoryNodeSerializer(many=True)})
+class CatalogCategoryTreeAPIView(APIView):
+    permission_classes = [IsCompanyUserOrAdmin]
+    http_method_names = ["get"]
+
+    def get(self, request: Request) -> Response:
+        org = request.user.organization
+        cats = list(ProductCategory.objects.filter(organization=org).order_by("name", "id"))
+        counts = dict(
+            Product.objects.filter(organization=org, is_active=True, category__isnull=False)
+            .values("category_id")
+            .annotate(n=models.Count("id"))
+            .values_list("category_id", "n")
+        )
+        nodes = {
+            c.id: {"id": c.id, "name": c.name, "product_count": counts.get(c.id, 0), "children": []}
+            for c in cats
+        }
+        roots = []
+        for c in cats:
+            if c.parent_id and c.parent_id in nodes:
+                nodes[c.parent_id]["children"].append(nodes[c.id])
+            else:
+                roots.append(nodes[c.id])
+
+        def _roll_up(node):
+            node["product_count"] += sum(_roll_up(ch) for ch in node["children"])
+            return node["product_count"]
+
+        for root in roots:
+            _roll_up(root)
+        return Response(roots)

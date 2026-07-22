@@ -3412,3 +3412,66 @@ class CatalogProductListTests(TestCase):
         )
         Product.objects.create(organization=org_b, sku="B-1", name="Other org product")
         self.assertEqual(self.api.get(self.url).json()["count"], 0)
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
+class CatalogCategoryTreeTests(TestCase):
+    def setUp(self):
+        self.org = Organization.objects.create(
+            name="Org A", identification_number="A1",
+            web_service_url="https://a.example", employees_count=5,
+        )
+        self.admin = User.objects.create_user(
+            username="admin_a", password="pw", role=User.Role.COMPANY_ADMIN, organization=self.org,
+        )
+        self.api = APIClient()
+        self.api.force_authenticate(self.admin)
+        self.url = reverse("catalog-category-tree")
+        # Cookware > Pans, Cookware > Pots, and a root sibling Textiles
+        self.pans = CategoryResolver(self.org).resolve(
+            [{"id": "7", "name": "Cookware"}, {"id": "42", "name": "Pans"}]
+        )
+        self.pots = CategoryResolver(self.org).resolve(
+            [{"id": "7", "name": "Cookware"}, {"id": "43", "name": "Pots"}]
+        )
+        self.textiles = CategoryResolver(self.org).resolve([{"id": "9", "name": "Textiles"}])
+
+    def test_tree_shape_and_rollup_counts(self):
+        Product.objects.create(organization=self.org, sku="P1", name="Pan", category=self.pans, is_active=True)
+        Product.objects.create(organization=self.org, sku="P2", name="Pot", category=self.pots, is_active=True)
+        Product.objects.create(organization=self.org, sku="P3", name="Old pan", category=self.pans, is_active=False)
+        resp = self.api.get(self.url)
+        self.assertEqual(resp.status_code, 200)
+        roots = resp.json()
+        self.assertEqual([r["name"] for r in roots], ["Cookware", "Textiles"])
+        cookware = roots[0]
+        self.assertEqual(cookware["product_count"], 2)  # rolled up, inactive excluded
+        self.assertEqual([c["name"] for c in cookware["children"]], ["Pans", "Pots"])
+        self.assertEqual(cookware["children"][0]["product_count"], 1)
+        self.assertEqual(roots[1]["product_count"], 0)
+
+    def test_company_user_allowed(self):
+        user = User.objects.create_user(
+            username="u_a", password="pw", role=User.Role.COMPANY_USER, organization=self.org,
+        )
+        api = APIClient()
+        api.force_authenticate(user)
+        self.assertEqual(api.get(self.url).status_code, 200)
+
+    def test_internal_admin_forbidden(self):
+        ia = User.objects.create_user(
+            username="ia", password="pw", role=User.Role.INTERNAL_ADMIN,
+            is_staff=True, is_superuser=True,
+        )
+        api = APIClient()
+        api.force_authenticate(ia)
+        self.assertEqual(api.get(self.url).status_code, 403)
+
+    def test_scoped_to_own_org(self):
+        org_b = Organization.objects.create(
+            name="Org B", identification_number="B1",
+            web_service_url="https://b.example", employees_count=5,
+        )
+        CategoryResolver(org_b).resolve([{"id": "99", "name": "B-only"}])
+        names = [r["name"] for r in self.api.get(self.url).json()]
+        self.assertNotIn("B-only", names)
