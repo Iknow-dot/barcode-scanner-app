@@ -6,6 +6,7 @@ from django.template.loader import render_to_string
 from django.utils import timezone
 
 import httpx
+from decimal import Decimal, InvalidOperation
 from django.utils.dateparse import parse_date
 from drf_spectacular.utils import extend_schema, extend_schema_view, OpenApiParameter, OpenApiExample
 from rest_framework import status as http_status
@@ -29,6 +30,7 @@ from core.models import (
     Product,
     ProductBarcode,
     ProductAttribute,
+    ProductCategory,
     CatalogIngestState,
 )
 from core.catalog import row_hash, proxy_image_paths
@@ -70,6 +72,7 @@ from core.serializers import (
     CatalogProductSerializer,
     CatalogSyncStatusSerializer,
     CatalogAdminProductSerializer,
+    CatalogCategoryNodeSerializer,
     CatalogIngestRequestSerializer,
     CatalogIngestResponseSerializer,
     CatalogDeactivateRequestSerializer,
@@ -1512,6 +1515,10 @@ class CatalogSyncStatusAPIView(APIView):
         active = Product.objects.filter(organization=org, is_active=True).count()
         total = Product.objects.filter(organization=org).count()
         stale_after_days = CatalogIngestState.STALE_AFTER.days
+        visible_attributes = [
+            {"key": a.key, "label": a.label, "type": a.type}
+            for a in ProductAttribute.objects.filter(organization=org, is_visible=True).order_by("order", "key")
+        ]
         if state is None:
             payload = {
                 "health": "never", "has_synced": False, "status": "ok", "is_stale": True,
@@ -1519,6 +1526,7 @@ class CatalogSyncStatusAPIView(APIView):
                 "last_full_push_at": None, "last_delta_push_at": None, "last_delete_at": None,
                 "received": 0, "upserted": 0, "deactivated": 0, "images_failed": 0, "last_error": "",
                 "active_product_count": active, "total_product_count": total,
+                "visible_attributes": visible_attributes,
             }
         else:
             is_stale = state.is_stale
@@ -1533,6 +1541,7 @@ class CatalogSyncStatusAPIView(APIView):
                 "deactivated": state.deactivated, "images_failed": state.images_failed,
                 "last_error": state.last_error,
                 "active_product_count": active, "total_product_count": total,
+                "visible_attributes": visible_attributes,
             }
         return Response(CatalogSyncStatusSerializer(payload).data)
 
@@ -1547,31 +1556,82 @@ class CatalogProductPagination(PageNumberPagination):
     tags=["Catalog"],
     parameters=[
         OpenApiParameter("q", str, description="Search name/sku (substring) or an exact barcode."),
-        OpenApiParameter("is_active", bool, description="Filter by active flag; omit for all."),
+        OpenApiParameter("is_active", bool, description="Filter by active flag; omit for all. Ignored for company users (always active-only)."),
+        OpenApiParameter("category", int, description="Category id; matches the node and all descendants."),
+        OpenApiParameter("price_min", str, description="Inclusive lower price bound."),
+        OpenApiParameter("price_max", str, description="Inclusive upper price bound."),
+        OpenApiParameter("article", str, description="Substring match on article."),
+        OpenApiParameter("pushed_after", str, description="ISO date; pushed_at on/after this day."),
+        OpenApiParameter("pushed_before", str, description="ISO date; pushed_at on/before this day."),
     ],
     responses={200: CatalogAdminProductSerializer(many=True)},
 )
 class CatalogProductListAPIView(ListAPIView):
-    permission_classes = [IsCompanyAdmin]
+    permission_classes = [IsCompanyUserOrAdmin]
     pagination_class = CatalogProductPagination
     serializer_class = CatalogAdminProductSerializer
 
     def get_queryset(self):
         org = self.request.user.organization
+        params = self.request.query_params
         qs = (
             Product.objects.filter(organization=org)
             .select_related("category")
             .prefetch_related("barcodes")
             .order_by("name", "sku")
         )
-        q = (self.request.query_params.get("q") or "").strip()
+        q = (params.get("q") or "").strip()
         if q:
             qs = qs.filter(
                 models.Q(name__icontains=q) | models.Q(sku__icontains=q) | models.Q(barcodes__barcode=q)
             ).distinct()
-        is_active = self.request.query_params.get("is_active")
-        if is_active not in (None, ""):
-            qs = qs.filter(is_active=str(is_active).lower() in ("true", "1", "yes"))
+
+        # Company users only ever see the active catalog; admins may filter.
+        if self.request.user.role == User.Role.COMPANY_USER:
+            qs = qs.filter(is_active=True)
+        else:
+            is_active = params.get("is_active")
+            if is_active not in (None, ""):
+                qs = qs.filter(is_active=str(is_active).lower() in ("true", "1", "yes"))
+
+        category_id = (params.get("category") or "").strip()
+        if category_id:
+            node = (
+                ProductCategory.objects.filter(organization=org, pk=category_id).first()
+                if category_id.isdigit() else None
+            )
+            qs = qs.filter(category__path__startswith=node.path) if node else qs.none()
+
+        for bound, lookup in (("price_min", "price__gte"), ("price_max", "price__lte")):
+            raw = (params.get(bound) or "").strip()
+            if raw:
+                try:
+                    qs = qs.filter(**{lookup: Decimal(raw)})
+                except InvalidOperation:
+                    pass  # invalid number → filter ignored
+
+        article = (params.get("article") or "").strip()
+        if article:
+            qs = qs.filter(article__icontains=article)
+
+        for bound, lookup in (("pushed_after", "pushed_at__date__gte"), ("pushed_before", "pushed_at__date__lte")):
+            raw = (params.get(bound) or "").strip()
+            if raw:
+                day = parse_date(raw)
+                if day:
+                    qs = qs.filter(**{lookup: day})
+
+        # attr_<key>=<value> — only org-visible attribute keys are honored, so
+        # hidden keys (e.g. cost_price) can be neither displayed nor probed.
+        attr_params = {k[5:]: v for k, v in params.items() if k.startswith("attr_") and v.strip()}
+        if attr_params:
+            visible_keys = set(
+                ProductAttribute.objects.filter(organization=org, is_visible=True)
+                .values_list("key", flat=True)
+            )
+            for key, value in attr_params.items():
+                if key in visible_keys:
+                    qs = qs.filter(**{f"attributes__{key}__icontains": value.strip()})
         return qs
 
     def list(self, request, *args, **kwargs):
@@ -1596,3 +1656,37 @@ class CatalogProductListAPIView(ListAPIView):
             "barcodes": [b.barcode for b in p.barcodes.all()],
             "attributes": project_attributes(p.attributes, visible),
         }
+
+
+@extend_schema(tags=["Catalog"], responses={200: CatalogCategoryNodeSerializer(many=True)})
+class CatalogCategoryTreeAPIView(APIView):
+    permission_classes = [IsCompanyUserOrAdmin]
+    http_method_names = ["get"]
+
+    def get(self, request: Request) -> Response:
+        org = request.user.organization
+        cats = list(ProductCategory.objects.filter(organization=org).order_by("name", "id"))
+        counts = dict(
+            Product.objects.filter(organization=org, is_active=True, category__isnull=False)
+            .values("category_id")
+            .annotate(n=models.Count("id"))
+            .values_list("category_id", "n")
+        )
+        nodes = {
+            c.id: {"id": c.id, "name": c.name, "product_count": counts.get(c.id, 0), "children": []}
+            for c in cats
+        }
+        roots = []
+        for c in cats:
+            if c.parent_id and c.parent_id in nodes:
+                nodes[c.parent_id]["children"].append(nodes[c.id])
+            else:
+                roots.append(nodes[c.id])
+
+        def _roll_up(node):
+            node["product_count"] += sum(_roll_up(ch) for ch in node["children"])
+            return node["product_count"]
+
+        for root in roots:
+            _roll_up(root)
+        return Response(roots)

@@ -22,6 +22,7 @@ const API_ENDPOINTS = {
     catalogProductSearch: "api/v1/catalog/products/search/",
     catalogSyncStatus: "api/v1/catalog/sync-status/",
     catalogProductList: "api/v1/catalog/products/list/",
+    catalogCategoryTree: "api/v1/catalog/categories/tree/",
 
     // Clients (1C ConsultWebExchange)
     client_check: "api/v1/clients/check/",

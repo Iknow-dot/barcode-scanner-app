@@ -694,6 +694,7 @@ class CatalogSyncStatusSerializer(serializers.Serializer):
     last_error = serializers.CharField(allow_blank=True)
     active_product_count = serializers.IntegerField()
     total_product_count = serializers.IntegerField()
+    visible_attributes = serializers.JSONField()
 
 
 class CatalogAdminProductSerializer(serializers.Serializer):
@@ -708,3 +709,11 @@ class CatalogAdminProductSerializer(serializers.Serializer):
     images = serializers.ListField(child=serializers.CharField())
     barcodes = serializers.ListField(child=serializers.CharField())
     attributes = serializers.JSONField()
+
+
+class CatalogCategoryNodeSerializer(serializers.Serializer):
+    """One node of the org category tree; children is the same shape, recursively."""
+    id = serializers.IntegerField()
+    name = serializers.CharField()
+    product_count = serializers.IntegerField()
+    children = serializers.JSONField()

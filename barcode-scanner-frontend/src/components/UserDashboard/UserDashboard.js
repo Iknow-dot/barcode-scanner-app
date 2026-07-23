@@ -1,4 +1,4 @@
-import React, {useState, useEffect, useContext, useCallback, useRef} from 'react';
+import React, {useState, useEffect, useContext, useCallback, useRef, useMemo} from 'react';
 import {warehouseService, productService, orderService, catalogService} from '../../api';
 import BarcodeScanner from './BarcodeScanner';
 import ClientLookupModal from './ClientLookupModal';
@@ -51,6 +51,7 @@ import {
     Spin,
     Switch,
     Tag,
+    Tree,
     Typography,
     theme
 } from "antd";
@@ -74,6 +75,7 @@ import {
     LeftOutlined,
     AppstoreOutlined,
     CheckCircleFilled,
+    FolderOpenOutlined,
 } from "@ant-design/icons";
 
 const {Text} = Typography;
@@ -111,6 +113,15 @@ const UserDashboard = () => {
     const [nameQuery, setNameQuery] = useState('');
     const [nameResults, setNameResults] = useState([]);
     const [nameSearchLoading, setNameSearchLoading] = useState(false);
+
+    // Category-tree catalog browser (drawer)
+    const [browseOpen, setBrowseOpen] = useState(false);
+    const [browseTree, setBrowseTree] = useState([]);
+    const [browseCategory, setBrowseCategory] = useState(null);
+    const [browseRows, setBrowseRows] = useState([]);
+    const [browseCount, setBrowseCount] = useState(0);
+    const [browsePage, setBrowsePage] = useState(1);
+    const [browseLoading, setBrowseLoading] = useState(false);
 
     // Purchase Order state
     const [orderMode, setOrderMode] = useState(false);
@@ -442,6 +453,52 @@ const UserDashboard = () => {
             allWarehouses: form.getFieldValue('allWarehouses'),
         });
     }, [handleSearch, form]);
+
+    // Lazy-load the category tree the first time the browser opens.
+    const openBrowse = useCallback(async () => {
+        setBrowseOpen(true);
+        if (browseTree.length === 0) {
+            const res = await catalogService.categoryTree();
+            if (res.success) setBrowseTree(res.data || []);
+        }
+    }, [browseTree.length]);
+
+    const fetchBrowseProducts = useCallback(async (categoryId, page) => {
+        setBrowseLoading(true);
+        try {
+            const res = await catalogService.listProducts({category: categoryId, page, page_size: 25});
+            if (res.success) {
+                const results = res.data.results || [];
+                setBrowseRows((prev) => (page === 1 ? results : [...prev, ...results]));
+                setBrowseCount(res.data.count ?? results.length);
+                setBrowsePage(page);
+            }
+        } finally {
+            setBrowseLoading(false);
+        }
+    }, []);
+
+    const handleBrowseCategorySelect = useCallback((keys) => {
+        const id = keys.length ? keys[0] : null;
+        setBrowseCategory(id);
+        setBrowseRows([]);
+        if (id) fetchBrowseProducts(id, 1);
+    }, [fetchBrowseProducts]);
+
+    // Picking a product closes the browser and runs the standard scan flow.
+    const handleBrowseProductSelect = useCallback((sku) => {
+        setBrowseOpen(false);
+        handleNameResultSelect(sku);
+    }, [handleNameResultSelect]);
+
+    const browseTreeData = useMemo(() => {
+        const toNode = (n) => ({
+            key: String(n.id),
+            title: `${n.name} (${n.product_count})`,
+            children: (n.children || []).map(toNode),
+        });
+        return browseTree.map(toNode);
+    }, [browseTree]);
 
     const handleResearchFromHistory = useCallback((entry) => {
         handleSearch({
@@ -897,6 +954,15 @@ const UserDashboard = () => {
                         loading={nameSearchLoading}
                         size="large"
                     />
+                    <Button
+                        type="link"
+                        size="small"
+                        icon={<FolderOpenOutlined/>}
+                        onClick={openBrowse}
+                        style={{paddingLeft: 0, marginTop: 4}}
+                    >
+                        {t.browseCatalog}
+                    </Button>
                     {nameQuery.trim().length > 0 && (
                         <Spin spinning={nameSearchLoading} size="small">
                             {nameResults.length === 0 && !nameSearchLoading ? (
@@ -1387,6 +1453,65 @@ const UserDashboard = () => {
                 onConfirm={handleConfirmAddToCart}
                 onClose={handleCancelAddToCart}
             />
+
+            {/* Category-tree catalog browser */}
+            <Drawer
+                title={t.catalogBrowseTitle}
+                open={browseOpen}
+                onClose={() => setBrowseOpen(false)}
+                placement="bottom"
+                height="85%"
+            >
+                <Tree
+                    treeData={browseTreeData}
+                    selectedKeys={browseCategory ? [browseCategory] : []}
+                    onSelect={handleBrowseCategorySelect}
+                    blockNode
+                />
+                <div style={{marginTop: 12}}>
+                    {!browseCategory ? (
+                        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t.selectCategoryHint}/>
+                    ) : (
+                        <Spin spinning={browseLoading}>
+                            {browseRows.length === 0 && !browseLoading ? (
+                                <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t.noProductsFound}/>
+                            ) : (
+                                <>
+                                    <List
+                                        size="small"
+                                        dataSource={browseRows}
+                                        renderItem={(item) => (
+                                            <List.Item onClick={() => handleBrowseProductSelect(item.sku)}
+                                                       style={{cursor: 'pointer'}}>
+                                                <List.Item.Meta
+                                                    avatar={item.images && item.images[0] ? (
+                                                        <img src={catalogService.imageUrl(item.images[0])} alt={item.name}
+                                                             style={{width: 36, height: 36, objectFit: 'cover', borderRadius: 6}}/>
+                                                    ) : (
+                                                        <PictureOutlined style={{fontSize: 24, opacity: 0.3}}/>
+                                                    )}
+                                                    title={item.name}
+                                                    description={
+                                                        <Text type="secondary" style={{fontSize: 12}}>
+                                                            {item.sku}{item.price != null ? ` · ${item.price} ₾` : ''}
+                                                        </Text>
+                                                    }
+                                                />
+                                            </List.Item>
+                                        )}
+                                    />
+                                    {browseRows.length < browseCount && (
+                                        <Button block onClick={() => fetchBrowseProducts(browseCategory, browsePage + 1)}
+                                                loading={browseLoading} style={{marginTop: 8}}>
+                                            {t.loadMore}
+                                        </Button>
+                                    )}
+                                </>
+                            )}
+                        </Spin>
+                    )}
+                </div>
+            </Drawer>
 
             {/* ===== Mobile-First Layout ===== */}
             <div className="m-dashboard">
