@@ -1427,9 +1427,15 @@ class CatalogProductSearchAPIView(APIView):
         ).select_related("category")
         if connection.vendor == "postgresql":
             from django.contrib.postgres.search import TrigramSimilarity
-            qs = qs.annotate(rank=TrigramSimilarity("name", q)).filter(rank__gt=0.1).order_by("-rank")
+            qs = (
+                qs.annotate(rank=TrigramSimilarity("name", q))
+                .filter(models.Q(rank__gt=0.1) | models.Q(article__icontains=q))
+                .order_by("-rank")
+            )
         else:  # SQLite dev fallback
-            qs = qs.filter(name__icontains=q).order_by("name")
+            qs = qs.filter(
+                models.Q(name__icontains=q) | models.Q(article__icontains=q)
+            ).order_by("name")
 
         rows = [
             {

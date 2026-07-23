@@ -62,7 +62,6 @@ import {
     ShoppingOutlined,
     ShoppingCartOutlined,
     InboxOutlined,
-    PictureOutlined,
     QrcodeOutlined,
     PlusOutlined,
     PlusCircleOutlined,
@@ -989,9 +988,7 @@ const UserDashboard = () => {
                                                             alt={item.name}
                                                             style={{width: 36, height: 36, objectFit: 'cover', borderRadius: 6}}
                                                         />
-                                                    ) : (
-                                                        <PictureOutlined style={{fontSize: 24, opacity: 0.3}}/>
-                                                    )
+                                                    ) : undefined
                                                 }
                                                 title={item.name}
                                                 description={
@@ -1034,17 +1031,12 @@ const UserDashboard = () => {
                         </Button>
                         {/* Product Hero */}
                         <div className="m-product-hero">
-                            {productInfo.images && productInfo.images.length > 0 ? (
+                            {productInfo.images && productInfo.images.length > 0 && (
                                 <img
                                     src={getImageSrc(productInfo.images[0])}
                                     alt={productInfo.sku_name || ''}
                                     className="m-product-hero-img"
                                 />
-                            ) : (
-                                <div className="m-product-hero-img placeholder">
-                                    <PictureOutlined/>
-                                    <span>{t.noImage}</span>
-                                </div>
                             )}
                             <div className="m-product-hero-body">
                                 <div style={{flex: 1, minWidth: 0}}>
@@ -1487,9 +1479,7 @@ const UserDashboard = () => {
                                                     avatar={item.images && item.images[0] ? (
                                                         <img src={catalogService.imageUrl(item.images[0])} alt={item.name}
                                                              style={{width: 36, height: 36, objectFit: 'cover', borderRadius: 6}}/>
-                                                    ) : (
-                                                        <PictureOutlined style={{fontSize: 24, opacity: 0.3}}/>
-                                                    )}
+                                                    ) : undefined}
                                                     title={item.name}
                                                     description={
                                                         <Text type="secondary" style={{fontSize: 12}}>
