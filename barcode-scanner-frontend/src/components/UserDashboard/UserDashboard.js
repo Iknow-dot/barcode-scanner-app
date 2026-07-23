@@ -21,6 +21,17 @@ import DailySnapshot from './DailySnapshot';
 import groupItemsBySku from './groupItemsBySku';
 import inheritFromGroup from './inheritFromGroup';
 import displayCustomerName from '../../utils/orderDisplay';
+import OfflineBanner, {useOfflineStatus} from './OfflineBanner';
+import {startSyncLoop} from '../../utils/offlineOrderSync';
+import {
+    enqueueOp,
+    applyOpToSnapshot,
+    getSnapshot,
+    makeTempId,
+    pendingCount,
+    getQueuedOrderIds,
+} from '../../utils/offlineOrderQueue';
+import {isOffline} from '../../utils/connectivity';
 import {
     Alert,
     Badge,
@@ -153,7 +164,44 @@ const UserDashboard = () => {
         };
 
         fetchWarehouses();
+
+        // Restore-after-refresh: if there's no active order but a queued
+        // offline order exists, restore it from its snapshot so pending
+        // work stays visible instead of silently vanishing.
+        const queued = getQueuedOrderIds();
+        if (!activeOrderRef.current && queued.length > 0) {
+            const snapshot = getSnapshot(queued[0]);
+            if (snapshot) {
+                activeOrderRef.current = snapshot;
+                setActiveOrder(snapshot);
+                setOrderMode(true);
+            }
+        }
     }, [setSubNav]);
+
+    const userWarehousesRef = useRef(userWarehouses);
+    userWarehousesRef.current = userWarehouses;
+
+    useEffect(() => {
+        const stop = startSyncLoop(() => ({
+            userWarehouses: userWarehousesRef.current,
+            onSynced: (orderId, result) => {
+                if (result.aborted) return;
+                if (result.failures.length > 0) {
+                    notify.warning(t.orderError, t.offlineSyncFailures(result.failures.length));
+                } else if (result.synced > 0) {
+                    notify.success(t.success, t.offlineSynced);
+                }
+                // Refresh the active order view with the canonical server state.
+                if (result.order && activeOrderRef.current?.id === result.order.id) {
+                    activeOrderRef.current = result.order;
+                    setActiveOrder(result.order);
+                }
+            },
+        }));
+        return stop;
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     // Scoped to current user; the customer-search effect below omits this filter on purpose so colleagues' drafts stay findable.
     const currentUserId = authData?.user?.id;
@@ -245,6 +293,18 @@ const UserDashboard = () => {
     const [othersCollapsed, setOthersCollapsed] = useState(true);
 
     const handleSearch = useCallback(async ({search, searchType, allWarehouses, fromScan}) => {
+        if (isOffline() && fromScan && activeOrderRef.current) {
+            const orderId = activeOrderRef.current.id;
+            const op = {type: 'add_item_barcode', tempId: makeTempId(), barcode: search, quantity: 1};
+            enqueueOp(orderId, op);
+            const snapshot = getSnapshot(orderId) || activeOrderRef.current;
+            const optimistic = applyOpToSnapshot(snapshot, op);
+            activeOrderRef.current = optimistic;
+            setActiveOrder(optimistic);
+            playFoundSound();
+            notify.info(t.activeOrder, t.offlineItemPending);
+            return;
+        }
         if (isSearchingRef.current) return;
         isSearchingRef.current = true;
         setLoading(true);
@@ -590,6 +650,10 @@ const UserDashboard = () => {
     const handleProceedToPayment = async () => {
         if (!activeOrder) return;
         const orderId = activeOrder.id;
+        if (isOffline() || pendingCount(orderId) > 0) {
+            notify.warning(t.orderError, t.offlineConfirmBlocked);
+            return;
+        }
         const result = await orderService.updateOrder(orderId, {status: 'confirmed'});
         if (!result.success) {
             notify.error(t.orderError, result.error);
@@ -783,6 +847,8 @@ const UserDashboard = () => {
         return '';
     };
 
+    const {offline: activeOrderOffline, pending: activeOrderPending} = useOfflineStatus(activeOrder?.id);
+
     const hasResults = balances.length > 0 || (stockUnavailable && !!productInfo.sku);
     const showEmptyProductState = !hasResults && !scannerOpen;
     const showOrderPanel = orderMode && activeOrder;
@@ -791,6 +857,9 @@ const UserDashboard = () => {
     const renderScanTab = () => (
         <div className="m-tab-content">
             {/* Active order indicator bar */}
+            {showOrderPanel && (
+                <OfflineBanner orderId={activeOrder.id}/>
+            )}
             {showOrderPanel && (
                 <div
                     className="m-order-indicator"
@@ -1300,6 +1369,7 @@ const UserDashboard = () => {
                             onChangeCustomer={() => setChangeCustomerOpen(true)}
                             notify={notify}
                             isMobileDrawer={true}
+                            confirmDisabled={activeOrderOffline || activeOrderPending > 0}
                         />
                     </div>
                 )}

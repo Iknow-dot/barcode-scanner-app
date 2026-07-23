@@ -41,6 +41,7 @@ import {
     PlusOutlined,
     MoreOutlined,
     WarningOutlined,
+    CloudSyncOutlined,
 } from '@ant-design/icons';
 
 const {Text, Title} = Typography;
@@ -146,14 +147,18 @@ const CartTableRow = memo(({
         item.effective_price && parseFloat(item.effective_price) !== parseFloat(item.price);
     const discountPct = parseFloat(item.discount_percent || 0);
     const priceCap = parseFloat(item.price || 0);
+    const isPending = item._pending === true || String(item.id).startsWith('tmp_');
 
     return (
-        <div className="m-cart-row">
+        <div className="m-cart-row" style={{opacity: isPending ? 0.6 : 1}}>
             <div className="m-cart-cell m-cart-cell-warehouse" data-label={t.warehouse}>
                 <Tag color={assigned ? 'green' : 'blue'} style={{fontSize: 11, margin: 0}}>
                     {item.warehouse_name}
                     {assigned && <span style={{marginLeft: 4}}>✓</span>}
                 </Tag>
+                {isPending && (
+                    <CloudSyncOutlined style={{marginLeft: 6, color: '#faad14'}} title={t.offlineItemPending}/>
+                )}
                 {Number.isFinite(stockNumber) && (
                     <Text type={exceedsLocal ? 'warning' : 'secondary'} style={{fontSize: 11, marginLeft: 6}}>
                         {exceedsLocal && <WarningOutlined style={{marginRight: 2}}/>}
@@ -802,7 +807,7 @@ const NotesSection = memo(({order, onLocalOrderUpdate, notify, t}) => {
 
 NotesSection.displayName = 'NotesSection';
 
-const OrderPanel = ({order: initialOrder, onSaveForLater, onProceedToPayment, onDeleteOrder, onOrderUpdate, onChangeCustomer, notify, isMobileDrawer}) => {
+const OrderPanel = ({order: initialOrder, onSaveForLater, onProceedToPayment, onDeleteOrder, onOrderUpdate, onChangeCustomer, notify, isMobileDrawer, confirmDisabled}) => {
     const {t} = useLanguage();
     const {authData} = useContext(AuthContext);
     const discountConfig = useMemo(() => ({
@@ -1077,12 +1082,12 @@ const OrderPanel = ({order: initialOrder, onSaveForLater, onProceedToPayment, on
                             onConfirm={onProceedToPayment}
                             okText={t.yes}
                             cancelText={t.no}
-                            disabled={!hasItems}
+                            disabled={!hasItems || confirmDisabled}
                         >
                             <Button
                                 type="primary"
                                 icon={<DollarOutlined/>}
-                                disabled={!hasItems}
+                                disabled={!hasItems || confirmDisabled}
                                 size="large"
                                 style={{flex: 2}}
                             >
