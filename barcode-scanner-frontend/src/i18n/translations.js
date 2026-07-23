@@ -488,6 +488,9 @@ const translations = {
         conversionRate: 'კონვერსია',
         analyticsTotals: 'ჯამი',
         noOrders: 'შეკვეთები არ არის',
+        catalogBrowseTitle: 'კატალოგი',
+        selectCategoryHint: 'აირჩიეთ კატეგორია',
+        loadMore: 'მეტის ჩვენება',
         // ===== Daily snapshot (empty state) =====
         greetingMorning: 'დილა მშვიდობისა',
         greetingAfternoon: 'შუადღე მშვიდობისა',
@@ -1090,6 +1093,9 @@ const translations = {
         conversionRate: 'Conversion',
         analyticsTotals: 'Total',
         noOrders: 'No orders',
+        catalogBrowseTitle: 'Catalog',
+        selectCategoryHint: 'Select a category',
+        loadMore: 'Load more',
         // ===== Daily snapshot (empty state) =====
         greetingMorning: 'Good morning',
         greetingAfternoon: 'Good afternoon',
