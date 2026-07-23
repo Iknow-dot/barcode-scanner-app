@@ -91,6 +91,30 @@ test('HTTP failure drops the op but continues; network failure aborts', async ()
     expect(getOps(42)[0].type).toBe('update_order');
 });
 
+test('5xx mid-drain aborts and retains the op in the queue', async () => {
+    enqueueOp(42, {type: 'update_item', itemId: 7, payload: {quantity: 5}});
+    enqueueOp(42, {type: 'update_order', payload: {notes: 'x'}});
+    orderService.rawUpdateOrderItem.mockResolvedValue({success: false, error: 'boom', code: null, status: 500});
+
+    const result = await syncOrder(42, {userWarehouses: []});
+
+    expect(result.aborted).toBe(true);
+    expect(result.failures).toHaveLength(0);
+    expect(getOps(42)).toHaveLength(2); // nothing dropped
+    expect(orderService.rawUpdateOrder).not.toHaveBeenCalled();
+});
+
+test('non-404 probe HTTP failure aborts without draining', async () => {
+    enqueueOp(42, {type: 'update_order', payload: {notes: 'x'}});
+    orderService.getOrder.mockResolvedValue({success: false, error: 'server error', code: null, status: 500});
+
+    const result = await syncOrder(42, {userWarehouses: []});
+
+    expect(result.aborted).toBe(true);
+    expect(getOps(42)).toHaveLength(1); // ops retained
+    expect(orderService.rawUpdateOrder).not.toHaveBeenCalled();
+});
+
 test('deleted order clears its queue', async () => {
     enqueueOp(42, {type: 'update_order', payload: {notes: 'x'}});
     orderService.getOrder.mockResolvedValue({success: false, error: 'gone', code: null, status: 404});

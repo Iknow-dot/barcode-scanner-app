@@ -1,5 +1,6 @@
 import client from './client';
 import translations from '../i18n/translations';
+import {markOffline, markOnline} from '../utils/connectivity';
 
 /**
  * Get the current language from localStorage (fallback to 'ka').
@@ -74,12 +75,14 @@ export const getErrorCode = (error) => {
 export const apiRequest = async (requestFn) => {
     try {
         const response = await requestFn();
+        markOnline();
         return {
             success: true,
             data: response.data,
             status: response.status,
         };
     } catch (error) {
+        if (!error.response) markOffline(); // no HTTP response → network failure
         return {
             success: false,
             error: extractErrorMessage(error),

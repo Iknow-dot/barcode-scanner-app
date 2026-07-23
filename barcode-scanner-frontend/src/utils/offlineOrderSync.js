@@ -73,16 +73,21 @@ export const syncOrder = async (orderId, {userWarehouses} = {}) => {
             markOffline();
             return {synced, failures, order: null, aborted: true};
         }
+        // Any other HTTP failure (500, 403, ...) — the order's fate is
+        // unknown; leave the queue intact and try again later.
+        return {synced, failures, order: null, aborted: true};
     }
 
     while (getOps(orderId).length > 0) {
         const op = getOps(orderId)[0];
         const result = await replayOp(orderId, op, userWarehouses);
-        if (isNetworkError(result)) {
+        if (isNetworkError(result) || (result.status && result.status >= 500)) {
+            // Network failure or server error: the op may still succeed
+            // later — keep it queued and retry the whole drain.
             markOffline();
             return {synced, failures, order: null, aborted: true};
         }
-        removeOp(orderId, 0); // success or HTTP failure — either way it drains
+        removeOp(orderId, 0); // success or 4xx failure — either way it drains
         if (result.success) {
             synced += 1;
         } else {

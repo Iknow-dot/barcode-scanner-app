@@ -28,6 +28,7 @@ import {
     applyOpToSnapshot,
     getSnapshot,
     makeTempId,
+    saveSnapshot,
     pendingCount,
     getQueuedOrderIds,
 } from '../../utils/offlineOrderQueue';
@@ -299,6 +300,7 @@ const UserDashboard = () => {
             enqueueOp(orderId, op);
             const snapshot = getSnapshot(orderId) || activeOrderRef.current;
             const optimistic = applyOpToSnapshot(snapshot, op);
+            saveSnapshot(orderId, optimistic);
             activeOrderRef.current = optimistic;
             setActiveOrder(optimistic);
             playFoundSound();
