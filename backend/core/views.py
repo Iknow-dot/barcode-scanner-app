@@ -1515,6 +1515,10 @@ class CatalogSyncStatusAPIView(APIView):
         active = Product.objects.filter(organization=org, is_active=True).count()
         total = Product.objects.filter(organization=org).count()
         stale_after_days = CatalogIngestState.STALE_AFTER.days
+        visible_attributes = [
+            {"key": a.key, "label": a.label, "type": a.type}
+            for a in ProductAttribute.objects.filter(organization=org, is_visible=True).order_by("order", "key")
+        ]
         if state is None:
             payload = {
                 "health": "never", "has_synced": False, "status": "ok", "is_stale": True,
@@ -1522,6 +1526,7 @@ class CatalogSyncStatusAPIView(APIView):
                 "last_full_push_at": None, "last_delta_push_at": None, "last_delete_at": None,
                 "received": 0, "upserted": 0, "deactivated": 0, "images_failed": 0, "last_error": "",
                 "active_product_count": active, "total_product_count": total,
+                "visible_attributes": visible_attributes,
             }
         else:
             is_stale = state.is_stale
@@ -1536,6 +1541,7 @@ class CatalogSyncStatusAPIView(APIView):
                 "deactivated": state.deactivated, "images_failed": state.images_failed,
                 "last_error": state.last_error,
                 "active_product_count": active, "total_product_count": total,
+                "visible_attributes": visible_attributes,
             }
         return Response(CatalogSyncStatusSerializer(payload).data)
 

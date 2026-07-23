@@ -694,6 +694,7 @@ class CatalogSyncStatusSerializer(serializers.Serializer):
     last_error = serializers.CharField(allow_blank=True)
     active_product_count = serializers.IntegerField()
     total_product_count = serializers.IntegerField()
+    visible_attributes = serializers.JSONField()
 
 
 class CatalogAdminProductSerializer(serializers.Serializer):

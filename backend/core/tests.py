@@ -3337,6 +3337,25 @@ class CatalogSyncStatusTests(TestCase):
         self.assertEqual(data["health"], "never")
         self.assertEqual(data["last_error"], "")
 
+    def test_visible_attributes_listed(self):
+        ProductAttribute.objects.create(
+            organization=self.org, key="color", label="Color", is_visible=True, order=1, type="text",
+        )
+        ProductAttribute.objects.create(
+            organization=self.org, key="size", label="Size", is_visible=True, order=0, type="text",
+        )
+        ProductAttribute.objects.create(
+            organization=self.org, key="cost_price", label="Cost", is_visible=False, order=2,
+        )
+        data = self.api.get(self.url).json()
+        self.assertEqual(
+            data["visible_attributes"],
+            [
+                {"key": "size", "label": "Size", "type": "text"},
+                {"key": "color", "label": "Color", "type": "text"},
+            ],
+        )
+
 
 @override_settings(SECURE_SSL_REDIRECT=False)
 class CatalogProductListTests(TestCase):
