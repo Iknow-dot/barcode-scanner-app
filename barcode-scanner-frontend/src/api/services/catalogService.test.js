@@ -37,4 +37,9 @@ describe('catalogService admin methods', () => {
     catalogService.listProducts(params);
     expect(api.get).toHaveBeenCalledWith(API_ENDPOINTS.catalogProductList, { params });
   });
+
+  test('categoryTree hits the tree endpoint', () => {
+    catalogService.categoryTree();
+    expect(api.get).toHaveBeenCalledWith(API_ENDPOINTS.catalogCategoryTree);
+  });
 });
