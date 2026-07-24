@@ -1,16 +1,16 @@
-import React, {useState, useEffect, useCallback, useRef} from 'react';
+import React, {useState, useEffect, useCallback, useRef, useMemo} from 'react';
 import {catalogService} from '../../api/services/catalogService';
 import {useLanguage} from '../../i18n/LanguageContext';
 import useAppNotification from '../../hooks/useAppNotification';
 import formatRelativeTime from '../../utils/formatRelativeTime';
+import {toCascaderOptions, categoryPathLabels} from './cascaderOptions';
 import {
-    Table, Card, Tag, Input, InputNumber, DatePicker, Popover, Tree, Segmented, Button,
-    Drawer, Descriptions, Image, Space, Flex, Typography, Statistic, Empty, Row, Col, Grid,
+    Table, Card, Tag, Input, InputNumber, DatePicker, Popover, Cascader, Segmented, Button,
+    Drawer, Descriptions, Image, Space, Flex, Typography, Statistic, Empty, Row, Col,
 } from 'antd';
 import {ReloadOutlined, SearchOutlined, DatabaseOutlined, FilterOutlined} from '@ant-design/icons';
 
 const {Text, Title} = Typography;
-const {useBreakpoint} = Grid;
 
 const HEALTH_TAG = (health, t) => {
     const map = {
@@ -24,23 +24,15 @@ const HEALTH_TAG = (health, t) => {
 
 const fmtTime = (iso, t) => (iso ? formatRelativeTime(new Date(iso).getTime(), t) : '—');
 
-// catalogService.categoryTree() nodes → antd Tree data
-const toTreeData = (nodes) => (nodes || []).map((n) => ({
-    key: String(n.id),
-    title: `${n.name} (${n.product_count})`,
-    children: toTreeData(n.children),
-}));
-
-const EMPTY_FILTERS = {price_min: null, price_max: null, article: '', dates: null, attrs: {}};
+const EMPTY_FILTERS = {price_min: null, price_max: null, dates: null, attrs: {}};
 
 const CatalogTab = () => {
     const {t} = useLanguage();
     const {notify, contextHolder} = useAppNotification();
-    const screens = useBreakpoint();
 
     const [status, setStatus] = useState(null);
-    const [treeData, setTreeData] = useState([]);
-    const [category, setCategory] = useState(null); // selected category id (string) or null
+    const [tree, setTree] = useState([]);            // raw category-tree nodes
+    const [categoryPath, setCategoryPath] = useState([]); // Cascader value: ids root→selected
     const [rows, setRows] = useState([]);
     const [count, setCount] = useState(0);
     const [page, setPage] = useState(1);
@@ -55,6 +47,9 @@ const CatalogTab = () => {
     const [selected, setSelected] = useState(null);
     const debounceRef = useRef(null);
 
+    const category = categoryPath.length ? categoryPath[categoryPath.length - 1] : null;
+    const cascaderOpts = useMemo(() => toCascaderOptions(tree), [tree]);
+
     const fetchStatus = useCallback(async () => {
         const res = await catalogService.syncStatus();
         if (res.success) setStatus(res.data);
@@ -62,7 +57,7 @@ const CatalogTab = () => {
 
     const fetchTree = useCallback(async () => {
         const res = await catalogService.categoryTree();
-        if (res.success) setTreeData(toTreeData(res.data));
+        if (res.success) setTree(res.data || []);
     }, []);
 
     const buildParams = useCallback((opts = {}) => {
@@ -77,7 +72,6 @@ const CatalogTab = () => {
         const f = opts.filters ?? applied;
         if (f.price_min != null) params.price_min = f.price_min;
         if (f.price_max != null) params.price_max = f.price_max;
-        if (f.article) params.article = f.article;
         if (f.dates && f.dates[0]) params.pushed_after = f.dates[0].format('YYYY-MM-DD');
         if (f.dates && f.dates[1]) params.pushed_before = f.dates[1].format('YYYY-MM-DD');
         Object.entries(f.attrs || {}).forEach(([k, v]) => {
@@ -124,11 +118,11 @@ const CatalogTab = () => {
         fetchList({activeFilter: value, page: 1});
     };
 
-    const onTreeSelect = (keys) => {
-        const next = keys.length ? keys[0] : null;
-        setCategory(next);
+    const onCategoryChange = (path) => {
+        const next = path || [];
+        setCategoryPath(next);
         setPage(1);
-        fetchList({category: next, page: 1});
+        fetchList({category: next.length ? next[next.length - 1] : null, page: 1});
     };
 
     const onTableChange = (pagination) => {
@@ -177,7 +171,6 @@ const CatalogTab = () => {
     const activeFilterTags = [];
     if (applied.price_min != null) activeFilterTags.push({label: `${t.priceMinLabel}: ${applied.price_min}`, patch: {price_min: null}});
     if (applied.price_max != null) activeFilterTags.push({label: `${t.priceMaxLabel}: ${applied.price_max}`, patch: {price_max: null}});
-    if (applied.article) activeFilterTags.push({label: `${t.article}: ${applied.article}`, patch: {article: ''}});
     if (applied.dates) activeFilterTags.push({label: `${t.updatedRangeLabel}`, patch: {dates: null}});
     Object.entries(applied.attrs || {}).forEach(([k, v]) => {
         if (!v) return;
@@ -196,8 +189,6 @@ const CatalogTab = () => {
                                  value={draft.price_max}
                                  onChange={(v) => setDraft((d) => ({...d, price_max: v}))}/>
                 </Space.Compact>
-                <Input placeholder={t.article} value={draft.article} allowClear
-                       onChange={(e) => setDraft((d) => ({...d, article: e.target.value}))}/>
                 <DatePicker.RangePicker style={{width: '100%'}} value={draft.dates}
                                         onChange={(dates) => setDraft((d) => ({...d, dates}))}/>
                 {visibleAttrs.map((a) => (
@@ -242,19 +233,6 @@ const CatalogTab = () => {
         },
     ];
 
-    const treePanel = (
-        <Card size="small" title={t.categoriesLabel} style={{minWidth: 220}}>
-            <Button type={category ? 'text' : 'link'} size="small" style={{paddingLeft: 0, marginBottom: 8}}
-                    onClick={() => onTreeSelect([])}>
-                {t.allCategories}
-            </Button>
-            {treeData.length
-                ? <Tree treeData={treeData} selectedKeys={category ? [category] : []}
-                        onSelect={onTreeSelect} defaultExpandAll blockNode/>
-                : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={null}/>}
-        </Card>
-    );
-
     return (
         <>
             {contextHolder}
@@ -282,63 +260,77 @@ const CatalogTab = () => {
                 )}
             </Card>
 
-            <Flex gap={16} align="flex-start" vertical={!screens.md}>
-                {treePanel}
-
-                <div style={{flex: 1, minWidth: 0, width: '100%'}}>
-                    <Flex gap={12} wrap="wrap" align="center" style={{marginBottom: 12}}>
-                        <Input
-                            placeholder={t.searchCatalog}
-                            prefix={<SearchOutlined style={{opacity: 0.4}}/>}
-                            allowClear
-                            value={q}
-                            onChange={(e) => onSearchChange(e.target.value)}
-                            style={{maxWidth: 360, flex: '1 1 240px'}}
-                        />
-                        <Segmented
-                            value={activeFilter}
-                            onChange={onFilterChange}
-                            options={[
-                                {label: t.catalogAll, value: 'all'},
-                                {label: t.catalogActiveOnly, value: 'active'},
-                                {label: t.catalogInactiveOnly, value: 'inactive'},
-                            ]}
-                        />
-                        <Popover content={filterPanel} trigger="click" open={filterOpen}
-                                 onOpenChange={setFilterOpen} placement="bottomLeft">
-                            <Button icon={<FilterOutlined/>}>
-                                {t.filtersLabel}{activeFilterTags.length ? ` (${activeFilterTags.length})` : ''}
-                            </Button>
-                        </Popover>
-                    </Flex>
-
-                    {activeFilterTags.length > 0 && (
-                        <Space wrap style={{marginBottom: 12}}>
-                            {activeFilterTags.map((f) => (
-                                <Tag key={f.label} closable onClose={(e) => {
-                                    e.preventDefault();
-                                    removeFilter(f.patch);
-                                }}>{f.label}</Tag>
-                            ))}
-                        </Space>
-                    )}
-
-                    <Table
-                        dataSource={rows}
-                        columns={columns}
-                        loading={loading}
-                        size="middle"
-                        scroll={{x: 'max-content'}}
-                        onRow={(record) => ({onClick: () => setSelected(record), style: {cursor: 'pointer'}})}
-                        onChange={onTableChange}
-                        pagination={{
-                            current: page, pageSize, total: count,
-                            showSizeChanger: true, pageSizeOptions: ['25', '50', '100'],
-                        }}
-                        locale={{emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t.noProductsFound}/>}}
+            <div style={{width: '100%'}}>
+                <Flex gap={12} wrap="wrap" align="center" style={{marginBottom: 12}}>
+                    <Input
+                        placeholder={t.searchCatalog}
+                        prefix={<SearchOutlined style={{opacity: 0.4}}/>}
+                        allowClear
+                        value={q}
+                        onChange={(e) => onSearchChange(e.target.value)}
+                        style={{maxWidth: 360, flex: '1 1 240px'}}
                     />
-                </div>
-            </Flex>
+                    <Cascader
+                        options={cascaderOpts}
+                        value={categoryPath}
+                        onChange={onCategoryChange}
+                        changeOnSelect
+                        showSearch
+                        allowClear
+                        placeholder={t.allCategories}
+                        style={{minWidth: 220}}
+                    />
+                    <Popover content={filterPanel} trigger="click" open={filterOpen}
+                             onOpenChange={setFilterOpen} placement="bottomLeft">
+                        <Button icon={<FilterOutlined/>}>
+                            {t.filtersLabel}{activeFilterTags.length ? ` (${activeFilterTags.length})` : ''}
+                        </Button>
+                    </Popover>
+                    <Segmented
+                        value={activeFilter}
+                        onChange={onFilterChange}
+                        options={[
+                            {label: t.catalogAll, value: 'all'},
+                            {label: t.catalogActiveOnly, value: 'active'},
+                            {label: t.catalogInactiveOnly, value: 'inactive'},
+                        ]}
+                    />
+                </Flex>
+
+                {(category || activeFilterTags.length > 0) && (
+                    <Space wrap style={{marginBottom: 12}}>
+                        {category && (
+                            <Tag closable onClose={(e) => {
+                                e.preventDefault();
+                                onCategoryChange([]);
+                            }}>
+                                {t.colCategory}: {(categoryPathLabels(tree, category) || []).join(' / ')}
+                            </Tag>
+                        )}
+                        {activeFilterTags.map((f) => (
+                            <Tag key={f.label} closable onClose={(e) => {
+                                e.preventDefault();
+                                removeFilter(f.patch);
+                            }}>{f.label}</Tag>
+                        ))}
+                    </Space>
+                )}
+
+                <Table
+                    dataSource={rows}
+                    columns={columns}
+                    loading={loading}
+                    size="middle"
+                    scroll={{x: 'max-content'}}
+                    onRow={(record) => ({onClick: () => setSelected(record), style: {cursor: 'pointer'}})}
+                    onChange={onTableChange}
+                    pagination={{
+                        current: page, pageSize, total: count,
+                        showSizeChanger: true, pageSizeOptions: ['25', '50', '100'],
+                    }}
+                    locale={{emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t.noProductsFound}/>}}
+                />
+            </div>
 
             <Drawer
                 title={selected ? selected.name : t.productDetails}
