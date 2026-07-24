@@ -1425,26 +1425,31 @@ class CatalogProductSearchAPIView(APIView):
         qs = Product.objects.filter(
             organization=request.user.organization, is_active=True,
         ).select_related("category")
+        # Smart-box matching: fuzzy on name, substring on article/sku, exact
+        # on barcode. One box on the frontend covers all four identifiers.
+        ident_q = (
+            models.Q(article__icontains=q)
+            | models.Q(sku__icontains=q)
+            | models.Q(barcodes__barcode=q)
+        )
         if connection.vendor == "postgresql":
             from django.contrib.postgres.search import TrigramSimilarity
             qs = (
                 qs.annotate(rank=TrigramSimilarity("name", q))
-                .filter(models.Q(rank__gt=0.1) | models.Q(article__icontains=q))
+                .filter(models.Q(rank__gt=0.1) | ident_q)
                 .order_by("-rank")
             )
         else:  # SQLite dev fallback
-            qs = qs.filter(
-                models.Q(name__icontains=q) | models.Q(article__icontains=q)
-            ).order_by("name")
+            qs = qs.filter(models.Q(name__icontains=q) | ident_q).order_by("name")
 
         rows = [
             {
-                "sku": p.sku, "name": p.name, "price": p.price,
+                "sku": p.sku, "article": p.article, "name": p.name, "price": p.price,
                 "image": signed_image_paths(request.user.organization_id, p.sku, len(p.image_urls))[0]
                 if p.image_urls else None,
                 "category_path": p.category.path_names if p.category_id else [],
             }
-            for p in qs[:20]
+            for p in qs.distinct()[:20]
         ]
         return Response(CatalogProductSerializer(rows, many=True).data)
 

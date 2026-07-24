@@ -3600,3 +3600,62 @@ class CatalogCategoryTreeTests(TestCase):
         CategoryResolver(org_b).resolve([{"id": "99", "name": "B-only"}])
         names = [r["name"] for r in self.api.get(self.url).json()]
         self.assertNotIn("B-only", names)
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
+class CatalogProductTypeaheadTests(TestCase):
+    """GET /api/v1/catalog/products/search/ — the smart-box typeahead must
+    match name, article, sku (substrings) and exact barcodes, org-scoped,
+    active-only, and include `article` in each row."""
+
+    def setUp(self):
+        self.org = Organization.objects.create(
+            name="Org A", identification_number="A1",
+            web_service_url="https://a.example", employees_count=5,
+        )
+        self.user = User.objects.create_user(
+            username="u1", password="pw", role=User.Role.COMPANY_USER, organization=self.org,
+        )
+        self.api = APIClient()
+        self.api.force_authenticate(self.user)
+        self.url = reverse("catalog-product-search")
+        self.pan = Product.objects.create(
+            organization=self.org, sku="PAN-1", name="Frying pan", article="ART-7",
+        )
+        ProductBarcode.objects.create(product=self.pan, barcode="4860001234567")
+        Product.objects.create(organization=self.org, sku="POT-1", name="Stock pot", article="AR-9")
+
+    def _skus(self, q):
+        return [r["sku"] for r in self.api.get(self.url, {"q": q}).json()]
+
+    def test_matches_article_substring(self):
+        self.assertEqual(self._skus("art-7"), ["PAN-1"])
+
+    def test_matches_sku_substring(self):
+        # "PAN" also hits the name "Frying pan" — the same product must not
+        # come back twice (regression guard for the barcode-join distinct()).
+        self.assertEqual(self._skus("PAN"), ["PAN-1"])
+
+    def test_matches_exact_barcode(self):
+        self.assertEqual(self._skus("4860001234567"), ["PAN-1"])
+
+    def test_partial_barcode_does_not_match(self):
+        self.assertEqual(self._skus("48600012"), [])
+
+    def test_rows_include_article(self):
+        row = self.api.get(self.url, {"q": "Frying"}).json()[0]
+        self.assertEqual(row["article"], "ART-7")
+
+    def test_inactive_products_excluded(self):
+        Product.objects.create(
+            organization=self.org, sku="GONE-1", name="Old pan", article="ART-7X", is_active=False,
+        )
+        self.assertEqual(self._skus("ART-7"), ["PAN-1"])
+
+    def test_scoped_to_own_org(self):
+        org_b = Organization.objects.create(
+            name="Org B", identification_number="B1",
+            web_service_url="https://b.example", employees_count=5,
+        )
+        Product.objects.create(organization=org_b, sku="B-PAN", name="B pan", article="ART-7B")
+        self.assertEqual(self._skus("ART-7"), ["PAN-1"])

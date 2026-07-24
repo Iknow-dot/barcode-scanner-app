@@ -573,6 +573,7 @@ class ConsultantOrderStatsSerializer(serializers.Serializer):
 
 class CatalogProductSerializer(serializers.Serializer):
     sku = serializers.CharField()
+    article = serializers.CharField(allow_blank=True, required=False)
     name = serializers.CharField()
     price = serializers.DecimalField(max_digits=12, decimal_places=2, allow_null=True)
     image = serializers.CharField(allow_null=True)
