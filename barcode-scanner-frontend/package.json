@@ -51,6 +51,9 @@
     ]
   },
   "jest": {
+    "moduleNameMapper": {
+      "^@rc-component/([^/]+)/(?!lib/|es/|assets/)(.*)$": "@rc-component/$1/lib/$2"
+    },
     "transformIgnorePatterns": [
       "[/\\\\]node_modules[/\\\\](?!axios[/\\\\]).+\\.(js|jsx|mjs|cjs|ts|tsx)$",
       "^.+\\.module\\.(css|sass|scss)$"
