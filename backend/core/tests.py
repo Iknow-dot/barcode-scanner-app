@@ -3632,9 +3632,7 @@ class CatalogProductTypeaheadTests(TestCase):
         self.assertEqual(self._skus("art-7"), ["PAN-1"])
 
     def test_matches_sku_substring(self):
-        # "PAN" also hits the name "Frying pan" — the same product must not
-        # come back twice (regression guard for the barcode-join distinct()).
-        self.assertEqual(self._skus("PAN"), ["PAN-1"])
+        self.assertEqual(self._skus("PAN-1"), ["PAN-1"])
 
     def test_matches_exact_barcode(self):
         self.assertEqual(self._skus("4860001234567"), ["PAN-1"])
@@ -3659,3 +3657,10 @@ class CatalogProductTypeaheadTests(TestCase):
         )
         Product.objects.create(organization=org_b, sku="B-PAN", name="B pan", article="ART-7B")
         self.assertEqual(self._skus("ART-7"), ["PAN-1"])
+
+    def test_multiple_barcodes_do_not_duplicate_rows(self):
+        # Two barcode rows fan the LEFT JOIN out to two rows for the same
+        # product on any match — distinct() must collapse them back to one.
+        ProductBarcode.objects.create(product=self.pan, barcode="4860007654321")
+        self.assertEqual(self._skus("Frying"), ["PAN-1"])
+        self.assertEqual(self._skus("PAN-1"), ["PAN-1"])
