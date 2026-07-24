@@ -1,9 +1,10 @@
-import React, {useState, useEffect, useContext, useCallback, useRef, useMemo} from 'react';
+import React, {useState, useEffect, useContext, useCallback, useRef} from 'react';
 import {warehouseService, productService, orderService, catalogService} from '../../api';
 import BarcodeScanner from './BarcodeScanner';
 import ClientLookupModal from './ClientLookupModal';
 import OrderPanel from './OrderPanel';
 import AddToCartSheet from './AddToCartSheet';
+import FindProductDrawer from './FindProductDrawer';
 import subNavContext from "../../contexts/SubNavContext";
 import AuthContext from "../Auth/AuthContext";
 import useAppNotification from "../../hooks/useAppNotification";
@@ -41,23 +42,17 @@ import {
     Drawer,
     Empty,
     Flex,
-    Form,
     Input,
     List,
     Modal,
     Popconfirm,
     Result,
-    Segmented,
     Spin,
-    Switch,
     Tag,
-    Tree,
     Typography,
     theme
 } from "antd";
 import {
-    BarcodeOutlined,
-    NumberOutlined,
     SearchOutlined,
     ShoppingOutlined,
     ShoppingCartOutlined,
@@ -74,7 +69,6 @@ import {
     LeftOutlined,
     AppstoreOutlined,
     CheckCircleFilled,
-    FolderOpenOutlined,
 } from "@ant-design/icons";
 
 const {Text} = Typography;
@@ -90,9 +84,8 @@ const MAX_STOCK_FOR_FULL_BAR = 15;
 
 const UserDashboard = () => {
     const [drawerVisible, setDrawerVisible] = useState(false);
-    const [form] = Form.useForm();
     const [loading, setLoading] = useState(false);
-    const [disableScan, setDisableScan] = useState(false);
+    const [allWarehouses, setAllWarehouses] = useState(false);
     const {setSubNav} = useContext(subNavContext);
     const {authData} = useContext(AuthContext);
     const [scannerOpen, setScannerOpen] = useState(false);
@@ -105,22 +98,6 @@ const UserDashboard = () => {
     // treating it as a not-found error.
     const [stockUnavailable, setStockUnavailable] = useState(false);
     const {t} = useLanguage();
-
-    // Name-search (catalog) state — debounced search-as-you-type against
-    // GET /api/v1/catalog/products/search/?q=, independent of the barcode
-    // scanner / manual barcode-or-article search above.
-    const [nameQuery, setNameQuery] = useState('');
-    const [nameResults, setNameResults] = useState([]);
-    const [nameSearchLoading, setNameSearchLoading] = useState(false);
-
-    // Category-tree catalog browser (drawer)
-    const [browseOpen, setBrowseOpen] = useState(false);
-    const [browseTree, setBrowseTree] = useState([]);
-    const [browseCategory, setBrowseCategory] = useState(null);
-    const [browseRows, setBrowseRows] = useState([]);
-    const [browseCount, setBrowseCount] = useState(0);
-    const [browsePage, setBrowsePage] = useState(1);
-    const [browseLoading, setBrowseLoading] = useState(false);
 
     // Purchase Order state
     const [orderMode, setOrderMode] = useState(false);
@@ -271,28 +248,6 @@ const UserDashboard = () => {
         return () => clearTimeout(handle);
     }, [activeTab, customerSearch]);
 
-    // Debounced catalog name search. Mirrors the customer-search debounce
-    // pattern above: fires 300ms after typing stops, clears results when
-    // the input is emptied.
-    useEffect(() => {
-        const trimmed = nameQuery.trim();
-        if (!trimmed) {
-            setNameResults([]);
-            setNameSearchLoading(false);
-            return;
-        }
-        const handle = setTimeout(async () => {
-            setNameSearchLoading(true);
-            try {
-                const result = await catalogService.searchByName(trimmed);
-                setNameResults(result.success && Array.isArray(result.data) ? result.data : []);
-            } finally {
-                setNameSearchLoading(false);
-            }
-        }, 300);
-        return () => clearTimeout(handle);
-    }, [nameQuery]);
-
     const isSearchingRef = useRef(false);
     // Remembers the last successful search so the "show other warehouses"
     // button can re-run it with the warehouse filter dropped.
@@ -428,10 +383,10 @@ const UserDashboard = () => {
         handleSearch({
             search: decodedText,
             searchType: 'barcode',
-            allWarehouses: form.getFieldValue('allWarehouses'),
+            allWarehouses,
             fromScan: true,
         });
-    }, [handleSearch, form]);
+    }, [handleSearch, allWarehouses]);
 
     const handleShowOtherWarehouses = useCallback(() => {
         if (!lastSearchRef.current) return;
@@ -441,71 +396,24 @@ const UserDashboard = () => {
         });
     }, [handleSearch]);
 
-    // Selecting a catalog name-search result runs the same scan flow as a
-    // manual "article" search (exact sku lookup), reusing handleSearch.
-    const handleNameResultSelect = useCallback((sku) => {
-        setNameQuery('');
-        setNameResults([]);
+    // Selecting a product in the Find-product drawer (typeahead or category
+    // browse) closes it and runs the same scan flow as an exact sku lookup.
+    const handleSelectFromCatalog = useCallback((sku) => {
+        setDrawerVisible(false);
         handleSearch({
             search: sku,
             searchType: 'article',
-            allWarehouses: form.getFieldValue('allWarehouses'),
+            allWarehouses,
         });
-    }, [handleSearch, form]);
-
-    // Lazy-load the category tree the first time the browser opens.
-    const openBrowse = useCallback(async () => {
-        setBrowseOpen(true);
-        if (browseTree.length === 0) {
-            const res = await catalogService.categoryTree();
-            if (res.success) setBrowseTree(res.data || []);
-        }
-    }, [browseTree.length]);
-
-    const fetchBrowseProducts = useCallback(async (categoryId, page) => {
-        setBrowseLoading(true);
-        try {
-            const res = await catalogService.listProducts({category: categoryId, page, page_size: 25});
-            if (res.success) {
-                const results = res.data.results || [];
-                setBrowseRows((prev) => (page === 1 ? results : [...prev, ...results]));
-                setBrowseCount(res.data.count ?? results.length);
-                setBrowsePage(page);
-            }
-        } finally {
-            setBrowseLoading(false);
-        }
-    }, []);
-
-    const handleBrowseCategorySelect = useCallback((keys) => {
-        const id = keys.length ? keys[0] : null;
-        setBrowseCategory(id);
-        setBrowseRows([]);
-        if (id) fetchBrowseProducts(id, 1);
-    }, [fetchBrowseProducts]);
-
-    // Picking a product closes the browser and runs the standard scan flow.
-    const handleBrowseProductSelect = useCallback((sku) => {
-        setBrowseOpen(false);
-        handleNameResultSelect(sku);
-    }, [handleNameResultSelect]);
-
-    const browseTreeData = useMemo(() => {
-        const toNode = (n) => ({
-            key: String(n.id),
-            title: `${n.name} (${n.product_count})`,
-            children: (n.children || []).map(toNode),
-        });
-        return browseTree.map(toNode);
-    }, [browseTree]);
+    }, [handleSearch, allWarehouses]);
 
     const handleResearchFromHistory = useCallback((entry) => {
         handleSearch({
             search: entry.search,
             searchType: entry.searchType,
-            allWarehouses: form.getFieldValue('allWarehouses'),
+            allWarehouses,
         });
-    }, [handleSearch, form]);
+    }, [handleSearch, allWarehouses]);
 
     const handleBackToDashboard = useCallback(() => {
         setBalances([]);
@@ -940,72 +848,6 @@ const UserDashboard = () => {
                 </div>
             )}
 
-            {/* Name search — search-as-you-type against the catalog by product
-                name; selecting a result runs the same scan flow as an exact
-                article lookup. */}
-            {!scannerOpen && (
-                <div className="m-name-search" style={{marginBottom: 12}}>
-                    <Input.Search
-                        placeholder={t.nameSearch}
-                        value={nameQuery}
-                        onChange={(e) => setNameQuery(e.target.value)}
-                        allowClear
-                        loading={nameSearchLoading}
-                        size="large"
-                    />
-                    <Button
-                        type="link"
-                        size="small"
-                        icon={<FolderOpenOutlined/>}
-                        onClick={openBrowse}
-                        style={{paddingLeft: 0, marginTop: 4}}
-                    >
-                        {t.browseCatalog}
-                    </Button>
-                    {nameQuery.trim().length > 0 && (
-                        <Spin spinning={nameSearchLoading} size="small">
-                            {nameResults.length === 0 && !nameSearchLoading ? (
-                                <Empty
-                                    image={Empty.PRESENTED_IMAGE_SIMPLE}
-                                    description={<Text type="secondary" style={{fontSize: 13}}>{t.noResults}</Text>}
-                                    style={{margin: '16px 0'}}
-                                />
-                            ) : (
-                                <List
-                                    size="small"
-                                    dataSource={nameResults}
-                                    className="m-name-search-results"
-                                    renderItem={(item) => (
-                                        <List.Item
-                                            onClick={() => handleNameResultSelect(item.sku)}
-                                            style={{cursor: 'pointer'}}
-                                        >
-                                            <List.Item.Meta
-                                                avatar={
-                                                    item.image ? (
-                                                        <img
-                                                            src={getImageSrc(item.image)}
-                                                            alt={item.name}
-                                                            style={{width: 36, height: 36, objectFit: 'cover', borderRadius: 6}}
-                                                        />
-                                                    ) : undefined
-                                                }
-                                                title={item.name}
-                                                description={
-                                                    <Text type="secondary" style={{fontSize: 12}}>
-                                                        {item.sku}{item.price != null ? ` · ${item.price} ₾` : ''}
-                                                    </Text>
-                                                }
-                                            />
-                                        </List.Item>
-                                    )}
-                                />
-                            )}
-                        </Spin>
-                    )}
-                </div>
-            )}
-
             {/* Empty product state — daily snapshot */}
             {showEmptyProductState && (
                 <DailySnapshot
@@ -1275,118 +1117,16 @@ const UserDashboard = () => {
                 onClose={() => setScannerOpen(false)}
             />
 
-            {/* Search Drawer */}
-            <Drawer
-                title={
-                    <Flex align="center" gap={8}>
-                        <SearchOutlined style={{fontSize: 18, color: '#1677ff'}}/>
-                        <span style={{fontWeight: 600}}>{t.productSearch}</span>
-                        {orderMode && (
-                            <Tag color="blue" style={{marginLeft: 8}}>
-                                <ShoppingCartOutlined/> {t.orderMode}
-                            </Tag>
-                        )}
-                    </Flex>
-                }
-                placement="bottom"
-                closable={true}
+            {/* Unified Find-product drawer: smart search + category browse */}
+            <FindProductDrawer
                 open={drawerVisible}
                 onClose={() => setDrawerVisible(false)}
-                className="search-drawer"
-                height="auto"
-                destroyOnHidden
-                styles={{
-                    body: {paddingTop: 16, paddingBottom: 24},
-                }}
-            >
-                <Form
-                    form={form}
-                    onFinish={handleSearch}
-                    initialValues={{searchType: 'barcode'}}
-                    layout="vertical"
-                    style={{maxWidth: 500, margin: '0 auto'}}
-                >
-                    <Form.Item
-                        name="searchType"
-                        initialValue="barcode"
-                        rules={[{required: true, message: t.selectSearchType}]}
-                    >
-                        <Segmented
-                            size="large"
-                            block
-                            options={[
-                                {
-                                    label: (
-                                        <Flex align="center" justify="center" gap={8}>
-                                            <BarcodeOutlined/> {t.barcode}
-                                        </Flex>
-                                    ),
-                                    value: "barcode"
-                                },
-                                {
-                                    label: (
-                                        <Flex align="center" justify="center" gap={8}>
-                                            <NumberOutlined/> {t.article}
-                                        </Flex>
-                                    ),
-                                    value: "article"
-                                },
-                            ]}
-                            onChange={(value) => {
-                                if (value === 'barcode') {
-                                    setDisableScan(false);
-                                } else {
-                                    setDisableScan(true);
-                                }
-                            }}
-                        />
-                    </Form.Item>
-
-                    <Form.Item
-                        name="search"
-                        rules={[{required: true, message: t.enterSearchText}]}
-                    >
-                        <Input.Search
-                            size="large"
-                            autoFocus
-                            placeholder={t.searchPlaceholder}
-                            enterButton={
-                                <Button type="primary" icon={<SearchOutlined/>}>
-                                    {t.search}
-                                </Button>
-                            }
-                            onSearch={form.submit}
-                            allowClear
-                            style={{borderRadius: 10}}
-                        />
-                    </Form.Item>
-
-                    <Flex justify="center" style={{marginTop: 4}}>
-                        <Form.Item
-                            name="allWarehouses"
-                            label={t.allWarehouses}
-                            initialValue={false}
-                            valuePropName="checked"
-                        >
-                            <Switch/>
-                        </Form.Item>
-                    </Flex>
-                </Form>
-
-                {!disableScan && (
-                    <Flex justify="center" style={{marginTop: 8}}>
-                        <Button
-                            type="default"
-                            size="large"
-                            icon={<QrcodeOutlined/>}
-                            onClick={handleOpenScanner}
-                            style={{borderRadius: 10, height: 44}}
-                        >
-                            {t.scanInstead || t.scan}
-                        </Button>
-                    </Flex>
-                )}
-            </Drawer>
+                onSelectProduct={handleSelectFromCatalog}
+                onScan={handleOpenScanner}
+                allWarehouses={allWarehouses}
+                onAllWarehousesChange={setAllWarehouses}
+                orderMode={!!showOrderPanel}
+            />
 
             {/* Order Drawer (mobile - shows active order details) */}
             <Drawer
@@ -1445,63 +1185,6 @@ const UserDashboard = () => {
                 onConfirm={handleConfirmAddToCart}
                 onClose={handleCancelAddToCart}
             />
-
-            {/* Category-tree catalog browser */}
-            <Drawer
-                title={t.catalogBrowseTitle}
-                open={browseOpen}
-                onClose={() => setBrowseOpen(false)}
-                placement="bottom"
-                height="85%"
-            >
-                <Tree
-                    treeData={browseTreeData}
-                    selectedKeys={browseCategory ? [browseCategory] : []}
-                    onSelect={handleBrowseCategorySelect}
-                    blockNode
-                />
-                <div style={{marginTop: 12}}>
-                    {!browseCategory ? (
-                        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t.selectCategoryHint}/>
-                    ) : (
-                        <Spin spinning={browseLoading}>
-                            {browseRows.length === 0 && !browseLoading ? (
-                                <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t.noProductsFound}/>
-                            ) : (
-                                <>
-                                    <List
-                                        size="small"
-                                        dataSource={browseRows}
-                                        renderItem={(item) => (
-                                            <List.Item onClick={() => handleBrowseProductSelect(item.sku)}
-                                                       style={{cursor: 'pointer'}}>
-                                                <List.Item.Meta
-                                                    avatar={item.images && item.images[0] ? (
-                                                        <img src={catalogService.imageUrl(item.images[0])} alt={item.name}
-                                                             style={{width: 36, height: 36, objectFit: 'cover', borderRadius: 6}}/>
-                                                    ) : undefined}
-                                                    title={item.name}
-                                                    description={
-                                                        <Text type="secondary" style={{fontSize: 12}}>
-                                                            {item.sku}{item.price != null ? ` · ${item.price} ₾` : ''}
-                                                        </Text>
-                                                    }
-                                                />
-                                            </List.Item>
-                                        )}
-                                    />
-                                    {browseRows.length < browseCount && (
-                                        <Button block onClick={() => fetchBrowseProducts(browseCategory, browsePage + 1)}
-                                                loading={browseLoading} style={{marginTop: 8}}>
-                                            {t.loadMore}
-                                        </Button>
-                                    )}
-                                </>
-                            )}
-                        </Spin>
-                    )}
-                </div>
-            </Drawer>
 
             {/* ===== Mobile-First Layout ===== */}
             <div className="m-dashboard">
