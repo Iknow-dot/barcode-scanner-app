@@ -38,6 +38,11 @@ const FindProductDrawer = ({
     const [page, setPage] = useState(1);
     const [browseLoading, setBrowseLoading] = useState(false);
 
+    // Monotonic tokens guarding against out-of-order async responses: a
+    // response only lands if no newer request superseded it.
+    const browseSeqRef = useRef(0);
+    const searchSeqRef = useRef(0);
+
     // Lazy-load the category tree the first time the drawer opens.
     useEffect(() => {
         if (!open || treeLoaded) return;
@@ -58,17 +63,20 @@ const FindProductDrawer = ({
     useEffect(() => {
         const trimmed = query.trim();
         if (!trimmed) {
+            searchSeqRef.current += 1;
             setResults([]);
             setSearchLoading(false);
             return;
         }
         const handle = setTimeout(async () => {
+            const seq = ++searchSeqRef.current;
             setSearchLoading(true);
             try {
                 const res = await catalogService.searchByName(trimmed);
+                if (seq !== searchSeqRef.current) return;
                 setResults(res.success && Array.isArray(res.data) ? res.data : []);
             } finally {
-                setSearchLoading(false);
+                if (seq === searchSeqRef.current) setSearchLoading(false);
             }
         }, 300);
         return () => clearTimeout(handle);
@@ -77,11 +85,13 @@ const FindProductDrawer = ({
     const currentId = stack.length ? stack[stack.length - 1] : null;
 
     const fetchProducts = useCallback(async (categoryId, pageNum) => {
+        const seq = ++browseSeqRef.current;
         setBrowseLoading(true);
         try {
             const res = await catalogService.listProducts({
                 category: categoryId, page: pageNum, page_size: PAGE_SIZE,
             });
+            if (seq !== browseSeqRef.current) return;
             if (res.success) {
                 const list = res.data.results || [];
                 setRows((prev) => (pageNum === 1 ? list : [...prev, ...list]));
@@ -89,7 +99,7 @@ const FindProductDrawer = ({
                 setPage(pageNum);
             }
         } finally {
-            setBrowseLoading(false);
+            if (seq === browseSeqRef.current) setBrowseLoading(false);
         }
     }, []);
 
