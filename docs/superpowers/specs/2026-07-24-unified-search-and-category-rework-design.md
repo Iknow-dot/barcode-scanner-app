@@ -50,7 +50,8 @@ in `UserDashboard.js`. Opened by the existing bottom-bar **Search** button; full
 Drill-down category list backed by the existing tree endpoint
 (`GET /api/v1/catalog/categories/tree/`, loaded lazily on first open):
 
-- Breadcrumb line (`All categories › Beverages`) plus a back row (`‹ All categories`).
+- Breadcrumb line (`All categories › Beverages`) plus a back row labeled with the
+  parent level (`‹ All categories`); tapping it ascends exactly one level.
 - One level at a time: rows for the current node's children as `name (count)` with big
   tap targets; tapping descends.
 - Under the subcategory rows, a "Products" section listing the **current branch's**
