@@ -3443,6 +3443,19 @@ class CatalogProductListTests(TestCase):
         Product.objects.create(organization=org_b, sku="B-1", name="Other org product")
         self.assertEqual(self.api.get(self.url).json()["count"], 0)
 
+    def test_same_barcode_in_other_org_not_returned(self):
+        p = Product.objects.create(organization=self.org, sku="PAN-1", name="Frying pan")
+        ProductBarcode.objects.create(product=p, barcode="4860001234567")
+        org_b = Organization.objects.create(
+            name="Org B", identification_number="B1",
+            web_service_url="https://b.example", employees_count=5,
+        )
+        p_b = Product.objects.create(organization=org_b, sku="B-PAN", name="B pan")
+        ProductBarcode.objects.create(product=p_b, barcode="4860001234567")
+        data = self.api.get(self.url, {"q": "4860001234567"}).json()
+        self.assertEqual(data["count"], 1)
+        self.assertEqual(data["results"][0]["sku"], "PAN-1")
+
 
 @override_settings(SECURE_SSL_REDIRECT=False)
 class CatalogProductListFilterTests(TestCase):
@@ -3662,6 +3675,16 @@ class CatalogProductTypeaheadTests(TestCase):
         )
         Product.objects.create(organization=org_b, sku="B-PAN", name="B pan", article="ART-7B")
         self.assertEqual(self._skus("ART-7"), ["PAN-1"])
+
+    def test_same_barcode_in_other_org_not_returned(self):
+        org_b = Organization.objects.create(
+            name="Org B", identification_number="B1",
+            web_service_url="https://b.example", employees_count=5,
+        )
+        p_b = Product.objects.create(organization=org_b, sku="B-PAN", name="B pan")
+        ProductBarcode.objects.create(product=p_b, barcode="4860001234567")
+        # Barcode collides with our own PAN-1 — only the own-org row may match.
+        self.assertEqual(self._skus("4860001234567"), ["PAN-1"])
 
     def test_multiple_barcodes_do_not_duplicate_rows(self):
         # Two barcode rows fan the LEFT JOIN out to two rows for the same
