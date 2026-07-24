@@ -14,8 +14,9 @@ export function buildImageUrl(baseUrl, proxyPath) {
  * `searchByName` hits GET /api/v1/catalog/products/search/?q= and resolves
  * to the shared { success, data, error, code, status } envelope used by the
  * other services (see api/request.js). `data` is an array of
- * { sku, name, price, image } where `image` is a single proxy path string
- * (or null) — not base64.
+ * { sku, article, name, price, image, category_path } where `image` is a
+ * single proxy path string (or null) — not base64 — and `category_path` is
+ * the category names root→leaf (empty if uncategorized).
  *
  * `imageUrl` turns any proxy path string returned by the backend (scan
  * response `images[]`, or a name-search result's `image`) into an absolute

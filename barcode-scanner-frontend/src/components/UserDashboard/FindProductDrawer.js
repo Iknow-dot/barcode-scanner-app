@@ -68,9 +68,11 @@ const FindProductDrawer = ({
             setSearchLoading(false);
             return;
         }
+        // The debounce window counts as loading — otherwise the first
+        // keystroke shows the "no results" empty state for 300ms.
+        setSearchLoading(true);
         const handle = setTimeout(async () => {
             const seq = ++searchSeqRef.current;
-            setSearchLoading(true);
             try {
                 const res = await catalogService.searchByName(trimmed);
                 if (seq !== searchSeqRef.current) return;
@@ -109,7 +111,14 @@ const FindProductDrawer = ({
         setRows([]);
         setCount(0);
         setPage(1);
-        if (currentId != null) fetchProducts(currentId, 1);
+        if (currentId != null) {
+            fetchProducts(currentId, 1);
+        } else {
+            // Ascending to the root starts no new fetch, so invalidate any
+            // in-flight one — its late response must not repopulate rows.
+            browseSeqRef.current += 1;
+            setBrowseLoading(false);
+        }
     }, [currentId, fetchProducts]);
 
     const children = useMemo(() => childrenForStack(tree, stack), [tree, stack]);
