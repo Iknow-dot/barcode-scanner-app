@@ -3387,6 +3387,11 @@ class CatalogProductListTests(TestCase):
         self.assertEqual(self.api.get(self.url, {"q": "POT-1"}).json()["count"], 1)
         self.assertEqual(self.api.get(self.url, {"q": "4860001234567"}).json()["count"], 1)
 
+    def test_search_matches_article(self):
+        Product.objects.create(organization=self.org, sku="WOK-1", name="Wok", article="AR-55")
+        Product.objects.create(organization=self.org, sku="LID-1", name="Lid", article="ZZ-11")
+        self.assertEqual(self.api.get(self.url, {"q": "ar-55"}).json()["count"], 1)
+
     def test_is_active_filter(self):
         Product.objects.create(organization=self.org, sku="A", name="Active", is_active=True)
         Product.objects.create(organization=self.org, sku="B", name="Gone", is_active=False)

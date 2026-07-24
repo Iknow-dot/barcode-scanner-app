@@ -1566,7 +1566,7 @@ class CatalogProductPagination(PageNumberPagination):
 @extend_schema(
     tags=["Catalog"],
     parameters=[
-        OpenApiParameter("q", str, description="Search name/sku (substring) or an exact barcode."),
+        OpenApiParameter("q", str, description="Search name/sku/article (substring) or an exact barcode."),
         OpenApiParameter("is_active", bool, description="Filter by active flag; omit for all. Ignored for company users (always active-only)."),
         OpenApiParameter("category", int, description="Category id; matches the node and all descendants."),
         OpenApiParameter("price_min", str, description="Inclusive lower price bound."),
@@ -1594,7 +1594,8 @@ class CatalogProductListAPIView(ListAPIView):
         q = (params.get("q") or "").strip()
         if q:
             qs = qs.filter(
-                models.Q(name__icontains=q) | models.Q(sku__icontains=q) | models.Q(barcodes__barcode=q)
+                models.Q(name__icontains=q) | models.Q(sku__icontains=q)
+                | models.Q(article__icontains=q) | models.Q(barcodes__barcode=q)
             ).distinct()
 
         # Company users only ever see the active catalog; admins may filter.
