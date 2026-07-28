@@ -4,6 +4,7 @@ import {LeftOutlined, QrcodeOutlined, RightOutlined, SearchOutlined, ShoppingCar
 import {catalogService} from '../../api';
 import {useLanguage} from '../../i18n/LanguageContext';
 import {childrenForStack, nodeForStack, breadcrumbForStack, parentStack} from './catalogBrowse';
+import ProductImage from '../Common/ProductImage';
 
 const {Text} = Typography;
 
@@ -141,7 +142,7 @@ const FindProductDrawer = ({
         <List.Item onClick={() => handleSelect(item.sku)} style={{cursor: 'pointer'}}>
             <List.Item.Meta
                 avatar={item.image || (item.images && item.images[0]) ? (
-                    <img
+                    <ProductImage
                         src={catalogService.imageUrl(item.image || item.images[0])}
                         alt={item.name}
                         style={{width: 36, height: 36, objectFit: 'cover', borderRadius: 6}}

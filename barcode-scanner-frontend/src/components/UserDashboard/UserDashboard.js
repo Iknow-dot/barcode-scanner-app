@@ -5,6 +5,7 @@ import ClientLookupModal from './ClientLookupModal';
 import OrderPanel from './OrderPanel';
 import AddToCartSheet from './AddToCartSheet';
 import FindProductDrawer from './FindProductDrawer';
+import ProductImage from '../Common/ProductImage';
 import subNavContext from "../../contexts/SubNavContext";
 import AuthContext from "../Auth/AuthContext";
 import useAppNotification from "../../hooks/useAppNotification";
@@ -874,7 +875,7 @@ const UserDashboard = () => {
                         {/* Product Hero */}
                         <div className="m-product-hero">
                             {productInfo.images && productInfo.images.length > 0 && (
-                                <img
+                                <ProductImage
                                     src={getImageSrc(productInfo.images[0])}
                                     alt={productInfo.sku_name || ''}
                                     className="m-product-hero-img"
