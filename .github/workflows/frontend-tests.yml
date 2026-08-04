@@ -1,0 +1,47 @@
+name: Frontend tests
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - djangoRewrite
+
+concurrency:
+  group: frontend-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Jest suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: barcode-scanner-frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Matches the engines field in barcode-scanner-frontend/package.json.
+      # The Node version is load-bearing here: --openssl-legacy-provider below
+      # exists because of how Node 22 and this pinned CRA webpack interact.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: barcode-scanner-frontend/package-lock.json
+
+      # `npm ci` installs exactly what package-lock.json pins and fails if the
+      # lockfile and package.json disagree, so CI cannot drift from developers.
+      - name: Install dependencies
+        run: npm ci
+
+      # CI=true makes react-scripts run once and treat warnings as errors it
+      # reports rather than sitting in watch mode. --openssl-legacy-provider is
+      # required for the CRA 5 webpack/Node combination this app is pinned to;
+      # dropping it breaks every script in package.json.
+      - name: Run tests
+        env:
+          CI: true
+        run: npx react-scripts --openssl-legacy-provider test --watchAll=false
