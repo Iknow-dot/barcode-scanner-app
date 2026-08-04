@@ -241,6 +241,19 @@ class ConsultWebExchangeClient:
             },
         )
         self._check_auth(response, "GetStockAndPrices")
+        # 201 "No Stock": the nomenclature was found, it just has no stock at
+        # the requested warehouses. That is a hit with an empty stock list —
+        # falling through to the not-found branch would tell the consultant the
+        # product does not exist.
+        if response.status_code == 201:
+            try:
+                body = response.json()
+            except ValueError:
+                body = {}
+            if not isinstance(body, dict):
+                body = {}
+            body.setdefault("stock", [])
+            return body
         if response.status_code != 200:
             logger.warning(
                 "ConsultWebExchange GetStockAndPrices non-200 org=%s sku=%s status=%s",

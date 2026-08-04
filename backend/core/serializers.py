@@ -530,6 +530,7 @@ class ProductSearchSerializer(serializers.Serializer):
         warehouse = serializers.CharField(max_length=255)
         warehouse_name = serializers.CharField(max_length=255)
         quantity = serializers.IntegerField()
+        reserve = serializers.IntegerField(read_only=True)
         price = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
 
     is_barcode = serializers.BooleanField(write_only=True)
@@ -538,6 +539,7 @@ class ProductSearchSerializer(serializers.Serializer):
     article = serializers.CharField(max_length=255, read_only=True)
     price = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
     sku_name = serializers.CharField(max_length=255, read_only=True)
+    unit = serializers.CharField(max_length=50, read_only=True)
     stock = serializers.ListField(read_only=True, child=StockSerializer())
     images = serializers.ListField(child=serializers.CharField(), read_only=True)
     stock_status = serializers.CharField(read_only=True, required=False)
@@ -550,6 +552,7 @@ class ProductSearchSerializer(serializers.Serializer):
             'price',
             'sku',
             'sku_name',
+            'unit',
             'stock',
             'images',
             'stock_status',
