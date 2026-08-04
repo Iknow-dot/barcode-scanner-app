@@ -1,0 +1,58 @@
+name: Backend tests
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - djangoRewrite
+
+# A newer push to the same branch makes the in-flight run redundant.
+concurrency:
+  group: backend-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Django test suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      # Honours requires-python (>=3.13) from pyproject.toml.
+      - name: Install Python
+        run: uv python install
+
+      # --locked fails rather than silently re-resolving, so a stale uv.lock
+      # is a build error instead of a difference between CI and developers.
+      - name: Install dependencies
+        run: uv sync --locked
+
+      # The environment here deliberately mirrors a plain local `manage.py
+      # test` run, because that is the setup the suite is known to pass under:
+      #   - DEBUG unset  -> False -> SECURE_SSL_REDIRECT True. Endpoint tests
+      #     must carry @override_settings(SECURE_SSL_REDIRECT=False) or their
+      #     APIClient calls 301-redirect. Setting DEBUG=true here would hide
+      #     that whole class of failure from CI.
+      #   - DATABASE_URL unset -> SQLite. Production is Postgres; see the note
+      #     in the workflow README comment below.
+      #   - FERNET_KEY unset -> the tests that need it set and clear it
+      #     themselves, and pre-setting it would change what they observe.
+      - name: Run tests
+        working-directory: backend
+        env:
+          DJANGO_SECRET_KEY: ci-insecure-key-for-tests-only
+        run: uv run python manage.py test --verbosity 2 --noinput
+
+# Note: this runs against SQLite, matching local development. It will not catch
+# Postgres-specific behaviour (transaction semantics, JSON/array lookups,
+# collation-dependent ordering). Adding a `services: postgres:17` container and
+# setting DATABASE_URL is the upgrade path if that gap starts to bite.
