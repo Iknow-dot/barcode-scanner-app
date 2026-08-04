@@ -52,7 +52,9 @@
   },
   "jest": {
     "moduleNameMapper": {
-      "^@rc-component/([^/]+)/(?!lib/|es/|assets/)(.*)$": "@rc-component/$1/lib/$2"
+      "^@rc-component/([^/]+)/(?!lib/|es/|assets/)(.*)$": "@rc-component/$1/lib/$2",
+      "^react-router-dom$": "<rootDir>/node_modules/react-router-dom/dist/index.js",
+      "^react-router/dom$": "<rootDir>/node_modules/react-router/dist/development/dom-export.js"
     },
     "transformIgnorePatterns": [
       "[/\\\\]node_modules[/\\\\](?!axios[/\\\\]).+\\.(js|jsx|mjs|cjs|ts|tsx)$",
