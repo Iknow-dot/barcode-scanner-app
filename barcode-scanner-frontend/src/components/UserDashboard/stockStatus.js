@@ -23,3 +23,15 @@ export const isStockBlocked = (status) => Boolean(status);
 export const stockStatusMessageKey = (status) => (
     status === STOCK_STATUS_NO_LOOKUP_KEY ? 'stockLookupKeyMissing' : 'stockUnavailable'
 );
+
+/**
+ * Whether a search produced something worth showing.
+ *
+ * A resolved product counts even with no stock anywhere: its card, price and
+ * images must render rather than collapsing to the "nothing scanned yet" empty
+ * state. Balances alone also count, so a result never disappears just because
+ * the product payload was thinner than expected.
+ */
+export const hasProductResult = (productInfo, balances) => (
+    Boolean(productInfo?.sku) || (balances || []).length > 0
+);
