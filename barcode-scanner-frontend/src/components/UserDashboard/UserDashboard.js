@@ -20,7 +20,7 @@ import {recordScan} from '../../utils/scanLog';
 import useDailySnapshot from '../../hooks/useDailySnapshot';
 import DailySnapshot from './DailySnapshot';
 import groupItemsBySku from './groupItemsBySku';
-import {isStockBlocked, stockStatusMessageKey} from './stockStatus';
+import {hasProductResult, isStockBlocked, stockStatusMessageKey} from './stockStatus';
 import inheritFromGroup from './inheritFromGroup';
 import displayCustomerName from '../../utils/orderDisplay';
 import OfflineBanner, {useOfflineStatus} from './OfflineBanner';
@@ -817,7 +817,9 @@ const UserDashboard = () => {
 
     const {offline: activeOrderOffline, pending: activeOrderPending} = useOfflineStatus(activeOrder?.id);
 
-    const hasResults = balances.length > 0 || (stockUnavailable && !!productInfo.sku);
+    // A resolved product is a result even with no stock anywhere — see
+    // hasProductResult in stockStatus.js.
+    const hasResults = hasProductResult(productInfo, balances);
     const showEmptyProductState = !hasResults && !scannerOpen;
     const showOrderPanel = orderMode && activeOrder;
 
@@ -906,6 +908,15 @@ const UserDashboard = () => {
                                 type="warning"
                                 showIcon
                                 message={t[stockStatusMessageKey(stockStatus)]}
+                                style={{margin: '12px 0'}}
+                            />
+                        )}
+
+                        {!stockUnavailable && balances.length === 0 && (
+                            <Alert
+                                type="info"
+                                showIcon
+                                message={t.outOfStock}
                                 style={{margin: '12px 0'}}
                             />
                         )}
