@@ -3966,13 +3966,16 @@ class ProductSearchReplicaLookupKeyTests(TestCase):
         self.assertEqual(called.call_args.args[0], '2000000078649')
         self.assertIs(called.call_args.kwargs['is_barcode'], True)
 
-    def test_unmatchable_product_skips_the_call_and_reports_unavailable(self):
+    def test_unmatchable_product_reports_no_lookup_key_not_unavailable(self):
+        # "unavailable" means 1C could not be reached and a retry may help.
+        # Here we never asked it — the replica simply holds no identifier 1C
+        # can resolve — so the two must not share a status.
         self.product.article = ''
         self.product.save()
         self.product.barcodes.all().delete()
         response, called = self._search('000000007126', False)
         called.assert_not_called()
-        self.assertEqual(response.data['stock_status'], 'unavailable')
+        self.assertEqual(response.data['stock_status'], 'no_lookup_key')
 
 
 @override_settings(SECURE_SSL_REDIRECT=False)
@@ -4021,3 +4024,50 @@ class ProductSearchCachedUnitTests(TestCase):
         response = self._search({'stock': []})
         self.assertEqual(response.status_code, 200, response.data)
         self.assertNotIn('unit', response.data)
+
+
+class GetStockAndPricesUpstreamErrorTests(TestCase):
+    """Only a genuine "nomenclature not found" is PRODUCT_NOT_FOUND. Any other
+    upstream failure is an external-service error — reporting a 422 or a 500 as
+    "product not found" hides a broken integration behind a shrug."""
+
+    def setUp(self):
+        self.org = _make_organization()
+        os.environ['FERNET_KEY'] = _TEST_FERNET_KEY
+
+    def tearDown(self):
+        os.environ.pop('FERNET_KEY', None)
+
+    def _raise_for(self, status_code):
+        client = ConsultWebExchangeClient(self.org)
+        resp = mock.Mock()
+        resp.status_code = status_code
+        resp.json.return_value = {}
+        resp.text = ''
+        with mock.patch('httpx.request', return_value=resp):
+            with self.assertRaises(ConsultWebExchangeError) as ctx:
+                client.get_stock_and_prices('X', is_barcode=True, warehouses='')
+        return ctx.exception
+
+    def test_421_is_product_not_found(self):
+        exc = self._raise_for(421)
+        self.assertEqual(exc.code, 'PRODUCT_NOT_FOUND')
+        self.assertEqual(exc.http_status, 404)
+
+    def test_404_is_product_not_found(self):
+        exc = self._raise_for(404)
+        self.assertEqual(exc.code, 'PRODUCT_NOT_FOUND')
+        self.assertEqual(exc.http_status, 404)
+
+    def test_422_is_an_external_service_error(self):
+        exc = self._raise_for(422)
+        self.assertEqual(exc.code, 'EXTERNAL_SERVICE_ERROR')
+        self.assertEqual(exc.http_status, 502)
+        self.assertEqual(exc.upstream_status, 422)
+
+    def test_500_is_an_external_service_error(self):
+        # A wrong publication name on the 1C host answers 500 with
+        # "ინფორმაციული ბაზა ..." — a misconfiguration, not a missing product.
+        exc = self._raise_for(500)
+        self.assertEqual(exc.code, 'EXTERNAL_SERVICE_ERROR')
+        self.assertEqual(exc.http_status, 502)

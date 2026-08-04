@@ -254,15 +254,30 @@ class ConsultWebExchangeClient:
                 body = {}
             body.setdefault("stock", [])
             return body
-        if response.status_code != 200:
+        # 421 is 1C's "nomenclature not found by barcode/article"; a plain 404
+        # says the same thing. Everything else — 422, 5xx, a wrong publication
+        # name on the host — is a broken integration, and calling that "product
+        # not found" sends the consultant hunting for a product that exists.
+        if response.status_code in (404, 421):
             logger.warning(
-                "ConsultWebExchange GetStockAndPrices non-200 org=%s sku=%s status=%s",
+                "ConsultWebExchange GetStockAndPrices not-found org=%s sku=%s status=%s",
                 self.organization.id, sku, response.status_code,
             )
             raise ConsultWebExchangeError(
                 code="PRODUCT_NOT_FOUND",
                 detail=f"Product with SKU '{sku}' not found in the organization's web service.",
                 http_status=404,
+                upstream_status=response.status_code,
+            )
+        if response.status_code != 200:
+            logger.error(
+                "ConsultWebExchange GetStockAndPrices unexpected org=%s sku=%s status=%s body=%r",
+                self.organization.id, sku, response.status_code, response.text[:500],
+            )
+            raise ConsultWebExchangeError(
+                code="EXTERNAL_SERVICE_ERROR",
+                detail="Unexpected response from the organization's web service.",
+                http_status=502,
                 upstream_status=response.status_code,
             )
         return response.json()

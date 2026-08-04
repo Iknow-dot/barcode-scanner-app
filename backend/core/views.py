@@ -433,7 +433,10 @@ class ProductSearchAPIView(APIView):
                 except ConsultWebExchangeError:
                     payload["stock"], payload["stock_status"] = [], "unavailable"
             else:
-                payload["stock"], payload["stock_status"] = [], "unavailable"
+                # Distinct from "unavailable": 1C was never asked, because the
+                # replica holds no identifier it can resolve. Retrying will not
+                # help — the catalog row needs an article or a barcode.
+                payload["stock"], payload["stock_status"] = [], "no_lookup_key"
             return Response(self.serializer_class(payload).data)
 
         # --- miss: today's full live path + lazy upsert self-heal ---
