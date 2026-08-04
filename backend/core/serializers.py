@@ -529,8 +529,11 @@ class ProductSearchSerializer(serializers.Serializer):
     class StockSerializer(serializers.Serializer):
         warehouse = serializers.CharField(max_length=255)
         warehouse_name = serializers.CharField(max_length=255)
-        quantity = serializers.IntegerField()
-        reserve = serializers.IntegerField(read_only=True)
+        # 1C types these as Number and goods sold by weight come back
+        # fractional; an IntegerField floored 2.5 kg to 2 and 0.5 kg to 0.
+        # Decimal (serialized as a string, like `price` above) keeps them exact.
+        quantity = serializers.DecimalField(max_digits=15, decimal_places=3)
+        reserve = serializers.DecimalField(max_digits=15, decimal_places=3, read_only=True)
         price = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
 
     is_barcode = serializers.BooleanField(write_only=True)

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import os
+from decimal import Decimal
 from unittest import mock
 
 import httpx
@@ -2730,7 +2731,8 @@ class ScanFastPathTests(TestCase):
         body = r.json()
         self.assertEqual(body["sku_name"], "Candle")
         self.assertEqual(body["images"], [signed_image_path(self.org.id, "S1", 0)])
-        self.assertEqual(body["stock"][0]["quantity"], 3)
+        # Serialized as a decimal string so fractional 1C quantities survive.
+        self.assertEqual(Decimal(body["stock"][0]["quantity"]), Decimal(3))
 
     @mock.patch("core.views.ConsultWebExchangeClient.get_stock_and_prices")
     def test_stock_failure_degrades_gracefully(self, mstock):
@@ -3786,7 +3788,7 @@ class ProductSearchResponseFieldTests(TestCase):
             'warehouse': '000000003', 'warehouse_name': 'ქავთარაძის #5',
             'quantity': -11, 'reserve': 12, 'price': '38.04',
         }]})
-        self.assertEqual(data['stock'][0]['reserve'], 12)
+        self.assertEqual(Decimal(data['stock'][0]['reserve']), Decimal('12'))
 
     def test_missing_unit_and_reserve_are_omitted_not_errors(self):
         data = self._serialize({'stock': [{
@@ -4071,3 +4073,37 @@ class GetStockAndPricesUpstreamErrorTests(TestCase):
         exc = self._raise_for(500)
         self.assertEqual(exc.code, 'EXTERNAL_SERVICE_ERROR')
         self.assertEqual(exc.http_status, 502)
+
+
+class StockQuantityPrecisionTests(TestCase):
+    """1C types quantity/reserve as Number, and goods sold by weight really do
+    come back fractional. An IntegerField silently floored 2.5 kg to 2, which
+    understates stock and — at 0.5 — reads as out of stock entirely."""
+
+    def _rows(self, **row):
+        base = {'sku': 'S1', 'sku_name': 'N', 'article': 'A',
+                'images': [], 'category_path': [], 'attributes': []}
+        stock_row = {'warehouse': 'W1', 'warehouse_name': 'Main', 'price': '1.00'}
+        stock_row.update(row)
+        base['stock'] = [stock_row]
+        return ProductSearchSerializer(base).data['stock'][0]
+
+    def test_fractional_quantity_is_not_truncated(self):
+        self.assertEqual(Decimal(self._rows(quantity=2.5)['quantity']), Decimal('2.5'))
+
+    def test_fractional_reserve_is_not_truncated(self):
+        row = self._rows(quantity=10, reserve=1.5)
+        self.assertEqual(Decimal(row['reserve']), Decimal('1.5'))
+
+    def test_a_half_unit_does_not_collapse_to_out_of_stock(self):
+        self.assertNotEqual(Decimal(self._rows(quantity=0.5)['quantity']), Decimal('0'))
+
+    def test_whole_numbers_survive_the_round_trip(self):
+        self.assertEqual(Decimal(self._rows(quantity=65)['quantity']), Decimal('65'))
+
+    def test_negative_quantity_is_preserved(self):
+        # 1C really does return negative on-hand figures (observed live: -11).
+        self.assertEqual(Decimal(self._rows(quantity=-11)['quantity']), Decimal('-11'))
+
+    def test_null_reserve_stays_null(self):
+        self.assertIsNone(self._rows(quantity=1, reserve=None)['reserve'])
