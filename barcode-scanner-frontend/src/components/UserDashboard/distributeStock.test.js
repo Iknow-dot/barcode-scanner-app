@@ -54,3 +54,34 @@ describe('distributeStock', () => {
         expect([...result.entries()]).toEqual([['W2', 5]]);
     });
 });
+
+describe('decimal-string quantities from the product-search API', () => {
+    // The backend serializes stock quantities as decimal strings ("3.000") so
+    // fractional 1C values survive; every comparison here must still be
+    // numeric, not lexicographic.
+    it('allocates from string quantities', () => {
+        const result = distributeStock(4, [
+            {warehouse: 'W1', quantity: '3.000'},
+            {warehouse: 'W2', quantity: '5.000'},
+        ], new Set(['W1']));
+        expect(result.get('W1')).toBe(3);
+        expect(result.get('W2')).toBe(1);
+    });
+
+    it('sorts by numeric value, not string order', () => {
+        // '9.000' > '10.000' lexicographically — the bigger warehouse must win.
+        const result = distributeStock(10, [
+            {warehouse: 'SMALL', quantity: '9.000'},
+            {warehouse: 'BIG', quantity: '10.000'},
+        ], new Set(['SMALL', 'BIG']));
+        expect(result.get('BIG')).toBe(10);
+        expect(result.has('SMALL')).toBe(false);
+    });
+
+    it('treats a fractional quantity as real stock', () => {
+        const result = distributeStock(1, [
+            {warehouse: 'W1', quantity: '0.500'},
+        ], new Set(['W1']));
+        expect(result.get('W1')).toBe(1);
+    });
+});

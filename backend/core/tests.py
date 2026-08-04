@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import os
+from decimal import Decimal
 from unittest import mock
 
 import httpx
@@ -18,6 +19,7 @@ from core.models import Organization, PurchaseOrder, PurchaseOrderItem, Warehous
 from core.serializers import (
     OrganizationExternalServiceSerializer,
     OrganizationSerializer,
+    ProductSearchSerializer,
     PurchaseOrderSerializer,
 )
 from core.services.consult_web_exchange import (
@@ -2729,7 +2731,8 @@ class ScanFastPathTests(TestCase):
         body = r.json()
         self.assertEqual(body["sku_name"], "Candle")
         self.assertEqual(body["images"], [signed_image_path(self.org.id, "S1", 0)])
-        self.assertEqual(body["stock"][0]["quantity"], 3)
+        # Serialized as a decimal string so fractional 1C quantities survive.
+        self.assertEqual(Decimal(body["stock"][0]["quantity"]), Decimal(3))
 
     @mock.patch("core.views.ConsultWebExchangeClient.get_stock_and_prices")
     def test_stock_failure_degrades_gracefully(self, mstock):
@@ -3692,3 +3695,415 @@ class CatalogProductTypeaheadTests(TestCase):
         ProductBarcode.objects.create(product=self.pan, barcode="4860007654321")
         self.assertEqual(self._skus("Frying"), ["PAN-1"])
         self.assertEqual(self._skus("PAN-1"), ["PAN-1"])
+
+
+# ---------------------------------------------------------------------------
+# GetStockAndPrices — documented status codes and response fields
+#
+# Contract source: "Dika Api documentation - კონსულტანტების ვები" (v001).
+#   200 - OK          successful exchange
+#   201 - No Stock    product exists, no stock at the requested warehouse(s)
+#   421 - Error       nomenclature not found by barcode/article
+#   422 - Unprocessable Content
+# ---------------------------------------------------------------------------
+
+class GetStockAndPricesStatusTests(TestCase):
+    """201 means 'found, but out of stock' — it must not read as 'not found'."""
+
+    def setUp(self):
+        self.org = _make_organization()
+        os.environ['FERNET_KEY'] = _TEST_FERNET_KEY
+
+    def tearDown(self):
+        os.environ.pop('FERNET_KEY', None)
+
+    def _mock_response(self, status_code: int, body: object = None, json_raises: bool = False):
+        resp = mock.Mock()
+        resp.status_code = status_code
+        if json_raises:
+            resp.json.side_effect = ValueError('not json')
+        else:
+            resp.json.return_value = body if body is not None else {}
+        resp.text = '' if body is None else str(body)
+        return resp
+
+    def test_201_no_stock_returns_product_with_empty_stock(self):
+        client = ConsultWebExchangeClient(self.org)
+        body = {'sku': '000000012699', 'sku_name': 'CRAZY ჭიქები',
+                'article': 'B25250060', 'unit': 'ცალი', 'stock': []}
+        with mock.patch('httpx.request', return_value=self._mock_response(201, body)):
+            result = client.get_stock_and_prices('X', is_barcode=True, warehouses='')
+        self.assertEqual(result['sku_name'], 'CRAZY ჭიქები')
+        self.assertEqual(result['stock'], [])
+
+    def test_201_defaults_missing_stock_key_to_empty_list(self):
+        client = ConsultWebExchangeClient(self.org)
+        with mock.patch(
+            'httpx.request',
+            return_value=self._mock_response(201, {'sku': 'S1', 'sku_name': 'N'}),
+        ):
+            result = client.get_stock_and_prices('S1', is_barcode=False, warehouses='')
+        self.assertEqual(result['stock'], [])
+
+    def test_201_with_unparseable_body_returns_empty_stock(self):
+        client = ConsultWebExchangeClient(self.org)
+        with mock.patch(
+            'httpx.request',
+            return_value=self._mock_response(201, json_raises=True),
+        ):
+            result = client.get_stock_and_prices('S1', is_barcode=False, warehouses='')
+        self.assertEqual(result, {'stock': []})
+
+    def test_421_still_raises_product_not_found(self):
+        client = ConsultWebExchangeClient(self.org)
+        with mock.patch('httpx.request', return_value=self._mock_response(421)):
+            with self.assertRaises(ConsultWebExchangeError) as ctx:
+                client.get_stock_and_prices('X', is_barcode=True, warehouses='')
+        self.assertEqual(ctx.exception.code, 'PRODUCT_NOT_FOUND')
+        self.assertEqual(ctx.exception.upstream_status, 421)
+
+    def test_200_still_returns_body(self):
+        client = ConsultWebExchangeClient(self.org)
+        body = {'sku': 'S1', 'stock': [{'warehouse': 'W1', 'quantity': 3}]}
+        with mock.patch('httpx.request', return_value=self._mock_response(200, body)):
+            result = client.get_stock_and_prices('S1', is_barcode=False, warehouses='')
+        self.assertEqual(result, body)
+
+
+class ProductSearchResponseFieldTests(TestCase):
+    """`unit` and `stock[].reserve` are documented fields that must reach the client."""
+
+    def _serialize(self, payload):
+        base = {'sku': 'S1', 'sku_name': 'N', 'article': 'A',
+                'images': [], 'category_path': [], 'attributes': []}
+        base.update(payload)
+        return ProductSearchSerializer(base).data
+
+    def test_unit_is_returned(self):
+        data = self._serialize({'unit': 'ცალი', 'stock': []})
+        self.assertEqual(data['unit'], 'ცალი')
+
+    def test_reserve_is_returned_per_stock_row(self):
+        data = self._serialize({'stock': [{
+            'warehouse': '000000003', 'warehouse_name': 'ქავთარაძის #5',
+            'quantity': -11, 'reserve': 12, 'price': '38.04',
+        }]})
+        self.assertEqual(Decimal(data['stock'][0]['reserve']), Decimal('12'))
+
+    def test_missing_unit_and_reserve_are_omitted_not_errors(self):
+        data = self._serialize({'stock': [{
+            'warehouse': 'W1', 'warehouse_name': 'Main',
+            'quantity': 1, 'price': '1.00',
+        }]})
+        self.assertNotIn('unit', data)
+        self.assertNotIn('reserve', data['stock'][0])
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
+class ProductSearchNoStockUpsertTests(TestCase):
+    """A 201 'No Stock' body that carries no product identity must not seed the
+    catalog replica with a nameless row."""
+
+    def setUp(self):
+        self.org = _make_organization()
+        os.environ['FERNET_KEY'] = _TEST_FERNET_KEY
+        self.org.encrypt_password('s3cret')
+        self.org.save()
+        self.user = User.objects.create_user(
+            username='nostock_user', password='p',
+            role=User.Role.COMPANY_USER, organization=self.org,
+        )
+        warehouse = Warehouse.objects.create(
+            organization=self.org, code='W1', name='Main',
+        )
+        warehouse.users.add(self.user)
+        self.client_api = APIClient()
+        self.client_api.force_authenticate(self.user)
+        self.url = reverse('product-search')
+
+    def tearDown(self):
+        os.environ.pop('FERNET_KEY', None)
+
+    def _search(self, upstream_body):
+        with mock.patch('core.views.ConsultWebExchangeClient') as cls:
+            cls.return_value.get_stock_and_prices.return_value = upstream_body
+            return self.client_api.post(
+                self.url,
+                {'sku': 'UNKNOWN1', 'is_barcode': True, 'warehouses': ['W1']},
+                format='json',
+            )
+
+    def test_bodyless_no_stock_is_reported_as_not_found(self):
+        # Verified against the live 1C service: a 201 "No Stock" always carries a
+        # plain-text body and never any product data, and 1C returns it both for
+        # an unknown barcode and for a known item that is out of stock. With
+        # nothing identifiable to render, the only useful answer is "not found".
+        response = self._search({'stock': []})
+        self.assertEqual(response.status_code, 404, response.data)
+        self.assertEqual(response.data['code'], 'PRODUCT_NOT_FOUND')
+        self.assertFalse(Product.objects.filter(organization=self.org).exists())
+
+    def test_no_stock_with_product_identity_still_upserts(self):
+        response = self._search({
+            'sku': 'S9', 'sku_name': 'Real product', 'article': 'A9', 'stock': [],
+        })
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(
+            Product.objects.get(organization=self.org, sku='S9').name,
+            'Real product',
+        )
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
+class ProductSearchStockStatusTests(TestCase):
+    """A cached product that is merely out of stock must not be reported with
+    stock_status='unavailable' — that value means 1C could not be reached."""
+
+    def setUp(self):
+        self.org = _make_organization()
+        os.environ['FERNET_KEY'] = _TEST_FERNET_KEY
+        self.org.encrypt_password('s3cret')
+        self.org.save()
+        self.user = User.objects.create_user(
+            username='ss_user', password='p',
+            role=User.Role.COMPANY_USER, organization=self.org,
+        )
+        warehouse = Warehouse.objects.create(
+            organization=self.org, code='W1', name='Main',
+        )
+        warehouse.users.add(self.user)
+        Product.objects.create(
+            organization=self.org, sku='CACHED1', name='Cached', article='A1',
+        )
+        self.client_api = APIClient()
+        self.client_api.force_authenticate(self.user)
+        self.url = reverse('product-search')
+
+    def tearDown(self):
+        os.environ.pop('FERNET_KEY', None)
+
+    def _search(self):
+        return self.client_api.post(
+            self.url,
+            {'sku': 'CACHED1', 'is_barcode': False, 'warehouses': ['W1']},
+            format='json',
+        )
+
+    def test_no_stock_is_not_reported_as_unavailable(self):
+        with mock.patch('httpx.request') as req:
+            resp = mock.Mock()
+            resp.status_code = 201
+            resp.json.return_value = {'sku': 'CACHED1', 'stock': []}
+            resp.text = ''
+            req.return_value = resp
+            response = self._search()
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data['stock'], [])
+        self.assertNotIn('stock_status', response.data)
+
+    def test_upstream_failure_still_reports_unavailable(self):
+        with mock.patch('httpx.request', side_effect=httpx.ConnectError('down')):
+            response = self._search()
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data['stock_status'], 'unavailable')
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
+class ProductSearchReplicaLookupKeyTests(TestCase):
+    """1C's GetStockAndPrices matches a barcode or an article — never the 1C
+    nomenclature code. Verified live: sending the code with IsBarcode=false
+    returns 421, so the cached-product path must send something 1C can match."""
+
+    def setUp(self):
+        self.org = _make_organization()
+        os.environ['FERNET_KEY'] = _TEST_FERNET_KEY
+        self.org.encrypt_password('s3cret')
+        self.org.save()
+        self.user = User.objects.create_user(
+            username='rk_user', password='p',
+            role=User.Role.COMPANY_USER, organization=self.org,
+        )
+        warehouse = Warehouse.objects.create(
+            organization=self.org, code='W1', name='Main',
+        )
+        warehouse.users.add(self.user)
+        self.product = Product.objects.create(
+            organization=self.org, sku='000000007126', name='GASTRO', article='09130',
+        )
+        ProductBarcode.objects.create(product=self.product, barcode='2000000078649')
+        self.client_api = APIClient()
+        self.client_api.force_authenticate(self.user)
+        self.url = reverse('product-search')
+
+    def tearDown(self):
+        os.environ.pop('FERNET_KEY', None)
+
+    def _search(self, sku, is_barcode):
+        with mock.patch('core.views.ConsultWebExchangeClient') as cls:
+            cls.return_value.get_stock_and_prices.return_value = {'stock': []}
+            response = self.client_api.post(
+                self.url,
+                {'sku': sku, 'is_barcode': is_barcode, 'warehouses': ['W1']},
+                format='json',
+            )
+            return response, cls.return_value.get_stock_and_prices
+
+    def test_barcode_scan_looks_up_by_the_scanned_barcode(self):
+        _, called = self._search('2000000078649', True)
+        called.assert_called_once()
+        self.assertEqual(called.call_args.args[0], '2000000078649')
+        self.assertIs(called.call_args.kwargs['is_barcode'], True)
+
+    def test_code_search_looks_up_by_article_not_the_1c_code(self):
+        _, called = self._search('000000007126', False)
+        called.assert_called_once()
+        self.assertEqual(called.call_args.args[0], '09130')
+        self.assertIs(called.call_args.kwargs['is_barcode'], False)
+
+    def test_article_less_product_falls_back_to_a_known_barcode(self):
+        self.product.article = ''
+        self.product.save()
+        _, called = self._search('000000007126', False)
+        called.assert_called_once()
+        self.assertEqual(called.call_args.args[0], '2000000078649')
+        self.assertIs(called.call_args.kwargs['is_barcode'], True)
+
+    def test_unmatchable_product_reports_no_lookup_key_not_unavailable(self):
+        # "unavailable" means 1C could not be reached and a retry may help.
+        # Here we never asked it — the replica simply holds no identifier 1C
+        # can resolve — so the two must not share a status.
+        self.product.article = ''
+        self.product.save()
+        self.product.barcodes.all().delete()
+        response, called = self._search('000000007126', False)
+        called.assert_not_called()
+        self.assertEqual(response.data['stock_status'], 'no_lookup_key')
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
+class ProductSearchCachedUnitTests(TestCase):
+    """The replica does not store `unit`, and 1C reports it per lookup key (a
+    package barcode and the product's article can disagree), so the cached path
+    must take `unit` from the live stock response rather than drop it."""
+
+    def setUp(self):
+        self.org = _make_organization()
+        os.environ['FERNET_KEY'] = _TEST_FERNET_KEY
+        self.org.encrypt_password('s3cret')
+        self.org.save()
+        self.user = User.objects.create_user(
+            username='cu_user', password='p',
+            role=User.Role.COMPANY_USER, organization=self.org,
+        )
+        warehouse = Warehouse.objects.create(organization=self.org, code='W1', name='Main')
+        warehouse.users.add(self.user)
+        product = Product.objects.create(
+            organization=self.org, sku='000000007126', name='GASTRO', article='09130',
+        )
+        ProductBarcode.objects.create(product=product, barcode='2000000078649')
+        self.client_api = APIClient()
+        self.client_api.force_authenticate(self.user)
+        self.url = reverse('product-search')
+
+    def tearDown(self):
+        os.environ.pop('FERNET_KEY', None)
+
+    def _search(self, live_body):
+        with mock.patch('core.views.ConsultWebExchangeClient') as cls:
+            cls.return_value.get_stock_and_prices.return_value = live_body
+            return self.client_api.post(
+                self.url,
+                {'sku': '2000000078649', 'is_barcode': True, 'warehouses': ['W1']},
+                format='json',
+            )
+
+    def test_cached_product_surfaces_unit_from_live_response(self):
+        response = self._search({'unit': 'შეკვრა', 'stock': []})
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data['unit'], 'შეკვრა')
+
+    def test_absent_unit_is_omitted(self):
+        response = self._search({'stock': []})
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertNotIn('unit', response.data)
+
+
+class GetStockAndPricesUpstreamErrorTests(TestCase):
+    """Only a genuine "nomenclature not found" is PRODUCT_NOT_FOUND. Any other
+    upstream failure is an external-service error — reporting a 422 or a 500 as
+    "product not found" hides a broken integration behind a shrug."""
+
+    def setUp(self):
+        self.org = _make_organization()
+        os.environ['FERNET_KEY'] = _TEST_FERNET_KEY
+
+    def tearDown(self):
+        os.environ.pop('FERNET_KEY', None)
+
+    def _raise_for(self, status_code):
+        client = ConsultWebExchangeClient(self.org)
+        resp = mock.Mock()
+        resp.status_code = status_code
+        resp.json.return_value = {}
+        resp.text = ''
+        with mock.patch('httpx.request', return_value=resp):
+            with self.assertRaises(ConsultWebExchangeError) as ctx:
+                client.get_stock_and_prices('X', is_barcode=True, warehouses='')
+        return ctx.exception
+
+    def test_421_is_product_not_found(self):
+        exc = self._raise_for(421)
+        self.assertEqual(exc.code, 'PRODUCT_NOT_FOUND')
+        self.assertEqual(exc.http_status, 404)
+
+    def test_404_is_product_not_found(self):
+        exc = self._raise_for(404)
+        self.assertEqual(exc.code, 'PRODUCT_NOT_FOUND')
+        self.assertEqual(exc.http_status, 404)
+
+    def test_422_is_an_external_service_error(self):
+        exc = self._raise_for(422)
+        self.assertEqual(exc.code, 'EXTERNAL_SERVICE_ERROR')
+        self.assertEqual(exc.http_status, 502)
+        self.assertEqual(exc.upstream_status, 422)
+
+    def test_500_is_an_external_service_error(self):
+        # A wrong publication name on the 1C host answers 500 with
+        # "ინფორმაციული ბაზა ..." — a misconfiguration, not a missing product.
+        exc = self._raise_for(500)
+        self.assertEqual(exc.code, 'EXTERNAL_SERVICE_ERROR')
+        self.assertEqual(exc.http_status, 502)
+
+
+class StockQuantityPrecisionTests(TestCase):
+    """1C types quantity/reserve as Number, and goods sold by weight really do
+    come back fractional. An IntegerField silently floored 2.5 kg to 2, which
+    understates stock and — at 0.5 — reads as out of stock entirely."""
+
+    def _rows(self, **row):
+        base = {'sku': 'S1', 'sku_name': 'N', 'article': 'A',
+                'images': [], 'category_path': [], 'attributes': []}
+        stock_row = {'warehouse': 'W1', 'warehouse_name': 'Main', 'price': '1.00'}
+        stock_row.update(row)
+        base['stock'] = [stock_row]
+        return ProductSearchSerializer(base).data['stock'][0]
+
+    def test_fractional_quantity_is_not_truncated(self):
+        self.assertEqual(Decimal(self._rows(quantity=2.5)['quantity']), Decimal('2.5'))
+
+    def test_fractional_reserve_is_not_truncated(self):
+        row = self._rows(quantity=10, reserve=1.5)
+        self.assertEqual(Decimal(row['reserve']), Decimal('1.5'))
+
+    def test_a_half_unit_does_not_collapse_to_out_of_stock(self):
+        self.assertNotEqual(Decimal(self._rows(quantity=0.5)['quantity']), Decimal('0'))
+
+    def test_whole_numbers_survive_the_round_trip(self):
+        self.assertEqual(Decimal(self._rows(quantity=65)['quantity']), Decimal('65'))
+
+    def test_negative_quantity_is_preserved(self):
+        # 1C really does return negative on-hand figures (observed live: -11).
+        self.assertEqual(Decimal(self._rows(quantity=-11)['quantity']), Decimal('-11'))
+
+    def test_null_reserve_stays_null(self):
+        self.assertIsNone(self._rows(quantity=1, reserve=None)['reserve'])

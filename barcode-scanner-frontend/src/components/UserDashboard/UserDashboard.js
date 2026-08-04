@@ -21,6 +21,7 @@ import {recordScan} from '../../utils/scanLog';
 import useDailySnapshot from '../../hooks/useDailySnapshot';
 import DailySnapshot from './DailySnapshot';
 import groupItemsBySku from './groupItemsBySku';
+import {isStockBlocked, stockStatusMessageKey} from './stockStatus';
 import inheritFromGroup from './inheritFromGroup';
 import displayCustomerName from '../../utils/orderDisplay';
 import OfflineBanner, {useOfflineStatus} from './OfflineBanner';
@@ -93,11 +94,12 @@ const UserDashboard = () => {
     const [balances, setBalances] = useState([]);
     const [userWarehouses, setUserWarehouses] = useState([]);
     const [productInfo, setProductInfo] = useState({sku_name: '', article: '', price: '', images: []});
-    // True when a scan resolved the product locally but the live 1C stock
-    // lookup failed (backend returns stock: [], stock_status: 'unavailable').
-    // We still show the product — just without a balance list — instead of
-    // treating it as a not-found error.
-    const [stockUnavailable, setStockUnavailable] = useState(false);
+    // Set when a scan resolved the product but its balances can't be trusted —
+    // either the live 1C lookup failed or the catalog row has no identifier 1C
+    // can resolve (see stockStatus.js). We still show the product, just without
+    // a balance list, instead of treating it as a not-found error.
+    const [stockStatus, setStockStatus] = useState('');
+    const stockUnavailable = isStockBlocked(stockStatus);
     const {t} = useLanguage();
 
     // Purchase Order state
@@ -299,7 +301,7 @@ const UserDashboard = () => {
                 // Live 1C stock lookup failed upstream — the product itself was
                 // resolved (locally or via 1C), so still show it, just flag that
                 // the balance list can't be trusted right now.
-                setStockUnavailable(result.data.stock_status === 'unavailable');
+                setStockStatus(result.data.stock_status || '');
                 recordScan({
                     search,
                     searchType,
@@ -340,7 +342,7 @@ const UserDashboard = () => {
                 setBalances([]);
                 setProductInfo({sku_name: '', article: '', price: '', images: []});
                 setSearchedAllWarehouses(false);
-                setStockUnavailable(false);
+                setStockStatus('');
 
                 const isExternalServiceError = result.code && result.code.startsWith('EXTERNAL_SERVICE_');
 
@@ -421,7 +423,7 @@ const UserDashboard = () => {
         setProductInfo({sku_name: '', article: '', price: '', images: []});
         setSearchedAllWarehouses(false);
         setOthersCollapsed(true);
-        setStockUnavailable(false);
+        setStockStatus('');
         lastSearchRef.current = null;
     }, []);
 
@@ -904,7 +906,7 @@ const UserDashboard = () => {
                             <Alert
                                 type="warning"
                                 showIcon
-                                message={t.stockUnavailable}
+                                message={t[stockStatusMessageKey(stockStatus)]}
                                 style={{margin: '12px 0'}}
                             />
                         )}

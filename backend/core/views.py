@@ -417,11 +417,26 @@ class ProductSearchAPIView(APIView):
                 "category_path": product.category.path_names if product.category_id else [],
                 "attributes": project_attributes(product.attributes, visible),
             }
-            try:
-                live = client.get_stock_and_prices(product.sku, is_barcode=False, warehouses=selected_warehouses)
-                payload["stock"] = live.get("stock", [])
-            except ConsultWebExchangeError:
-                payload["stock"], payload["stock_status"] = [], "unavailable"
+            # 1C resolves a barcode or an article — never the 1C nomenclature
+            # code, which it rejects with 421. Send back whatever it can match.
+            lookup, lookup_is_barcode = self._live_lookup_key(product, sku, bool(is_barcode))
+            if lookup:
+                try:
+                    live = client.get_stock_and_prices(
+                        lookup, is_barcode=lookup_is_barcode, warehouses=selected_warehouses,
+                    )
+                    payload["stock"] = live.get("stock", [])
+                    # The replica has no `unit` column, and 1C reports it per
+                    # lookup key — a package barcode and the article can differ.
+                    if live.get("unit"):
+                        payload["unit"] = live["unit"]
+                except ConsultWebExchangeError:
+                    payload["stock"], payload["stock_status"] = [], "unavailable"
+            else:
+                # Distinct from "unavailable": 1C was never asked, because the
+                # replica holds no identifier it can resolve. Retrying will not
+                # help — the catalog row needs an article or a barcode.
+                payload["stock"], payload["stock_status"] = [], "no_lookup_key"
             return Response(self.serializer_class(payload).data)
 
         # --- miss: today's full live path + lazy upsert self-heal ---
@@ -430,8 +445,24 @@ class ProductSearchAPIView(APIView):
         except ConsultWebExchangeError as exc:
             return _consult_error_response(exc)
 
+        # 1C answers 201 "No Stock" with a plain-text body carrying no product
+        # data, and uses it both for an unknown barcode and for a known item
+        # that is out of stock. With nothing identifiable to render — and
+        # nothing safe to seed the replica with — "not found" is the only
+        # useful answer here. A cached product takes the fast path above, where
+        # an empty stock list is reported as genuinely out of stock instead.
+        if not (product_data.get("sku_name") or product_data.get("article")):
+            return Response(
+                {
+                    "code": "PRODUCT_NOT_FOUND",
+                    "detail": f"Product with SKU '{sku}' not found in the organization's web service.",
+                },
+                status=http_status.HTTP_404_NOT_FOUND,
+            )
+
         img_urls = product_data.get("img_url") or []
         self._lazy_upsert(user.organization, sku, bool(is_barcode), product_data, img_urls)
+        product_data.setdefault("sku", sku)
         product_data["images"] = signed_image_paths(
             user.organization_id, product_data.get("sku") or sku, len(img_urls),
         )
@@ -439,6 +470,22 @@ class ProductSearchAPIView(APIView):
         product_data["category_path"] = []
         product_data["attributes"] = []
         return Response(self.serializer_class(product_data).data)
+
+    @staticmethod
+    def _live_lookup_key(product, scanned, scanned_is_barcode):
+        """Pick an identifier 1C can resolve for a product already in the replica.
+
+        Returns (value, is_barcode), or (None, False) when the replica holds
+        neither an article nor a barcode for it.
+        """
+        if scanned_is_barcode:
+            return scanned, True
+        if product.article:
+            return product.article, False
+        known = product.barcodes.first()
+        if known:
+            return known.barcode, True
+        return None, False
 
     @staticmethod
     def _lazy_upsert(org, scanned, is_barcode, data, img_urls):
