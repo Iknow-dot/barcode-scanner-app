@@ -76,6 +76,13 @@ route added in `core/urls.py`.
 The `?status=` list filter passes raw values through, so `?status=completed` works
 without changes.
 
+4. **Serializer guard — webhook is the only writer.** The regular
+   `PurchaseOrderViewSet` update path currently accepts any `status` value. Add
+   validation to `PurchaseOrderSerializer`: reject `status='completed'` coming from the
+   API (400, `{"code": "STATUS_NOT_SETTABLE"}`), and reject any status change on an
+   order that is already `completed` (400, `{"code": "ORDER_COMPLETED_LOCKED"}`).
+   Without this, any JWT user could fake or unwind completion.
+
 ### 4. Frontend display
 
 - `components/UserDashboard/UserDashboard.js`: add `completed: 'blue'` to
@@ -101,6 +108,9 @@ Backend (`core/tests.py`, endpoint-test convention with SSL redirect disabled):
 - 400 on missing/non-integer `order_id`.
 - Analytics: a `completed` order counts in `orders_confirmed`.
 - Invoice: a `completed` order renders without the DRAFT watermark.
+- Serializer guard: PATCH `status='completed'` via the orders API → 400
+  `STATUS_NOT_SETTABLE`; PATCH any status on a completed order → 400
+  `ORDER_COMPLETED_LOCKED`.
 
 Post-implementation: run the `tenancy-reviewer` agent over the new view (new
 non-JWT surface).
