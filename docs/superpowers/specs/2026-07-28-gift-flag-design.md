@@ -57,7 +57,12 @@ Two additive migrations:
   offline queue replays it with no extra work. Active state renders a small "საჩუქარი" tag on
   the row. The control is hidden entirely when the org flag is off.
 - **Admin orders view** (`OrdersTab` item rows): gifted lines show a gift tag.
-- **Organization form**: a switch for `gift_marking_enabled` with hint text.
+- **Organization form**: a new **"Features" section** on the org *edit* form (a `Divider`-grouped
+  block, same pattern as the Web Service and Invoice Template sections), placed between those two.
+  It holds one switch per org-level feature flag — starting with `gift_marking_enabled` plus hint
+  text. Future org-level toggles are added to this section; each remains its own boolean column on
+  `Organization` (the section is a UI grouping, not a storage mechanism). The add form stays
+  untouched — new orgs start with every feature off. *(Amended 2026-08-07.)*
 - **i18n**: Georgian + English strings for the toggle, tag, hint, and the `GIFT_NOT_ENABLED`
   error code.
 
