@@ -77,6 +77,8 @@ from core.serializers import (
     CatalogIngestResponseSerializer,
     CatalogDeactivateRequestSerializer,
     CatalogDeactivateResponseSerializer,
+    OrderCompleteRequestSerializer,
+    OrderCompleteResponseSerializer,
 )
 from core.services.consult_web_exchange import (
     ConsultWebExchangeClient,
@@ -1457,6 +1459,59 @@ class CatalogProductDeactivateAPIView(APIView):
         state.last_delete_at, state.deactivated = now, count
         state.save(update_fields=["last_delete_at", "deactivated"])
         return Response({"deactivated": count})
+
+
+@extend_schema(
+    tags=["Webhooks"],
+    summary="Mark an order completed · შეკვეთის დასრულება",
+    description=(
+        "Called by the external 1C service once an order is paid and finalized there. "
+        "Moves a `confirmed` order to `completed`. Idempotent: repeating the call for an "
+        "already-completed order returns 200 again. The organization is derived from the "
+        "push token; an order id outside that organization returns 404."
+    ),
+    request=OrderCompleteRequestSerializer,
+    responses={200: OrderCompleteResponseSerializer},
+    parameters=[_PUSH_TOKEN_PARAM],
+    examples=[
+        OpenApiExample("Mark order 123 completed", request_only=True, value={"order_id": 123}),
+        OpenApiExample("Result", response_only=True, value={"order_id": 123, "status": "completed"}),
+    ],
+)
+class OrderCompleteWebhookAPIView(APIView):
+    permission_classes = []  # authenticated by per-org push token, not JWT
+    http_method_names = ["post"]
+
+    def post(self, request: Request) -> Response:
+        org = organization_from_push(request)  # raises AuthenticationFailed / PermissionDenied
+        serializer = OrderCompleteRequestSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(
+                {"code": "VALIDATION_ERROR", "detail": serializer.errors},
+                status=http_status.HTTP_400_BAD_REQUEST,
+            )
+        order_id = serializer.validated_data["order_id"]
+
+        order = PurchaseOrder.objects.filter(organization=org, pk=order_id).first()
+        if order is None:
+            return Response(
+                {"code": "ORDER_NOT_FOUND", "detail": f"No order #{order_id} in this organization."},
+                status=http_status.HTTP_404_NOT_FOUND,
+            )
+        if order.status == PurchaseOrder.Status.COMPLETED:
+            return Response({"order_id": order.id, "status": order.status})
+        if order.status != PurchaseOrder.Status.CONFIRMED:
+            return Response(
+                {
+                    "code": "INVALID_STATUS_TRANSITION",
+                    "detail": "Only a confirmed order can be marked completed.",
+                    "current_status": order.status,
+                },
+                status=http_status.HTTP_409_CONFLICT,
+            )
+        order.status = PurchaseOrder.Status.COMPLETED
+        order.save(update_fields=["status", "updated_at"])
+        return Response({"order_id": order.id, "status": order.status})
 
 
 @extend_schema(tags=["Catalog"])

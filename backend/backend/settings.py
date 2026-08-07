@@ -256,6 +256,7 @@ SPECTACULAR_SETTINGS = {
         {'name': 'Analytics', 'description': 'Admin analytics (per-consultant order stats)'},
         {'name': 'Catalog Ingest'},
         {'name': 'Catalog'},
+        {'name': 'Webhooks', 'description': 'Inbound webhooks from the external 1C service (push-token auth)'},
     ],
 }
 

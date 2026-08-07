@@ -2545,6 +2545,104 @@ class IngestDeactivateTests(TestCase):
 
 
 @override_settings(SECURE_SSL_REDIRECT=False)
+class OrderCompleteWebhookTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.org = Organization.objects.create(
+            name="Org", identification_number="ORG1", web_service_url="https://x", employees_count=5,
+        )
+        self.url = "/api/v1/webhooks/orders/complete/"
+
+    def _order(self, status="confirmed", org=None):
+        return PurchaseOrder.objects.create(
+            organization=org or self.org, customer_name="Nino", status=status,
+        )
+
+    def _complete(self, body, token=None):
+        return self.client.post(
+            self.url, body, format="json",
+            HTTP_X_WEBHOOK_TOKEN=token if token is not None else self.org.webhook_token,
+        )
+
+    def test_confirmed_order_becomes_completed(self):
+        order = self._order()
+        r = self._complete({"order_id": order.id})
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json(), {"order_id": order.id, "status": "completed"})
+        order.refresh_from_db()
+        self.assertEqual(order.status, "completed")
+
+    def test_repeat_call_is_idempotent(self):
+        order = self._order()
+        self._complete({"order_id": order.id})
+        r = self._complete({"order_id": order.id})
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json(), {"order_id": order.id, "status": "completed"})
+
+    def test_draft_order_rejected_with_409(self):
+        order = self._order(status="draft")
+        r = self._complete({"order_id": order.id})
+        self.assertEqual(r.status_code, 409)
+        body = r.json()
+        self.assertEqual(body["code"], "INVALID_STATUS_TRANSITION")
+        self.assertEqual(body["current_status"], "draft")
+        order.refresh_from_db()
+        self.assertEqual(order.status, "draft")
+
+    def test_cancelled_order_rejected_with_409(self):
+        order = self._order(status="cancelled")
+        r = self._complete({"order_id": order.id})
+        self.assertEqual(r.status_code, 409)
+        self.assertEqual(r.json()["code"], "INVALID_STATUS_TRANSITION")
+
+    def test_foreign_org_order_is_404(self):
+        other = Organization.objects.create(
+            name="Other", identification_number="ORG2", web_service_url="https://y", employees_count=5,
+        )
+        foreign_order = self._order(org=other)
+        r = self._complete({"order_id": foreign_order.id})  # self.org's token
+        self.assertEqual(r.status_code, 404)
+        self.assertEqual(r.json()["code"], "ORDER_NOT_FOUND")
+        foreign_order.refresh_from_db()
+        self.assertEqual(foreign_order.status, "confirmed")  # untouched
+
+    def test_unknown_order_is_404(self):
+        r = self._complete({"order_id": 999999})
+        self.assertEqual(r.status_code, 404)
+        self.assertEqual(r.json()["code"], "ORDER_NOT_FOUND")
+
+    def test_missing_token_rejected(self):
+        order = self._order()
+        r = self.client.post(self.url, {"order_id": order.id}, format="json")
+        self.assertIn(r.status_code, (401, 403))
+
+    def test_bad_token_rejected(self):
+        order = self._order()
+        r = self._complete({"order_id": order.id}, token="nope")
+        self.assertIn(r.status_code, (401, 403))
+        order.refresh_from_db()
+        self.assertEqual(order.status, "confirmed")
+
+    def test_ip_allowlist_denies_unlisted_source(self):
+        OrganizationPushAllowedIP.objects.create(
+            organization=self.org, ip_or_network="10.0.0.0/8",
+        )
+        order = self._order()
+        r = self._complete({"order_id": order.id})  # test client IP is 127.0.0.1
+        self.assertEqual(r.status_code, 403)
+
+    def test_missing_order_id_is_400(self):
+        r = self._complete({})
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.json()["code"], "VALIDATION_ERROR")
+
+    def test_non_integer_order_id_is_400(self):
+        r = self._complete({"order_id": "abc"})
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.json()["code"], "VALIDATION_ERROR")
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
 class ImageProxyTests(TestCase):
     def setUp(self):
         self.client = APIClient()

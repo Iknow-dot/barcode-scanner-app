@@ -684,6 +684,17 @@ class CatalogDeactivateResponseSerializer(serializers.Serializer):
     deactivated = serializers.IntegerField(help_text="Number of active products that were deactivated.")
 
 
+class OrderCompleteRequestSerializer(serializers.Serializer):
+    order_id = serializers.IntegerField(
+        help_text="The PurchaseOrder id — the number printed on the invoice (`order.id` token).",
+    )
+
+
+class OrderCompleteResponseSerializer(serializers.Serializer):
+    order_id = serializers.IntegerField()
+    status = serializers.CharField(help_text="Always 'completed' on success.")
+
+
 class CatalogSyncStatusSerializer(serializers.Serializer):
     """Company-admin sync-health snapshot for the org's catalog replica."""
     health = serializers.CharField(help_text="never | error | stale | ok")

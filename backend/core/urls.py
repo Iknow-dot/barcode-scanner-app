@@ -21,6 +21,7 @@ from core.views import (
     CatalogSyncStatusAPIView,
     CatalogProductListAPIView,
     CatalogCategoryTreeAPIView,
+    OrderCompleteWebhookAPIView,
 )
 
 router = DefaultRouter()
@@ -45,5 +46,6 @@ urlpatterns = [
     path('catalog/sync-status/', CatalogSyncStatusAPIView.as_view(), name='catalog-sync-status'),
     path('catalog/products/list/', CatalogProductListAPIView.as_view(), name='catalog-product-list'),
     path('catalog/products/', CatalogProductIngestAPIView.as_view(), name='catalog-product-ingest'),
+    path('webhooks/orders/complete/', OrderCompleteWebhookAPIView.as_view(), name='webhook-order-complete'),
     path('', include(router.urls)),
 ]
