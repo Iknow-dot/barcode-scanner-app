@@ -109,6 +109,10 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         data['organization_name'] = (
             self.user.organization.name if self.user.organization else None
         )
+        data['gift_marking_enabled'] = bool(
+            self.user.organization
+            and self.user.organization.gift_marking_enabled
+        )
 
         # Warehouse names assigned to this user
         data['warehouses'] = list(
