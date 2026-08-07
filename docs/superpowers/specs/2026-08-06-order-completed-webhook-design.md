@@ -76,12 +76,13 @@ route added in `core/urls.py`.
 The `?status=` list filter passes raw values through, so `?status=completed` works
 without changes.
 
-4. **Serializer guard — webhook is the only writer.** The regular
-   `PurchaseOrderViewSet` update path currently accepts any `status` value. Add
-   validation to `PurchaseOrderSerializer`: reject `status='completed'` coming from the
-   API (400, `{"code": "STATUS_NOT_SETTABLE"}`), and reject any status change on an
-   order that is already `completed` (400, `{"code": "ORDER_COMPLETED_LOCKED"}`).
-   Without this, any JWT user could fake or unwind completion.
+4. **Viewset guard — webhook is the only writer.** The regular
+   `PurchaseOrderViewSet` update path currently accepts any `status` value. Add a
+   guard in `PurchaseOrderViewSet.update()` (PATCH routes through it): reject
+   `status='completed'` coming from the API (400, `{"code": "STATUS_NOT_SETTABLE"}`),
+   and reject any status change on an order that is already `completed` (400,
+   `{"code": "ORDER_COMPLETED_LOCKED"}`). The guard lives in the viewset rather than
+   the serializer so the error body keeps the project's `{"code", "detail"}` envelope.
 
 ### 4. Frontend display
 
