@@ -43,6 +43,10 @@ class Organization(models.Model):
     # the same invoice they printed before this feature shipped.
     invoice_template_html = models.TextField(blank=True, default='')
 
+    # Consultants may mark order line items as gifts (ClickUp 86ca495uu).
+    # Off by default — most organizations don't use gift marking.
+    gift_marking_enabled = models.BooleanField(default=False)
+
     @property
     def non_admin_user_count(self) -> int:
         """Return the number of non-admin (company_user) users in this organization."""
@@ -318,6 +322,8 @@ class PurchaseOrderItem(models.Model):
     # Discount
     discount_percent = models.DecimalField(max_digits=5, decimal_places=2, default=0)
     discounted_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    # Informational gift mark — never affects effective_price / line_total.
+    is_gift = models.BooleanField(default=False)
 
     added_at = models.DateTimeField(auto_now_add=True)
 

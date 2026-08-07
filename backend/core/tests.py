@@ -2664,6 +2664,60 @@ class OrderCompleteWebhookTests(TestCase):
 
 
 @override_settings(SECURE_SSL_REDIRECT=False)
+class OrderStatusGuardTests(TestCase):
+    def setUp(self):
+        self.org = _make_organization(name='OrgG', identification_number='800')
+        self.user = User.objects.create_user(
+            username='guard', password='p',
+            role=User.Role.COMPANY_USER, organization=self.org,
+        )
+        self.api = APIClient()
+        self.api.force_authenticate(self.user)
+
+    def _order(self, status='confirmed'):
+        return PurchaseOrder.objects.create(
+            organization=self.org, created_by=self.user,
+            customer_name='Nino', status=status,
+        )
+
+    def _patch(self, order, body):
+        return self.api.patch(f'/api/v1/orders/{order.id}/', body, format='json')
+
+    def test_user_cannot_set_completed(self):
+        order = self._order(status='confirmed')
+        r = self._patch(order, {'status': 'completed'})
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.json()['code'], 'STATUS_NOT_SETTABLE')
+        order.refresh_from_db()
+        self.assertEqual(order.status, 'confirmed')
+
+    def test_user_cannot_change_status_of_completed_order(self):
+        order = self._order(status='completed')
+        r = self._patch(order, {'status': 'draft'})
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.json()['code'], 'ORDER_COMPLETED_LOCKED')
+        order.refresh_from_db()
+        self.assertEqual(order.status, 'completed')
+
+    def test_normal_status_transitions_still_work(self):
+        order = self._order(status='draft')
+        r = self._patch(order, {'status': 'confirmed'})
+        self.assertEqual(r.status_code, 200)
+        order.refresh_from_db()
+        self.assertEqual(order.status, 'confirmed')
+
+    def test_non_status_edit_on_completed_order_is_allowed(self):
+        # Spec locks the STATUS of a completed order; other fields (e.g. notes)
+        # remain editable for now.
+        order = self._order(status='completed')
+        r = self._patch(order, {'notes': 'delivered to reception'})
+        self.assertEqual(r.status_code, 200)
+        order.refresh_from_db()
+        self.assertEqual(order.notes, 'delivered to reception')
+        self.assertEqual(order.status, 'completed')
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
 class ImageProxyTests(TestCase):
     def setUp(self):
         self.client = APIClient()
@@ -4236,3 +4290,22 @@ class StockQuantityPrecisionTests(TestCase):
 
     def test_null_reserve_stays_null(self):
         self.assertIsNone(self._rows(quantity=1, reserve=None)['reserve'])
+
+
+class GiftFlagModelTests(TestCase):
+    def test_defaults_are_off(self):
+        org = _make_organization()
+        self.assertFalse(org.gift_marking_enabled)
+        order = PurchaseOrder.objects.create(organization=org, customer_name='C')
+        item = PurchaseOrderItem.objects.create(order=order, sku='S1', price='10.00')
+        self.assertFalse(item.is_gift)
+
+    def test_gift_does_not_change_line_total(self):
+        org = _make_organization()
+        order = PurchaseOrder.objects.create(organization=org, customer_name='C')
+        item = PurchaseOrderItem.objects.create(
+            order=order, sku='S1', price='10.00', quantity=3, is_gift=True,
+        )
+        item.refresh_from_db()  # coerce the string price to Decimal, as any DB read does
+        self.assertEqual(str(item.line_total), '30.00')
+        self.assertEqual(str(order.total), '30.00')
