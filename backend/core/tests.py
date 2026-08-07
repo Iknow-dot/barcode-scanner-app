@@ -4309,3 +4309,115 @@ class GiftFlagModelTests(TestCase):
         item.refresh_from_db()  # coerce the string price to Decimal, as any DB read does
         self.assertEqual(str(item.line_total), '30.00')
         self.assertEqual(str(order.total), '30.00')
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
+class GiftFlagEndpointTests(TestCase):
+    def setUp(self):
+        self.org = _make_organization(gift_marking_enabled=True)
+        self.user = User.objects.create_user(
+            username='gift-consultant', password='p',
+            role=User.Role.COMPANY_USER, organization=self.org,
+        )
+        self.order = PurchaseOrder.objects.create(
+            organization=self.org, created_by=self.user, customer_name='Cust',
+        )
+        self.item = PurchaseOrderItem.objects.create(
+            order=self.order, sku='SKU1', sku_name='Widget',
+            price='100.00', quantity=2, warehouse_code='WHA',
+            warehouse_name='WH-A',
+        )
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.user)
+
+    def _update_url(self, item_id):
+        return f'/api/v1/orders/{self.order.id}/items/{item_id}/update/'
+
+    def _disable_gifts(self):
+        self.org.gift_marking_enabled = False
+        self.org.save(update_fields=['gift_marking_enabled'])
+
+    def test_update_item_sets_gift_and_keeps_totals(self):
+        before_total = str(self.order.total)
+        response = self.client.patch(
+            self._update_url(self.item.id), {'is_gift': True}, format='json',
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        self.item.refresh_from_db()
+        self.assertTrue(self.item.is_gift)
+        self.assertEqual(str(self.order.total), before_total)
+        returned = next(
+            i for i in response.data['items'] if i['id'] == self.item.id
+        )
+        self.assertTrue(returned['is_gift'])
+
+    def test_update_item_gift_rejected_when_org_disabled(self):
+        self._disable_gifts()
+        response = self.client.patch(
+            self._update_url(self.item.id), {'is_gift': True}, format='json',
+        )
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.data['code'], 'GIFT_NOT_ENABLED')
+        self.item.refresh_from_db()
+        self.assertFalse(self.item.is_gift)
+
+    def test_clearing_gift_allowed_when_org_disabled(self):
+        self.item.is_gift = True
+        self.item.save(update_fields=['is_gift'])
+        self._disable_gifts()
+        response = self.client.patch(
+            self._update_url(self.item.id), {'is_gift': False}, format='json',
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        self.item.refresh_from_db()
+        self.assertFalse(self.item.is_gift)
+
+    def test_add_item_with_gift(self):
+        response = self.client.post(
+            f'/api/v1/orders/{self.order.id}/items/',
+            {'sku': 'SKU9', 'price': '5.00', 'quantity': 1,
+             'warehouse_code': 'WHZ', 'is_gift': True},
+            format='json',
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+        created = self.order.items.get(sku='SKU9')
+        self.assertTrue(created.is_gift)
+
+    def test_add_item_gift_rejected_when_org_disabled(self):
+        self._disable_gifts()
+        response = self.client.post(
+            f'/api/v1/orders/{self.order.id}/items/',
+            {'sku': 'SKU9', 'price': '5.00', 'is_gift': True},
+            format='json',
+        )
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.data['code'], 'GIFT_NOT_ENABLED')
+        self.assertFalse(self.order.items.filter(sku='SKU9').exists())
+
+    def test_bulk_update_sets_gift(self):
+        other = PurchaseOrderItem.objects.create(
+            order=self.order, sku='SKU1', price='100.00', quantity=1,
+            warehouse_code='WHB', warehouse_name='WH-B',
+        )
+        response = self.client.patch(
+            f'/api/v1/orders/{self.order.id}/items/bulk-update/',
+            {'item_ids': [self.item.id, other.id], 'data': {'is_gift': True}},
+            format='json',
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        self.item.refresh_from_db()
+        other.refresh_from_db()
+        self.assertTrue(self.item.is_gift)
+        self.assertTrue(other.is_gift)
+
+    def test_bulk_update_gift_rejected_when_org_disabled(self):
+        self._disable_gifts()
+        response = self.client.patch(
+            f'/api/v1/orders/{self.order.id}/items/bulk-update/',
+            {'item_ids': [self.item.id], 'data': {'is_gift': True}},
+            format='json',
+        )
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.data['code'], 'GIFT_NOT_ENABLED')
+        self.item.refresh_from_db()
+        self.assertFalse(self.item.is_gift)

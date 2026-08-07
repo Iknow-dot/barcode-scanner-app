@@ -159,6 +159,24 @@ def _enforce_discount_permission(user, *, base_price, discount_percent, discount
     return None
 
 
+def _enforce_gift_permission(user, *, is_gift):
+    """Reject setting the gift flag when the user's organization has not
+    enabled gift marking (ClickUp 86ca495uu). Clearing the flag is always
+    allowed. Returns ``None`` when the caller can proceed, otherwise a DRF
+    ``Response`` with the ``GIFT_NOT_ENABLED`` envelope to return as-is.
+    """
+    if not is_gift:
+        return None
+    org = user.organization
+    if org is None or not org.gift_marking_enabled:
+        return Response(
+            {"code": "GIFT_NOT_ENABLED",
+             "detail": "Gift marking is not enabled for your organization."},
+            status=http_status.HTTP_403_FORBIDDEN,
+        )
+    return None
+
+
 def _consult_error_response(exc: ConsultWebExchangeError) -> Response:
     """Translate a ConsultWebExchangeError into a DRF Response.
 
@@ -1001,6 +1019,31 @@ class PurchaseOrderViewSet(ModelViewSet):
 
         return qs
 
+    def update(self, request, *args, **kwargs):
+        # 'completed' is written ONLY by the external-service webhook
+        # (OrderCompleteWebhookAPIView); users can neither set it nor move
+        # an order out of it. partial_update() routes through here too.
+        order = self.get_object()
+        requested_status = request.data.get('status')
+        if requested_status and requested_status != order.status:
+            if order.status == PurchaseOrder.Status.COMPLETED:
+                return Response(
+                    {
+                        "code": "ORDER_COMPLETED_LOCKED",
+                        "detail": "A completed order's status can no longer be changed.",
+                    },
+                    status=http_status.HTTP_400_BAD_REQUEST,
+                )
+            if requested_status == PurchaseOrder.Status.COMPLETED:
+                return Response(
+                    {
+                        "code": "STATUS_NOT_SETTABLE",
+                        "detail": "Status 'completed' is set only by the external service webhook.",
+                    },
+                    status=http_status.HTTP_400_BAD_REQUEST,
+                )
+        return super().update(request, *args, **kwargs)
+
     @action(detail=True, methods=['post'], url_path='items')
     def add_item(self, request, pk=None):
         """Add a product line item to the order."""
@@ -1014,6 +1057,12 @@ class PurchaseOrderViewSet(ModelViewSet):
             base_price=data.get('price') or 0,
             discount_percent=data.get('discount_percent') or 0,
             discounted_price=data.get('discounted_price'),
+        )
+        if denied is not None:
+            return denied
+
+        denied = _enforce_gift_permission(
+            request.user, is_gift=data.get('is_gift', False),
         )
         if denied is not None:
             return denied
@@ -1041,6 +1090,8 @@ class PurchaseOrderViewSet(ModelViewSet):
                 existing_item.discount_percent = data['discount_percent']
             if data.get('discounted_price') is not None:
                 existing_item.discounted_price = data['discounted_price']
+            if data.get('is_gift'):
+                existing_item.is_gift = True
             existing_item.save()
         else:
             PurchaseOrderItem.objects.create(order=order, **data)
@@ -1112,6 +1163,12 @@ class PurchaseOrderViewSet(ModelViewSet):
             if denied is not None:
                 return denied
 
+        denied = _enforce_gift_permission(
+            request.user, is_gift=validated.get('is_gift', False),
+        )
+        if denied is not None:
+            return denied
+
         serializer.save()
         # Refresh to clear cached/prefetched items
         order.refresh_from_db()
@@ -1139,6 +1196,14 @@ class PurchaseOrderViewSet(ModelViewSet):
         serializer.is_valid(raise_exception=True)
         item_ids = serializer.validated_data['item_ids']
         data = serializer.validated_data['data']
+
+        # The gift guard is org-level, not per-item, so it runs once before
+        # the loop — no failed_item_id annotation needed.
+        denied = _enforce_gift_permission(
+            request.user, is_gift=data.get('is_gift', False),
+        )
+        if denied is not None:
+            return denied
 
         items = list(order.items.filter(pk__in=item_ids))
         is_changing_discount = (

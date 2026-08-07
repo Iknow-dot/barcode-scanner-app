@@ -340,7 +340,7 @@ class PurchaseOrderItemSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'sku', 'sku_name', 'article', 'price', 'quantity',
             'warehouse_code', 'warehouse_name', 'unit',
-            'discount_percent', 'discounted_price', 'effective_price',
+            'discount_percent', 'discounted_price', 'is_gift', 'effective_price',
             'line_total', 'added_at',
         ]
         read_only_fields = ['id', 'added_at', 'line_total', 'effective_price']
@@ -358,13 +358,14 @@ class AddOrderItemSerializer(serializers.Serializer):
     unit = serializers.CharField(max_length=50, required=False, default='')
     discount_percent = serializers.DecimalField(max_digits=5, decimal_places=2, required=False, default=0)
     discounted_price = serializers.DecimalField(max_digits=10, decimal_places=2, required=False, allow_null=True, default=None)
+    is_gift = serializers.BooleanField(required=False, default=False)
 
 
 class BulkUpdateOrderItemsDataSerializer(serializers.Serializer):
     """Whitelisted fields the bulk-update endpoint may set on each item.
 
     Per-warehouse quantity has its own update_item endpoint; only price,
-    discount_percent, discounted_price, and unit are bulk-updatable.
+    discount_percent, discounted_price, is_gift, and unit are bulk-updatable.
     All fields are optional; at least one must be provided (validated by this
     serializer's validate method).
     """
@@ -378,6 +379,7 @@ class BulkUpdateOrderItemsDataSerializer(serializers.Serializer):
     discounted_price = serializers.DecimalField(
         max_digits=10, decimal_places=2, required=False, allow_null=True,
     )
+    is_gift = serializers.BooleanField(required=False)
 
     def validate(self, attrs):
         if not attrs:
