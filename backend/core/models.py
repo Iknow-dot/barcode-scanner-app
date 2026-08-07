@@ -221,6 +221,7 @@ class PurchaseOrder(models.Model):
     class Status(models.TextChoices):
         DRAFT = 'draft', 'Draft'
         CONFIRMED = 'confirmed', 'Confirmed'
+        COMPLETED = 'completed', 'Completed'
         CANCELLED = 'cancelled', 'Cancelled'
 
     class DeliveryType(models.TextChoices):
@@ -250,6 +251,7 @@ class PurchaseOrder(models.Model):
         User,
         on_delete=models.SET_NULL,
         null=True,
+        blank=True,
         related_name='created_orders',
     )
     status = models.CharField(

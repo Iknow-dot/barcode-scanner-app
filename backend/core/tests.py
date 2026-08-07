@@ -2360,6 +2360,16 @@ class OrderAnalyticsAPITests(TestCase):
         self.assertIn(resp.status_code, (401, 403))
 
 
+class PurchaseOrderCompletedStatusTests(TestCase):
+    def test_completed_is_a_valid_status(self):
+        org = _make_organization(name='OrgS', identification_number='900')
+        order = PurchaseOrder.objects.create(
+            organization=org, customer_name='Nino', status=PurchaseOrder.Status.COMPLETED,
+        )
+        order.full_clean()  # choices validation
+        self.assertEqual(order.status, 'completed')
+
+
 class WebhookTokenTests(TestCase):
     def _org(self, name):
         return Organization.objects.create(
