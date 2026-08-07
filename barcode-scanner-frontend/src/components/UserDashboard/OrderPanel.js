@@ -3,6 +3,7 @@ import dayjs from 'dayjs';
 import {useLanguage} from '../../i18n/LanguageContext';
 import {orderService, productService} from '../../api';
 import AuthContext from '../Auth/AuthContext';
+import GiftToggleButton from './GiftToggleButton';
 import groupItemsBySku from './groupItemsBySku';
 import displayCustomerName from '../../utils/orderDisplay';
 import {
@@ -106,6 +107,7 @@ const CartTableRow = memo(({
     t,
     canApplyDiscount,
     maxDiscountPercent,
+    giftEnabled,
 }) => {
     const [editingPrice, setEditingPrice] = useState(false);
     const [editingDiscount, setEditingDiscount] = useState(false);
@@ -141,6 +143,14 @@ const CartTableRow = memo(({
         else notify.error(t.orderError, result.error);
     }, [orderId, item.id, onLocalOrderUpdate, notify, t]);
 
+    const handleGiftToggle = useCallback(async () => {
+        const result = await orderService.updateOrderItem(orderId, item.id, {
+            is_gift: !item.is_gift,
+        });
+        if (result.success) onLocalOrderUpdate(result.data);
+        else notify.error(t.orderError, result.error);
+    }, [orderId, item.id, item.is_gift, onLocalOrderUpdate, notify, t]);
+
     const exceedsLocal =
         Number.isFinite(stockNumber) && Number(item.quantity) > Number(stockNumber);
     const hasDiscount =
@@ -156,6 +166,11 @@ const CartTableRow = memo(({
                     {item.warehouse_name}
                     {assigned && <span style={{marginLeft: 4}}>✓</span>}
                 </Tag>
+                {item.is_gift && (
+                    <Tag color="magenta" style={{fontSize: 10, marginLeft: 4}}>
+                        {t.giftLabel}
+                    </Tag>
+                )}
                 {isPending && (
                     <CloudSyncOutlined style={{marginLeft: 6, color: '#faad14'}} title={t.offlineItemPending}/>
                 )}
@@ -276,6 +291,12 @@ const CartTableRow = memo(({
             </div>
 
             <div className="m-cart-cell m-cart-cell-action">
+                <GiftToggleButton
+                    enabled={giftEnabled}
+                    isGift={!!item.is_gift}
+                    onToggle={handleGiftToggle}
+                    label={t.giftLabel}
+                />
                 <Popconfirm
                     title={t.removeFromAllWarehouses || t.confirmDelete || 'Remove?'}
                     onConfirm={handleRemoveLine}
@@ -304,7 +325,7 @@ const OrderItemGroupCard = memo(({
     assignedCodes,
 }) => {
     const [showOtherWarehouses, setShowOtherWarehouses] = useState(false);
-    const {canApplyDiscount, maxDiscountPercent} = discountConfig;
+    const {canApplyDiscount, maxDiscountPercent, giftEnabled} = discountConfig;
 
     // Lazy-loaded stock for this SKU. null = not yet fetched, array = fetched data,
     // 'error' = fetch failed. ensureStock returns a Promise so callers can await
@@ -448,6 +469,7 @@ const OrderItemGroupCard = memo(({
                         t={t}
                         canApplyDiscount={canApplyDiscount}
                         maxDiscountPercent={maxDiscountPercent}
+                        giftEnabled={giftEnabled}
                     />
                 ))}
             </div>
@@ -813,7 +835,9 @@ const OrderPanel = ({order: initialOrder, onSaveForLater, onProceedToPayment, on
     const discountConfig = useMemo(() => ({
         canApplyDiscount: !!authData?.user?.can_apply_discount,
         maxDiscountPercent: parseFloat(authData?.user?.max_discount_percent || 0),
-    }), [authData?.user?.can_apply_discount, authData?.user?.max_discount_percent]);
+        giftEnabled: !!authData?.gift_marking_enabled,
+    }), [authData?.user?.can_apply_discount, authData?.user?.max_discount_percent,
+         authData?.gift_marking_enabled]);
     const assignedCodes = useMemo(
         () => new Set((authData?.user?.warehouses || []).map((w) => w.code)),
         [authData?.user?.warehouses],
