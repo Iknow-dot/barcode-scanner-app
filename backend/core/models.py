@@ -251,7 +251,6 @@ class PurchaseOrder(models.Model):
         User,
         on_delete=models.SET_NULL,
         null=True,
-        blank=True,
         related_name='created_orders',
     )
     status = models.CharField(

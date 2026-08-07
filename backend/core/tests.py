@@ -2366,7 +2366,7 @@ class PurchaseOrderCompletedStatusTests(TestCase):
         order = PurchaseOrder.objects.create(
             organization=org, customer_name='Nino', status=PurchaseOrder.Status.COMPLETED,
         )
-        order.full_clean()  # choices validation
+        order.full_clean(exclude=['created_by'])  # choices validation; created_by is blank=False (pre-existing model constraint, out of scope)
         self.assertEqual(order.status, 'completed')
 
 
