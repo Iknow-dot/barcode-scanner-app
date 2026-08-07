@@ -11,6 +11,7 @@ import {
     UploadOutlined,
     FileImageOutlined,
     DeleteOutlined,
+    AppstoreOutlined,
 } from "@ant-design/icons";
 import {useLanguage} from '../../i18n/LanguageContext';
 
@@ -120,6 +121,24 @@ const EditOrganizationForm = ({hasPassword}) => {
                     <Switch/>
                 </Form.Item>
             </Flex>
+
+            <Divider style={{margin: '16px 0 16px'}}>
+                <Flex align="center" gap={6} style={{opacity: 0.7, fontSize: 13}}>
+                    <AppstoreOutlined/>
+                    {t.featuresSection}
+                </Flex>
+            </Divider>
+
+            {/* Per-organization feature toggles — future org-level feature
+                switches are appended inside this section. */}
+            <Form.Item
+                label={t.giftMarkingEnabled}
+                name="gift_marking_enabled"
+                valuePropName="checked"
+                extra={<span style={{fontSize: 12, opacity: 0.5}}>{t.giftMarkingHint}</span>}
+            >
+                <Switch/>
+            </Form.Item>
 
             <Divider style={{margin: '16px 0 16px'}}>
                 <Flex align="center" gap={6} style={{opacity: 0.7, fontSize: 13}}>

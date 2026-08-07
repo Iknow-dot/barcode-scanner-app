@@ -300,6 +300,11 @@ const OrdersTab = () => {
                             </Text>
                         </div>
                     )}
+                    {record.is_gift && (
+                        <Tag color="magenta" style={{fontSize: 10, marginTop: 2}}>
+                            {t.giftLabel}
+                        </Tag>
+                    )}
                 </div>
             ),
         },
