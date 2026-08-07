@@ -1240,6 +1240,15 @@ class InvoiceEndpointTests(TestCase):
         # when nothing matches it).
         self.assertNotIn('>DRAFT<', body)
 
+    def test_completed_invoice_omits_draft_watermark(self):
+        completed = PurchaseOrder.objects.create(
+            organization=self.org_a, created_by=self.user_a,
+            customer_name='Paid Client', status='completed',
+        )
+        response = self.client_a.get(self._url(completed.id))
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn('>DRAFT<', response.content.decode())
+
 
 @override_settings(SECURE_SSL_REDIRECT=False)
 class InvoiceTemplateEndpointTests(TestCase):

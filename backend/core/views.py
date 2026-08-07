@@ -1199,7 +1199,7 @@ class PurchaseOrderViewSet(ModelViewSet):
         body = render_invoice_template(template_html, org=org, order=order)
         wrapped = wrap_in_skeleton(
             body,
-            draft=order.status != 'confirmed',
+            draft=order.status not in ('confirmed', 'completed'),
             logo_data_url=order.organization.invoice_logo or '',
         )
         return Response(wrapped, content_type='text/html')
@@ -1233,7 +1233,7 @@ class PurchaseOrderViewSet(ModelViewSet):
         body = render_invoice_template(sanitized, org=order.organization, order=order)
         wrapped = wrap_in_skeleton(
             body,
-            draft=order.status != 'confirmed',
+            draft=order.status not in ('confirmed', 'completed'),
             logo_data_url=order.organization.invoice_logo or '',
         )
         return Response(wrapped, content_type='text/html')
