@@ -837,7 +837,9 @@ class OrderAnalyticsAPIView(APIView):
             qs.values('created_by', 'created_by__username')
             .annotate(
                 orders_created=models.Count('id'),
-                orders_confirmed=models.Count('id', filter=models.Q(status='confirmed')),
+                orders_confirmed=models.Count(
+                    'id', filter=models.Q(status__in=('confirmed', 'completed')),
+                ),
             )
             .order_by('-orders_created')
         )

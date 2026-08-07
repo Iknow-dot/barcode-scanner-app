@@ -2359,6 +2359,18 @@ class OrderAnalyticsAPITests(TestCase):
         resp = APIClient().get(self.url)
         self.assertIn(resp.status_code, (401, 403))
 
+    def test_completed_order_counts_as_sale(self):
+        PurchaseOrder.objects.create(
+            organization=self.org, created_by=self.c1, customer_name='E', status='completed',
+        )
+        self.api.force_authenticate(self.admin)
+        resp = self.api.get(self.url)
+        by_id = {c['user_id']: c for c in resp.data['consultants']}
+        # c1 already has 1 confirmed in setUp; the completed order makes 2 sales out of 3 created.
+        self.assertEqual(by_id[self.c1.id]['orders_created'], 3)
+        self.assertEqual(by_id[self.c1.id]['orders_confirmed'], 2)
+        self.assertEqual(resp.data['totals']['orders_confirmed'], 2)
+
 
 class PurchaseOrderCompletedStatusTests(TestCase):
     def test_completed_is_a_valid_status(self):
