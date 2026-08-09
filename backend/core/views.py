@@ -1658,6 +1658,9 @@ class CatalogProductSearchAPIView(APIView):
     http_method_names = ["get"]
 
     def get(self, request: Request) -> Response:
+        denied = _catalog_disabled_response(request.user.organization)
+        if denied is not None:
+            return denied
         q = (request.query_params.get("q") or "").strip()
         if not q:
             return Response([])
@@ -1762,6 +1765,9 @@ class CatalogSyncStatusAPIView(APIView):
 
     def get(self, request: Request) -> Response:
         org = request.user.organization
+        denied = _catalog_disabled_response(org)
+        if denied is not None:
+            return denied
         state = CatalogIngestState.objects.filter(organization=org).first()
         active = Product.objects.filter(organization=org, is_active=True).count()
         total = Product.objects.filter(organization=org).count()
@@ -1887,6 +1893,9 @@ class CatalogProductListAPIView(ListAPIView):
         return qs
 
     def list(self, request, *args, **kwargs):
+        denied = _catalog_disabled_response(request.user.organization)
+        if denied is not None:
+            return denied
         queryset = self.filter_queryset(self.get_queryset())
         page = self.paginate_queryset(queryset)
         org = request.user.organization
@@ -1917,6 +1926,9 @@ class CatalogCategoryTreeAPIView(APIView):
 
     def get(self, request: Request) -> Response:
         org = request.user.organization
+        denied = _catalog_disabled_response(org)
+        if denied is not None:
+            return denied
         cats = list(ProductCategory.objects.filter(organization=org).order_by("name", "id"))
         counts = dict(
             Product.objects.filter(organization=org, is_active=True, category__isnull=False)

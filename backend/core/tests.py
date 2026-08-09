@@ -4613,3 +4613,45 @@ class CatalogFeatureIngestTests(TestCase):
         r = self._push([{"sku": "OLD", "name": "Old again"}])
         self.assertEqual(r.status_code, 403)
         self.assertEqual(r.json()["code"], "PRODUCT_LIMIT_REACHED")
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
+class CatalogFeatureConsultantTests(TestCase):
+    """The four JWT catalog endpoints 403 with CATALOG_NOT_ENABLED when the
+    user's org has the feature off, and work when it's on."""
+
+    URLS = [
+        "/api/v1/catalog/products/search/?q=x",
+        "/api/v1/catalog/products/list/",
+        "/api/v1/catalog/categories/tree/",
+        "/api/v1/catalog/sync-status/",
+    ]
+
+    def setUp(self):
+        self.org = _make_organization(
+            name="ConsultOrg", identification_number="CO1",
+            product_catalog_enabled=True,
+        )
+        # company_admin passes both IsCompanyUserOrAdmin (search/list/tree)
+        # and IsCompanyAdmin (sync-status), so one user covers all four URLs.
+        self.user = User.objects.create_user(
+            username="catalog-admin", password="p",
+            role=User.Role.COMPANY_ADMIN, organization=self.org,
+        )
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.user)
+
+    def test_all_403_when_disabled(self):
+        self.org.product_catalog_enabled = False
+        self.org.save(update_fields=["product_catalog_enabled"])
+        for url in self.URLS:
+            with self.subTest(url=url):
+                r = self.client.get(url)
+                self.assertEqual(r.status_code, 403, url)
+                self.assertEqual(r.json()["code"], "CATALOG_NOT_ENABLED")
+
+    def test_all_pass_when_enabled(self):
+        for url in self.URLS:
+            with self.subTest(url=url):
+                r = self.client.get(url)
+                self.assertEqual(r.status_code, 200, url)
