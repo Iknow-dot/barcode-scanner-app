@@ -2662,6 +2662,16 @@ class OrderCompleteWebhookTests(TestCase):
         self.assertEqual(r.status_code, 400)
         self.assertEqual(r.json()["code"], "VALIDATION_ERROR")
 
+    def test_bearer_token_fallback_works(self):
+        order = self._order()
+        r = self.client.post(
+            self.url, {"order_id": order.id}, format="json",
+            HTTP_AUTHORIZATION=f"Bearer {self.org.webhook_token}",
+        )
+        self.assertEqual(r.status_code, 200)
+        order.refresh_from_db()
+        self.assertEqual(order.status, "completed")
+
 
 @override_settings(SECURE_SSL_REDIRECT=False)
 class OrderStatusGuardTests(TestCase):
@@ -2715,6 +2725,18 @@ class OrderStatusGuardTests(TestCase):
         order.refresh_from_db()
         self.assertEqual(order.notes, 'delivered to reception')
         self.assertEqual(order.status, 'completed')
+
+    def test_user_cannot_create_order_as_completed(self):
+        r = self.api.post(
+            '/api/v1/orders/',
+            {'customer_name': 'Nino', 'status': 'completed'},
+            format='json',
+        )
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.json()['code'], 'STATUS_NOT_SETTABLE')
+        self.assertFalse(
+            PurchaseOrder.objects.filter(organization=self.org, status='completed').exists()
+        )
 
 
 @override_settings(SECURE_SSL_REDIRECT=False)

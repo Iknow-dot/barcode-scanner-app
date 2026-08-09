@@ -949,6 +949,17 @@ class PurchaseOrderViewSet(ModelViewSet):
 
         Retail orders (is_retail=true) carry blank client ids, so neither
         match runs and every retail order is created as its own fresh draft."""
+        # 'completed' is written ONLY by the external-service webhook
+        # (OrderCompleteWebhookAPIView); users can never create a born-completed order.
+        if request.data.get('status') == PurchaseOrder.Status.COMPLETED:
+            return Response(
+                {
+                    "code": "STATUS_NOT_SETTABLE",
+                    "detail": "Status 'completed' is set only by the external service webhook.",
+                },
+                status=http_status.HTTP_400_BAD_REQUEST,
+            )
+
         org = request.user.organization
         external_client_id = (request.data.get('external_client_id') or '').strip()
         identification_number = (request.data.get('customer_identification_number') or '').strip()
@@ -1546,6 +1557,10 @@ class CatalogProductDeactivateAPIView(APIView):
     ],
 )
 class OrderCompleteWebhookAPIView(APIView):
+    # Default JWT auth would intercept "Authorization: Bearer <push-token>" and
+    # 401 before the view runs, breaking the documented Bearer fallback (see
+    # _PUSH_TOKEN_PARAM below) — disable it so the push-token check below decides.
+    authentication_classes = []
     permission_classes = []  # authenticated by per-org push token, not JWT
     http_method_names = ["post"]
 
