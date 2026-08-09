@@ -12,6 +12,7 @@ import CatalogTab from './CatalogTab';
 import {AppstoreOutlined, BarChartOutlined, BankOutlined, DatabaseOutlined, FileImageOutlined, GlobalOutlined, ShoppingOutlined, TeamOutlined, UserOutlined} from "@ant-design/icons";
 import SubNavContext from "../../contexts/SubNavContext";
 import {useLanguage} from '../../i18n/LanguageContext';
+import {catalogFeatureEnabled} from '../../utils/features';
 import {Typography} from "antd";
 
 const {Title, Text} = Typography;
@@ -39,6 +40,9 @@ const SystemAdminDashboard = () => {
     const [users, setUsers] = useState([]);
     const [usersLoading, setUsersLoading] = useState(true);
     const userRole = authData?.role;
+    // Catalog is an org-level feature: when it's off, company admins lose the
+    // menu entry and the tab pane just like consultants lose the search.
+    const catalogOn = catalogFeatureEnabled(authData);
     const [activeTab, setActiveTab] = useState(userRole === userRoles.internal_admin ? 1 : 2);
     const {t} = useLanguage();
 
@@ -63,7 +67,7 @@ const SystemAdminDashboard = () => {
                 label: userRole === userRoles.company_admin ? t.employees : t.users,
                 onClick: () => setActiveTab(3)
             },
-            userRole === userRoles.company_admin && ({
+            userRole === userRoles.company_admin && catalogOn && ({
                 key: '8',
                 icon: <DatabaseOutlined/>,
                 label: t.catalog,
@@ -94,7 +98,7 @@ const SystemAdminDashboard = () => {
                 onClick: () => setActiveTab(7)
             }),
         ].filter(Boolean));
-    }, [userRole, setSubNav, t]);
+    }, [userRole, catalogOn, setSubNav, t]);
 
     const fetchUsers = async () => {
         setUsersLoading(true);
@@ -142,7 +146,7 @@ const SystemAdminDashboard = () => {
             ActiveTabPane = <AnalyticsTab/>;
             break;
         case 8:
-            ActiveTabPane = <CatalogTab/>;
+            ActiveTabPane = catalogOn ? <CatalogTab/> : null;
             break;
         default:
             ActiveTabPane = null;

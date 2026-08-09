@@ -25,6 +25,7 @@ import {hasProductResult, isStockBlocked, stockStatusMessageKey} from './stockSt
 import inheritFromGroup from './inheritFromGroup';
 import formatInsufficientStock from './insufficientStock';
 import {warehouseRowView, pickUnit} from './warehouseRowView';
+import {catalogFeatureEnabled} from '../../utils/features';
 import displayCustomerName from '../../utils/orderDisplay';
 import OfflineBanner, {useOfflineStatus} from './OfflineBanner';
 import {startSyncLoop} from '../../utils/offlineOrderSync';
@@ -95,7 +96,7 @@ const UserDashboard = () => {
     const {authData} = useContext(AuthContext);
     // Catalog browse/search is an org-level feature; when it's off, the
     // search entry point and the find-product drawer are hidden entirely.
-    const catalogEnabled = !!authData?.product_catalog_enabled;
+    const catalogEnabled = catalogFeatureEnabled(authData);
     const [scannerOpen, setScannerOpen] = useState(false);
     const [balances, setBalances] = useState([]);
     const [userWarehouses, setUserWarehouses] = useState([]);
