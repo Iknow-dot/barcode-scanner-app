@@ -24,6 +24,7 @@ import groupItemsBySku from './groupItemsBySku';
 import {hasProductResult, isStockBlocked, stockStatusMessageKey} from './stockStatus';
 import inheritFromGroup from './inheritFromGroup';
 import formatInsufficientStock from './insufficientStock';
+import {warehouseRowView, pickUnit} from './warehouseRowView';
 import displayCustomerName from '../../utils/orderDisplay';
 import OfflineBanner, {useOfflineStatus} from './OfflineBanner';
 import {startSyncLoop} from '../../utils/offlineOrderSync';
@@ -324,6 +325,9 @@ const UserDashboard = () => {
                     article: result.data.article,
                     price: result.data.price,
                     sku: result.data.sku,
+                    // Per-lookup-key unit from 1C (a package barcode and the
+                    // article can report different units for one product).
+                    unit: result.data.unit || '',
                     images: result.data.images || []
                 });
                 lastSearchRef.current = {search, searchType};
@@ -443,12 +447,15 @@ const UserDashboard = () => {
     }, [othersCollapsed, searchedAllWarehouses, handleShowOtherWarehouses]);
 
     const renderWarehouseRow = (item, isMine) => {
-        const qty = Number(item.quantity) || 0;
-        const isEmpty = qty === 0;
-        const isLow = qty > 0 && qty <= LOW_STOCK_THRESHOLD;
-        const fillPct = Math.min(100, (qty / MAX_STOCK_FOR_FULL_BAR) * 100);
+        const view = warehouseRowView(item);
+        const isEmpty = view.qty === 0;
+        const isLow = view.qty > 0 && view.qty <= LOW_STOCK_THRESHOLD;
+        const fillPct = Math.min(100, (view.qty / MAX_STOCK_FOR_FULL_BAR) * 100);
         const qtyClass = isEmpty ? 'empty' : isLow ? 'low' : '';
         const fillClass = isEmpty ? 'empty' : isLow ? 'low' : '';
+        const unitLabel = productInfo.unit
+            ? (t.unitOptions?.find((opt) => opt.value === productInfo.unit)?.label || productInfo.unit)
+            : null;
 
         return (
             <div
@@ -464,19 +471,51 @@ const UserDashboard = () => {
                         >
                             {item.warehouse_name}
                         </Text>
-                        <Text type="secondary" style={{fontSize: 12, display: 'block', marginTop: 2}}>
-                            {item.price} ₾
-                        </Text>
+                        {view.hasDiscount ? (
+                            <Text type="secondary" style={{fontSize: 12, display: 'block', marginTop: 2}}>
+                                <Text delete type="secondary" style={{fontSize: 12}}>{item.price} ₾</Text>
+                                {' '}
+                                <Text strong style={{fontSize: 12, color: '#cf1322'}}>
+                                    {view.discountedPrice.toFixed(2)} ₾
+                                </Text>
+                                {view.discountPercent > 0 && (
+                                    <Tag color="red" style={{marginLeft: 6, fontSize: 11, lineHeight: '16px'}}>
+                                        -{view.discountPercent}%
+                                    </Tag>
+                                )}
+                            </Text>
+                        ) : (
+                            <Text type="secondary" style={{fontSize: 12, display: 'block', marginTop: 2}}>
+                                {item.price} ₾
+                            </Text>
+                        )}
+                        {view.hasReserve && (
+                            <Tag style={{marginTop: 4, fontSize: 11}}>
+                                {t.reserveLabel}: {view.reserve}
+                            </Tag>
+                        )}
                     </div>
                     <Flex align="center" gap={8}>
-                        <span className={`m-balance-qty-num ${qtyClass}`}>{qty}</span>
+                        <div style={{textAlign: 'right'}}>
+                            <span className={`m-balance-qty-num ${qtyClass}`}>{view.qty}</span>
+                            {unitLabel && (
+                                <Text type="secondary" style={{fontSize: 11, marginLeft: 4}}>
+                                    {unitLabel}
+                                </Text>
+                            )}
+                            {view.hasReserve && (
+                                <Text type="secondary" style={{fontSize: 11, display: 'block'}}>
+                                    {t.freeStockLabel}
+                                </Text>
+                            )}
+                        </div>
                         {showOrderPanel && (
                             <Button
                                 type="primary"
                                 size="middle"
                                 icon={<PlusCircleOutlined/>}
                                 onClick={(e) => handleAddToOrderFromWarehouse(item, e)}
-                                disabled={qty <= 0}
+                                disabled={view.qty <= 0}
                                 className="m-add-to-order-btn"
                             />
                         )}
@@ -800,6 +839,7 @@ const UserDashboard = () => {
                 quantity,
                 warehouse_code: warehouse_code || '',
                 warehouse_name: warehouse_name || '',
+                unit: pickUnit(inherited.unit, productInfo.unit),
                 ...inherited,
             });
             if (addResult.success) {
@@ -1215,7 +1255,7 @@ const UserDashboard = () => {
                 productInfo={productInfo}
                 balances={balances}
                 initialWarehouseCode={addToCartInitialWh}
-                unit={inheritFromExistingGroup(productInfo.sku)?.unit}
+                unit={pickUnit(inheritFromExistingGroup(productInfo.sku)?.unit, productInfo.unit)}
                 confirming={addToCartConfirming}
                 onConfirm={handleConfirmAddToCart}
                 onClose={handleCancelAddToCart}

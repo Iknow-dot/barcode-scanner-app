@@ -3178,6 +3178,36 @@ class ScanFastPathTests(TestCase):
         self.assertEqual(r.status_code, 200)
         self.assertEqual(r.json()["stock_status"], "unavailable")
 
+    @mock.patch("core.views.ConsultWebExchangeClient.get_stock_and_prices")
+    def test_stock_rows_carry_1c_automatic_discount_fields(self, mstock):
+        # 1C sends the program-side automatic discount per stock row as
+        # (undocumented) `discountpercent` / `discountedprice` — they must
+        # reach the frontend under our snake_case names (ClickUp 86capt0cg).
+        mstock.return_value = {"stock": [{
+            "warehouse": "W1", "warehouse_name": "Main", "quantity": 3, "reserve": 1,
+            "price": "31.00", "discountpercent": 5, "discountedprice": "29.45",
+        }]}
+        r = self.client.post(
+            "/api/v1/product/search/", {"sku": "123", "is_barcode": True, "warehouses": ["W1"]}, format="json",
+        )
+        self.assertEqual(r.status_code, 200)
+        row = r.json()["stock"][0]
+        self.assertEqual(Decimal(row["discount_percent"]), Decimal(5))
+        self.assertEqual(Decimal(row["discounted_price"]), Decimal("29.45"))
+
+    @mock.patch("core.views.ConsultWebExchangeClient.get_stock_and_prices")
+    def test_stock_rows_omit_discount_fields_when_1c_does_not_send_them(self, mstock):
+        # Bases that predate the discount fields simply omit the keys — the
+        # row must serialize without them rather than erroring.
+        mstock.return_value = {"stock": [{"warehouse": "W1", "warehouse_name": "Main", "quantity": 3, "price": "9.90"}]}
+        r = self.client.post(
+            "/api/v1/product/search/", {"sku": "123", "is_barcode": True, "warehouses": ["W1"]}, format="json",
+        )
+        self.assertEqual(r.status_code, 200)
+        row = r.json()["stock"][0]
+        self.assertNotIn("discount_percent", row)
+        self.assertNotIn("discounted_price", row)
+
 
 from io import StringIO
 from django.core.management import call_command

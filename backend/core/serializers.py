@@ -537,6 +537,14 @@ class ProductSearchSerializer(serializers.Serializer):
         quantity = serializers.DecimalField(max_digits=15, decimal_places=3)
         reserve = serializers.DecimalField(max_digits=15, decimal_places=3, read_only=True)
         price = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
+        # 1C's per-row automatic discount (undocumented lowercase keys).
+        # Omitted from the row entirely when the base doesn't send them.
+        discount_percent = serializers.DecimalField(
+            max_digits=5, decimal_places=2, read_only=True, source='discountpercent',
+        )
+        discounted_price = serializers.DecimalField(
+            max_digits=10, decimal_places=2, read_only=True, source='discountedprice',
+        )
 
     is_barcode = serializers.BooleanField(write_only=True)
     sku = serializers.CharField(max_length=255)
