@@ -2,24 +2,28 @@
 
 The main schema (``/api/schema/`` → ``/api/redoc/``) documents the whole app,
 which is JWT-authenticated and consumed by our own frontend. External systems
-(a customer's 1C ConsultWebExchange) only ever call the two *catalog ingest*
-endpoints, with a completely different auth model (a per-org push token). To
-give integrators a focused contract, ``/api/integration/schema/`` reuses
-``SpectacularAPIView`` with ``custom_settings`` that (a) swap in the onboarding
-guide below as the schema description and (b) apply the preprocessing hook here
-to keep ONLY the ingest endpoints.
+(a customer's 1C ConsultWebExchange) only ever call the *catalog ingest*
+endpoints and the *order completion* webhook, with a completely different auth
+model (a per-org push token). To give integrators a focused contract,
+``/api/integration/schema/`` reuses ``SpectacularAPIView`` with
+``custom_settings`` that (a) swap in the onboarding guide below as the schema
+description and (b) apply the preprocessing hook here to keep ONLY those
+integration endpoints.
 
 Path-prefix filtering can't separate them (ingest, name-search and the image
 proxy all live under ``catalog/products/``), so the hook filters by view class.
 """
 
 INTEGRATION_DESCRIPTION = """\
-# Catalog Integration API
+# Integration API
 
-Push your product catalog into the Barcode Scanner platform. Your 1C system is
-the **source of truth**; you push changes to us and we keep a fast local replica
-that powers barcode scan and name search. **Stock and price are never stored** —
-we always fetch those live from your 1C at scan time.
+Push your product catalog into the Barcode Scanner platform, and report back
+when an order is paid. Your 1C system is the **source of truth** for the
+catalog; you push changes to us and we keep a fast local replica that powers
+barcode scan and name search. **Stock and price are never stored** — we always
+fetch those live from your 1C at scan time. When an order you received from us
+is paid and finalized, you call the **order completion webhook** so the order
+reaches its terminal `completed` status on our side.
 
 ## Authentication
 
@@ -36,12 +40,13 @@ Your organization may optionally restrict pushes to a **source-IP allowlist**. I
 configured, pushes are accepted only from the listed IP addresses or CIDR networks
 — any other source gets `403 Forbidden`. Leave it empty for no restriction.
 
-## The two operations
+## The three operations
 
 | Operation | Endpoint | When |
 |-----------|----------|------|
 | **Upsert products** | `POST /api/v1/catalog/products/` | Onboarding (full catalog) and every later change |
 | **Deactivate products** | `POST /api/v1/catalog/products/deactivate/` | When a product is discontinued |
+| **Complete an order** | `POST /api/v1/webhooks/orders/complete/` | When an order (invoice) is paid & finalized in 1C |
 
 ## Onboarding vs. steady state
 
@@ -71,15 +76,31 @@ Send absolute image URLs in `image_urls`. We fetch them from your host (with you
 do not copy or store the image files. Image URLs are expected to live on the same
 host as your web service.
 
+## Order completion webhook
+
+When an order is **paid and finalized** in your 1C, call
+`POST /api/v1/webhooks/orders/complete/` with `{"order_id": <int>}` — the order
+number printed on our invoice as `#N`. Only a `confirmed` order can be completed;
+this is the **only** way an order ever reaches `completed` (our own users cannot
+set it). The call is **idempotent**: repeating it for an already-completed order
+returns `200` again, so retries are safe. Error responses carry a machine-readable
+`code` field to branch on: `INVALID_STATUS_TRANSITION` (409, order is draft or
+cancelled, with `current_status`), `ORDER_NOT_FOUND` (404, unknown id — or an id
+that belongs to another organization), `VALIDATION_ERROR` (400, missing or
+non-integer `order_id`).
+
 ---
 
-# კატალოგის ინტეგრაციის API
+# ინტეგრაციის API
 
-ატვირთეთ თქვენი პროდუქტების კატალოგი Barcode Scanner პლატფორმაზე. თქვენი 1C სისტემა
-არის **ჭეშმარიტების წყარო (source of truth)**; თქვენ გვიგზავნით ცვლილებებს, ჩვენ კი
-ვინახავთ სწრაფ ლოკალურ ასლს (replica), რომელიც უზრუნველყოფს შტრიხკოდითა და
-დასახელებით ძებნას. **მარაგი და ფასი არასდროს ინახება** — ისინი ყოველთვის იტვირთება
-პირდაპირ თქვენი 1C-დან სკანირების მომენტში.
+ატვირთეთ თქვენი პროდუქტების კატალოგი Barcode Scanner პლატფორმაზე და შეგვატყობინეთ,
+როცა შეკვეთა გადახდილია. თქვენი 1C სისტემა არის კატალოგის **ჭეშმარიტების წყარო
+(source of truth)**; თქვენ გვიგზავნით ცვლილებებს, ჩვენ კი ვინახავთ სწრაფ ლოკალურ
+ასლს (replica), რომელიც უზრუნველყოფს შტრიხკოდითა და დასახელებით ძებნას. **მარაგი და
+ფასი არასდროს ინახება** — ისინი ყოველთვის იტვირთება პირდაპირ თქვენი 1C-დან სკანირების
+მომენტში. როცა ჩვენგან მიღებული შეკვეთა გადახდილი და საბოლოოდ გატარებულია, თქვენ
+იძახებთ **შეკვეთის დასრულების webhook-ს**, რომ შეკვეთამ ჩვენს მხარეს მიიღოს
+ტერმინალური `completed` სტატუსი.
 
 ## ავთენტიფიკაცია
 
@@ -97,12 +118,13 @@ token **განსაზღვრავს თქვენს ორგან�
 სიით**. თუ კონფიგურირებულია, ატვირთვა დაიშვება მხოლოდ მითითებული IP-მისამართებიდან ან
 CIDR ქსელებიდან — სხვა წყაროსთვის დაბრუნდება `403 Forbidden`. ცარიელი = შეზღუდვის გარეშე.
 
-## ორი ოპერაცია
+## სამი ოპერაცია
 
 | ოპერაცია | Endpoint | როდის |
 |----------|----------|-------|
 | **პროდუქტების ატვირთვა / განახლება** | `POST /api/v1/catalog/products/` | ჩართვისას (სრული კატალოგი) და ყოველი ცვლილებისას |
 | **პროდუქტების დეაქტივაცია** | `POST /api/v1/catalog/products/deactivate/` | როცა პროდუქტი იხსნება მიმოქცევიდან |
+| **შეკვეთის დასრულება** | `POST /api/v1/webhooks/orders/complete/` | როცა შეკვეთა (ინვოისი) გადახდილია და გატარებულია 1C-ში |
 
 ## ჩართვა (Onboarding) vs. მუდმივი რეჟიმი
 
@@ -133,6 +155,19 @@ CIDR ქსელებიდან — სხვა წყაროსთვი
 ჰოსტიდან (თქვენივე 1C credentials-ით) და მივაწოდებთ კონსულტანტებს ავთენტიფიცირებული
 proxy-ის მეშვეობით — ფაილებს არ ვაკოპირებთ და არ ვინახავთ. მოსალოდნელია, რომ სურათების
 URL-ები იმავე ჰოსტზეა, სადაც თქვენი ვებ-სერვისი.
+
+## შეკვეთის დასრულების Webhook
+
+როცა შეკვეთა **გადახდილია და საბოლოოდ გატარებულია** თქვენს 1C-ში, გამოიძახეთ
+`POST /api/v1/webhooks/orders/complete/` სხეულით `{"order_id": <int>}` — ეს არის
+ჩვენი ინვოისზე დაბეჭდილი შეკვეთის ნომერი `#N`. დასრულება შესაძლებელია მხოლოდ
+`confirmed` შეკვეთისთვის; ეს არის **ერთადერთი** გზა, რომლითაც შეკვეთა `completed`
+სტატუსს იღებს (ჩვენს მომხმარებლებს ეს არ შეუძლიათ). გამოძახება **იდემპოტენტურია**:
+უკვე დასრულებულ შეკვეთაზე გამეორება ისევ `200`-ს აბრუნებს, ამიტომ ხელახალი ცდები
+უსაფრთხოა. შეცდომის პასუხებს აქვთ მანქანურად წაკითხვადი `code` ველი:
+`INVALID_STATUS_TRANSITION` (409, შეკვეთა draft ან cancelled სტატუსშია,
+`current_status`-თან ერთად), `ORDER_NOT_FOUND` (404, უცნობი ნომერი — ან სხვა
+ორგანიზაციის შეკვეთა), `VALIDATION_ERROR` (400, `order_id` აკლია ან არ არის რიცხვი).
 """
 
 
@@ -147,9 +182,14 @@ def integration_endpoints_only(endpoints):
     from core.views import (
         CatalogProductIngestAPIView,
         CatalogProductDeactivateAPIView,
+        OrderCompleteWebhookAPIView,
     )
 
-    allowed = {CatalogProductIngestAPIView, CatalogProductDeactivateAPIView}
+    allowed = {
+        CatalogProductIngestAPIView,
+        CatalogProductDeactivateAPIView,
+        OrderCompleteWebhookAPIView,
+    }
     return [
         (path, path_regex, method, callback)
         for (path, path_regex, method, callback) in endpoints

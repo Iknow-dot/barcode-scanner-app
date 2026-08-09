@@ -20,19 +20,23 @@ urlpatterns = [
     path('api/docs/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
     path('api/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),
 
-    # Catalog Integration API — the focused contract external systems (1C) push into.
-    # Same SpectacularAPIView, filtered to the ingest endpoints via a preprocessing hook.
+    # Integration API — the focused contract external systems (1C) call: catalog
+    # push + order-completion webhook. Same SpectacularAPIView, filtered to the
+    # integration endpoints via a preprocessing hook.
     path(
         'api/integration/schema/',
         SpectacularAPIView.as_view(
             custom_settings={
-                'TITLE': 'Barcode Scanner — Catalog Integration API',
+                'TITLE': 'Barcode Scanner — Integration API',
                 'DESCRIPTION': INTEGRATION_DESCRIPTION,
                 'VERSION': '1.0.0',
                 'PREPROCESSING_HOOKS': ['core.schema.integration_endpoints_only'],
                 # Scope the tag list so ReDoc doesn't render the internal API's tag
                 # groups (Users, Organizations, …) as empty nav sections.
-                'TAGS': [{'name': 'Catalog Ingest', 'description': 'Push your product catalog into the platform. · კატალოგის ატვირთვა პლატფორმაზე.'}],
+                'TAGS': [
+                    {'name': 'Catalog Ingest', 'description': 'Push your product catalog into the platform. · კატალოგის ატვირთვა პლატფორმაზე.'},
+                    {'name': 'Webhooks', 'description': 'Report order lifecycle events back to the platform. · შეკვეთის სტატუსის შეტყობინება პლატფორმისთვის.'},
+                ],
             },
         ),
         name='integration-schema',
