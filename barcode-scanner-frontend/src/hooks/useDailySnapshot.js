@@ -55,7 +55,7 @@ const useDailySnapshot = (currentUserId) => {
                     ? result.data
                     : (result.data?.results || []);
                 const total = orders
-                    .filter((o) => o.status === 'confirmed')
+                    .filter((o) => o.status === 'confirmed' || o.status === 'completed')
                     .reduce((sum, o) => sum + (parseFloat(o.total) || 0), 0);
                 setOrdersSummary({count: orders.length, total});
             }

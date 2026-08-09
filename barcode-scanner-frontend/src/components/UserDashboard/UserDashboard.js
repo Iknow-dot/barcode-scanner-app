@@ -78,6 +78,7 @@ const {Text} = Typography;
 const ORDER_STATUS_COLOR = {
     draft: 'blue',
     confirmed: 'green',
+    completed: 'cyan',
     cancelled: 'red',
 };
 
@@ -972,6 +973,7 @@ const UserDashboard = () => {
         const statusLabelMap = {
             draft: t.orderDraft,
             confirmed: t.orderConfirmed,
+            completed: t.orderCompleted,
             cancelled: t.orderCancelled,
         };
         return (

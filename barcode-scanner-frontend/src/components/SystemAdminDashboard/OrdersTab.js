@@ -44,6 +44,7 @@ const {RangePicker} = DatePicker;
 const STATUS_COLOR_MAP = {
     draft: 'orange',
     confirmed: 'green',
+    completed: 'cyan',
     cancelled: 'red',
 };
 
@@ -136,6 +137,7 @@ const OrdersTab = () => {
         const map = {
             draft: t.orderDraft,
             confirmed: t.orderConfirmed,
+            completed: t.orderCompleted,
             cancelled: t.orderCancelled,
         };
         return map[status] || status;
@@ -177,6 +179,7 @@ const OrdersTab = () => {
             filters: [
                 {text: t.orderDraft, value: 'draft'},
                 {text: t.orderConfirmed, value: 'confirmed'},
+                {text: t.orderCompleted, value: 'completed'},
                 {text: t.orderCancelled, value: 'cancelled'},
             ],
             onFilter: (value, record) => record.status === value,
@@ -394,6 +397,7 @@ const OrdersTab = () => {
                             options={[
                                 {label: t.orderDraft, value: 'draft'},
                                 {label: t.orderConfirmed, value: 'confirmed'},
+                                {label: t.orderCompleted, value: 'completed'},
                                 {label: t.orderCancelled, value: 'cancelled'},
                             ]}
                         />
