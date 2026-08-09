@@ -83,6 +83,8 @@ without changes.
    and reject any status change on an order that is already `completed` (400,
    `{"code": "ORDER_COMPLETED_LOCKED"}`). The guard lives in the viewset rather than
    the serializer so the error body keeps the project's `{"code", "detail"}` envelope.
+   The same guard applies on `create()` (a new order cannot be born `completed`) and
+   on `destroy()` (a completed order cannot be deleted).
 
 ### 4. Frontend display
 
@@ -109,7 +111,7 @@ Backend (`core/tests.py`, endpoint-test convention with SSL redirect disabled):
 - 400 on missing/non-integer `order_id`.
 - Analytics: a `completed` order counts in `orders_confirmed`.
 - Invoice: a `completed` order renders without the DRAFT watermark.
-- Serializer guard: PATCH `status='completed'` via the orders API → 400
+- Viewset guard: PATCH `status='completed'` via the orders API → 400
   `STATUS_NOT_SETTABLE`; PATCH any status on a completed order → 400
   `ORDER_COMPLETED_LOCKED`.
 

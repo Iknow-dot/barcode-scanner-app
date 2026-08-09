@@ -951,7 +951,8 @@ class PurchaseOrderViewSet(ModelViewSet):
         match runs and every retail order is created as its own fresh draft."""
         # 'completed' is written ONLY by the external-service webhook
         # (OrderCompleteWebhookAPIView); users can never create a born-completed order.
-        if request.data.get('status') == PurchaseOrder.Status.COMPLETED:
+        requested_status = request.data.get('status') if isinstance(request.data, dict) else None
+        if requested_status == PurchaseOrder.Status.COMPLETED:
             return Response(
                 {
                     "code": "STATUS_NOT_SETTABLE",
@@ -1035,7 +1036,7 @@ class PurchaseOrderViewSet(ModelViewSet):
         # (OrderCompleteWebhookAPIView); users can neither set it nor move
         # an order out of it. partial_update() routes through here too.
         order = self.get_object()
-        requested_status = request.data.get('status')
+        requested_status = request.data.get('status') if isinstance(request.data, dict) else None
         if requested_status and requested_status != order.status:
             if order.status == PurchaseOrder.Status.COMPLETED:
                 return Response(
@@ -1054,6 +1055,18 @@ class PurchaseOrderViewSet(ModelViewSet):
                     status=http_status.HTTP_400_BAD_REQUEST,
                 )
         return super().update(request, *args, **kwargs)
+
+    def destroy(self, request, *args, **kwargs):
+        order = self.get_object()
+        if order.status == PurchaseOrder.Status.COMPLETED:
+            return Response(
+                {
+                    "code": "ORDER_COMPLETED_LOCKED",
+                    "detail": "A completed order can no longer be deleted.",
+                },
+                status=http_status.HTTP_400_BAD_REQUEST,
+            )
+        return super().destroy(request, *args, **kwargs)
 
     @action(detail=True, methods=['post'], url_path='items')
     def add_item(self, request, pk=None):

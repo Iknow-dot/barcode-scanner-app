@@ -36,6 +36,6 @@ def organization_from_push(request) -> Organization:
         client_ip = get_client_ip(request)
         if not ip_in_allowlist(client_ip, allowed):
             logger.warning("Push denied for org %s: source IP %s not in allowlist", org.id, client_ip)
-            raise PermissionDenied("Source IP not allowed for catalog push.")
+            raise PermissionDenied("Source IP not allowed.")
 
     return org

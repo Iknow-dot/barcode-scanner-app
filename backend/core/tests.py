@@ -2738,6 +2738,24 @@ class OrderStatusGuardTests(TestCase):
             PurchaseOrder.objects.filter(organization=self.org, status='completed').exists()
         )
 
+    def test_user_cannot_delete_completed_order(self):
+        order = self._order(status='completed')
+        r = self.api.delete(f'/api/v1/orders/{order.id}/')
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.json()['code'], 'ORDER_COMPLETED_LOCKED')
+        self.assertTrue(PurchaseOrder.objects.filter(pk=order.id).exists())
+
+    def test_user_can_still_delete_draft_order(self):
+        order = self._order(status='draft')
+        r = self.api.delete(f'/api/v1/orders/{order.id}/')
+        self.assertEqual(r.status_code, 204)
+        self.assertFalse(PurchaseOrder.objects.filter(pk=order.id).exists())
+
+    def test_list_body_returns_400_not_500(self):
+        order = self._order(status='confirmed')
+        r = self.api.patch(f'/api/v1/orders/{order.id}/', ['not', 'a', 'dict'], format='json')
+        self.assertEqual(r.status_code, 400)
+
 
 @override_settings(SECURE_SSL_REDIRECT=False)
 class ImageProxyTests(TestCase):
