@@ -4472,3 +4472,25 @@ class GiftFlagEndpointTests(TestCase):
         self.assertEqual(response.data['code'], 'GIFT_NOT_ENABLED')
         self.item.refresh_from_db()
         self.assertFalse(self.item.is_gift)
+
+
+class CatalogFeatureModelTests(TestCase):
+    def test_defaults(self):
+        org = _make_organization()
+        self.assertFalse(org.product_catalog_enabled)
+        self.assertIsNone(org.product_limit)
+
+    def test_data_migration_enables_orgs_with_products(self):
+        import importlib
+        mig = importlib.import_module(
+            'core.migrations.0027_enable_catalog_for_orgs_with_products',
+        )
+        from django.apps import apps as global_apps
+        with_products = _make_organization(name='HasCatalog', identification_number='C1')
+        without = _make_organization(name='NoCatalog', identification_number='C2')
+        Product.objects.create(organization=with_products, sku='P1', name='P')
+        mig.enable_catalog_for_orgs_with_products(global_apps, None)
+        with_products.refresh_from_db()
+        without.refresh_from_db()
+        self.assertTrue(with_products.product_catalog_enabled)
+        self.assertFalse(without.product_catalog_enabled)
