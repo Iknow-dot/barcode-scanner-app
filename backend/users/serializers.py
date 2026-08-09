@@ -113,6 +113,10 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
             self.user.organization
             and self.user.organization.gift_marking_enabled
         )
+        data['product_catalog_enabled'] = bool(
+            self.user.organization
+            and self.user.organization.product_catalog_enabled
+        )
 
         # Warehouse names assigned to this user
         data['warehouses'] = list(
