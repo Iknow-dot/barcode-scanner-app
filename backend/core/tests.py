@@ -1578,6 +1578,7 @@ class CatalogModelTests(TestCase):
     def setUp(self):
         self.org = Organization.objects.create(
             name="Org", identification_number="ORG1", web_service_url="https://x", employees_count=5,
+            product_catalog_enabled=True,
         )
 
     def test_product_unique_per_org_sku_and_barcode_lookup(self):
@@ -2440,6 +2441,7 @@ class PushAuthTests(TestCase):
     def setUp(self):
         self.org = Organization.objects.create(
             name="Org", identification_number="ORG1", web_service_url="https://x", employees_count=5,
+            product_catalog_enabled=True,
         )
 
     def _req(self, headers):
@@ -2468,6 +2470,7 @@ class IngestUpsertTests(TestCase):
         self.client = APIClient()
         self.org = Organization.objects.create(
             name="Org", identification_number="ORG1", web_service_url="https://x", employees_count=5,
+            product_catalog_enabled=True,
         )
         self.url = "/api/v1/catalog/products/"
 
@@ -2509,6 +2512,7 @@ class IngestUpsertTests(TestCase):
     def test_push_is_isolated_per_org(self):
         other = Organization.objects.create(
             name="Other", identification_number="ORG2", web_service_url="https://y", employees_count=5,
+            product_catalog_enabled=True,
         )
         self.client.post(
             self.url, {"products": [{"sku": "S1", "name": "A-candle"}]},
@@ -2537,6 +2541,7 @@ class IngestDeactivateTests(TestCase):
         self.client = APIClient()
         self.org = Organization.objects.create(
             name="Org", identification_number="ORG1", web_service_url="https://x", employees_count=5,
+            product_catalog_enabled=True,
         )
         Product.objects.create(organization=self.org, sku="S1", name="Candle")
 
@@ -2554,6 +2559,7 @@ class IngestDeactivateTests(TestCase):
     def test_deactivate_is_isolated_per_org(self):
         other = Organization.objects.create(
             name="Other", identification_number="ORG2", web_service_url="https://y", employees_count=5,
+            product_catalog_enabled=True,
         )
         Product.objects.create(organization=other, sku="S1", name="Other Candle")
         r = self.client.post(
@@ -2571,6 +2577,7 @@ class OrderCompleteWebhookTests(TestCase):
         self.client = APIClient()
         self.org = Organization.objects.create(
             name="Org", identification_number="ORG1", web_service_url="https://x", employees_count=5,
+            product_catalog_enabled=True,
         )
         self.url = "/api/v1/webhooks/orders/complete/"
 
@@ -2619,6 +2626,7 @@ class OrderCompleteWebhookTests(TestCase):
     def test_foreign_org_order_is_404(self):
         other = Organization.objects.create(
             name="Other", identification_number="ORG2", web_service_url="https://y", employees_count=5,
+            product_catalog_enabled=True,
         )
         foreign_order = self._order(org=other)
         r = self._complete({"order_id": foreign_order.id})  # self.org's token
@@ -2764,9 +2772,11 @@ class ImageProxyTests(TestCase):
         self.org = Organization.objects.create(
             name="Org", identification_number="ORG1", web_service_url="https://x",
             web_service_username="u", employees_count=5,
+            product_catalog_enabled=True,
         )
         self.other = Organization.objects.create(
             name="Other", identification_number="ORG2", web_service_url="https://y", employees_count=5,
+            product_catalog_enabled=True,
         )
         self.user = User.objects.create_user(
             username="c", password="p", role=User.Role.COMPANY_USER, organization=self.org,
@@ -2894,9 +2904,11 @@ class NameSearchTests(TestCase):
         self.client = APIClient()
         self.org = Organization.objects.create(
             name="Org", identification_number="ORG1", web_service_url="https://x", employees_count=5,
+            product_catalog_enabled=True,
         )
         self.other = Organization.objects.create(
             name="Other", identification_number="ORG2", web_service_url="https://y", employees_count=5,
+            product_catalog_enabled=True,
         )
         self.user = User.objects.create_user(
             username="c", password="p", role=User.Role.COMPANY_USER, organization=self.org,
@@ -2934,6 +2946,7 @@ class ScanFastPathTests(TestCase):
         self.client = APIClient()
         self.org = Organization.objects.create(
             name="Org", identification_number="ORG1", web_service_url="https://x", employees_count=5,
+            product_catalog_enabled=True,
         )
         self.user = User.objects.create_user(
             username="c", password="p", role=User.Role.COMPANY_USER, organization=self.org,
@@ -2975,6 +2988,7 @@ class StalenessCommandTests(TestCase):
     def setUp(self):
         self.org = Organization.objects.create(
             name="Org", identification_number="ORG1", web_service_url="https://x", employees_count=5,
+            product_catalog_enabled=True,
         )
 
     def test_marks_stale_org(self):
@@ -3044,6 +3058,7 @@ class ExternalServiceTokenTests(TestCase):
         self.client = APIClient()
         self.org = Organization.objects.create(
             name="Org", identification_number="ORG1", web_service_url="https://x", employees_count=5,
+            product_catalog_enabled=True,
         )
         self.admin = User.objects.create_user(
             username="admin", password="p", role=User.Role.COMPANY_ADMIN, organization=self.org,
@@ -3088,6 +3103,7 @@ class PushIPAllowlistTests(TestCase):
         self.client = APIClient()
         self.org = Organization.objects.create(
             name="Org", identification_number="ORG1", web_service_url="https://x", employees_count=5,
+            product_catalog_enabled=True,
         )
         self.url = "/api/v1/catalog/products/"
 
@@ -3159,6 +3175,7 @@ class CatalogCategoryModelTests(TestCase):
         self.org = Organization.objects.create(
             name="Org A", identification_number="A1",
             web_service_url="https://a.example", employees_count=5,
+            product_catalog_enabled=True,
         )
 
     def test_category_unique_per_org(self):
@@ -3261,10 +3278,12 @@ class CategoryResolverTests(TestCase):
         self.org = Organization.objects.create(
             name="Org A", identification_number="A1",
             web_service_url="https://a.example", employees_count=5,
+            product_catalog_enabled=True,
         )
         self.org2 = Organization.objects.create(
             name="Org B", identification_number="B1",
             web_service_url="https://b.example", employees_count=5,
+            product_catalog_enabled=True,
         )
 
     def test_builds_full_chain(self):
@@ -3343,6 +3362,7 @@ class AttributeHelperTests(TestCase):
         self.org = Organization.objects.create(
             name="Org A", identification_number="A1",
             web_service_url="https://a.example", employees_count=5,
+            product_catalog_enabled=True,
         )
 
     def test_humanize_key(self):
@@ -3367,6 +3387,7 @@ class AttributeRegistrationTests(TestCase):
         self.org = Organization.objects.create(
             name="Org A", identification_number="A1",
             web_service_url="https://a.example", employees_count=5,
+            product_catalog_enabled=True,
         )
 
     def test_registers_hidden_with_inferred_type(self):
@@ -3397,6 +3418,7 @@ class CatalogIngestCategoryAttributeTests(TestCase):
         self.org = Organization.objects.create(
             name="Org A", identification_number="A1",
             web_service_url="https://a.example", employees_count=5,
+            product_catalog_enabled=True,
         )
         self.api = APIClient()
         self.url = reverse("catalog-product-ingest")
@@ -3454,6 +3476,7 @@ class ScanResponseCategoryAttributeTests(TestCase):
         self.org = Organization.objects.create(
             name="Org A", identification_number="A1",
             web_service_url="https://a.example", employees_count=5,
+            product_catalog_enabled=True,
         )
         self.user = User.objects.create_user(
             username="u1", password="pw", role=User.Role.COMPANY_USER, organization=self.org,
@@ -3508,6 +3531,7 @@ class CatalogSyncStatusTests(TestCase):
         self.org = Organization.objects.create(
             name="Org A", identification_number="A1",
             web_service_url="https://a.example", employees_count=5,
+            product_catalog_enabled=True,
         )
         self.admin = User.objects.create_user(
             username="admin_a", password="pw", role=User.Role.COMPANY_ADMIN, organization=self.org,
@@ -3567,6 +3591,7 @@ class CatalogSyncStatusTests(TestCase):
         org_b = Organization.objects.create(
             name="Org B", identification_number="B1",
             web_service_url="https://b.example", employees_count=5,
+            product_catalog_enabled=True,
         )
         CatalogIngestState.objects.create(organization=org_b, status="error", last_error="B only")
         data = self.api.get(self.url).json()
@@ -3600,6 +3625,7 @@ class CatalogProductListTests(TestCase):
         self.org = Organization.objects.create(
             name="Org A", identification_number="A1",
             web_service_url="https://a.example", employees_count=5,
+            product_catalog_enabled=True,
         )
         self.admin = User.objects.create_user(
             username="admin_a", password="pw", role=User.Role.COMPANY_ADMIN, organization=self.org,
@@ -3676,6 +3702,7 @@ class CatalogProductListTests(TestCase):
         org_b = Organization.objects.create(
             name="Org B", identification_number="B1",
             web_service_url="https://b.example", employees_count=5,
+            product_catalog_enabled=True,
         )
         Product.objects.create(organization=org_b, sku="B-1", name="Other org product")
         self.assertEqual(self.api.get(self.url).json()["count"], 0)
@@ -3686,6 +3713,7 @@ class CatalogProductListTests(TestCase):
         org_b = Organization.objects.create(
             name="Org B", identification_number="B1",
             web_service_url="https://b.example", employees_count=5,
+            product_catalog_enabled=True,
         )
         p_b = Product.objects.create(organization=org_b, sku="B-PAN", name="B pan")
         ProductBarcode.objects.create(product=p_b, barcode="4860001234567")
@@ -3700,6 +3728,7 @@ class CatalogProductListFilterTests(TestCase):
         self.org = Organization.objects.create(
             name="Org A", identification_number="A1",
             web_service_url="https://a.example", employees_count=5,
+            product_catalog_enabled=True,
         )
         self.admin = User.objects.create_user(
             username="admin_a", password="pw", role=User.Role.COMPANY_ADMIN, organization=self.org,
@@ -3741,6 +3770,7 @@ class CatalogProductListFilterTests(TestCase):
         org_b = Organization.objects.create(
             name="Org B", identification_number="B1",
             web_service_url="https://b.example", employees_count=5,
+            product_catalog_enabled=True,
         )
         b_cat = CategoryResolver(org_b).resolve([{"id": "77", "name": "B cat"}])
         self.assertEqual(self._count({"category": b_cat.id}), 0)
@@ -3800,6 +3830,7 @@ class CatalogCategoryTreeTests(TestCase):
         self.org = Organization.objects.create(
             name="Org A", identification_number="A1",
             web_service_url="https://a.example", employees_count=5,
+            product_catalog_enabled=True,
         )
         self.admin = User.objects.create_user(
             username="admin_a", password="pw", role=User.Role.COMPANY_ADMIN, organization=self.org,
@@ -3851,6 +3882,7 @@ class CatalogCategoryTreeTests(TestCase):
         org_b = Organization.objects.create(
             name="Org B", identification_number="B1",
             web_service_url="https://b.example", employees_count=5,
+            product_catalog_enabled=True,
         )
         CategoryResolver(org_b).resolve([{"id": "99", "name": "B-only"}])
         names = [r["name"] for r in self.api.get(self.url).json()]
@@ -3867,6 +3899,7 @@ class CatalogProductTypeaheadTests(TestCase):
         self.org = Organization.objects.create(
             name="Org A", identification_number="A1",
             web_service_url="https://a.example", employees_count=5,
+            product_catalog_enabled=True,
         )
         self.user = User.objects.create_user(
             username="u1", password="pw", role=User.Role.COMPANY_USER, organization=self.org,
@@ -3909,6 +3942,7 @@ class CatalogProductTypeaheadTests(TestCase):
         org_b = Organization.objects.create(
             name="Org B", identification_number="B1",
             web_service_url="https://b.example", employees_count=5,
+            product_catalog_enabled=True,
         )
         Product.objects.create(organization=org_b, sku="B-PAN", name="B pan", article="ART-7B")
         self.assertEqual(self._skus("ART-7"), ["PAN-1"])
@@ -3917,6 +3951,7 @@ class CatalogProductTypeaheadTests(TestCase):
         org_b = Organization.objects.create(
             name="Org B", identification_number="B1",
             web_service_url="https://b.example", employees_count=5,
+            product_catalog_enabled=True,
         )
         p_b = Product.objects.create(organization=org_b, sku="B-PAN", name="B pan")
         ProductBarcode.objects.create(product=p_b, barcode="4860001234567")
@@ -4494,3 +4529,87 @@ class CatalogFeatureModelTests(TestCase):
         without.refresh_from_db()
         self.assertTrue(with_products.product_catalog_enabled)
         self.assertFalse(without.product_catalog_enabled)
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
+class CatalogFeatureIngestTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.org = Organization.objects.create(
+            name="CatOrg", identification_number="CAT1",
+            web_service_url="https://x", employees_count=5,
+            product_catalog_enabled=True,
+        )
+        self.url = "/api/v1/catalog/products/"
+
+    def _push(self, products, is_full=False):
+        return self.client.post(
+            self.url, {"products": products, "is_full": is_full},
+            format="json", HTTP_X_WEBHOOK_TOKEN=self.org.webhook_token,
+        )
+
+    def _disable(self):
+        self.org.product_catalog_enabled = False
+        self.org.save(update_fields=['product_catalog_enabled'])
+
+    def _set_limit(self, n):
+        self.org.product_limit = n
+        self.org.save(update_fields=['product_limit'])
+
+    def test_ingest_403_when_disabled(self):
+        self._disable()
+        r = self._push([{"sku": "S1", "name": "X"}])
+        self.assertEqual(r.status_code, 403)
+        self.assertEqual(r.json()["code"], "CATALOG_NOT_ENABLED")
+        self.assertFalse(Product.objects.filter(organization=self.org).exists())
+
+    def test_deactivate_403_when_disabled(self):
+        Product.objects.create(organization=self.org, sku="S1", name="X")
+        self._disable()
+        r = self.client.post(
+            "/api/v1/catalog/products/deactivate/", {"skus": ["S1"]},
+            format="json", HTTP_X_WEBHOOK_TOKEN=self.org.webhook_token,
+        )
+        self.assertEqual(r.status_code, 403)
+        self.assertEqual(r.json()["code"], "CATALOG_NOT_ENABLED")
+        self.assertTrue(Product.objects.get(organization=self.org, sku="S1").is_active)
+
+    def test_over_limit_push_imports_nothing(self):
+        self._set_limit(2)
+        r = self._push([{"sku": f"S{i}", "name": "X"} for i in range(3)])
+        self.assertEqual(r.status_code, 403)
+        body = r.json()
+        self.assertEqual(body["code"], "PRODUCT_LIMIT_REACHED")
+        self.assertEqual(body["limit"], 2)
+        self.assertEqual(body["current"], 0)
+        self.assertEqual(Product.objects.filter(organization=self.org).count(), 0)
+
+    def test_within_limit_push_succeeds(self):
+        self._set_limit(3)
+        r = self._push([{"sku": f"S{i}", "name": "X"} for i in range(3)])
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(Product.objects.filter(organization=self.org).count(), 3)
+
+    def test_repush_existing_skus_not_double_counted(self):
+        self._set_limit(2)
+        self._push([{"sku": "S1", "name": "A"}, {"sku": "S2", "name": "B"}])
+        r = self._push([{"sku": "S1", "name": "A2"}, {"sku": "S2", "name": "B2"}])
+        self.assertEqual(r.status_code, 200, r.json())
+
+    def test_inactive_rows_do_not_count_toward_limit(self):
+        self._set_limit(2)
+        Product.objects.create(organization=self.org, sku="OLD", name="Old",
+                               is_active=False)
+        Product.objects.create(organization=self.org, sku="KEEP", name="Keep")
+        r = self._push([{"sku": "NEW", "name": "New"}])
+        self.assertEqual(r.status_code, 200, r.json())
+
+    def test_reactivating_push_counts_toward_limit(self):
+        self._set_limit(2)
+        Product.objects.create(organization=self.org, sku="OLD", name="Old",
+                               is_active=False)
+        Product.objects.create(organization=self.org, sku="A", name="A")
+        Product.objects.create(organization=self.org, sku="B", name="B")
+        r = self._push([{"sku": "OLD", "name": "Old again"}])
+        self.assertEqual(r.status_code, 403)
+        self.assertEqual(r.json()["code"], "PRODUCT_LIMIT_REACHED")
