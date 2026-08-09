@@ -23,6 +23,7 @@ import DailySnapshot from './DailySnapshot';
 import groupItemsBySku from './groupItemsBySku';
 import {hasProductResult, isStockBlocked, stockStatusMessageKey} from './stockStatus';
 import inheritFromGroup from './inheritFromGroup';
+import formatInsufficientStock from './insufficientStock';
 import displayCustomerName from '../../utils/orderDisplay';
 import OfflineBanner, {useOfflineStatus} from './OfflineBanner';
 import {startSyncLoop} from '../../utils/offlineOrderSync';
@@ -626,7 +627,19 @@ const UserDashboard = () => {
         }
         const result = await orderService.updateOrder(orderId, {status: 'confirmed'});
         if (!result.success) {
-            notify.error(t.orderError, result.error);
+            // The backend re-checks live 1C free stock on confirm and answers
+            // INSUFFICIENT_STOCK with one entry per short line — show which
+            // products fell short instead of the raw English detail.
+            if (result.code === 'INSUFFICIENT_STOCK') {
+                notify.error(
+                    t.insufficientStockTitle,
+                    <span style={{whiteSpace: 'pre-line'}}>
+                        {formatInsufficientStock(result.data?.items, t)}
+                    </span>,
+                );
+            } else {
+                notify.error(t.orderError, result.error);
+            }
             return;
         }
         // Reset order panel state immediately — the modal lives on the

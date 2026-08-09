@@ -63,7 +63,11 @@ export const getErrorCode = (error) => {
  *
  * Wraps any axios call and returns a consistent result shape:
  *   { success: true,  data: <response data>, status: <http status> }
- *   { success: false, error: <readable message>, code: <error code|null>, status: <http status|null> }
+ *   { success: false, error: <readable message>, code: <error code|null>, status: <http status|null>, data: <response body|undefined> }
+ *
+ * On failure `data` carries the raw DRF response body so callers can read
+ * structured error payloads (e.g. INSUFFICIENT_STOCK's `items` list) beyond
+ * the flattened `error` message.
  *
  * Usage:
  *   const result = await apiRequest(() => client.post('/users/', payload));
@@ -88,6 +92,7 @@ export const apiRequest = async (requestFn) => {
             error: extractErrorMessage(error),
             code: getErrorCode(error),
             status: error.response?.status || null,
+            data: error.response?.data,
         };
     }
 };
