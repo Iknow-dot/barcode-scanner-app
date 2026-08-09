@@ -2766,6 +2766,205 @@ class OrderStatusGuardTests(TestCase):
 
 
 @override_settings(SECURE_SSL_REDIRECT=False)
+class ConfirmStockGuardTests(TestCase):
+    """Confirming an order re-checks live 1C free stock per line (ClickUp 86ca5rubt).
+
+    The guard blocks the draft→confirmed transition when any line requests
+    more than the free stock 1C reports for its warehouse. Lines that cannot
+    be verified (no article/barcode lookup key, blank warehouse, upstream
+    outage) fail OPEN so a 1C incident never freezes the sales floor.
+    """
+
+    def setUp(self):
+        self.org = _make_organization(name='OrgS', identification_number='801')
+        self.user = User.objects.create_user(
+            username='stockguard', password='p',
+            role=User.Role.COMPANY_USER, organization=self.org,
+        )
+        self.api = APIClient()
+        self.api.force_authenticate(self.user)
+
+    def _order(self, status='draft'):
+        return PurchaseOrder.objects.create(
+            organization=self.org, created_by=self.user,
+            customer_name='Nino', status=status,
+        )
+
+    def _item(self, order, *, sku='S1', article='A1', warehouse='W1', qty=1, **extra):
+        return PurchaseOrderItem.objects.create(
+            order=order, sku=sku, sku_name=f'Name {sku}', article=article,
+            price='10.00', quantity=qty,
+            warehouse_code=warehouse, warehouse_name=f'WH {warehouse}',
+            **extra,
+        )
+
+    def _confirm(self, order):
+        return self.api.patch(
+            f'/api/v1/orders/{order.id}/', {'status': 'confirmed'}, format='json',
+        )
+
+    @staticmethod
+    def _stock(*rows):
+        return {'stock': [
+            {'warehouse': code, 'warehouse_name': f'WH {code}', 'quantity': qty, 'price': '10.00'}
+            for code, qty in rows
+        ]}
+
+    @mock.patch('core.views.ConsultWebExchangeClient.get_stock_and_prices')
+    def test_confirm_blocked_when_free_stock_insufficient(self, mstock):
+        mstock.return_value = self._stock(('W1', 3))
+        order = self._order()
+        self._item(order, qty=5)
+
+        r = self._confirm(order)
+
+        self.assertEqual(r.status_code, 400)
+        body = r.json()
+        self.assertEqual(body['code'], 'INSUFFICIENT_STOCK')
+        self.assertEqual(len(body['items']), 1)
+        short = body['items'][0]
+        self.assertEqual(short['sku'], 'S1')
+        self.assertEqual(short['warehouse_code'], 'W1')
+        self.assertEqual(Decimal(short['requested']), Decimal(5))
+        self.assertEqual(Decimal(short['available']), Decimal(3))
+        order.refresh_from_db()
+        self.assertEqual(order.status, 'draft')
+
+    @mock.patch('core.views.ConsultWebExchangeClient.get_stock_and_prices')
+    def test_confirm_allowed_when_stock_sufficient(self, mstock):
+        mstock.return_value = self._stock(('W1', 5))
+        order = self._order()
+        self._item(order, qty=3)
+
+        r = self._confirm(order)
+
+        self.assertEqual(r.status_code, 200)
+        order.refresh_from_db()
+        self.assertEqual(order.status, 'confirmed')
+        mstock.assert_called_once_with('A1', is_barcode=False, warehouses='W1')
+
+    @mock.patch('core.views.ConsultWebExchangeClient.get_stock_and_prices')
+    def test_lines_of_same_sku_and_warehouse_are_summed(self, mstock):
+        mstock.return_value = self._stock(('W1', 3))
+        order = self._order()
+        self._item(order, qty=2)
+        self._item(order, qty=2)
+
+        r = self._confirm(order)
+
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.json()['code'], 'INSUFFICIENT_STOCK')
+        self.assertEqual(Decimal(r.json()['items'][0]['requested']), Decimal(4))
+
+    @mock.patch('core.views.ConsultWebExchangeClient.get_stock_and_prices')
+    def test_gift_lines_consume_stock_too(self, mstock):
+        mstock.return_value = self._stock(('W1', 3))
+        order = self._order()
+        self._item(order, qty=2)
+        self._item(order, qty=2, is_gift=True)
+
+        r = self._confirm(order)
+
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.json()['code'], 'INSUFFICIENT_STOCK')
+
+    @mock.patch('core.views.ConsultWebExchangeClient.get_stock_and_prices')
+    def test_missing_warehouse_row_counts_as_zero(self, mstock):
+        # 1C answered, but reported no row for the line's warehouse — that IS
+        # the answer "0 free there", not an unverifiable line.
+        mstock.return_value = self._stock(('W2', 10))
+        order = self._order()
+        self._item(order, qty=1, warehouse='W1')
+
+        r = self._confirm(order)
+
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(Decimal(r.json()['items'][0]['available']), Decimal(0))
+
+    @mock.patch('core.views.ConsultWebExchangeClient.get_stock_and_prices')
+    def test_fractional_free_stock_is_compared_exactly(self, mstock):
+        mstock.return_value = self._stock(('W1', '2.5'))
+        order = self._order()
+        self._item(order, qty=3)
+
+        r = self._confirm(order)
+
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(Decimal(r.json()['items'][0]['available']), Decimal('2.5'))
+
+    @mock.patch('core.views.ConsultWebExchangeClient.get_stock_and_prices')
+    def test_confirm_fails_open_when_service_unreachable(self, mstock):
+        mstock.side_effect = ConsultWebExchangeError(
+            code='EXTERNAL_SERVICE_TIMEOUT', detail='t', http_status=504,
+        )
+        order = self._order()
+        self._item(order, qty=999)
+
+        r = self._confirm(order)
+
+        self.assertEqual(r.status_code, 200)
+        order.refresh_from_db()
+        self.assertEqual(order.status, 'confirmed')
+
+    @mock.patch('core.views.ConsultWebExchangeClient.get_stock_and_prices')
+    def test_confirm_fails_open_when_no_lookup_key(self, mstock):
+        # No article on the line and no replica product/barcode to fall back
+        # to — the line is unverifiable, so it must not block the confirm.
+        order = self._order()
+        self._item(order, article='', qty=999)
+
+        r = self._confirm(order)
+
+        self.assertEqual(r.status_code, 200)
+        mstock.assert_not_called()
+
+    @mock.patch('core.views.ConsultWebExchangeClient.get_stock_and_prices')
+    def test_confirm_fails_open_when_no_warehouse_on_line(self, mstock):
+        order = self._order()
+        self._item(order, warehouse='', qty=999)
+
+        r = self._confirm(order)
+
+        self.assertEqual(r.status_code, 200)
+        mstock.assert_not_called()
+
+    @mock.patch('core.views.ConsultWebExchangeClient.get_stock_and_prices')
+    def test_replica_barcode_is_lookup_fallback_when_no_article(self, mstock):
+        p = Product.objects.create(organization=self.org, sku='S1', name='Candle', price='10.00')
+        ProductBarcode.objects.create(product=p, barcode='4870001')
+        mstock.return_value = self._stock(('W1', 10))
+        order = self._order()
+        self._item(order, article='', qty=1)
+
+        r = self._confirm(order)
+
+        self.assertEqual(r.status_code, 200)
+        mstock.assert_called_once_with('4870001', is_barcode=True, warehouses='W1')
+
+    @mock.patch('core.views.ConsultWebExchangeClient.get_stock_and_prices')
+    def test_non_status_patch_does_not_call_service(self, mstock):
+        order = self._order()
+        self._item(order, qty=999)
+
+        r = self.api.patch(
+            f'/api/v1/orders/{order.id}/', {'notes': 'call before delivery'}, format='json',
+        )
+
+        self.assertEqual(r.status_code, 200)
+        mstock.assert_not_called()
+
+    @mock.patch('core.views.ConsultWebExchangeClient.get_stock_and_prices')
+    def test_patch_to_same_confirmed_status_does_not_call_service(self, mstock):
+        order = self._order(status='confirmed')
+        self._item(order, qty=999)
+
+        r = self._confirm(order)
+
+        self.assertEqual(r.status_code, 200)
+        mstock.assert_not_called()
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
 class ImageProxyTests(TestCase):
     def setUp(self):
         self.client = APIClient()

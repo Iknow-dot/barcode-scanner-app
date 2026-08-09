@@ -1054,7 +1054,108 @@ class PurchaseOrderViewSet(ModelViewSet):
                     },
                     status=http_status.HTTP_400_BAD_REQUEST,
                 )
+            if requested_status == PurchaseOrder.Status.CONFIRMED:
+                shortages = self._insufficient_stock_lines(order)
+                if shortages:
+                    return Response(
+                        {
+                            "code": "INSUFFICIENT_STOCK",
+                            "detail": "Requested quantity exceeds free stock for one or more items.",
+                            "items": shortages,
+                        },
+                        status=http_status.HTTP_400_BAD_REQUEST,
+                    )
         return super().update(request, *args, **kwargs)
+
+    @staticmethod
+    def _insufficient_stock_lines(order):
+        """Live-check 1C free stock for every line before a confirm.
+
+        Returns one shortage dict per (product, warehouse) whose summed
+        requested quantity exceeds the free stock 1C reports. Unverifiable
+        lines — no article/barcode lookup key, blank warehouse, upstream
+        failure — fail OPEN (skipped with a log entry) so a 1C outage or a
+        thin catalog row never freezes the sales floor; 1C itself remains
+        the final authority when the order is posted there.
+        """
+        items = list(order.items.all())
+        if not items:
+            return []
+
+        # A line's 1C lookup key is its article, else a replica barcode for
+        # its sku — 1C resolves only those two (the nomenclature code is 421).
+        barcode_by_sku = {}
+        skus_needing_barcode = {i.sku for i in items if not i.article and i.sku}
+        if skus_needing_barcode:
+            rows = ProductBarcode.objects.filter(
+                product__organization=order.organization,
+                product__sku__in=skus_needing_barcode,
+            ).values_list('product__sku', 'barcode')
+            for sku, barcode in rows:
+                barcode_by_sku.setdefault(sku, barcode)
+
+        # (lookup key, is_barcode) -> warehouse_code -> [requested, sample item]
+        grouped = {}
+        for item in items:
+            if item.article:
+                lookup = (item.article, False)
+            elif barcode_by_sku.get(item.sku):
+                lookup = (barcode_by_sku[item.sku], True)
+            else:
+                logging.warning(
+                    "Confirm stock check: no 1C lookup key for order=%s sku=%r — line skipped",
+                    order.id, item.sku,
+                )
+                continue
+            if not item.warehouse_code:
+                logging.warning(
+                    "Confirm stock check: no warehouse on order=%s sku=%r — line skipped",
+                    order.id, item.sku,
+                )
+                continue
+            per_warehouse = grouped.setdefault(lookup, {})
+            entry = per_warehouse.setdefault(item.warehouse_code, [Decimal(0), item])
+            entry[0] += item.quantity
+
+        if not grouped:
+            return []
+
+        client = ConsultWebExchangeClient(order.organization)
+        shortages = []
+        for (key, is_barcode), per_warehouse in grouped.items():
+            try:
+                live = client.get_stock_and_prices(
+                    key, is_barcode=is_barcode,
+                    warehouses=','.join(sorted(per_warehouse)),
+                )
+            except ConsultWebExchangeError as exc:
+                logging.warning(
+                    "Confirm stock check unavailable for order=%s key=%r (%s) — lines skipped",
+                    order.id, key, exc.code,
+                )
+                continue
+            available = {}
+            for row in live.get('stock') or []:
+                if not isinstance(row, dict) or not row.get('warehouse'):
+                    continue
+                try:
+                    available[row['warehouse']] = Decimal(str(row.get('quantity', 0)))
+                except InvalidOperation:
+                    continue
+            # A warehouse 1C did not echo back has zero free stock there —
+            # the call itself succeeded, so this is an answer, not an outage.
+            for warehouse_code, (requested, item) in per_warehouse.items():
+                free = available.get(warehouse_code, Decimal(0))
+                if requested > free:
+                    shortages.append({
+                        'sku': item.sku,
+                        'sku_name': item.sku_name,
+                        'warehouse_code': warehouse_code,
+                        'warehouse_name': item.warehouse_name,
+                        'requested': str(requested),
+                        'available': str(free),
+                    })
+        return shortages
 
     def destroy(self, request, *args, **kwargs):
         order = self.get_object()
