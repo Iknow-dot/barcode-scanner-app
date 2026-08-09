@@ -9,7 +9,9 @@ import ExternalServiceSettings from '../Organization/ExternalServiceSettings';
 import InvoiceTemplateSettings from '../Organization/InvoiceTemplateSettings';
 import AnalyticsTab from './AnalyticsTab';
 import CatalogTab from './CatalogTab';
-import {AppstoreOutlined, BarChartOutlined, BankOutlined, DatabaseOutlined, FileImageOutlined, GlobalOutlined, ShoppingOutlined, TeamOutlined, UserOutlined} from "@ant-design/icons";
+import CatalogDemo from './CatalogDemo';
+import LockedFeature from '../Common/LockedFeature';
+import {AppstoreOutlined, BarChartOutlined, BankOutlined, DatabaseOutlined, FileImageOutlined, GlobalOutlined, LockOutlined, ShoppingOutlined, TeamOutlined, UserOutlined} from "@ant-design/icons";
 import SubNavContext from "../../contexts/SubNavContext";
 import {useLanguage} from '../../i18n/LanguageContext';
 import {catalogFeatureEnabled} from '../../utils/features';
@@ -40,8 +42,10 @@ const SystemAdminDashboard = () => {
     const [users, setUsers] = useState([]);
     const [usersLoading, setUsersLoading] = useState(true);
     const userRole = authData?.role;
-    // Catalog is an org-level feature: when it's off, company admins lose the
-    // menu entry and the tab pane just like consultants lose the search.
+    // Catalog is an org-level feature. Consultants lose the search entirely
+    // when it's off; company admins instead see the menu entry with a lock
+    // and a blurred demo page with an unlock prompt (the backend endpoints
+    // stay gated regardless).
     const catalogOn = catalogFeatureEnabled(authData);
     const [activeTab, setActiveTab] = useState(userRole === userRoles.internal_admin ? 1 : 2);
     const {t} = useLanguage();
@@ -67,9 +71,9 @@ const SystemAdminDashboard = () => {
                 label: userRole === userRoles.company_admin ? t.employees : t.users,
                 onClick: () => setActiveTab(3)
             },
-            userRole === userRoles.company_admin && catalogOn && ({
+            userRole === userRoles.company_admin && ({
                 key: '8',
-                icon: <DatabaseOutlined/>,
+                icon: catalogOn ? <DatabaseOutlined/> : <LockOutlined/>,
                 label: t.catalog,
                 onClick: () => setActiveTab(8)
             }),
@@ -146,7 +150,16 @@ const SystemAdminDashboard = () => {
             ActiveTabPane = <AnalyticsTab/>;
             break;
         case 8:
-            ActiveTabPane = catalogOn ? <CatalogTab/> : null;
+            ActiveTabPane = catalogOn ? <CatalogTab/> : (
+                <LockedFeature
+                    title={t.catalogLockedTitle}
+                    description={t.catalogLockedDesc}
+                    unlockLabel={t.unlockFeature}
+                    unlockHint={t.unlockContactHint}
+                >
+                    <CatalogDemo/>
+                </LockedFeature>
+            );
             break;
         default:
             ActiveTabPane = null;
