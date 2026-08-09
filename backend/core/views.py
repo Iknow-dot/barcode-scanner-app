@@ -1438,6 +1438,22 @@ _PUSH_TOKEN_PARAM = OpenApiParameter(
 )
 
 
+def _catalog_disabled_response(org):
+    """Gate every catalog surface behind Organization.product_catalog_enabled.
+
+    Returns the ``CATALOG_NOT_ENABLED`` 403 Response when the feature is off
+    for *org* (or there is no org), otherwise ``None`` — same contract as
+    ``_enforce_gift_permission``.
+    """
+    if org is None or not org.product_catalog_enabled:
+        return Response(
+            {"code": "CATALOG_NOT_ENABLED",
+             "detail": "The product catalog is not enabled for this organization."},
+            status=http_status.HTTP_403_FORBIDDEN,
+        )
+    return None
+
+
 @extend_schema(
     tags=["Catalog Ingest"],
     summary="Push catalog products (bulk on onboarding, deltas thereafter) · პროდუქტების ატვირთვა",
@@ -1562,8 +1578,32 @@ class CatalogProductIngestAPIView(APIView):
 
     def post(self, request: Request) -> Response:
         org = organization_from_push(request)  # raises AuthenticationFailed on bad/missing token
+        denied = _catalog_disabled_response(org)
+        if denied is not None:
+            return denied
         products = request.data.get("products") or []
         is_full = bool(request.data.get("is_full"))
+
+        if org.product_limit is not None:
+            pushed_skus = {item.get("sku") for item in products if item.get("sku")}
+            # A pushed SKU counts once whether it's new, an update of an active
+            # row, or a reactivation; active rows NOT in the push keep counting.
+            active_others = (
+                Product.objects.filter(organization=org, is_active=True)
+                .exclude(sku__in=pushed_skus).count()
+            )
+            if active_others + len(pushed_skus) > org.product_limit:
+                current = Product.objects.filter(
+                    organization=org, is_active=True,
+                ).count()
+                return Response(
+                    {"code": "PRODUCT_LIMIT_REACHED",
+                     "detail": "This push would exceed the organization's product limit; nothing was imported.",
+                     "limit": org.product_limit, "current": current,
+                     "received": len(pushed_skus)},
+                    status=http_status.HTTP_403_FORBIDDEN,
+                )
+
         upserted = skipped = 0
         resolver = CategoryResolver(org)
         seen_attr_keys = {}  # key -> a sample value, for type inference
@@ -1642,6 +1682,9 @@ class CatalogProductDeactivateAPIView(APIView):
 
     def post(self, request: Request) -> Response:
         org = organization_from_push(request)
+        denied = _catalog_disabled_response(org)
+        if denied is not None:
+            return denied
         skus = request.data.get("skus") or []
         now = timezone.now()
         count = Product.objects.filter(organization=org, sku__in=skus, is_active=True).update(
@@ -1716,6 +1759,9 @@ class CatalogProductSearchAPIView(APIView):
     http_method_names = ["get"]
 
     def get(self, request: Request) -> Response:
+        denied = _catalog_disabled_response(request.user.organization)
+        if denied is not None:
+            return denied
         q = (request.query_params.get("q") or "").strip()
         if not q:
             return Response([])
@@ -1820,6 +1866,9 @@ class CatalogSyncStatusAPIView(APIView):
 
     def get(self, request: Request) -> Response:
         org = request.user.organization
+        denied = _catalog_disabled_response(org)
+        if denied is not None:
+            return denied
         state = CatalogIngestState.objects.filter(organization=org).first()
         active = Product.objects.filter(organization=org, is_active=True).count()
         total = Product.objects.filter(organization=org).count()
@@ -1945,6 +1994,9 @@ class CatalogProductListAPIView(ListAPIView):
         return qs
 
     def list(self, request, *args, **kwargs):
+        denied = _catalog_disabled_response(request.user.organization)
+        if denied is not None:
+            return denied
         queryset = self.filter_queryset(self.get_queryset())
         page = self.paginate_queryset(queryset)
         org = request.user.organization
@@ -1975,6 +2027,9 @@ class CatalogCategoryTreeAPIView(APIView):
 
     def get(self, request: Request) -> Response:
         org = request.user.organization
+        denied = _catalog_disabled_response(org)
+        if denied is not None:
+            return denied
         cats = list(ProductCategory.objects.filter(organization=org).order_by("name", "id"))
         counts = dict(
             Product.objects.filter(organization=org, is_active=True, category__isnull=False)

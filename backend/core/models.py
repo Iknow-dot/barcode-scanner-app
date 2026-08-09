@@ -47,6 +47,11 @@ class Organization(models.Model):
     # Off by default — most organizations don't use gift marking.
     gift_marking_enabled = models.BooleanField(default=False)
 
+    # Local product catalog (pushed from 1C, browsed by consultants) is a
+    # per-org feature. product_limit caps ACTIVE products; NULL = unlimited.
+    product_catalog_enabled = models.BooleanField(default=False)
+    product_limit = models.PositiveIntegerField(null=True, blank=True)
+
     @property
     def non_admin_user_count(self) -> int:
         """Return the number of non-admin (company_user) users in this organization."""

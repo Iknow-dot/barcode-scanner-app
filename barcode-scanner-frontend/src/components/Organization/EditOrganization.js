@@ -15,6 +15,8 @@ import {useLanguage} from '../../i18n/LanguageContext';
 const EditOrganizationForm = ({hasPassword}) => {
     const {t} = useLanguage();
     const {loading} = useModalFormLoading();
+    const form = Form.useFormInstance();
+    const catalogEnabled = Form.useWatch('product_catalog_enabled', form);
 
     return (
         <>
@@ -114,6 +116,28 @@ const EditOrganizationForm = ({hasPassword}) => {
             >
                 <Switch/>
             </Form.Item>
+
+            <Flex gap={16} align="flex-start">
+                <Form.Item
+                    label={t.productCatalogEnabled}
+                    name="product_catalog_enabled"
+                    valuePropName="checked"
+                    style={{flex: 1}}
+                    extra={<span style={{fontSize: 12, opacity: 0.5}}>{t.productCatalogHint}</span>}
+                >
+                    <Switch/>
+                </Form.Item>
+                <Form.Item
+                    label={t.productLimit}
+                    name="product_limit"
+                    style={{flex: 1}}
+                    extra={<span style={{fontSize: 12, opacity: 0.5}}>{t.productLimitHint}</span>}
+                >
+                    <InputNumber style={{width: '100%'}} min={1}
+                                 disabled={!catalogEnabled}
+                                 placeholder={t.productLimitUnlimited}/>
+                </Form.Item>
+            </Flex>
 
             <Form.Item label={null} style={{marginTop: 8, marginBottom: 0}}>
                 <Button block type="primary" htmlType="submit" loading={loading}

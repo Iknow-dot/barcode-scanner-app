@@ -50,12 +50,12 @@ const Login = () => {
             return;
         }
 
-        const {access_token, refresh_token, role, organization_id, organization_name, warehouses, user, gift_marking_enabled} = result.data;
+        const {access_token, refresh_token, role, organization_id, organization_name, warehouses, user, gift_marking_enabled, product_catalog_enabled} = result.data;
 
         // Set the token for subsequent requests
         authService.setAuthToken(access_token);
 
-        login(access_token, refresh_token, role, organization_id, organization_name, warehouses, user, gift_marking_enabled);
+        login(access_token, refresh_token, role, organization_id, organization_name, warehouses, user, gift_marking_enabled, product_catalog_enabled);
         navigate(role === 'internal_admin' || role === 'company_admin' ? '/system-admin-dashboard' : '/dashboard');
 
         setLoading(false);
