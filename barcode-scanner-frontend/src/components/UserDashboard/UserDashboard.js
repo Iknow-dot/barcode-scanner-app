@@ -91,6 +91,9 @@ const UserDashboard = () => {
     const [allWarehouses, setAllWarehouses] = useState(false);
     const {setSubNav} = useContext(subNavContext);
     const {authData} = useContext(AuthContext);
+    // Catalog browse/search is an org-level feature; when it's off, the
+    // search entry point and the find-product drawer are hidden entirely.
+    const catalogEnabled = !!authData?.product_catalog_enabled;
     const [scannerOpen, setScannerOpen] = useState(false);
     const [balances, setBalances] = useState([]);
     const [userWarehouses, setUserWarehouses] = useState([]);
@@ -1133,16 +1136,19 @@ const UserDashboard = () => {
                 onClose={() => setScannerOpen(false)}
             />
 
-            {/* Unified Find-product drawer: smart search + category browse */}
-            <FindProductDrawer
-                open={drawerVisible}
-                onClose={() => setDrawerVisible(false)}
-                onSelectProduct={handleSelectFromCatalog}
-                onScan={handleOpenScanner}
-                allWarehouses={allWarehouses}
-                onAllWarehousesChange={setAllWarehouses}
-                orderMode={!!showOrderPanel}
-            />
+            {/* Unified Find-product drawer: smart search + category browse.
+                Only mounted when the org has the catalog feature enabled. */}
+            {catalogEnabled && (
+                <FindProductDrawer
+                    open={drawerVisible}
+                    onClose={() => setDrawerVisible(false)}
+                    onSelectProduct={handleSelectFromCatalog}
+                    onScan={handleOpenScanner}
+                    allWarehouses={allWarehouses}
+                    onAllWarehousesChange={setAllWarehouses}
+                    orderMode={!!showOrderPanel}
+                />
+            )}
 
             {/* Order Drawer (mobile - shows active order details) */}
             <Drawer
@@ -1254,14 +1260,16 @@ const UserDashboard = () => {
                             >
                                 {hasResults ? (t.scanAgain || t.scan) : t.scan}
                             </Button>
-                            <Button
-                                size="large"
-                                icon={<SearchOutlined style={{fontSize: 18}}/>}
-                                onClick={handleOpenSearch}
-                                className="m-fab-search"
-                            >
-                                {t.search}
-                            </Button>
+                            {catalogEnabled && (
+                                <Button
+                                    size="large"
+                                    icon={<SearchOutlined style={{fontSize: 18}}/>}
+                                    onClick={handleOpenSearch}
+                                    className="m-fab-search"
+                                >
+                                    {t.search}
+                                </Button>
+                            )}
                         </div>
 
                         {/* Tab navigation row */}
