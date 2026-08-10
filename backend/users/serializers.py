@@ -232,6 +232,20 @@ class _BaseUserSerializer(serializers.ModelSerializer):
         source='warehouses',
     )
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Non-internal-admin requesters may only attach warehouses from
+        # their own organization; the M2M set bypasses model validation.
+        request = self.context.get('request')
+        if (
+            request is not None
+            and request.user.is_authenticated
+            and request.user.role != User.Role.INTERNAL_ADMIN
+        ):
+            self.fields['warehouse_ids'].child_relation.queryset = (
+                Warehouse.objects.filter(organization=request.user.organization)
+            )
+
     class Meta:
         model = User
         fields = [
