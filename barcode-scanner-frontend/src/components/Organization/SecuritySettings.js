@@ -43,7 +43,7 @@ const SecuritySettings = () => {
                     session_timeout_minutes: result.data.session_timeout_minutes,
                 });
             } else {
-                notify.error(t.error, result.error || t.error);
+                notify.error(t.error, result.error);
             }
         } finally {
             setSaving(false);
