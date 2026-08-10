@@ -1,9 +1,12 @@
 import ipaddress
 import logging
+from datetime import timedelta
 
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+from rest_framework_simplejwt.token_blacklist.models import OutstandingToken
+from rest_framework_simplejwt.utils import datetime_from_epoch
 from users.models import AllowedIP
 from core.models import Warehouse
 
@@ -11,6 +14,23 @@ logger = logging.getLogger(__name__)
 
 
 User = get_user_model()
+
+
+def org_refresh_lifetime(user):
+    """Per-org idle session timeout as a timedelta, or None → global default."""
+    org = getattr(user, 'organization', None)
+    if org is not None and org.session_timeout_minutes:
+        return timedelta(minutes=org.session_timeout_minutes)
+    return None
+
+
+def _sync_outstanding_expiry(token):
+    # OutstandingToken rows are written before exp is re-stamped; keep the
+    # blacklist bookkeeping (and flushexpiredtokens) truthful.
+    OutstandingToken.objects.filter(jti=token['jti']).update(
+        expires_at=datetime_from_epoch(token['exp']),
+        token=str(token),
+    )
 
 
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
@@ -42,6 +62,10 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         token['role'] = user.role
         if user.organization_id:
             token['organization_id'] = user.organization_id
+        lifetime = org_refresh_lifetime(user)
+        if lifetime is not None:
+            token.set_exp(lifetime=lifetime)
+            _sync_outstanding_expiry(token)
         return token
 
     def _get_client_ip(self):

@@ -1,5 +1,7 @@
 from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
+from rest_framework_simplejwt.token_blacklist.models import OutstandingToken
+from rest_framework_simplejwt.tokens import RefreshToken
 
 from core.models import Organization
 from users.models import User
@@ -97,3 +99,55 @@ class LoginCatalogFlagTests(TestCase):
         response = self._login('cat-root', 'pw12345')
         self.assertEqual(response.status_code, 200, response.data)
         self.assertIs(response.data['product_catalog_enabled'], False)
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
+class LoginSessionTimeoutTests(TestCase):
+    def _make_org(self, **overrides):
+        defaults = dict(
+            name='TimeoutOrg', identification_number='555666777',
+            web_service_url='http://example.com/db', employees_count=5,
+        )
+        defaults.update(overrides)
+        return Organization.objects.create(**defaults)
+
+    def _login(self, username, password):
+        return APIClient().post(
+            '/api/v1/users/auth/login/',
+            {'username': username, 'password': password},
+            format='json',
+        )
+
+    def _refresh_token_from_login(self, org):
+        User.objects.create_user(
+            username='timeout-user', password='pw12345',
+            role=User.Role.COMPANY_USER, organization=org,
+        )
+        response = self._login('timeout-user', 'pw12345')
+        self.assertEqual(response.status_code, 200, response.data)
+        return RefreshToken(response.data['refresh_token'])
+
+    def test_org_timeout_sets_refresh_lifetime(self):
+        token = self._refresh_token_from_login(
+            self._make_org(session_timeout_minutes=30))
+        self.assertAlmostEqual(token['exp'] - token['iat'], 30 * 60, delta=10)
+
+    def test_null_timeout_keeps_default_lifetime(self):
+        token = self._refresh_token_from_login(self._make_org())
+        self.assertAlmostEqual(token['exp'] - token['iat'], 24 * 60 * 60, delta=10)
+
+    def test_internal_admin_gets_default_lifetime(self):
+        User.objects.create_user(
+            username='root-admin', password='pw12345',
+            role=User.Role.INTERNAL_ADMIN, is_staff=True, is_superuser=True,
+        )
+        response = self._login('root-admin', 'pw12345')
+        self.assertEqual(response.status_code, 200, response.data)
+        token = RefreshToken(response.data['refresh_token'])
+        self.assertAlmostEqual(token['exp'] - token['iat'], 24 * 60 * 60, delta=10)
+
+    def test_outstanding_token_expiry_stays_truthful(self):
+        token = self._refresh_token_from_login(
+            self._make_org(session_timeout_minutes=30))
+        row = OutstandingToken.objects.get(jti=token['jti'])
+        self.assertAlmostEqual(row.expires_at.timestamp(), token['exp'], delta=10)
