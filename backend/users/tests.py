@@ -5,7 +5,7 @@ from rest_framework.test import APIClient
 from rest_framework_simplejwt.token_blacklist.models import OutstandingToken
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from core.models import Organization
+from core.models import Organization, Warehouse
 from users.models import User
 
 
@@ -390,12 +390,6 @@ class UsersEndpointPermissionTests(TestCase):
         self.peer.refresh_from_db()
         self.assertEqual(self.peer.organization, self.org)
 
-    # -- unauthenticated --
-
-    def test_unauthenticated_request_is_rejected(self):
-        response = APIClient().get('/api/v1/users/')
-        self.assertEqual(response.status_code, 401)
-
     # -- internal_admin: unrestricted --
 
     def test_internal_admin_can_list_all_users(self):
@@ -412,3 +406,182 @@ class UsersEndpointPermissionTests(TestCase):
         self.assertEqual(response.status_code, 200, response.data)
         self.other_org_user.refresh_from_db()
         self.assertEqual(self.other_org_user.first_name, 'ByAdmin')
+
+    # -- unauthenticated --
+
+    def test_unauthenticated_request_is_rejected(self):
+        response = APIClient().get('/api/v1/users/')
+        self.assertEqual(response.status_code, 401)
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
+class UserWarehouseAssignmentTests(TestCase):
+    """
+    warehouse_ids on the user serializers must be scoped to the requesting
+    company admin's organization — otherwise a company admin can attach
+    another organization's warehouse to their users (the M2M set bypasses
+    model validation). Internal admins stay unrestricted.
+    """
+
+    def setUp(self):
+        self.org = Organization.objects.create(
+            name='WhOrg', identification_number='777888999',
+            web_service_url='http://example.com/db', employees_count=5,
+        )
+        self.other_org = Organization.objects.create(
+            name='WhOtherOrg', identification_number='222333444',
+            web_service_url='http://example.com/db2', employees_count=5,
+        )
+        self.own_warehouse = Warehouse.objects.create(
+            organization=self.org, code='WH-OWN', name='Own Warehouse',
+        )
+        self.other_warehouse = Warehouse.objects.create(
+            organization=self.other_org, code='WH-OTHER', name='Other Warehouse',
+        )
+        self.company_admin = User.objects.create_user(
+            username='wh-admin', password='pw12345',
+            role=User.Role.COMPANY_ADMIN, organization=self.org,
+        )
+        self.internal_admin = User.objects.create_user(
+            username='wh-internal', password='pw12345',
+            role=User.Role.INTERNAL_ADMIN,
+            is_staff=True, is_superuser=True,
+        )
+        self.target = User.objects.create_user(
+            username='wh-target', password='pw12345',
+            role=User.Role.COMPANY_USER, organization=self.org,
+        )
+
+    def _client(self, user):
+        client = APIClient()
+        client.force_authenticate(user)
+        return client
+
+    def test_company_admin_cannot_attach_other_org_warehouse_on_create(self):
+        response = self._client(self.company_admin).post(
+            '/api/v1/users/',
+            {'username': 'wh-new', 'password': 'pw123456',
+             'role': User.Role.COMPANY_USER,
+             'warehouse_ids': [self.other_warehouse.pk]},
+            format='json',
+        )
+        self.assertEqual(response.status_code, 400, response.data)
+        self.assertFalse(User.objects.filter(username='wh-new').exists())
+
+    def test_company_admin_cannot_attach_other_org_warehouse_on_patch(self):
+        response = self._client(self.company_admin).patch(
+            f'/api/v1/users/{self.target.pk}/',
+            {'warehouse_ids': [self.other_warehouse.pk]}, format='json',
+        )
+        self.assertEqual(response.status_code, 400, response.data)
+        self.assertEqual(self.target.warehouses.count(), 0)
+
+    def test_company_admin_can_attach_own_org_warehouse(self):
+        response = self._client(self.company_admin).patch(
+            f'/api/v1/users/{self.target.pk}/',
+            {'warehouse_ids': [self.own_warehouse.pk]}, format='json',
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(
+            list(self.target.warehouses.all()), [self.own_warehouse])
+
+    def test_internal_admin_can_attach_any_warehouse(self):
+        response = self._client(self.internal_admin).patch(
+            f'/api/v1/users/{self.target.pk}/',
+            {'warehouse_ids': [self.other_warehouse.pk]}, format='json',
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(
+            list(self.target.warehouses.all()), [self.other_warehouse])
+
+    def test_mixed_warehouse_list_rejected_and_attaches_nothing(self):
+        response = self._client(self.company_admin).patch(
+            f'/api/v1/users/{self.target.pk}/',
+            {'warehouse_ids': [self.own_warehouse.pk, self.other_warehouse.pk]},
+            format='json',
+        )
+        self.assertEqual(response.status_code, 400, response.data)
+        self.assertEqual(self.target.warehouses.count(), 0)
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
+class LoginDeviceLockTests(TestCase):
+    def setUp(self):
+        self.org = Organization.objects.create(
+            name='DeviceOrg', identification_number='111222333',
+            web_service_url='http://example.com/db', employees_count=5,
+        )
+        self.user = User.objects.create_user(
+            username='device-user', password='pw12345',
+            role=User.Role.COMPANY_USER, organization=self.org,
+            device_lock_enabled=True,
+        )
+
+    def _login(self, username='device-user', password='pw12345',
+               device_id=None, user_agent='TestBrowser/1.0'):
+        payload = {'username': username, 'password': password}
+        if device_id is not None:
+            payload['device_id'] = device_id
+        return APIClient().post(
+            '/api/v1/users/auth/login/', payload, format='json',
+            HTTP_USER_AGENT=user_agent,
+        )
+
+    def test_first_login_binds_and_returns_generated_device_id(self):
+        response = self._login()
+        self.assertEqual(response.status_code, 200, response.data)
+        issued = response.data.get('device_id')
+        self.assertTrue(issued)
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.bound_device_id, issued)
+        self.assertIsNotNone(self.user.device_bound_at)
+        self.assertEqual(self.user.device_label, 'TestBrowser/1.0')
+
+    def test_first_login_binds_presented_device_id(self):
+        response = self._login(device_id='shared-phone-1')
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data['device_id'], 'shared-phone-1')
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.bound_device_id, 'shared-phone-1')
+
+    def test_second_login_with_matching_device_succeeds(self):
+        issued = self._login().data['device_id']
+        response = self._login(device_id=issued)
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data['device_id'], issued)
+
+    def test_login_with_wrong_device_rejected(self):
+        self._login(device_id='phone-A')
+        response = self._login(device_id='phone-B')
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.data['code'], 'DEVICE_NOT_ALLOWED')
+
+    def test_login_without_device_rejected_when_bound(self):
+        self._login(device_id='phone-A')
+        response = self._login()
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.data['code'], 'DEVICE_NOT_ALLOWED')
+
+    def test_lock_disabled_skips_binding(self):
+        user = User.objects.create_user(
+            username='free-user', password='pw12345',
+            role=User.Role.COMPANY_USER, organization=self.org,
+            device_lock_enabled=False,
+        )
+        response = self._login(username='free-user')
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertNotIn('device_id', response.data)
+        user.refresh_from_db()
+        self.assertEqual(user.bound_device_id, '')
+
+    def test_two_users_can_share_one_device(self):
+        User.objects.create_user(
+            username='device-user-2', password='pw12345',
+            role=User.Role.COMPANY_USER, organization=self.org,
+            device_lock_enabled=True,
+        )
+        self.assertEqual(
+            self._login(device_id='shared-phone-1').status_code, 200)
+        self.assertEqual(
+            self._login(username='device-user-2',
+                        device_id='shared-phone-1').status_code, 200)
