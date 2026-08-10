@@ -52,6 +52,13 @@ client.interceptors.response.use(
 
                 // Store the new token and retry the request with updated token
                 localStorage.setItem('token', newAccessToken);
+
+                // Rotation is on server-side: each refresh returns a NEW
+                // refresh token and blacklists the old one — persist it or
+                // the next silent refresh 401s and force-logs the user out.
+                if (refreshResponse.data.refresh) {
+                    localStorage.setItem('refresh_token', refreshResponse.data.refresh);
+                }
                 originalRequest.headers['Authorization'] = `Bearer ${newAccessToken}`;
                 return client(originalRequest);
             } catch (refreshError) {

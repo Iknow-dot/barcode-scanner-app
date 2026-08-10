@@ -9,6 +9,7 @@ import {
     CheckCircleOutlined,
     CloseCircleOutlined,
     AppstoreOutlined,
+    SafetyOutlined,
 } from "@ant-design/icons";
 import {useLanguage} from '../../i18n/LanguageContext';
 
@@ -138,6 +139,22 @@ const EditOrganizationForm = ({hasPassword}) => {
                                  placeholder={t.productLimitUnlimited}/>
                 </Form.Item>
             </Flex>
+
+            <Divider style={{margin: '16px 0 16px'}}>
+                <Flex align="center" gap={6} style={{opacity: 0.7, fontSize: 13}}>
+                    <SafetyOutlined/>
+                    {t.securitySection}
+                </Flex>
+            </Divider>
+
+            <Form.Item
+                label={t.sessionTimeout}
+                name="session_timeout_minutes"
+                extra={<span style={{fontSize: 12, opacity: 0.5}}>{t.sessionTimeoutHint}</span>}
+            >
+                <InputNumber style={{width: '100%'}} min={15} max={43200}
+                             placeholder={t.sessionTimeoutDefault}/>
+            </Form.Item>
 
             <Form.Item label={null} style={{marginTop: 8, marginBottom: 0}}>
                 <Button block type="primary" htmlType="submit" loading={loading}
