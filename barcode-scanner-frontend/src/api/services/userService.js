@@ -38,6 +38,13 @@ export const deleteUser = (userId) =>
     api.delete(API_ENDPOINTS.delete_user(userId));
 
 /**
+ * Reset a user's bound device (device lock). Their next login re-binds.
+ * @param {number} userId
+ */
+export const resetDevice = (userId) =>
+    api.post(API_ENDPOINTS.reset_device(userId));
+
+/**
  * Get the client's current IP address.
  * @returns {Promise<{success: boolean, data?: {ip: string}, error?: string}>}
  */

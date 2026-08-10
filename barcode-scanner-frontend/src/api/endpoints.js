@@ -3,6 +3,7 @@ const API_ENDPOINTS = {
     users: "api/v1/users/",
     edit_user: userId => `api/v1/users/${userId}/`,
     delete_user: userId => `api/v1/users/${userId}/`,
+    reset_device: userId => `api/v1/users/${userId}/reset-device/`,
     auth: {
         login: "api/v1/users/auth/login/",
         logout: "api/v1/users/auth/logout/",

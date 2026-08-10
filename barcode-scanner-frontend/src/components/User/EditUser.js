@@ -1,9 +1,9 @@
 import React, {useState, useEffect, useContext} from 'react';
 import {userService, organizationService, warehouseService} from '../../api';
 import AuthContext from '../Auth/AuthContext';
-import {Button, Divider, Flex, Form, Input, InputNumber, Select, Space, Switch, Tag, theme, Tooltip} from "antd";
+import {Button, Divider, Flex, Form, Input, InputNumber, Popconfirm, Select, Space, Switch, Tag, theme, Tooltip} from "antd";
 import ModalForm, {RenderOption, useModalFormLoading} from "../ModalForm";
-import {SaveOutlined, UserOutlined, LockOutlined, MailOutlined, SafetyCertificateOutlined, PercentageOutlined} from "@ant-design/icons";
+import {SaveOutlined, UserOutlined, LockOutlined, MailOutlined, SafetyCertificateOutlined, PercentageOutlined, MobileOutlined} from "@ant-design/icons";
 import {useLanguage} from '../../i18n/LanguageContext';
 
 const roleTagColors = {
@@ -35,8 +35,23 @@ const EditUserForm = ({object, hasExistingIps}) => {
     const [organizations, setOrganizations] = useState([]);
     const [warehouses, setWarehouses] = useState([]);
     const [restrictByIp, setRestrictByIp] = useState(hasExistingIps);
+    const [deviceInfo, setDeviceInfo] = useState({
+        bound: !!object.has_bound_device,
+        boundAt: object.device_bound_at,
+        label: object.device_label,
+    });
+    const [resettingDevice, setResettingDevice] = useState(false);
     const form = Form.useFormInstance();
     const canApplyDiscount = Form.useWatch('can_apply_discount', form);
+
+    const handleResetDevice = async () => {
+        setResettingDevice(true);
+        const result = await userService.resetDevice(object.id);
+        setResettingDevice(false);
+        if (result.success) {
+            setDeviceInfo({bound: false, boundAt: null, label: ''});
+        }
+    };
     const isCompanyAdmin = authData?.role === 'company_admin';
     const isInternalAdmin = authData?.role === 'internal_admin';
 
@@ -258,6 +273,46 @@ const EditUserForm = ({object, hasExistingIps}) => {
 
             <Divider style={{margin: '4px 0 16px'}} dashed/>
 
+            <Flex align="center" justify="space-between" style={{marginBottom: 8}}>
+                <Space>
+                    <MobileOutlined style={{color: '#1677ff', fontSize: 16}}/>
+                    <span style={{fontWeight: 500}}>{t.deviceLock}</span>
+                    <Tooltip title={t.deviceLockHint}>
+                        <span style={{fontSize: 12, color: token.colorTextTertiary, cursor: 'help'}}>?</span>
+                    </Tooltip>
+                </Space>
+                <Form.Item name="device_lock_enabled" valuePropName="checked" noStyle>
+                    <Switch size="small"/>
+                </Form.Item>
+            </Flex>
+
+            <Flex align="center" justify="space-between">
+                {deviceInfo.bound ? (
+                    <Space direction="vertical" size={0}>
+                        <span style={{fontSize: 12}}>{t.boundDevice}</span>
+                        <span style={{fontSize: 12, color: token.colorTextTertiary}}>
+                            {(deviceInfo.label || '—').slice(0, 60)}
+                            {deviceInfo.boundAt ? ` · ${new Date(deviceInfo.boundAt).toLocaleDateString()}` : ''}
+                        </span>
+                    </Space>
+                ) : (
+                    <span style={{fontSize: 12, color: token.colorTextTertiary}}>{t.noDeviceBound}</span>
+                )}
+                {deviceInfo.bound && (
+                    <Popconfirm
+                        title={t.resetDeviceConfirm}
+                        onConfirm={handleResetDevice}
+                        okText={t.resetDevice}
+                    >
+                        <Button size="small" danger loading={resettingDevice}>
+                            {t.resetDevice}
+                        </Button>
+                    </Popconfirm>
+                )}
+            </Flex>
+
+            <Divider style={{margin: '4px 0 16px'}} dashed/>
+
             <Flex align="center" justify="space-between" style={{marginBottom: canApplyDiscount ? 12 : 0}}>
                 <Space>
                     <PercentageOutlined style={{color: '#1677ff', fontSize: 16}}/>
@@ -351,6 +406,7 @@ const EditUser = ({visible, setVisible, onFinish, object}) => {
                 warehouse_ids: existingWarehouseIds,
                 can_apply_discount: !!object.can_apply_discount,
                 max_discount_percent: Number(object.max_discount_percent || 0),
+                device_lock_enabled: !!object.device_lock_enabled,
             }}
             name="editUser"
             visible={visible}

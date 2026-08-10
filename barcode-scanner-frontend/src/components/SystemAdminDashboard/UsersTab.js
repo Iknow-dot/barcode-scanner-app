@@ -215,6 +215,8 @@ const UsersTab = ({initialUsers, initialLoading = false, addModalExtraProps, han
             payload.warehouse_ids = newUser.warehouse_ids;
         }
 
+        payload.device_lock_enabled = !!newUser.device_lock_enabled;
+
         const result = await userService.createUser(payload);
 
         if (result.success) {

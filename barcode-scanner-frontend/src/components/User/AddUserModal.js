@@ -3,7 +3,7 @@ import {userService, organizationService, warehouseService} from '../../api';
 import AuthContext from '../Auth/AuthContext';
 import {Button, Divider, Flex, Form, Input, InputNumber, Select, Space, Switch, Tag, theme, Tooltip} from "antd";
 import ModalForm, {RenderOption, useModalFormLoading} from "../ModalForm";
-import {PlusOutlined, UserOutlined, LockOutlined, MailOutlined, SafetyCertificateOutlined, PercentageOutlined} from "@ant-design/icons";
+import {PlusOutlined, UserOutlined, LockOutlined, MailOutlined, SafetyCertificateOutlined, PercentageOutlined, MobileOutlined} from "@ant-design/icons";
 import {useLanguage} from '../../i18n/LanguageContext';
 
 
@@ -39,6 +39,13 @@ const AddUserForm = ({organization = null}) => {
     const [restrictByIp, setRestrictByIp] = useState(false);
     const form = Form.useFormInstance();
     const canApplyDiscount = Form.useWatch('can_apply_discount', form);
+    const roleValue = Form.useWatch('role', form);
+
+    // Device lock defaults ON for company users, OFF for admins.
+    useEffect(() => {
+        form.setFieldValue('device_lock_enabled', roleValue === 'company_user');
+    }, [roleValue, form]);
+
     const isCompanyAdmin = authData?.role === 'company_admin';
     const isInternalAdmin = authData?.role === 'internal_admin';
 
@@ -275,6 +282,26 @@ const AddUserForm = ({organization = null}) => {
                     )}
                 />
             </Form.Item>
+
+            <Divider style={{margin: '4px 0 16px'}} dashed/>
+
+            <Flex align="center" justify="space-between">
+                <Space>
+                    <MobileOutlined style={{color: '#1677ff', fontSize: 16}}/>
+                    <span style={{fontWeight: 500}}>{t.deviceLock}</span>
+                    <Tooltip title={t.deviceLockHint}>
+                        <span style={{fontSize: 12, color: token.colorTextTertiary, cursor: 'help'}}>?</span>
+                    </Tooltip>
+                </Space>
+                <Form.Item
+                    name="device_lock_enabled"
+                    valuePropName="checked"
+                    initialValue={isCompanyAdmin}
+                    noStyle
+                >
+                    <Switch size="small"/>
+                </Form.Item>
+            </Flex>
 
             <Divider style={{margin: '4px 0 16px'}} dashed/>
 
