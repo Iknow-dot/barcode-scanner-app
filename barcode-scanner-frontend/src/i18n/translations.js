@@ -33,6 +33,7 @@ const translations = {
 
         // ===== Login Errors =====
         ipNotAllowed: 'თქვენი IP მისამართი არ არის დაშვებული. გთხოვთ, დაუკავშირდით ადმინისტრატორს.',
+        deviceNotAllowed: 'ეს ანგარიში მიბმულია სხვა მოწყობილობაზე. გთხოვთ, დაუკავშირდით ადმინისტრატორს.',
 
         // ===== Dashboard / Product Search =====
         productSearch: 'პროდუქტის ძიება',
@@ -666,6 +667,7 @@ const translations = {
 
         // ===== Login Errors =====
         ipNotAllowed: 'Your IP address is not allowed. Please contact the administrator.',
+        deviceNotAllowed: 'This account is locked to a different device. Please contact your administrator.',
 
         // ===== Dashboard / Product Search =====
         productSearch: 'Product Search',

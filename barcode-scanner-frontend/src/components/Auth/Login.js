@@ -42,6 +42,7 @@ const Login = () => {
         if (!result.success) {
             const errorMessages = {
                 'IP_NOT_ALLOWED': t.ipNotAllowed,
+                'DEVICE_NOT_ALLOWED': t.deviceNotAllowed,
             };
 
             const errorCode = result.code;
