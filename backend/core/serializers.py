@@ -217,6 +217,21 @@ class WarehouseSerializer(serializers.ModelSerializer):
         model = Warehouse
         fields = ['id', 'name', 'code', 'user_ids', 'user_ids_read']
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Non-internal-admin requesters may only reference users from their
+        # own organization. Scoping the queryset makes a cross-org id fail
+        # with the same "Invalid pk" error as a nonexistent one, so the
+        # endpoint can't be probed for other orgs' user ids or usernames.
+        request = self.context.get('request')
+        if (
+            request is not None
+            and request.user.is_authenticated
+            and request.user.role != User.Role.INTERNAL_ADMIN
+        ):
+            self.fields['user_ids'].child_relation.queryset = (
+                User.objects.filter(organization=request.user.organization)
+            )
 
     def validate(self, attrs):
         """Inject organization for company_admin and enforce unique_together."""
@@ -242,14 +257,11 @@ class WarehouseSerializer(serializers.ModelSerializer):
         """Ensure every user in the list belongs to the warehouse's organization."""
         if not users or not organization:
             return
-        invalid_users = [u for u in users if u.organization_id != organization.pk]
-        if invalid_users:
-            invalid_names = ', '.join(u.username for u in invalid_users)
+        if any(u.organization_id != organization.pk for u in users):
+            # Keep this generic: naming the offending users (or saying they
+            # exist at all) would leak cross-org account information.
             raise serializers.ValidationError({
-                'user_ids': (
-                    f"The following users do not belong to the warehouse's "
-                    f"organization: {invalid_names}"
-                ),
+                'user_ids': "All users must belong to the warehouse's organization.",
             })
 
     def create(self, validated_data):
