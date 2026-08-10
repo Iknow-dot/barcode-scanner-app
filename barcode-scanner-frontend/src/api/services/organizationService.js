@@ -84,3 +84,17 @@ export const getInvoiceTemplate = () =>
  */
 export const updateInvoiceTemplate = (payload) =>
     api.patch(API_ENDPOINTS.my_organization_invoice_template, payload);
+
+/**
+ * Get the current user's organization security settings.
+ * @returns {Promise<{success: boolean, data?: {session_timeout_minutes: number|null}, error?: string}>}
+ */
+export const getSecuritySettings = () =>
+    api.get(API_ENDPOINTS.my_organization_security);
+
+/**
+ * Update the current user's organization security settings.
+ * @param {Object} payload - { session_timeout_minutes: number|null }
+ */
+export const updateSecuritySettings = (payload) =>
+    api.patch(API_ENDPOINTS.my_organization_security, payload);

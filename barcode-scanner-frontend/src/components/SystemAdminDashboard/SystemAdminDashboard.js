@@ -7,11 +7,12 @@ import UsersTab from './UsersTab';
 import OrdersTab from './OrdersTab';
 import ExternalServiceSettings from '../Organization/ExternalServiceSettings';
 import InvoiceTemplateSettings from '../Organization/InvoiceTemplateSettings';
+import SecuritySettings from '../Organization/SecuritySettings';
 import AnalyticsTab from './AnalyticsTab';
 import CatalogTab from './CatalogTab';
 import CatalogDemo from './CatalogDemo';
 import LockedFeature from '../Common/LockedFeature';
-import {AppstoreOutlined, BarChartOutlined, BankOutlined, DatabaseOutlined, FileImageOutlined, GlobalOutlined, LockOutlined, ShoppingOutlined, TeamOutlined, UserOutlined} from "@ant-design/icons";
+import {AppstoreOutlined, BarChartOutlined, BankOutlined, DatabaseOutlined, FileImageOutlined, GlobalOutlined, LockOutlined, SafetyOutlined, ShoppingOutlined, TeamOutlined, UserOutlined} from "@ant-design/icons";
 import SubNavContext from "../../contexts/SubNavContext";
 import {useLanguage} from '../../i18n/LanguageContext';
 import {catalogFeatureEnabled} from '../../utils/features';
@@ -34,6 +35,7 @@ const tabMeta = (t, role) => ({
     6: {title: t.invoiceTemplateSettings, subtitle: t.invoiceTemplateSubtitle || '', icon: <FileImageOutlined style={{color: '#1677ff', fontSize: 22}}/>},
     7: {title: t.analytics, subtitle: t.analyticsSubtitle || '', icon: <BarChartOutlined style={{color: '#1677ff', fontSize: 22}}/>},
     8: {title: t.catalog, subtitle: t.catalogSubtitle || '', icon: <DatabaseOutlined style={{color: '#1677ff', fontSize: 22}}/>},
+    9: {title: t.securitySettings, subtitle: t.securitySubtitle || '', icon: <SafetyOutlined style={{color: '#1677ff', fontSize: 22}}/>},
 });
 
 const SystemAdminDashboard = () => {
@@ -94,6 +96,12 @@ const SystemAdminDashboard = () => {
                 icon: <FileImageOutlined/>,
                 label: t.invoiceTemplateSettings,
                 onClick: () => setActiveTab(6)
+            }),
+            userRole === userRoles.company_admin && ({
+                key: '9',
+                icon: <SafetyOutlined/>,
+                label: t.securitySettings,
+                onClick: () => setActiveTab(9)
             }),
             (userRole === userRoles.company_admin || userRole === userRoles.internal_admin) && ({
                 key: '7',
@@ -160,6 +168,9 @@ const SystemAdminDashboard = () => {
                     <CatalogDemo/>
                 </LockedFeature>
             );
+            break;
+        case 9:
+            ActiveTabPane = <SecuritySettings/>;
             break;
         default:
             ActiveTabPane = null;
