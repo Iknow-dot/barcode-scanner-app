@@ -10,6 +10,7 @@ export const DataTab = ({
                           addModalExtraProps = {},
                           handleAdd,
                           EditModal,
+                          editModalExtraProps = {},
                           handleEdit,
                           handleDelete,
                           loading = false,
@@ -35,6 +36,7 @@ export const DataTab = ({
             setVisible={setEditModalVisible}
             object={selectedObject}
             onFinish={handleEdit}
+            {...editModalExtraProps}
         />}
 
         <Flex justify="flex-end" style={{marginBottom: 16}} gap={8}>

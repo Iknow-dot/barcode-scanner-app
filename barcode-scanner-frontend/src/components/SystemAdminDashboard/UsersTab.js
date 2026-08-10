@@ -665,6 +665,15 @@ const UsersTab = ({initialUsers, initialLoading = false, addModalExtraProps, han
                 }
             ]} AddModal={AddUserModal} handleAdd={handleAdd} addModalExtraProps={addModalExtraProps}
                      EditModal={EditUserModal} handleEdit={handleEdit} handleDelete={handleDelete}
+                     editModalExtraProps={{
+                         onDeviceReset: (updatedUser, error) => {
+                             if (updatedUser) {
+                                 setUsers(prev => prev.map(u => u.id === updatedUser.id ? updatedUser : u));
+                             } else if (error) {
+                                 notify.error(t.error, error);
+                             }
+                         }
+                     }}
                      locale={{
                          emptyText: renderEmpty(),
                      }}/>

@@ -25,7 +25,7 @@ const RoleOption = ({label, desc}) => {
     );
 };
 
-const EditUserForm = ({object, hasExistingIps}) => {
+const EditUserForm = ({object, hasExistingIps, onDeviceReset}) => {
     const {authData} = useContext(AuthContext);
     const {t} = useLanguage();
     const {loading} = useModalFormLoading();
@@ -50,6 +50,9 @@ const EditUserForm = ({object, hasExistingIps}) => {
         setResettingDevice(false);
         if (result.success) {
             setDeviceInfo({bound: false, boundAt: null, label: ''});
+            if (onDeviceReset) onDeviceReset(result.data, null);
+        } else if (onDeviceReset) {
+            onDeviceReset(null, result.error);
         }
     };
     const isCompanyAdmin = authData?.role === 'company_admin';
@@ -303,6 +306,7 @@ const EditUserForm = ({object, hasExistingIps}) => {
                         title={t.resetDeviceConfirm}
                         onConfirm={handleResetDevice}
                         okText={t.resetDevice}
+                        cancelText={t.no}
                     >
                         <Button size="small" danger loading={resettingDevice}>
                             {t.resetDevice}
@@ -385,7 +389,7 @@ const ActiveToggle = ({checked, onChange, isSelf, t}) => {
     );
 };
 
-const EditUser = ({visible, setVisible, onFinish, object}) => {
+const EditUser = ({visible, setVisible, onFinish, object, onDeviceReset}) => {
     // Extract IP addresses from allowed_ips array of objects
     const existingIps = (object.allowed_ips || []).map(ip => ip.ip_or_network);
 
@@ -414,7 +418,7 @@ const EditUser = ({visible, setVisible, onFinish, object}) => {
             footer={null}
             onFinish={(data) => onFinish(data, object)}
         >
-            <EditUserForm object={object} hasExistingIps={existingIps.length > 0}/>
+            <EditUserForm object={object} hasExistingIps={existingIps.length > 0} onDeviceReset={onDeviceReset}/>
         </ModalForm>
     );
 };
