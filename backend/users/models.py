@@ -26,6 +26,14 @@ class User(AbstractUser):
     can_apply_discount = models.BooleanField(default=False)
     max_discount_percent = models.DecimalField(max_digits=5, decimal_places=2, default=0)
 
+    # Device lock — trust-on-first-use device binding enforced at login.
+    # bound_device_id is a server-issued bearer secret: expose it to the
+    # Django admin only, never through the API serializers.
+    device_lock_enabled = models.BooleanField(default=False)
+    bound_device_id = models.CharField(max_length=64, blank=True, default='')
+    device_bound_at = models.DateTimeField(null=True, blank=True)
+    device_label = models.CharField(max_length=256, blank=True, default='')
+
     def clean(self) -> None:
         if self.role == self.Role.INTERNAL_ADMIN and not (self.is_staff or self.is_superuser):
             raise ValidationError({

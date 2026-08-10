@@ -216,3 +216,20 @@ class RefreshSessionTimeoutTests(TestCase):
         refresh_str = self._login_refresh_token(self._make_org())
         self.assertEqual(self._refresh(refresh_str).status_code, 200)
         self.assertEqual(self._refresh(refresh_str).status_code, 401)
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
+class DeviceLockModelTests(TestCase):
+    def test_new_user_device_fields_default_unbound(self):
+        org = Organization.objects.create(
+            name='ModelOrg', identification_number='121212121',
+            web_service_url='http://example.com/db', employees_count=5,
+        )
+        user = User.objects.create_user(
+            username='model-user', password='pw12345',
+            role=User.Role.COMPANY_USER, organization=org,
+        )
+        self.assertFalse(user.device_lock_enabled)
+        self.assertEqual(user.bound_device_id, '')
+        self.assertIsNone(user.device_bound_at)
+        self.assertEqual(user.device_label, '')
