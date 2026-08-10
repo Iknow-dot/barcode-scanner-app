@@ -57,7 +57,7 @@ URL layout (`backend/backend/urls.py`):
 
 ### Authentication & authorization
 
-- JWT via `rest_framework_simplejwt` with token blacklisting on logout. Access token TTL 15 min, refresh 1 day, rotated + blacklisted on rotate.
+- JWT via `rest_framework_simplejwt` with token blacklisting on logout. Access token TTL 15 min (global); refresh lifetime defaults to 1 day but is overridden per org by `Organization.session_timeout_minutes` (the effective idle timeout, re-applied on every rotation by `CustomTokenRefreshSerializer`), rotated + blacklisted on rotate.
 - `users.serializers.CustomTokenObtainPairSerializer` is the load-bearing login flow:
   1. Standard credential check.
   2. **IP allowlist enforcement** — if the user has any `AllowedIP` rows, the client IP (from `X-Forwarded-For` first hop, falling back to `REMOTE_ADDR`) must match one of them as either an exact IP or a CIDR network. On failure it raises `IPNotAllowedError`, which `CustomTokenObtainPairView` catches and converts to a 403 with `{"code": "IP_NOT_ALLOWED"}`. Users with no `AllowedIP` rows are unrestricted.
