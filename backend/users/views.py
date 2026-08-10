@@ -116,6 +116,7 @@ class UsersViewSet(ModelViewSet):
     - role: filter by user role
     """
     serializer_class = CompanyUserSerializer
+    permission_classes = [CompanyUserPermission]
     filter_backends = [DjangoFilterBackend, SearchFilter]
     filterset_fields = ['organization', 'role']
     search_fields = ['username', 'email', 'first_name', 'last_name']
