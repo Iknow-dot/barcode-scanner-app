@@ -98,8 +98,21 @@ Company admins can PATCH their own organization (invoice-template flow), so
 from anyone but `internal_admin` (field-level validation comparing against the
 instance value, using the request user from serializer context; echoing the
 current value back is tolerated so whole-form resubmits keep working).
-Otherwise an org admin could weaken their own security policy. Run the
-`tenancy-reviewer` agent after implementation.
+Run the `tenancy-reviewer` agent after implementation.
+
+**Amendment (2026-08-10, post-review):** the user decided company admins
+SHOULD be able to manage their own organization's timeout (full 30 min –
+30 days range). This is done via a dedicated company-admin-only action —
+`GET/PATCH /api/v1/organizations/my-organization/security/` with a
+field-scoped `OrganizationSecuritySerializer` (only
+`session_timeout_minutes`) — mirroring the external-service and
+invoice-template settings pattern, NOT by widening the generic org-update
+endpoint. The `OrganizationSerializer` guard above stays: it governs the
+internal-admin update endpoint, which company admins still cannot reach.
+`OrganizationPermission` allowlists the new `security_settings` action for
+company admins. Frontend: a new company-admin "Security" settings tab in
+SystemAdminDashboard (like External service / Invoice template) with the
+timeout input; clearing the input resets to the 1-day default (null).
 
 ### Admin & frontend
 
