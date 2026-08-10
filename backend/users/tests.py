@@ -585,3 +585,18 @@ class LoginDeviceLockTests(TestCase):
         self.assertEqual(
             self._login(username='device-user-2',
                         device_id='shared-phone-1').status_code, 200)
+
+    def test_stale_first_bind_loses_race_and_is_rejected(self):
+        # Reproduces the TOCTOU: this request loaded the user while unbound,
+        # but a concurrent login wins the bind before our write. The CAS must
+        # leave the winner in place and reject the loser.
+        from users.serializers import CustomTokenObtainPairSerializer
+        from users.exceptions import DeviceNotAllowedError
+        stale = User.objects.get(pk=self.user.pk)  # in-memory: unbound
+        User.objects.filter(pk=self.user.pk).update(bound_device_id='winner-device')
+        serializer = CustomTokenObtainPairSerializer(context={})
+        serializer.user = stale
+        with self.assertRaises(DeviceNotAllowedError):
+            serializer._enforce_device_lock('loser-device')
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.bound_device_id, 'winner-device')

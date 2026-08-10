@@ -1,8 +1,10 @@
 import ipaddress
 import logging
 from datetime import timedelta
+from uuid import uuid4
 
 from django.contrib.auth import get_user_model
+from django.utils import timezone
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import (
     TokenObtainPairSerializer,
@@ -56,6 +58,10 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
             "user": {"id": 1, "username": "john"}
         }
     """
+
+    device_id = serializers.CharField(
+        required=False, allow_blank=True, write_only=True, max_length=64,
+    )
 
     @classmethod
     def get_token(cls, user):
@@ -111,6 +117,41 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
                 logger.warning("Invalid allowed IP/network entry: %s", value)
         return False
 
+    def _enforce_device_lock(self, presented_id):
+        """Trust-on-first-use device binding.
+
+        Returns the device ID to echo in the response, or None when the
+        lock is disabled for this user. Accepting a presented ID at bind
+        time is deliberate: every user of a shared device binds to that
+        device's single stored ID.
+        """
+        if not self.user.device_lock_enabled:
+            return None
+        if not self.user.bound_device_id:
+            bound_id = presented_id or uuid4().hex
+            request = self.context.get('request')
+            user_agent = request.META.get('HTTP_USER_AGENT', '') if request else ''
+            # Atomic first-bind: only one concurrent login can claim the
+            # empty slot; a loser falls through to the match check below.
+            bound_now = User.objects.filter(
+                pk=self.user.pk, bound_device_id='',
+            ).update(
+                bound_device_id=bound_id,
+                device_bound_at=timezone.now(),
+                device_label=user_agent[:256],
+            )
+            if bound_now:
+                return bound_id
+            self.user.refresh_from_db(
+                fields=['bound_device_id', 'device_bound_at', 'device_label'])
+        if presented_id != self.user.bound_device_id:
+            logger.warning(
+                "Login denied for user %s: presented device does not match bound device",
+                self.user.username)
+            from users.exceptions import DeviceNotAllowedError
+            raise DeviceNotAllowedError(presented_id)
+        return self.user.bound_device_id
+
     def validate(self, attrs):
         data = super().validate(attrs)
 
@@ -126,6 +167,10 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
                 )
                 from users.exceptions import IPNotAllowedError
                 raise IPNotAllowedError(client_ip)
+
+        # --- Device lock check ---
+        device_id_to_echo = self._enforce_device_lock(
+            (attrs.get('device_id') or '').strip())
 
         # Rename keys to match the frontend expectation
         data['access_token'] = data.pop('access')
@@ -157,6 +202,10 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
             'can_apply_discount': self.user.can_apply_discount,
             'max_discount_percent': str(self.user.max_discount_percent),
         }
+
+        if device_id_to_echo is not None:
+            data['device_id'] = device_id_to_echo
+
         return data
 
 

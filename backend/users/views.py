@@ -13,7 +13,7 @@ from rest_framework_simplejwt.exceptions import TokenError
 
 from core.models import Organization
 from core.permissions import CompanyUserPermission
-from users.exceptions import IPNotAllowedError
+from users.exceptions import DeviceNotAllowedError, IPNotAllowedError
 from users.models import User
 from users.serializers import (
     ClientIPSerializer,
@@ -41,8 +41,8 @@ class GetClientIPAPIView(APIView):
 @extend_schema(tags=['Auth'])
 class CustomTokenObtainPairView(TokenObtainPairView):
     """
-    Custom login view that catches IPNotAllowedError raised during
-    token validation and returns a structured JSON error response
+    Custom login view that catches IPNotAllowedError and DeviceNotAllowedError
+    raised during token validation and returns a structured JSON error response
     with a ``code`` field the frontend can use for translation.
     """
 
@@ -54,6 +54,14 @@ class CustomTokenObtainPairView(TokenObtainPairView):
                 {
                     "code": "IP_NOT_ALLOWED",
                     "detail": "Access denied: your IP address is not allowed.",
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        except DeviceNotAllowedError:
+            return Response(
+                {
+                    "code": "DEVICE_NOT_ALLOWED",
+                    "detail": "Access denied: this account is locked to a different device.",
                 },
                 status=status.HTTP_403_FORBIDDEN,
             )
