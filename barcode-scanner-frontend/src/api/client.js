@@ -9,6 +9,11 @@ const client = axios.create({
     },
 });
 
+// Shared in-flight refresh promise so concurrent 401s don't each POST the
+// same refresh token — rotation blacklists it after the first use, so a
+// second concurrent refresh would 401 and force-log the user out.
+let refreshPromise = null;
+
 // Add a request interceptor to include JWT token in all requests
 client.interceptors.request.use((config) => {
     const token = localStorage.getItem('token');
@@ -45,9 +50,14 @@ client.interceptors.response.use(
             }
 
             try {
-                const refreshResponse = await client.post(API_ENDPOINTS.auth.refresh, {
-                    refresh: refreshToken,
-                });
+                if (!refreshPromise) {
+                    refreshPromise = client.post(API_ENDPOINTS.auth.refresh, {
+                        refresh: refreshToken,
+                    }).finally(() => {
+                        refreshPromise = null;
+                    });
+                }
+                const refreshResponse = await refreshPromise;
                 const newAccessToken = refreshResponse.data.access;
 
                 // Store the new token and retry the request with updated token

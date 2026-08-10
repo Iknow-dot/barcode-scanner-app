@@ -152,7 +152,7 @@ const EditOrganizationForm = ({hasPassword}) => {
                 name="session_timeout_minutes"
                 extra={<span style={{fontSize: 12, opacity: 0.5}}>{t.sessionTimeoutHint}</span>}
             >
-                <InputNumber style={{width: '100%'}} min={15} max={43200}
+                <InputNumber style={{width: '100%'}} min={30} max={43200}
                              placeholder={t.sessionTimeoutDefault}/>
             </Form.Item>
 
