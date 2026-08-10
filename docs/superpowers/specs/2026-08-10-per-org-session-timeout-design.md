@@ -75,6 +75,18 @@ drf-spectacular tag):
 3. If the user lookup fails (user deleted mid-session), skip the
    customization — stock behavior applies.
 
+### Pre-existing bug fixed alongside (required for the feature to work)
+
+`barcode-scanner-frontend/src/api/client.js` stores only
+`refreshResponse.data.access` after a silent refresh and **discards the
+rotated refresh token**. With `ROTATE_REFRESH_TOKENS` +
+`BLACKLIST_AFTER_ROTATION`, the old token is blacklisted on the first
+refresh, so the second silent refresh (~30 min after login) sends a
+blacklisted token → 401 → forced logout. Today every session effectively
+dies ~30 minutes after login regardless of activity, and with this bug the
+per-org idle timeout would never be observable. Fix: persist
+`refreshResponse.data.refresh` to `localStorage` when present.
+
 ### Authorization guard
 
 Company admins can PATCH their own organization (invoice-template flow), so
