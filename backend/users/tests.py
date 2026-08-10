@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 from rest_framework_simplejwt.token_blacklist.models import OutstandingToken
@@ -151,3 +153,66 @@ class LoginSessionTimeoutTests(TestCase):
             self._make_org(session_timeout_minutes=30))
         row = OutstandingToken.objects.get(jti=token['jti'])
         self.assertAlmostEqual(row.expires_at.timestamp(), token['exp'], delta=10)
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
+class RefreshSessionTimeoutTests(TestCase):
+    def _make_org(self, **overrides):
+        defaults = dict(
+            name='RefreshOrg', identification_number='888999000',
+            web_service_url='http://example.com/db', employees_count=5,
+        )
+        defaults.update(overrides)
+        return Organization.objects.create(**defaults)
+
+    def _login_refresh_token(self, org):
+        User.objects.create_user(
+            username='refresh-user', password='pw12345',
+            role=User.Role.COMPANY_USER, organization=org,
+        )
+        response = APIClient().post(
+            '/api/v1/users/auth/login/',
+            {'username': 'refresh-user', 'password': 'pw12345'},
+            format='json',
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        return response.data['refresh_token']
+
+    def _refresh(self, refresh_token):
+        return APIClient().post(
+            '/api/v1/users/auth/refresh/',
+            {'refresh': refresh_token},
+            format='json',
+        )
+
+    def test_rotated_token_carries_org_lifetime(self):
+        refresh_str = self._login_refresh_token(
+            self._make_org(session_timeout_minutes=30))
+        response = self._refresh(refresh_str)
+        self.assertEqual(response.status_code, 200, response.data)
+        # Stock key names — the frontend interceptor reads .access/.refresh.
+        self.assertIn('access', response.data)
+        token = RefreshToken(response.data['refresh'])
+        self.assertAlmostEqual(token['exp'] - token['iat'], 30 * 60, delta=10)
+
+    def test_rotated_token_default_lifetime(self):
+        refresh_str = self._login_refresh_token(self._make_org())
+        response = self._refresh(refresh_str)
+        self.assertEqual(response.status_code, 200, response.data)
+        token = RefreshToken(response.data['refresh'])
+        self.assertAlmostEqual(token['exp'] - token['iat'], 24 * 60 * 60, delta=10)
+
+    def test_expired_refresh_is_rejected(self):
+        refresh_str = self._login_refresh_token(
+            self._make_org(session_timeout_minutes=30))
+        token = RefreshToken(refresh_str)
+        token.set_exp(lifetime=-timedelta(seconds=1))
+        response = self._refresh(str(token))
+        self.assertEqual(response.status_code, 401)
+
+    def test_old_token_is_blacklisted_after_rotation(self):
+        # Documents why api/client.js MUST store the rotated token (Task 6):
+        # the old one dies on first reuse.
+        refresh_str = self._login_refresh_token(self._make_org())
+        self.assertEqual(self._refresh(refresh_str).status_code, 200)
+        self.assertEqual(self._refresh(refresh_str).status_code, 401)

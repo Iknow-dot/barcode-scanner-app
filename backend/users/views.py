@@ -8,14 +8,19 @@ from rest_framework.views import APIView
 from rest_framework.viewsets import ModelViewSet
 from rest_framework import status
 from rest_framework_simplejwt.tokens import RefreshToken
-from rest_framework_simplejwt.views import TokenObtainPairView
+from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from rest_framework_simplejwt.exceptions import TokenError
 
 from core.models import Organization
 from core.permissions import CompanyUserPermission
 from users.exceptions import IPNotAllowedError
 from users.models import User
-from users.serializers import ClientIPSerializer, CompanyUserSerializer, InternalAdminUserSerializer
+from users.serializers import (
+    ClientIPSerializer,
+    CompanyUserSerializer,
+    CustomTokenRefreshSerializer,
+    InternalAdminUserSerializer,
+)
 
 
 @extend_schema(tags=['Network'])
@@ -52,6 +57,11 @@ class CustomTokenObtainPairView(TokenObtainPairView):
                 },
                 status=status.HTTP_403_FORBIDDEN,
             )
+
+
+class CustomTokenRefreshView(TokenRefreshView):
+    """Refresh view whose rotated tokens carry the per-org session timeout."""
+    serializer_class = CustomTokenRefreshSerializer
 
 
 @extend_schema(tags=['Auth'])

@@ -2,12 +2,12 @@ from django.urls import path, include
 from drf_spectacular.utils import extend_schema
 from rest_framework.routers import DefaultRouter
 from rest_framework_simplejwt.views import (
-    TokenRefreshView,
     TokenVerifyView,
 )
 
 from users.views import (
     CustomTokenObtainPairView,
+    CustomTokenRefreshView,
     GetClientIPAPIView,
     UsersViewSet,
     LogoutAPIView,
@@ -15,7 +15,7 @@ from users.views import (
 
 
 # Tag the third-party simplejwt views for Swagger docs
-TaggedTokenRefreshView = extend_schema(tags=['Auth'])(TokenRefreshView)
+TaggedTokenRefreshView = extend_schema(tags=['Auth'])(CustomTokenRefreshView)
 TaggedTokenVerifyView = extend_schema(tags=['Auth'])(TokenVerifyView)
 
 router = DefaultRouter()

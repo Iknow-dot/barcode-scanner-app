@@ -4,8 +4,12 @@ from datetime import timedelta
 
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
-from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+from rest_framework_simplejwt.serializers import (
+    TokenObtainPairSerializer,
+    TokenRefreshSerializer,
+)
 from rest_framework_simplejwt.token_blacklist.models import OutstandingToken
+from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.utils import datetime_from_epoch
 from users.models import AllowedIP
 from core.models import Warehouse
@@ -153,6 +157,33 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
             'can_apply_discount': self.user.can_apply_discount,
             'max_discount_percent': str(self.user.max_discount_percent),
         }
+        return data
+
+
+class CustomTokenRefreshSerializer(TokenRefreshSerializer):
+    """Stock refresh + rotation, then re-stamps the rotated refresh token's
+    expiry with the user's per-org idle timeout.
+
+    The *incoming* token's own expiry is what enforces the timeout — this
+    only ensures the next token in the rotation chain carries the org
+    lifetime too. If the user lookup fails (deleted mid-session), stock
+    behavior applies.
+    """
+
+    def validate(self, attrs):
+        data = super().validate(attrs)
+        rotated = data.get('refresh')
+        if not rotated:
+            return data
+        token = RefreshToken(rotated)
+        user = User.objects.select_related('organization').filter(
+            pk=token.get('user_id'),
+        ).first()
+        lifetime = org_refresh_lifetime(user) if user else None
+        if lifetime is not None:
+            token.set_exp(lifetime=lifetime)
+            _sync_outstanding_expiry(token)
+            data['refresh'] = str(token)
         return data
 
 
