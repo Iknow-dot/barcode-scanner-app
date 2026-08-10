@@ -74,6 +74,18 @@ class OrganizationSerializer(serializers.ModelSerializer):
             )
         return value
 
+    def validate_session_timeout_minutes(self, value):
+        current = self.instance.session_timeout_minutes if self.instance else None
+        if value == current:
+            return value
+        request = self.context.get('request')
+        role = getattr(getattr(request, 'user', None), 'role', None)
+        if role != User.Role.INTERNAL_ADMIN:
+            raise serializers.ValidationError(
+                'Only internal admins can change the session timeout.'
+            )
+        return value
+
     def validate_web_service_url(self, value):
         return _validate_consult_web_exchange_base_url(value)
 

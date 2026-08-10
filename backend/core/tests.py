@@ -14,7 +14,7 @@ from django.core.exceptions import ValidationError
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from rest_framework.exceptions import ValidationError as DRFValidationError
-from rest_framework.test import APIClient
+from rest_framework.test import APIClient, APIRequestFactory
 
 from core.models import Organization, PurchaseOrder, PurchaseOrderItem, Warehouse
 from core.serializers import (
@@ -4917,3 +4917,73 @@ class OrganizationSessionTimeoutFieldTests(TestCase):
                 session_timeout_minutes=value,
             )
             org.full_clean()  # must not raise
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
+class OrganizationSessionTimeoutAPITests(TestCase):
+    def setUp(self):
+        self.org = Organization.objects.create(
+            name='GuardOrg', identification_number='777888999',
+            web_service_url='http://example.com/db', employees_count=5,
+        )
+        self.internal_admin = User.objects.create_user(
+            username='sys-admin', password='pw12345',
+            role=User.Role.INTERNAL_ADMIN, is_staff=True, is_superuser=True,
+        )
+        self.company_admin = User.objects.create_user(
+            username='org-admin', password='pw12345',
+            role=User.Role.COMPANY_ADMIN, organization=self.org,
+        )
+
+    def _serializer_for_company_admin(self, payload):
+        request = APIRequestFactory().patch('/')
+        request.user = self.company_admin
+        return OrganizationSerializer(
+            self.org, data=payload, partial=True, context={'request': request},
+        )
+
+    def test_internal_admin_can_change_timeout(self):
+        client = APIClient()
+        client.force_authenticate(user=self.internal_admin)
+        response = client.patch(
+            f'/api/v1/organizations/{self.org.id}/',
+            {'session_timeout_minutes': 60},
+            format='json',
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        self.org.refresh_from_db()
+        self.assertEqual(self.org.session_timeout_minutes, 60)
+
+    def test_company_admin_blocked_at_permission_layer(self):
+        client = APIClient()
+        client.force_authenticate(user=self.company_admin)
+        response = client.patch(
+            f'/api/v1/organizations/{self.org.id}/',
+            {'session_timeout_minutes': 60},
+            format='json',
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_serializer_rejects_change_from_company_admin(self):
+        serializer = self._serializer_for_company_admin(
+            {'session_timeout_minutes': 90})
+        self.assertFalse(serializer.is_valid())
+        self.assertIn('session_timeout_minutes', serializer.errors)
+
+    def test_serializer_tolerates_echoed_current_value(self):
+        self.org.session_timeout_minutes = 120
+        self.org.save()
+        serializer = self._serializer_for_company_admin(
+            {'session_timeout_minutes': 120})
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+
+    def test_api_enforces_field_bounds(self):
+        client = APIClient()
+        client.force_authenticate(user=self.internal_admin)
+        response = client.patch(
+            f'/api/v1/organizations/{self.org.id}/',
+            {'session_timeout_minutes': 14},
+            format='json',
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('session_timeout_minutes', response.data)
