@@ -4987,3 +4987,72 @@ class OrganizationSessionTimeoutAPITests(TestCase):
         )
         self.assertEqual(response.status_code, 400)
         self.assertIn('session_timeout_minutes', response.data)
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
+class OrganizationSecuritySettingsAPITests(TestCase):
+    URL = '/api/v1/organizations/my-organization/security/'
+
+    def setUp(self):
+        self.org = Organization.objects.create(
+            name='SecOrg', identification_number='121212121',
+            web_service_url='http://example.com/db', employees_count=5,
+        )
+        self.company_admin = User.objects.create_user(
+            username='sec-admin', password='pw12345',
+            role=User.Role.COMPANY_ADMIN, organization=self.org,
+        )
+
+    def _client_for(self, user):
+        client = APIClient()
+        client.force_authenticate(user=user)
+        return client
+
+    def test_company_admin_reads_timeout(self):
+        self.org.session_timeout_minutes = 60
+        self.org.save()
+        response = self._client_for(self.company_admin).get(self.URL)
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data, {'session_timeout_minutes': 60})
+
+    def test_company_admin_updates_timeout(self):
+        response = self._client_for(self.company_admin).patch(
+            self.URL, {'session_timeout_minutes': 120}, format='json',
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        self.org.refresh_from_db()
+        self.assertEqual(self.org.session_timeout_minutes, 120)
+
+    def test_company_admin_clears_timeout(self):
+        self.org.session_timeout_minutes = 120
+        self.org.save()
+        response = self._client_for(self.company_admin).patch(
+            self.URL, {'session_timeout_minutes': None}, format='json',
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        self.org.refresh_from_db()
+        self.assertIsNone(self.org.session_timeout_minutes)
+
+    def test_bounds_enforced(self):
+        for bad in (29, 43201):
+            response = self._client_for(self.company_admin).patch(
+                self.URL, {'session_timeout_minutes': bad}, format='json',
+            )
+            self.assertEqual(response.status_code, 400, response.data)
+            self.assertIn('session_timeout_minutes', response.data)
+
+    def test_company_user_forbidden(self):
+        company_user = User.objects.create_user(
+            username='sec-user', password='pw12345',
+            role=User.Role.COMPANY_USER, organization=self.org,
+        )
+        response = self._client_for(company_user).get(self.URL)
+        self.assertEqual(response.status_code, 403)
+
+    def test_internal_admin_forbidden(self):
+        internal_admin = User.objects.create_user(
+            username='sec-root', password='pw12345',
+            role=User.Role.INTERNAL_ADMIN, is_staff=True, is_superuser=True,
+        )
+        response = self._client_for(internal_admin).get(self.URL)
+        self.assertEqual(response.status_code, 403)

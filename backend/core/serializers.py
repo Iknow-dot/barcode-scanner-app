@@ -186,6 +186,15 @@ class OrganizationInvoiceTemplateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({'code': exc.code, 'detail': exc.detail})
 
 
+class OrganizationSecuritySerializer(serializers.ModelSerializer):
+    """Serializer for company admins to manage their organization's security
+    settings. Field-scoped on purpose — never widen to `__all__`."""
+
+    class Meta:
+        model = Organization
+        fields = ['session_timeout_minutes']
+
+
 # ---------------------------------------------------------------------------
 # Warehouse �� full access (internal_admin, company_admin)
 # ---------------------------------------------------------------------------
