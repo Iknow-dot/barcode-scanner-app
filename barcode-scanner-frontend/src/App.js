@@ -19,8 +19,9 @@ import {
 } from "antd";
 import {Content, Header, Footer} from "antd/es/layout/layout";
 import Sider from "antd/es/layout/Sider";
-import {GlobalOutlined, LogoutOutlined, MoonOutlined, SunOutlined, UserOutlined} from "@ant-design/icons";
+import {GlobalOutlined, LogoutOutlined, MenuOutlined, MoonOutlined, SunOutlined, UserOutlined} from "@ant-design/icons";
 import SubNavContext, {SubNavProvider} from "./contexts/SubNavContext";
+import AdminNavDrawer from './components/Common/AdminNavDrawer';
 import {LanguageProvider, useLanguage} from "./i18n/LanguageContext";
 import "antd/dist/reset.css";
 
@@ -57,6 +58,9 @@ const MainContentView = ({children, isDark, toggleTheme}) => {
     const {authData} = useContext(AuthContext);
     const {subNav} = useContext(SubNavContext);
     const [siderCollapsed, setSiderCollapsed] = useState(!subNav);
+    // Small screens replace the old horizontal header menu with a hamburger
+    // that opens the admin nav as a left drawer (a collapsible sidebar).
+    const [mobileNavOpen, setMobileNavOpen] = useState(false);
     const {t} = useLanguage();
     const {
         token: {colorBgContainer, borderRadiusLG, colorText, colorBgBase, colorBorderSecondary},
@@ -157,6 +161,15 @@ const MainContentView = ({children, isDark, toggleTheme}) => {
                 }}>
                     {!screens.lg && (
                         <Flex align="center" style={{width: '100%', height: '100%', overflow: 'hidden'}}>
+                            {subNav?.length > 0 && (
+                                <Button
+                                    type="text"
+                                    aria-label="menu"
+                                    icon={<MenuOutlined/>}
+                                    onClick={() => setMobileNavOpen(true)}
+                                    style={{flexShrink: 0, marginRight: 4}}
+                                />
+                            )}
                             <a href={window.location.pathname} style={{flexShrink: 0}}>
                                 <img
                                     src={isDarkMode ? "logo-dark.png" : "logo-light.png"}
@@ -175,18 +188,7 @@ const MainContentView = ({children, isDark, toggleTheme}) => {
                                     {authData.organization_name}
                                 </span>
                             )}
-                            <Menu
-                                style={{
-                                    flex: 1,
-                                    minWidth: 0,
-                                    background: "transparent",
-                                    borderBottom: 'none',
-                                }}
-                                theme={isDarkMode ? "dark" : "light"}
-                                mode="horizontal"
-                                defaultSelectedKeys={authData?.role === "internal_admin" ? ['1'] : ['2']}
-                                items={subNav}
-                            />
+                            <div style={{flex: 1, minWidth: 0}}/>
                             <Space size={4} style={{flexShrink: 0}}>
                                 <LanguageSwitcher/>
                                 <Dropdown menu={{items}} trigger={['click']}>
@@ -209,6 +211,15 @@ const MainContentView = ({children, isDark, toggleTheme}) => {
                         </Flex>
                     )}
                 </Header>
+                {!screens.lg && (
+                    <AdminNavDrawer
+                        open={mobileNavOpen}
+                        onClose={() => setMobileNavOpen(false)}
+                        items={subNav}
+                        isDarkMode={isDarkMode}
+                        title={authData?.organization_name || ''}
+                    />
+                )}
                 <Content style={{margin: '20px 16px 0'}}>
                     <div
                         className="main-content-card"
