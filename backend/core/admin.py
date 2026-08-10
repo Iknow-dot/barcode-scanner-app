@@ -51,6 +51,13 @@ class OrganizationAdmin(admin.ModelAdmin):
                 'invoice_footer_text',
             ),
         }),
+        ('Security', {
+            'fields': ('session_timeout_minutes',),
+            'description': (
+                'Idle session timeout in minutes (refresh-token lifetime). '
+                'Blank = 1 day default. Min 15, max 43200 (30 days).'
+            ),
+        }),
     )
 
     def invoice_logo_preview(self, obj):
