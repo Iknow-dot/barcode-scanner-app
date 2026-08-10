@@ -2,6 +2,7 @@ import os
 import secrets
 
 from cryptography.fernet import Fernet
+from django.core.validators import MinValueValidator, MaxValueValidator
 from django.db import models
 from django.contrib.auth import get_user_model
 from django.utils import timezone
@@ -51,6 +52,15 @@ class Organization(models.Model):
     # per-org feature. product_limit caps ACTIVE products; NULL = unlimited.
     product_catalog_enabled = models.BooleanField(default=False)
     product_limit = models.PositiveIntegerField(null=True, blank=True)
+
+    # Per-org idle session timeout (ClickUp 86c4bh8j3): overrides the refresh-
+    # token lifetime in minutes. NULL = global SIMPLE_JWT default (1 day).
+    # Min 15 because access tokens live 15 minutes globally — a shorter idle
+    # timeout could not be honored.
+    session_timeout_minutes = models.PositiveIntegerField(
+        null=True, blank=True,
+        validators=[MinValueValidator(15), MaxValueValidator(43200)],
+    )
 
     @property
     def non_admin_user_count(self) -> int:

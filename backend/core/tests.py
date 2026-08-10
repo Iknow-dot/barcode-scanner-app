@@ -10,6 +10,7 @@ from unittest import mock
 import httpx
 from cryptography.fernet import Fernet
 from django.core.cache import cache
+from django.core.exceptions import ValidationError
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from rest_framework.exceptions import ValidationError as DRFValidationError
@@ -4884,3 +4885,35 @@ class CatalogFeatureConsultantTests(TestCase):
             with self.subTest(url=url):
                 r = self.client.get(url)
                 self.assertEqual(r.status_code, 200, url)
+
+
+class OrganizationSessionTimeoutFieldTests(TestCase):
+    def _make_org(self, **overrides):
+        defaults = dict(
+            name='TimeoutOrg', identification_number='111222333',
+            web_service_url='http://example.com/db', employees_count=5,
+        )
+        defaults.update(overrides)
+        return Organization.objects.create(**defaults)
+
+    def test_defaults_to_null(self):
+        self.assertIsNone(self._make_org().session_timeout_minutes)
+
+    def test_rejects_below_minimum(self):
+        org = self._make_org(session_timeout_minutes=14)
+        with self.assertRaises(ValidationError):
+            org.full_clean()
+
+    def test_rejects_above_maximum(self):
+        org = self._make_org(session_timeout_minutes=43201)
+        with self.assertRaises(ValidationError):
+            org.full_clean()
+
+    def test_accepts_boundary_values(self):
+        for value in (15, 43200):
+            org = self._make_org(
+                name=f'TimeoutOrg{value}',
+                identification_number=f'2223334{value}',
+                session_timeout_minutes=value,
+            )
+            org.full_clean()  # must not raise
