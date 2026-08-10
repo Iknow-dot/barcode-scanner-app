@@ -280,6 +280,9 @@ class _BaseUserSerializer(serializers.ModelSerializer):
         read_only=True,
         source='warehouses',
     )
+    device_bound_at = serializers.DateTimeField(read_only=True)
+    device_label = serializers.CharField(read_only=True)
+    has_bound_device = serializers.SerializerMethodField()
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -313,8 +316,15 @@ class _BaseUserSerializer(serializers.ModelSerializer):
             'warehouse_ids_read',
             'can_apply_discount',
             'max_discount_percent',
+            'device_lock_enabled',
+            'device_bound_at',
+            'device_label',
+            'has_bound_device',
         ]
         read_only_fields = ['id', 'last_login']
+
+    def get_has_bound_device(self, obj):
+        return bool(obj.bound_device_id)
 
     # -- helpers shared by both serializers --
 
@@ -322,6 +332,10 @@ class _BaseUserSerializer(serializers.ModelSerializer):
         password = validated_data.pop('password')
         warehouses = validated_data.pop('warehouses', [])
         validated_data.pop('allowed_ips', None)
+        # Device lock defaults ON for company users unless explicitly set.
+        if (validated_data.get('role') == User.Role.COMPANY_USER
+                and 'device_lock_enabled' not in validated_data):
+            validated_data['device_lock_enabled'] = True
         user = User(**validated_data)
         user.set_password(password)
         user.save()
@@ -332,6 +346,12 @@ class _BaseUserSerializer(serializers.ModelSerializer):
         return user
 
     def update(self, instance, validated_data):
+        # Defense-in-depth: CompanyUserPermission already blocks company
+        # users from this viewset, but if this serializer is ever reused on
+        # a surface reachable by them, the device lock must stay admin-only.
+        request = self.context.get('request')
+        if request and request.user.role == User.Role.COMPANY_USER:
+            validated_data.pop('device_lock_enabled', None)
         password = validated_data.pop('password', None)
         warehouses = validated_data.pop('warehouses', None)
         validated_data.pop('allowed_ips', None)

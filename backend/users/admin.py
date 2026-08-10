@@ -40,6 +40,7 @@ class UserAdmin(DjangoUserAdmin):
     list_display = DjangoUserAdmin.list_display + ('role', 'organization')
     list_filter = DjangoUserAdmin.list_filter + ('organization', 'warehouses', 'role', AllowedIPFilter)
     search_fields = DjangoUserAdmin.search_fields + ('organization__name',)
+    readonly_fields = ('device_bound_at', 'device_label')
 
     # Add role and organization to the user creation form
     add_fieldsets = DjangoUserAdmin.add_fieldsets + (
@@ -58,6 +59,15 @@ class UserAdmin(DjangoUserAdmin):
                 "Toggle whether this user can apply discounts to order items, "
                 "and set the maximum discount percent they are permitted to "
                 "use (also applies to manually-entered 'set price' overrides)."
+            ),
+        }),
+        ("Device lock", {
+            "fields": ("device_lock_enabled", "bound_device_id",
+                       "device_bound_at", "device_label"),
+            "description": (
+                "When enabled, the account binds to the first device that "
+                "logs in and can only sign in from it. Clear bound_device_id "
+                "to let the user re-bind from a new device."
             ),
         }),
     )

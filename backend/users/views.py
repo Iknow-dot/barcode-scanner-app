@@ -1,5 +1,6 @@
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import extend_schema, extend_schema_view
+from rest_framework.decorators import action
 from rest_framework.filters import SearchFilter
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
@@ -176,3 +177,22 @@ class UsersViewSet(ModelViewSet):
             )
 
         return super().create(request, *args, **kwargs)
+
+    @extend_schema(tags=['Users'], request=None)
+    @action(detail=True, methods=['post'], url_path='reset-device')
+    def reset_device(self, request, pk=None):
+        """Clear the user's bound device so their next login re-binds."""
+        # Defense-in-depth behind CompanyUserPermission (also 403s company users).
+        if request.user.role == User.Role.COMPANY_USER:
+            return Response(
+                {'detail': 'Only admins can reset a bound device.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        user = self.get_object()
+        user.bound_device_id = ''
+        user.device_bound_at = None
+        user.device_label = ''
+        user.save(
+            update_fields=['bound_device_id', 'device_bound_at', 'device_label'])
+        serializer = self.get_serializer(user)
+        return Response(serializer.data)
