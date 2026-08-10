@@ -40,10 +40,14 @@ timeout = refresh-token lifetime**.
 `core.Organization.session_timeout_minutes`:
 
 - `PositiveIntegerField(null=True, blank=True)`
-- Validators: `MinValueValidator(15)`, `MaxValueValidator(43200)` (30 days).
-  Min is 15 because access tokens live 15 minutes globally — a shorter idle
-  timeout could not be honored.
+- Validators: `MinValueValidator(30)`, `MaxValueValidator(43200)` (30 days).
+  Min is 30 because access tokens live 15 minutes globally and the frontend
+  only refreshes after the access token expires — a timeout at or below the
+  access-token TTL would force-log-out even continuously active users.
 - `null` means "use the global `SIMPLE_JWT['REFRESH_TOKEN_LIFETIME']`".
+- Because refresh only happens on access-token expiry, the effective idle
+  window for a configured timeout `T` is `[T-15, T]` minutes — activity
+  inside a still-live access-token window does not extend the session.
 - One additive migration.
 
 ### Login flow
@@ -119,7 +123,7 @@ Backend (`users` + `core` tests; endpoint test classes disable
 3. Internal admin (no org) → global default.
 4. Refresh rotation re-applies the org lifetime to the new refresh token.
 5. Refresh with an expired token → 401.
-6. Field validators reject < 15 and > 43200.
+6. Field validators reject < 30 and > 43200.
 7. `internal_admin` can update the field via the API; a `company_admin` PATCH
    that *changes* the field is rejected with a clear validation error, while a
    PATCH echoing the current value (whole-form resubmit) and updates to other
@@ -135,4 +139,4 @@ Backend (`users` + `core` tests; endpoint test classes disable
 
 Access token 15 min, refresh token 1 day with rotation → effectively a 1-day
 idle timeout; active users are never logged out. After this feature: idle
-timeout configurable per organization (15 min – 30 days), default unchanged.
+timeout configurable per organization (30 min – 30 days), default unchanged.

@@ -55,7 +55,7 @@ class OrganizationAdmin(admin.ModelAdmin):
             'fields': ('session_timeout_minutes',),
             'description': (
                 'Idle session timeout in minutes (refresh-token lifetime). '
-                'Blank = 1 day default. Min 15, max 43200 (30 days).'
+                'Blank = 1 day default. Min 30, max 43200 (30 days).'
             ),
         }),
     )

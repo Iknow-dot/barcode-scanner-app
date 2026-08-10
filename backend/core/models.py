@@ -55,11 +55,12 @@ class Organization(models.Model):
 
     # Per-org idle session timeout (ClickUp 86c4bh8j3): overrides the refresh-
     # token lifetime in minutes. NULL = global SIMPLE_JWT default (1 day).
-    # Min 15 because access tokens live 15 minutes globally — a shorter idle
-    # timeout could not be honored.
+    # Min 30 because access tokens live 15 minutes globally and refresh only
+    # happens after access-token expiry — a timeout <= the access TTL would
+    # log out even continuously active users.
     session_timeout_minutes = models.PositiveIntegerField(
         null=True, blank=True,
-        validators=[MinValueValidator(15), MaxValueValidator(43200)],
+        validators=[MinValueValidator(30), MaxValueValidator(43200)],
     )
 
     @property

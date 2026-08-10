@@ -4900,7 +4900,7 @@ class OrganizationSessionTimeoutFieldTests(TestCase):
         self.assertIsNone(self._make_org().session_timeout_minutes)
 
     def test_rejects_below_minimum(self):
-        org = self._make_org(session_timeout_minutes=14)
+        org = self._make_org(session_timeout_minutes=29)
         with self.assertRaises(ValidationError):
             org.full_clean()
 
@@ -4910,7 +4910,7 @@ class OrganizationSessionTimeoutFieldTests(TestCase):
             org.full_clean()
 
     def test_accepts_boundary_values(self):
-        for value in (15, 43200):
+        for value in (30, 43200):
             org = self._make_org(
                 name=f'TimeoutOrg{value}',
                 identification_number=f'2223334{value}',
@@ -4982,7 +4982,7 @@ class OrganizationSessionTimeoutAPITests(TestCase):
         client.force_authenticate(user=self.internal_admin)
         response = client.patch(
             f'/api/v1/organizations/{self.org.id}/',
-            {'session_timeout_minutes': 14},
+            {'session_timeout_minutes': 29},
             format='json',
         )
         self.assertEqual(response.status_code, 400)
