@@ -5,6 +5,7 @@ from uuid import uuid4
 
 from django.contrib.auth import get_user_model
 from django.utils import timezone
+from django.utils.crypto import constant_time_compare
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import (
     TokenObtainPairSerializer,
@@ -144,7 +145,7 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
                 return bound_id
             self.user.refresh_from_db(
                 fields=['bound_device_id', 'device_bound_at', 'device_label'])
-        if presented_id != self.user.bound_device_id:
+        if not constant_time_compare(presented_id, self.user.bound_device_id):
             logger.warning(
                 "Login denied for user %s: presented device does not match bound device",
                 self.user.username)

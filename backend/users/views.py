@@ -185,7 +185,7 @@ class UsersViewSet(ModelViewSet):
         # Defense-in-depth behind CompanyUserPermission (also 403s company users).
         if request.user.role == User.Role.COMPANY_USER:
             return Response(
-                {'detail': 'Only admins can reset a bound device.'},
+                {'code': 'NOT_ADMIN', 'detail': 'Only admins can reset a bound device.'},
                 status=status.HTTP_403_FORBIDDEN,
             )
         user = self.get_object()
