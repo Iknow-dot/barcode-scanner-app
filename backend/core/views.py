@@ -1374,8 +1374,10 @@ class PurchaseOrderViewSet(ModelViewSet):
         if denied is not None:
             return denied
 
-        # Check if the same SKU + warehouse already exists — if so, increment quantity
-        filter_kwargs = {'sku': data['sku']}
+        # Check if the same SKU + warehouse (+ gift class) already exists —
+        # if so, increment quantity. Gift lines never merge with paid lines:
+        # a partial gift is represented as two separate lines.
+        filter_kwargs = {'sku': data['sku'], 'is_gift': data.get('is_gift', False)}
         if data.get('warehouse_code'):
             filter_kwargs['warehouse_code'] = data['warehouse_code']
         existing_item = order.items.filter(**filter_kwargs).first()
@@ -1397,8 +1399,6 @@ class PurchaseOrderViewSet(ModelViewSet):
                 existing_item.discount_percent = data['discount_percent']
             if data.get('discounted_price') is not None:
                 existing_item.discounted_price = data['discounted_price']
-            if data.get('is_gift'):
-                existing_item.is_gift = True
             existing_item.save()
         else:
             PurchaseOrderItem.objects.create(order=order, **data)

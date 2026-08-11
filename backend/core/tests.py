@@ -5316,6 +5316,53 @@ class GiftFlagEndpointTests(TestCase):
         self.item.refresh_from_db()
         self.assertFalse(self.item.is_gift)
 
+    def test_add_gift_line_does_not_merge_into_paid_line(self):
+        response = self.client.post(
+            f'/api/v1/orders/{self.order.id}/items/',
+            {'sku': 'SKU1', 'price': '100.00', 'quantity': 1,
+             'warehouse_code': 'WHA', 'is_gift': True},
+            format='json',
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+        lines = self.order.items.filter(sku='SKU1', warehouse_code='WHA')
+        self.assertEqual(lines.count(), 2)
+        self.item.refresh_from_db()
+        self.assertFalse(self.item.is_gift)
+        self.assertEqual(self.item.quantity, 2)
+        gift_line = lines.get(is_gift=True)
+        self.assertEqual(gift_line.quantity, 1)
+
+    def test_add_paid_line_still_merges_into_paid_line(self):
+        response = self.client.post(
+            f'/api/v1/orders/{self.order.id}/items/',
+            {'sku': 'SKU1', 'price': '100.00', 'quantity': 1,
+             'warehouse_code': 'WHA'},
+            format='json',
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+        lines = self.order.items.filter(sku='SKU1', warehouse_code='WHA')
+        self.assertEqual(lines.count(), 1)
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.quantity, 3)
+
+    def test_add_gift_line_merges_into_existing_gift_line(self):
+        PurchaseOrderItem.objects.create(
+            order=self.order, sku='SKU1', sku_name='Widget',
+            price='100.00', quantity=1, warehouse_code='WHA',
+            warehouse_name='WH-A', is_gift=True,
+        )
+        response = self.client.post(
+            f'/api/v1/orders/{self.order.id}/items/',
+            {'sku': 'SKU1', 'price': '100.00', 'quantity': 1,
+             'warehouse_code': 'WHA', 'is_gift': True},
+            format='json',
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+        lines = self.order.items.filter(sku='SKU1', warehouse_code='WHA')
+        self.assertEqual(lines.count(), 2)
+        gift_line = lines.get(is_gift=True)
+        self.assertEqual(gift_line.quantity, 2)
+
 
 class CatalogFeatureModelTests(TestCase):
     def test_defaults(self):
