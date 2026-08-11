@@ -3,7 +3,8 @@ import dayjs from 'dayjs';
 import {useLanguage} from '../../i18n/LanguageContext';
 import {orderService, productService} from '../../api';
 import AuthContext from '../Auth/AuthContext';
-import GiftToggleButton from './GiftToggleButton';
+import GiftCounter from './GiftCounter';
+import {pairGiftLines, planGiftChange, applyGiftOps} from './giftSplit';
 import groupItemsBySku from './groupItemsBySku';
 import displayCustomerName from '../../utils/orderDisplay';
 import {
@@ -43,6 +44,7 @@ import {
     MoreOutlined,
     WarningOutlined,
     CloudSyncOutlined,
+    GiftOutlined,
 } from '@ant-design/icons';
 
 const {Text, Title} = Typography;
@@ -98,7 +100,7 @@ const useDebouncedField = (initialValue, onSave, delay = 600) => {
 };
 
 const CartTableRow = memo(({
-    item,
+    row,
     stockNumber,
     assigned,
     orderId,
@@ -112,65 +114,88 @@ const CartTableRow = memo(({
     const [editingPrice, setEditingPrice] = useState(false);
     const [editingDiscount, setEditingDiscount] = useState(false);
 
-    const handleQuantityChange = useCallback(async (newQuantity) => {
-        if (newQuantity < 1) return;
-        const result = await orderService.updateOrderItem(orderId, item.id, {quantity: newQuantity});
+    // The line that carries price/discount edits and quantity growth:
+    // the paid line when it exists, otherwise the gift line.
+    const anchor = row.paid ?? row.gift;
+
+    const handleQuantityChange = useCallback(async (newTotal) => {
+        if (newTotal < 1) return;
+        // Keep the gift count; the paid side absorbs the difference. When
+        // the row is gift-only, the gift line IS the row.
+        const target = row.paid ?? row.gift;
+        const otherQty = row.paid ? row.giftQty : 0;
+        const newQty = newTotal - otherQty;
+        if (newQty < 1) return; // shrink gifts via the gift stepper instead
+        const result = await orderService.updateOrderItem(orderId, target.id, {quantity: newQty});
         if (result.success) onLocalOrderUpdate(result.data);
         else notify.error(t.orderError, result.error);
-    }, [orderId, item.id, onLocalOrderUpdate, notify, t]);
+    }, [orderId, row, onLocalOrderUpdate, notify, t]);
 
     const handlePriceSave = useCallback(async (val) => {
-        const result = await orderService.updateOrderItem(orderId, item.id, {
+        const result = await orderService.updateOrderItem(orderId, anchor.id, {
             discounted_price: val == null ? null : val,
             discount_percent: 0,
         });
         if (result.success) onLocalOrderUpdate(result.data);
         else notify.error(t.orderError, result.error);
-    }, [orderId, item.id, onLocalOrderUpdate, notify, t]);
+    }, [orderId, anchor.id, onLocalOrderUpdate, notify, t]);
 
     const handleDiscountSave = useCallback(async (val) => {
-        const result = await orderService.updateOrderItem(orderId, item.id, {
+        const result = await orderService.updateOrderItem(orderId, anchor.id, {
             discount_percent: val == null ? 0 : val,
             discounted_price: null,
         });
         if (result.success) onLocalOrderUpdate(result.data);
         else notify.error(t.orderError, result.error);
-    }, [orderId, item.id, onLocalOrderUpdate, notify, t]);
+    }, [orderId, anchor.id, onLocalOrderUpdate, notify, t]);
 
     const handleRemoveLine = useCallback(async () => {
-        const result = await orderService.removeOrderItem(orderId, item.id);
-        if (result.success) onLocalOrderUpdate(result.data);
-        else notify.error(t.orderError, result.error);
-    }, [orderId, item.id, onLocalOrderUpdate, notify, t]);
+        // Remove BOTH physical lines behind this visual row.
+        const ids = [row.paid?.id, row.gift?.id].filter(Boolean);
+        let last = null;
+        for (const id of ids) {
+            const result = await orderService.removeOrderItem(orderId, id);
+            if (!result.success) {
+                notify.error(t.orderError, result.error);
+                return;
+            }
+            last = result;
+        }
+        if (last) onLocalOrderUpdate(last.data);
+    }, [orderId, row, onLocalOrderUpdate, notify, t]);
 
-    const handleGiftToggle = useCallback(async () => {
-        const result = await orderService.updateOrderItem(orderId, item.id, {
-            is_gift: !item.is_gift,
-        });
+    const handleGiftChange = useCallback(async (targetGift) => {
+        const ops = planGiftChange(row, targetGift);
+        if (ops.length === 0) return;
+        const result = await applyGiftOps(orderId, ops);
         if (result.success) onLocalOrderUpdate(result.data);
         else notify.error(t.orderError, result.error);
-    }, [orderId, item.id, item.is_gift, onLocalOrderUpdate, notify, t]);
+    }, [orderId, row, onLocalOrderUpdate, notify, t]);
 
     const exceedsLocal =
-        Number.isFinite(stockNumber) && Number(item.quantity) > Number(stockNumber);
+        Number.isFinite(stockNumber) && Number(row.totalQty) > Number(stockNumber);
     const hasDiscount =
-        item.effective_price && parseFloat(item.effective_price) !== parseFloat(item.price);
-    const discountPct = parseFloat(item.discount_percent || 0);
-    const priceCap = parseFloat(item.price || 0);
-    const isPending = item._pending === true || String(item.id).startsWith('tmp_');
+        anchor.effective_price && parseFloat(anchor.effective_price) !== parseFloat(anchor.price);
+    const discountPct = parseFloat(anchor.discount_percent || 0);
+    const priceCap = parseFloat(anchor.price || 0);
+    const linePending = (it) => it && (it._pending === true || String(it.id).startsWith('tmp_'));
+    const isPending = linePending(row.paid) || linePending(row.gift);
+    const rowLineTotal = (
+        Number(row.paid?.line_total || 0) + Number(row.gift?.line_total || 0)
+    ).toFixed(2);
+    const minusDisabled = (row.paid ? Number(row.paid.quantity) : row.giftQty) <= 1;
+
+    const giftStateClass = row.giftQty > 0
+        ? (row.giftQty >= row.totalQty ? ' m-cart-row-gift-full' : ' m-cart-row-gift')
+        : '';
 
     return (
-        <div className="m-cart-row" style={{opacity: isPending ? 0.6 : 1}}>
+        <div className={`m-cart-row${giftStateClass}`} style={{opacity: isPending ? 0.6 : 1}}>
             <div className="m-cart-cell m-cart-cell-warehouse" data-label={t.warehouse}>
                 <Tag color={assigned ? 'green' : 'blue'} style={{fontSize: 11, margin: 0}}>
-                    {item.warehouse_name}
+                    {row.warehouse_name}
                     {assigned && <span style={{marginLeft: 4}}>✓</span>}
                 </Tag>
-                {item.is_gift && (
-                    <Tag color="magenta" style={{fontSize: 10, marginLeft: 4}}>
-                        {t.giftLabel}
-                    </Tag>
-                )}
                 {isPending && (
                     <CloudSyncOutlined style={{marginLeft: 6, color: '#faad14'}} title={t.offlineItemPending}/>
                 )}
@@ -185,15 +210,15 @@ const CartTableRow = memo(({
             <div className="m-cart-cell m-cart-cell-qty" data-label={t.quantity}>
                 <div className="m-qty-stepper">
                     <Button size="small" icon={<MinusOutlined/>}
-                            onClick={() => handleQuantityChange(item.quantity - 1)}
-                            disabled={item.quantity <= 1}
+                            onClick={() => handleQuantityChange(row.totalQty - 1)}
+                            disabled={minusDisabled}
                             className="m-qty-btn"/>
-                    <InputNumber min={1} value={item.quantity} size="small"
+                    <InputNumber min={row.paid ? row.giftQty + 1 : 1} value={row.totalQty} size="small"
                                  onChange={handleQuantityChange}
                                  className="m-qty-input"
                                  controls={false} inputMode="numeric" pattern="[0-9]*"/>
                     <Button size="small" icon={<PlusOutlined/>}
-                            onClick={() => handleQuantityChange(item.quantity + 1)}
+                            onClick={() => handleQuantityChange(row.totalQty + 1)}
                             className="m-qty-btn"/>
                 </div>
             </div>
@@ -205,7 +230,7 @@ const CartTableRow = memo(({
                         size="small"
                         min={0}
                         max={priceCap > 0 ? priceCap : undefined}
-                        defaultValue={parseFloat(item.effective_price ?? item.price)}
+                        defaultValue={parseFloat(anchor.effective_price ?? anchor.price)}
                         addonAfter="₾"
                         controls={false}
                         inputMode="decimal"
@@ -231,14 +256,14 @@ const CartTableRow = memo(({
                         {hasDiscount ? (
                             <>
                                 <Text delete type="secondary" style={{fontSize: 11, marginRight: 4}}>
-                                    {item.price} ₾
+                                    {anchor.price} ₾
                                 </Text>
                                 <Text style={{fontSize: 13, fontWeight: 500}}>
-                                    {item.effective_price} ₾
+                                    {anchor.effective_price} ₾
                                 </Text>
                             </>
                         ) : (
-                            <Text style={{fontSize: 13, fontWeight: 500}}>{item.price} ₾</Text>
+                            <Text style={{fontSize: 13, fontWeight: 500}}>{anchor.price} ₾</Text>
                         )}
                     </button>
                 )}
@@ -286,17 +311,11 @@ const CartTableRow = memo(({
 
             <div className="m-cart-cell m-cart-cell-total" data-label={t.total}>
                 <Text strong style={{fontSize: 14, color: '#52c41a'}}>
-                    {item.line_total} ₾
+                    {rowLineTotal} ₾
                 </Text>
             </div>
 
             <div className="m-cart-cell m-cart-cell-action">
-                <GiftToggleButton
-                    enabled={giftEnabled}
-                    isGift={!!item.is_gift}
-                    onToggle={handleGiftToggle}
-                    label={t.giftLabel}
-                />
                 <Popconfirm
                     title={t.removeFromAllWarehouses || t.confirmDelete || 'Remove?'}
                     onConfirm={handleRemoveLine}
@@ -307,6 +326,18 @@ const CartTableRow = memo(({
                             aria-label={t.delete}/>
                 </Popconfirm>
             </div>
+
+            {giftEnabled && (
+                <div className="m-cart-cell m-cart-cell-gift">
+                    <GiftCounter
+                        enabled={giftEnabled}
+                        totalQty={row.totalQty}
+                        giftQty={row.giftQty}
+                        label={t.giftLabel}
+                        onChange={handleGiftChange}
+                    />
+                </div>
+            )}
         </div>
     );
 });
@@ -401,12 +432,18 @@ const OrderItemGroupCard = memo(({
     const cardExceeds = totalStock != null && group.totalQty > totalStock;
 
     const lineRows = useMemo(
-        () => group.items.map((it) => ({
-            key: `line-${it.id}`,
-            item: it,
-            assigned: assignedCodes.has(it.warehouse_code),
+        () => pairGiftLines(group.items).map((row) => ({
+            key: row.key,
+            row,
+            assigned: assignedCodes.has(row.warehouse_code),
         })),
         [group.items, assignedCodes],
+    );
+
+    const groupGiftQty = useMemo(
+        () => group.items.reduce(
+            (acc, it) => acc + (it.is_gift ? Number(it.quantity || 0) : 0), 0),
+        [group.items],
     );
 
     const otherWarehouses = useMemo(() => {
@@ -436,6 +473,11 @@ const OrderItemGroupCard = memo(({
                         {t.article}: {group.article || group.sku}
                     </Text>
                 </div>
+                {groupGiftQty > 0 && (
+                    <span className="m-gift-chip">
+                        <GiftOutlined/> {groupGiftQty}
+                    </span>
+                )}
                 <Popconfirm
                     title={t.removeFromAllWarehouses || t.confirmDelete || 'Remove product?'}
                     onConfirm={handleRemoveGroup}
@@ -457,12 +499,12 @@ const OrderItemGroupCard = memo(({
                     <div className="m-cart-cell"></div>
                 </div>
 
-                {lineRows.map((row) => (
+                {lineRows.map((entry) => (
                     <CartTableRow
-                        key={row.key}
-                        item={row.item}
-                        stockNumber={Array.isArray(stock) ? stockByCode.get(row.item.warehouse_code) : null}
-                        assigned={row.assigned}
+                        key={entry.key}
+                        row={entry.row}
+                        stockNumber={Array.isArray(stock) ? stockByCode.get(entry.row.warehouse_code) : null}
+                        assigned={entry.assigned}
                         orderId={orderId}
                         onLocalOrderUpdate={onLocalOrderUpdate}
                         notify={notify}
@@ -906,6 +948,12 @@ const OrderPanel = ({order: initialOrder, onSaveForLater, onProceedToPayment, on
         [localOrder?.items],
     );
 
+    const orderGiftQty = useMemo(
+        () => (localOrder?.items || []).reduce(
+            (acc, it) => acc + (it.is_gift ? Number(it.quantity || 0) : 0), 0),
+        [localOrder?.items],
+    );
+
     if (!localOrder) return null;
 
     const hasItems = localOrder.items && localOrder.items.length > 0;
@@ -1040,7 +1088,12 @@ const OrderPanel = ({order: initialOrder, onSaveForLater, onProceedToPayment, on
 
                         {/* Order Total */}
                         <div className="m-order-total-bar">
-                            <Text style={{fontSize: 15}}>{t.orderTotal}:</Text>
+                            <Text style={{fontSize: 15}}>
+                                {t.orderTotal}:
+                                {orderGiftQty > 0 && (
+                                    <Text className="m-gift-sum"> · {orderGiftQty} {t.giftLabel}</Text>
+                                )}
+                            </Text>
                             <Title level={4} style={{margin: 0, color: '#52c41a'}}>
                                 {localOrder.total} ₾
                             </Title>
