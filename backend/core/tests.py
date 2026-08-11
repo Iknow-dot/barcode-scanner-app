@@ -1099,6 +1099,85 @@ class SearchAddressesAPIViewTests(TestCase):
         self.assertEqual(response.data['external_service_status_code'], 403)
 
 
+def _rs_ge_record(**overrides) -> list:
+    """One-element list as returned by RS.ge RSPublicInfo. For unknown IDs the
+    API still returns 200 with a record whose fields are all null."""
+    record = {
+        'Status': None,
+        'RegisteredSubject': None,
+        'FullName': None,
+        'StartDate': None,
+        'VatPayer': None,
+        'Mortgage': None,
+        'Sequestration': None,
+        'AdditionalStatus': None,
+        'NonResident': 'არა',
+    }
+    record.update(overrides)
+    return [record]
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
+class RSGeLookupAPIViewTests(TestCase):
+    def setUp(self):
+        self.client_api = APIClient()
+        self.url = reverse('rs-ge-lookup')
+
+    def _lookup(self, identification_number='01001000001'):
+        return self.client_api.post(
+            self.url,
+            {'identification_number': identification_number},
+            format='json',
+        )
+
+    def test_happy_path_splits_full_name(self):
+        body = _rs_ge_record(
+            Status='არამეწარმე ფ/პ',
+            RegisteredSubject='ფიზიკური პირი',
+            FullName='გიორგი ბერიძე',
+        )
+        with mock.patch('httpx.post', return_value=_mock_httpx_response(200, body)):
+            response = self._lookup()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['first_name'], 'გიორგი')
+        self.assertEqual(response.data['last_name'], 'ბერიძე')
+
+    def test_null_full_name_returns_not_found(self):
+        # RS.ge signals "unknown ID" with a 200 and an all-null record
+        with mock.patch('httpx.post', return_value=_mock_httpx_response(200, _rs_ge_record())):
+            response = self._lookup()
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.data['code'], 'RS_GE_NOT_FOUND')
+
+    def test_missing_full_name_key_returns_not_found(self):
+        body = [{'Status': 'x', 'NonResident': 'არა'}]
+        with mock.patch('httpx.post', return_value=_mock_httpx_response(200, body)):
+            response = self._lookup()
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.data['code'], 'RS_GE_NOT_FOUND')
+
+    def test_blank_full_name_returns_not_found(self):
+        with mock.patch(
+            'httpx.post',
+            return_value=_mock_httpx_response(200, _rs_ge_record(FullName='   ')),
+        ):
+            response = self._lookup()
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.data['code'], 'RS_GE_NOT_FOUND')
+
+    def test_single_token_full_name_returns_empty_last_name(self):
+        body = _rs_ge_record(
+            Status='აქტიური',
+            RegisteredSubject='იურიდიული პირი',
+            FullName='ალფა',
+        )
+        with mock.patch('httpx.post', return_value=_mock_httpx_response(200, body)):
+            response = self._lookup()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['first_name'], 'ალფა')
+        self.assertEqual(response.data['last_name'], '')
+
+
 class OrganizationInvoiceFieldsTests(TestCase):
     def test_invoice_fields_default_to_blank(self):
         org = _make_organization()

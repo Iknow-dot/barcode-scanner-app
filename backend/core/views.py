@@ -634,13 +634,18 @@ class RSGeLookupAPIView(APIView):
                 status=http_status.HTTP_404_NOT_FOUND,
             )
 
-        # Extract name fields — RS.ge may return different field names
-        # Common patterns: name, first_name/last_name, taxpayer_name
+        # Unknown IDs still come back as 200 with a record whose fields are
+        # all null, so a null/blank FullName means "not found"
+        full_name = (taxpayer.get('FullName') or '').strip()
+        if not full_name:
+            return Response(
+                {"code": "RS_GE_NOT_FOUND", "detail": "Taxpayer not found on RS.ge."},
+                status=http_status.HTTP_404_NOT_FOUND,
+            )
 
-        full_name = taxpayer['FullName'].strip()
         parts = full_name.split(None, 1)
         first_name = parts[0]
-        last_name = parts[1]
+        last_name = parts[1] if len(parts) > 1 else ""
 
         return Response({
             "identification_number": identification_number,
