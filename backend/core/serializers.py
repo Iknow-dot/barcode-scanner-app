@@ -40,7 +40,20 @@ class OrganizationSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Organization
-        fields = '__all__'
+        # Field-scoped on purpose — never widen to `__all__` or an
+        # `exclude` list: secrets on Organization (webhook_token today,
+        # anything added later) must stay out unless explicitly listed here.
+        fields = [
+            'id', 'name', 'identification_number',
+            'web_service_url', 'web_service_username', 'web_service_password',
+            'retail_client_id_phone', 'employees_count',
+            'invoice_logo', 'invoice_display_name', 'invoice_address',
+            'invoice_phone', 'invoice_email', 'invoice_footer_text',
+            'invoice_template_html',
+            'gift_marking_enabled', 'product_catalog_enabled', 'product_limit',
+            'session_timeout_minutes',
+            'users', 'has_password', 'clear_password',
+        ]
         extra_kwargs = {
             'web_service_password': {'write_only': True, 'required': False},
         }

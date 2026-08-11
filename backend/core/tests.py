@@ -3902,6 +3902,52 @@ class ExternalServiceTokenTests(TestCase):
 
 
 @override_settings(SECURE_SSL_REDIRECT=False)
+class WebhookTokenNotInOrganizationAPITests(TestCase):
+    """The catalog-push token must never leak through the general
+    organization endpoints — it is surfaced only via the company-admin
+    external-service endpoint (covered by ExternalServiceTokenTests)."""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.org = Organization.objects.create(
+            name="Org", identification_number="ORG1", web_service_url="https://x", employees_count=5,
+        )
+        self.internal_admin = User.objects.create_user(
+            username="ia", password="p", role=User.Role.INTERNAL_ADMIN,
+            is_staff=True, is_superuser=True,
+        )
+        self.member = User.objects.create_user(
+            username="u", password="p", role=User.Role.COMPANY_USER, organization=self.org,
+        )
+
+    def test_list_omits_webhook_token(self):
+        self.client.force_authenticate(self.internal_admin)
+        r = self.client.get("/api/v1/organizations/")
+        self.assertEqual(r.status_code, 200)
+        rows = r.json()
+        self.assertTrue(rows)
+        for row in rows:
+            self.assertNotIn("webhook_token", row)
+            self.assertNotIn("web_service_password", row)
+
+    def test_detail_omits_webhook_token(self):
+        self.client.force_authenticate(self.internal_admin)
+        r = self.client.get(f"/api/v1/organizations/{self.org.id}/")
+        self.assertEqual(r.status_code, 200)
+        body = r.json()
+        self.assertNotIn("webhook_token", body)
+        self.assertNotIn("web_service_password", body)
+
+    def test_my_organization_omits_webhook_token(self):
+        self.client.force_authenticate(self.member)
+        r = self.client.get("/api/v1/organizations/my-organization/")
+        self.assertEqual(r.status_code, 200)
+        body = r.json()
+        self.assertNotIn("webhook_token", body)
+        self.assertNotIn("web_service_password", body)
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
 class PushIPAllowlistTests(TestCase):
     """Optional per-org source-IP allowlist for the catalog push token."""
 
