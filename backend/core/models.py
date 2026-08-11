@@ -23,6 +23,10 @@ class Organization(models.Model):
     webhook_token = models.CharField(
         max_length=64, unique=True, db_index=True, default=secrets.token_urlsafe,
     )
+    # ClientIDPhone (ID or phone) of the org's 1C retail counterparty
+    # (საცალო კონტრაგენტი). Used by the CreateOrder push for retail /
+    # clientless orders; while blank those orders confirm without a push.
+    retail_client_id_phone = models.CharField(max_length=50, blank=True, default='')
     employees_count = models.PositiveIntegerField()
 
     # Invoice template — rendered into the printable invoice HTML.
@@ -267,6 +271,11 @@ class PurchaseOrder(models.Model):
     # True when the order has no client and maps to the 1C retail counterparty
     # (საცალო კონტრაგენტი). Client fields above stay blank for retail orders.
     is_retail = models.BooleanField(default=False)
+    # 1C OrderNumber returned by CreateOrder on confirm; blank = never pushed.
+    # Once set, re-confirms skip the push (there is no UpdateOrder upstream).
+    external_order_number = models.CharField(
+        max_length=64, blank=True, default='', db_index=True,
+    )
     created_by = models.ForeignKey(
         User,
         on_delete=models.SET_NULL,

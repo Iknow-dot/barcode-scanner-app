@@ -452,9 +452,13 @@ class PurchaseOrderSerializer(serializers.ModelSerializer):
             'delivery_time_from', 'delivery_time_to', 'delivery_notes',
             'recipient_is_different', 'recipient_first_name',
             'recipient_last_name', 'recipient_phone',
-            'notes', 'items', 'total', 'created_at', 'updated_at',
+            'notes', 'items', 'total', 'external_order_number',
+            'created_at', 'updated_at',
         ]
-        read_only_fields = ['id', 'created_by', 'created_by_username', 'created_at', 'updated_at', 'total']
+        read_only_fields = [
+            'id', 'created_by', 'created_by_username', 'created_at',
+            'updated_at', 'total', 'external_order_number',
+        ]
         extra_kwargs = {
             'customer_name': {'required': False, 'allow_blank': True},
             'customer_phone': {'required': False, 'allow_blank': True},

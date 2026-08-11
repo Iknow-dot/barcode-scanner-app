@@ -38,7 +38,15 @@ class OrganizationAdmin(admin.ModelAdmin):
             'fields': ('name', 'identification_number', 'employees_count'),
         }),
         ('External service (1C ConsultWebExchange)', {
-            'fields': ('web_service_url', 'web_service_username', 'web_service_password'),
+            'fields': (
+                'web_service_url', 'web_service_username', 'web_service_password',
+                'retail_client_id_phone',
+            ),
+            'description': (
+                'Retail counterparty ID/phone: the 1C ClientIDPhone used when '
+                'pushing retail (clientless) orders via CreateOrder. While '
+                'blank, retail orders confirm without a 1C push.'
+            ),
         }),
         ('Invoice template', {
             'fields': (
@@ -79,9 +87,13 @@ class PurchaseOrderItemInline(admin.TabularInline):
 
 @admin.register(PurchaseOrder)
 class PurchaseOrderAdmin(admin.ModelAdmin):
-    list_display = ("id", "customer_name", "status", "created_by", "created_at")
+    list_display = ("id", "customer_name", "status", "external_order_number", "created_by", "created_at")
     list_filter = ("status", "organization")
-    search_fields = ("customer_name", "customer_phone", "customer_identification_number")
+    search_fields = (
+        "customer_name", "customer_phone", "customer_identification_number",
+        "external_order_number",
+    )
+    readonly_fields = ("external_order_number",)
     inlines = [PurchaseOrderItemInline]
 
 

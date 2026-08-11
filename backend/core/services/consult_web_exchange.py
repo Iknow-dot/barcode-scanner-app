@@ -1,13 +1,14 @@
 """
 1C ConsultWebExchange HTTP client.
 
-Wraps per-organization calls to three endpoints under
+Wraps per-organization calls to four endpoints under
 `{org.web_service_url}/HS/ConsultWebExchange/`:
 
     - CheckClient        — look up a client by identification number or phone
     - CreateClient       — create a client externally
     - GetStockAndPrices  — product / stock / price lookup (formerly inlined in
                             ProductSearchAPIView)
+    - CreateOrder        — create a customer order document in 1C
 
 `Organization.web_service_url` is the per-org BASE_URL (everything before the
 `HS/ConsultWebExchange/` segment). Basic-auth credentials are reused from the
@@ -395,6 +396,92 @@ class ConsultWebExchangeClient:
             )
 
         return response.json()
+
+    def create_order(
+        self,
+        *,
+        client_id_phone: str,
+        user_id: str,
+        stock_id: str,
+        comment: str = "",
+        items: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        """POST /CreateOrder — create a „მყიდველის შეკვეთა" document in 1C.
+
+        `items` use internal keys (`is_barcode`, `sku`, `quantity`, `price`,
+        `cost`, `discount`). Decimals are sent as floats and `IsBarcode` as
+        the strings "true"/"false", matching the documented example payload.
+
+        The .docx's 401–417 status table does not match the live service: it
+        answers 400 (validation) / 404 (lookups) with `{"success": false,
+        "message": "..."}`. Those become ORDER_CREATE_REJECTED with the
+        upstream message preserved in `detail`.
+
+        A blank `client_id_phone` raises ValueError without any request:
+        omitting it does not fail upstream — it silently creates an orphan
+        order with no client attached (confirmed against the live test base
+        2026-08-04).
+        """
+        if not client_id_phone:
+            raise ValueError(
+                "client_id_phone is required — upstream silently creates an "
+                "orphan order without it"
+            )
+
+        payload: dict[str, Any] = {
+            "ClientIDPhone": client_id_phone,
+            "UserID": user_id,
+            "StockID": stock_id,
+            "Items": [
+                {
+                    "IsBarcode": "true" if item.get("is_barcode") else "false",
+                    "Sku": item["sku"],
+                    "Quantity": item["quantity"],
+                    "Price": float(item["price"]),
+                    "Cost": float(item["cost"]),
+                    "Discount": float(item.get("discount") or 0),
+                }
+                for item in items
+            ],
+        }
+        if comment:
+            payload["Comment"] = comment
+
+        response = self._request("POST", "CreateOrder", json=payload)
+        self._check_auth(response, "CreateOrder")
+
+        try:
+            body = response.json()
+        except ValueError:
+            body = None
+
+        rejected = response.status_code in (400, 404) or (
+            isinstance(body, dict) and body.get("success") is False
+        )
+        if rejected:
+            message = body.get("message") if isinstance(body, dict) else None
+            logger.warning(
+                "ConsultWebExchange CreateOrder rejected org=%s status=%s body=%r",
+                self.organization.id, response.status_code, response.text[:500],
+            )
+            raise ConsultWebExchangeError(
+                code="ORDER_CREATE_REJECTED",
+                detail=message or "The organization's web service rejected the order.",
+                http_status=400,
+                upstream_status=response.status_code,
+            )
+        if response.status_code != 200 or not isinstance(body, dict):
+            logger.error(
+                "ConsultWebExchange CreateOrder unexpected org=%s status=%s body=%r",
+                self.organization.id, response.status_code, response.text[:500],
+            )
+            raise ConsultWebExchangeError(
+                code="EXTERNAL_SERVICE_ERROR",
+                detail="Unexpected response from the organization's web service.",
+                http_status=502,
+                upstream_status=response.status_code,
+            )
+        return body
 
 
 def _extract_client_list(body: Any) -> list[dict]:

@@ -1103,7 +1103,158 @@ class PurchaseOrderViewSet(ModelViewSet):
                         },
                         status=http_status.HTTP_400_BAD_REQUEST,
                     )
+                error = self._push_order_to_consult(order)
+                if error is not None:
+                    return error
         return super().update(request, *args, **kwargs)
+
+    @staticmethod
+    def _push_order_to_consult(order):
+        """Create the order in 1C via CreateOrder before it confirms — fail CLOSED.
+
+        Unlike the stock guard above, a failure here blocks the confirm: a
+        confirmed order that does not exist in 1C can never be completed by
+        the webhook and silently loses the sale upstream. Returns None when
+        the order was pushed (or the push is intentionally skipped), else an
+        error Response.
+
+        Skipped entirely for orders already pushed (there is no UpdateOrder
+        upstream — edits after a push do not reach 1C) and for clientless /
+        retail orders while the org has no retail counterparty configured.
+        """
+        if order.external_order_number:
+            logging.info(
+                "CreateOrder push skipped for order=%s — already pushed as %s",
+                order.id, order.external_order_number,
+            )
+            return None
+
+        items = list(order.items.all())
+        if not items:
+            return Response(
+                {"code": "EMPTY_ORDER", "detail": "Cannot confirm an order with no items."},
+                status=http_status.HTTP_400_BAD_REQUEST,
+            )
+
+        client_id_phone = (
+            order.customer_identification_number
+            or order.customer_phone
+            or order.organization.retail_client_id_phone
+        )
+        if not client_id_phone:
+            # Never call CreateOrder without a ClientIDPhone — upstream
+            # silently creates an orphan order with no client attached.
+            logging.warning(
+                "CreateOrder push skipped for order=%s — no client and no "
+                "retail counterparty configured for org=%s",
+                order.id, order.organization_id,
+            )
+            return None
+
+        warehouse_codes = {item.warehouse_code for item in items}
+        if len(warehouse_codes) > 1:
+            return Response(
+                {
+                    "code": "MULTIPLE_WAREHOUSES",
+                    "detail": "1C accepts one warehouse per order; all items must share a warehouse to confirm.",
+                },
+                status=http_status.HTTP_400_BAD_REQUEST,
+            )
+        stock_id = next(iter(warehouse_codes))
+        if not stock_id:
+            return Response(
+                {
+                    "code": "MISSING_WAREHOUSE",
+                    "detail": "Order items have no warehouse; a warehouse is required to confirm.",
+                },
+                status=http_status.HTTP_400_BAD_REQUEST,
+            )
+
+        barcode_by_sku = PurchaseOrderViewSet._replica_barcode_by_sku(
+            order.organization,
+            {i.sku for i in items if not i.article and i.sku},
+        )
+        payload_items = []
+        for item in items:
+            if item.article:
+                lookup, is_barcode = item.article, False
+            elif barcode_by_sku.get(item.sku):
+                lookup, is_barcode = barcode_by_sku[item.sku], True
+            else:
+                return Response(
+                    {
+                        "code": "ITEM_LOOKUP_KEY_MISSING",
+                        "detail": f"Item '{item.sku_name or item.sku}' has no article or known barcode to send to 1C.",
+                        "sku": item.sku,
+                    },
+                    status=http_status.HTTP_400_BAD_REQUEST,
+                )
+            # Keep 1C's computed Amount identical to our line_total: an
+            # absolute discounted price replaces Price (a derived percent
+            # would round); a percent discount rides along and 1C applies
+            # it to Cost itself.
+            if item.discounted_price is not None:
+                price, discount = item.discounted_price, Decimal(0)
+            else:
+                price, discount = item.price, item.discount_percent
+            payload_items.append({
+                "is_barcode": is_barcode,
+                "sku": lookup,
+                "quantity": item.quantity,
+                "price": price,
+                "cost": price * item.quantity,
+                "discount": discount,
+            })
+
+        # The "#<id>" back-reference is what lets the 1C side call the
+        # completed-order webhook with our order id.
+        comment = f"Web order #{order.id}"
+        if order.notes:
+            comment = f"{comment} — {order.notes}"[:500]
+
+        client = ConsultWebExchangeClient(order.organization)
+        try:
+            body = client.create_order(
+                client_id_phone=client_id_phone,
+                user_id=order.organization.web_service_username or "",
+                stock_id=stock_id,
+                comment=comment,
+                items=payload_items,
+            )
+        except ConsultWebExchangeError as exc:
+            return _consult_error_response(exc)
+
+        number = body.get("OrderNumber") or ""
+        if not number:
+            logging.error(
+                "CreateOrder succeeded for order=%s but returned no OrderNumber: %r",
+                order.id, body,
+            )
+            number = "UNKNOWN"
+        # Persisted before super().update() saves the status, so a later
+        # validation failure cannot cause a double push on retry.
+        order.external_order_number = number
+        order.save(update_fields=["external_order_number", "updated_at"])
+        logging.info("Order %s pushed to 1C as OrderNumber=%s", order.id, number)
+        return None
+
+    @staticmethod
+    def _replica_barcode_by_sku(organization, skus):
+        """Map sku → a replica barcode for order lines with no article.
+
+        A line's 1C lookup key is its article, else a replica barcode for
+        its sku — 1C resolves only those two (the nomenclature code is 421).
+        """
+        if not skus:
+            return {}
+        barcode_by_sku = {}
+        rows = ProductBarcode.objects.filter(
+            product__organization=organization,
+            product__sku__in=skus,
+        ).values_list('product__sku', 'barcode')
+        for sku, barcode in rows:
+            barcode_by_sku.setdefault(sku, barcode)
+        return barcode_by_sku
 
     @staticmethod
     def _insufficient_stock_lines(order):
@@ -1120,17 +1271,10 @@ class PurchaseOrderViewSet(ModelViewSet):
         if not items:
             return []
 
-        # A line's 1C lookup key is its article, else a replica barcode for
-        # its sku — 1C resolves only those two (the nomenclature code is 421).
-        barcode_by_sku = {}
-        skus_needing_barcode = {i.sku for i in items if not i.article and i.sku}
-        if skus_needing_barcode:
-            rows = ProductBarcode.objects.filter(
-                product__organization=order.organization,
-                product__sku__in=skus_needing_barcode,
-            ).values_list('product__sku', 'barcode')
-            for sku, barcode in rows:
-                barcode_by_sku.setdefault(sku, barcode)
+        barcode_by_sku = PurchaseOrderViewSet._replica_barcode_by_sku(
+            order.organization,
+            {i.sku for i in items if not i.article and i.sku},
+        )
 
         # (lookup key, is_barcode) -> warehouse_code -> [requested, sample item]
         grouped = {}

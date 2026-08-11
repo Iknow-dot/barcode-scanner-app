@@ -16,7 +16,14 @@ from django.urls import reverse
 from rest_framework.exceptions import ValidationError as DRFValidationError
 from rest_framework.test import APIClient, APIRequestFactory
 
-from core.models import Organization, PurchaseOrder, PurchaseOrderItem, Warehouse
+from core.models import (
+    Organization,
+    Product,
+    ProductBarcode,
+    PurchaseOrder,
+    PurchaseOrderItem,
+    Warehouse,
+)
 from core.serializers import (
     OrganizationExternalServiceSerializer,
     OrganizationSerializer,
@@ -2799,6 +2806,9 @@ class OrderStatusGuardTests(TestCase):
 
     def test_normal_status_transitions_still_work(self):
         order = self._order(status='draft')
+        # An empty order can no longer be confirmed (EMPTY_ORDER guard, part
+        # of the CreateOrder-push feature) — give it a line item.
+        PurchaseOrderItem.objects.create(order=order, sku='S-guard', quantity=1)
         r = self._patch(order, {'status': 'confirmed'})
         self.assertEqual(r.status_code, 200)
         order.refresh_from_db()
@@ -2843,6 +2853,495 @@ class OrderStatusGuardTests(TestCase):
         order = self._order(status='confirmed')
         r = self.api.patch(f'/api/v1/orders/{order.id}/', ['not', 'a', 'dict'], format='json')
         self.assertEqual(r.status_code, 400)
+
+
+class CreateOrderClientTests(TestCase):
+    """ConsultWebExchangeClient.create_order — payload shape + real error contract.
+
+    The upstream .docx status table (401–417) is wrong: the live service
+    answers 400 (validation) / 404 (lookups) with ``{"success": false,
+    "message": "..."}``. The client branches on that envelope, never on the
+    documented custom codes.
+    """
+
+    def setUp(self):
+        self.org = _make_organization()
+        os.environ['FERNET_KEY'] = _TEST_FERNET_KEY
+
+    def tearDown(self):
+        os.environ.pop('FERNET_KEY', None)
+
+    @staticmethod
+    def _success_body():
+        return {
+            'success': True,
+            'message': 'Customer order created successfully',
+            'OrderNumber': '00000000051',
+            'OrderDate': '04.06.2026 15:17:15',
+            'OrderRef': 'მყიდველის შეკვეთა 00000000051',
+            'Items': [
+                {'Sku': '000000007126', 'Name': 'GASTRO სამარილე',
+                 'Quantity': 2, 'Price': 15.5, 'Amount': 29.45},
+            ],
+        }
+
+    @staticmethod
+    def _mock_response(status_code, body=None, text=''):
+        resp = mock.Mock()
+        resp.status_code = status_code
+        if body is not None:
+            resp.json.return_value = body
+            resp.text = str(body)
+        else:
+            resp.json.side_effect = ValueError('no json body')
+            resp.text = text
+        resp.reason_phrase = ''
+        return resp
+
+    @staticmethod
+    def _items():
+        return [{
+            'is_barcode': False,
+            'sku': 'A-100',
+            'quantity': 2,
+            'price': Decimal('15.50'),
+            'cost': Decimal('31.00'),
+            'discount': Decimal('5'),
+        }]
+
+    def _call(self, response, **overrides):
+        client = ConsultWebExchangeClient(self.org)
+        kwargs = dict(
+            client_id_phone='204433265',
+            user_id='administrator',
+            stock_id='000000001',
+            comment='Web order #7',
+            items=self._items(),
+        )
+        kwargs.update(overrides)
+        captured: dict = {}
+
+        def fake_request(method, url, **rkwargs):
+            captured['method'] = method
+            captured['url'] = url
+            captured['json'] = rkwargs.get('json')
+            return response
+
+        with mock.patch('httpx.request', side_effect=fake_request):
+            result = client.create_order(**kwargs)
+        return result, captured
+
+    def test_create_order_posts_documented_payload_shape(self):
+        _, captured = self._call(self._mock_response(200, self._success_body()))
+
+        self.assertEqual(captured['method'], 'POST')
+        self.assertTrue(captured['url'].endswith('/HS/ConsultWebExchange/CreateOrder'))
+        self.assertEqual(
+            captured['json'],
+            {
+                'ClientIDPhone': '204433265',
+                'UserID': 'administrator',
+                'StockID': '000000001',
+                'Comment': 'Web order #7',
+                'Items': [{
+                    'IsBarcode': 'false',
+                    'Sku': 'A-100',
+                    'Quantity': 2,
+                    'Price': 15.5,
+                    'Cost': 31.0,
+                    'Discount': 5.0,
+                }],
+            },
+        )
+        # Decimals must be converted — stdlib json cannot serialize Decimal.
+        item = captured['json']['Items'][0]
+        for key in ('Price', 'Cost', 'Discount'):
+            self.assertIsInstance(item[key], float)
+
+    def test_create_order_serializes_is_barcode_true_as_string(self):
+        items = self._items()
+        items[0]['is_barcode'] = True
+        items[0]['sku'] = '2000000078649'
+        _, captured = self._call(
+            self._mock_response(200, self._success_body()), items=items,
+        )
+        self.assertEqual(captured['json']['Items'][0]['IsBarcode'], 'true')
+        self.assertEqual(captured['json']['Items'][0]['Sku'], '2000000078649')
+
+    def test_create_order_omits_blank_comment(self):
+        _, captured = self._call(
+            self._mock_response(200, self._success_body()), comment='',
+        )
+        self.assertNotIn('Comment', captured['json'])
+
+    def test_create_order_returns_upstream_body_on_success(self):
+        result, _ = self._call(self._mock_response(200, self._success_body()))
+        self.assertEqual(result['OrderNumber'], '00000000051')
+        self.assertTrue(result['success'])
+
+    def test_create_order_refuses_blank_client_id_phone(self):
+        # Upstream bug: a missing ClientIDPhone returns 200 and creates an
+        # orphan order with no client attached. The client must refuse
+        # locally rather than let that request out.
+        client = ConsultWebExchangeClient(self.org)
+        for blank in ('', None):
+            with mock.patch('httpx.request') as mrequest:
+                with self.assertRaises(ValueError):
+                    client.create_order(
+                        client_id_phone=blank,
+                        user_id='administrator',
+                        stock_id='000000001',
+                        comment='',
+                        items=self._items(),
+                    )
+                mrequest.assert_not_called()
+
+    def test_create_order_maps_400_rejection_with_upstream_message(self):
+        body = {'success': False, 'message': 'Items array is empty'}
+        with self.assertRaises(ConsultWebExchangeError) as ctx:
+            self._call(self._mock_response(400, body))
+        self.assertEqual(ctx.exception.code, 'ORDER_CREATE_REJECTED')
+        self.assertEqual(ctx.exception.http_status, 400)
+        self.assertIn('Items array is empty', ctx.exception.detail)
+
+    def test_create_order_maps_404_lookup_failure_with_upstream_message(self):
+        body = {'success': False, 'message': 'Customer not found by ClientIDPhone: 204433265'}
+        with self.assertRaises(ConsultWebExchangeError) as ctx:
+            self._call(self._mock_response(404, body))
+        self.assertEqual(ctx.exception.code, 'ORDER_CREATE_REJECTED')
+        self.assertEqual(ctx.exception.http_status, 400)
+        self.assertIn('Customer not found', ctx.exception.detail)
+
+    def test_create_order_rejects_success_false_in_200_body(self):
+        body = {'success': False, 'message': 'Something went sideways'}
+        with self.assertRaises(ConsultWebExchangeError) as ctx:
+            self._call(self._mock_response(200, body))
+        self.assertEqual(ctx.exception.code, 'ORDER_CREATE_REJECTED')
+        self.assertIn('Something went sideways', ctx.exception.detail)
+
+    def test_create_order_maps_401_to_unauthorized(self):
+        with self.assertRaises(ConsultWebExchangeError) as ctx:
+            self._call(self._mock_response(401))
+        self.assertEqual(ctx.exception.code, 'EXTERNAL_SERVICE_UNAUTHORIZED')
+
+    def test_create_order_maps_unexpected_status_to_external_error(self):
+        with self.assertRaises(ConsultWebExchangeError) as ctx:
+            self._call(self._mock_response(500, text='IIS error page'))
+        self.assertEqual(ctx.exception.code, 'EXTERNAL_SERVICE_ERROR')
+        self.assertEqual(ctx.exception.http_status, 502)
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
+@mock.patch('core.views.ConsultWebExchangeClient.create_order')
+@mock.patch('core.views.ConsultWebExchangeClient.get_stock_and_prices')
+class CreateOrderOnConfirmTests(TestCase):
+    """Confirming an order pushes it to 1C CreateOrder, fail closed.
+
+    The push runs after the stock guard and before the status saves. Any
+    push failure blocks the confirm (the order stays draft) — a confirmed
+    order that does not exist in 1C could never be completed by the
+    webhook. Skips: already-pushed orders, and clientless orders when the
+    org has no retail counterparty configured.
+    """
+
+    def setUp(self):
+        self.org = _make_organization(name='OrgPush', identification_number='802')
+        self.user = User.objects.create_user(
+            username='pusher', password='p',
+            role=User.Role.COMPANY_USER, organization=self.org,
+        )
+        self.api = APIClient()
+        self.api.force_authenticate(self.user)
+
+    def _order(self, status='draft', **extra):
+        defaults = dict(
+            organization=self.org, created_by=self.user,
+            customer_name='Nino',
+            customer_phone='+995555000111',
+            customer_identification_number='01001012345',
+        )
+        defaults.update(extra)
+        return PurchaseOrder.objects.create(status=status, **defaults)
+
+    def _item(self, order, *, sku='S1', article='A1', warehouse='W1', qty=1, **extra):
+        return PurchaseOrderItem.objects.create(
+            order=order, sku=sku, sku_name=f'Name {sku}', article=article,
+            price=extra.pop('price', Decimal('10.00')), quantity=qty,
+            warehouse_code=warehouse, warehouse_name=f'WH {warehouse}',
+            **extra,
+        )
+
+    def _confirm(self, order):
+        return self.api.patch(
+            f'/api/v1/orders/{order.id}/', {'status': 'confirmed'}, format='json',
+        )
+
+    @staticmethod
+    def _plenty_of_stock(mstock):
+        mstock.return_value = {'stock': [
+            {'warehouse': code, 'quantity': 999} for code in ('W1', 'W2')
+        ]}
+
+    @staticmethod
+    def _success(number='00000000051'):
+        return {'success': True, 'message': 'ok', 'OrderNumber': number}
+
+    def test_confirm_pushes_order_and_stores_order_number(self, mstock, mcreate):
+        self._plenty_of_stock(mstock)
+        mcreate.return_value = self._success()
+        order = self._order(notes='call before delivery')
+        self._item(order, qty=2)
+
+        r = self._confirm(order)
+
+        self.assertEqual(r.status_code, 200)
+        order.refresh_from_db()
+        self.assertEqual(order.status, 'confirmed')
+        self.assertEqual(order.external_order_number, '00000000051')
+        self.assertEqual(r.json()['external_order_number'], '00000000051')
+
+        kwargs = mcreate.call_args.kwargs
+        self.assertEqual(kwargs['client_id_phone'], '01001012345')  # ID over phone
+        self.assertEqual(kwargs['user_id'], 'svc-user')  # org web_service_username
+        self.assertEqual(kwargs['stock_id'], 'W1')
+        self.assertIn(f'#{order.id}', kwargs['comment'])
+        self.assertIn('call before delivery', kwargs['comment'])
+        self.assertEqual(kwargs['items'], [{
+            'is_barcode': False,
+            'sku': 'A1',
+            'quantity': 2,
+            'price': Decimal('10.00'),
+            'cost': Decimal('20.00'),
+            'discount': Decimal('0'),
+        }])
+
+    def test_client_id_falls_back_to_phone(self, mstock, mcreate):
+        self._plenty_of_stock(mstock)
+        mcreate.return_value = self._success()
+        order = self._order(customer_identification_number='')
+        self._item(order)
+
+        self._confirm(order)
+
+        self.assertEqual(mcreate.call_args.kwargs['client_id_phone'], '+995555000111')
+
+    def test_discounted_price_sent_as_price_with_zero_discount(self, mstock, mcreate):
+        # An absolute discounted price replaces Price so 1C's Amount equals
+        # our line_total exactly (a derived percent would round).
+        self._plenty_of_stock(mstock)
+        mcreate.return_value = self._success()
+        order = self._order()
+        self._item(order, qty=2, discounted_price=Decimal('8.00'),
+                   discount_percent=Decimal('20.00'))
+
+        self._confirm(order)
+
+        item = mcreate.call_args.kwargs['items'][0]
+        self.assertEqual(item['price'], Decimal('8.00'))
+        self.assertEqual(item['cost'], Decimal('16.00'))
+        self.assertEqual(item['discount'], Decimal('0'))
+
+    def test_percent_discount_sent_with_base_price(self, mstock, mcreate):
+        # 1C applies Discount to Cost itself: Amount = Cost × (1 − d/100).
+        self._plenty_of_stock(mstock)
+        mcreate.return_value = self._success()
+        order = self._order()
+        self._item(order, qty=2, discount_percent=Decimal('5.00'))
+
+        self._confirm(order)
+
+        item = mcreate.call_args.kwargs['items'][0]
+        self.assertEqual(item['price'], Decimal('10.00'))
+        self.assertEqual(item['cost'], Decimal('20.00'))
+        self.assertEqual(item['discount'], Decimal('5.00'))
+
+    def test_barcode_fallback_when_no_article(self, mstock, mcreate):
+        self._plenty_of_stock(mstock)
+        mcreate.return_value = self._success()
+        product = Product.objects.create(
+            organization=self.org, sku='SKU9', name='Prod 9',
+        )
+        ProductBarcode.objects.create(product=product, barcode='2000000078649')
+        order = self._order()
+        self._item(order, sku='SKU9', article='')
+
+        r = self._confirm(order)
+
+        self.assertEqual(r.status_code, 200)
+        item = mcreate.call_args.kwargs['items'][0]
+        self.assertTrue(item['is_barcode'])
+        self.assertEqual(item['sku'], '2000000078649')
+
+    def test_item_without_lookup_key_blocks_confirm(self, mstock, mcreate):
+        self._plenty_of_stock(mstock)
+        order = self._order()
+        self._item(order, sku='SKU-NOKEY', article='')
+
+        r = self._confirm(order)
+
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.json()['code'], 'ITEM_LOOKUP_KEY_MISSING')
+        mcreate.assert_not_called()
+        order.refresh_from_db()
+        self.assertEqual(order.status, 'draft')
+
+    def test_push_rejection_blocks_confirm(self, mstock, mcreate):
+        self._plenty_of_stock(mstock)
+        mcreate.side_effect = ConsultWebExchangeError(
+            code='ORDER_CREATE_REJECTED',
+            detail='Customer not found by ClientIDPhone: 01001012345',
+            http_status=400,
+            upstream_status=404,
+        )
+        order = self._order()
+        self._item(order)
+
+        r = self._confirm(order)
+
+        self.assertEqual(r.status_code, 400)
+        body = r.json()
+        self.assertEqual(body['code'], 'ORDER_CREATE_REJECTED')
+        self.assertIn('Customer not found', body['detail'])
+        order.refresh_from_db()
+        self.assertEqual(order.status, 'draft')
+        self.assertEqual(order.external_order_number, '')
+
+    def test_transport_failure_blocks_confirm(self, mstock, mcreate):
+        self._plenty_of_stock(mstock)
+        mcreate.side_effect = ConsultWebExchangeError(
+            code='EXTERNAL_SERVICE_UNAVAILABLE',
+            detail='Could not connect to the organization\'s web service.',
+            http_status=502,
+        )
+        order = self._order()
+        self._item(order)
+
+        r = self._confirm(order)
+
+        self.assertEqual(r.status_code, 502)
+        self.assertEqual(r.json()['code'], 'EXTERNAL_SERVICE_UNAVAILABLE')
+        order.refresh_from_db()
+        self.assertEqual(order.status, 'draft')
+
+    def test_mixed_warehouses_block_confirm(self, mstock, mcreate):
+        self._plenty_of_stock(mstock)
+        order = self._order()
+        self._item(order, warehouse='W1')
+        self._item(order, sku='S2', article='A2', warehouse='W2')
+
+        r = self._confirm(order)
+
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.json()['code'], 'MULTIPLE_WAREHOUSES')
+        mcreate.assert_not_called()
+        order.refresh_from_db()
+        self.assertEqual(order.status, 'draft')
+
+    def test_blank_warehouse_blocks_confirm(self, mstock, mcreate):
+        self._plenty_of_stock(mstock)
+        order = self._order()
+        self._item(order, warehouse='')
+
+        r = self._confirm(order)
+
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.json()['code'], 'MISSING_WAREHOUSE')
+        mcreate.assert_not_called()
+
+    def test_empty_order_blocks_confirm(self, mstock, mcreate):
+        order = self._order()
+
+        r = self._confirm(order)
+
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.json()['code'], 'EMPTY_ORDER')
+        mcreate.assert_not_called()
+
+    def test_retail_order_uses_org_retail_counterparty(self, mstock, mcreate):
+        self._plenty_of_stock(mstock)
+        mcreate.return_value = self._success()
+        self.org.retail_client_id_phone = '999888777'
+        self.org.save()
+        order = self._order(
+            is_retail=True, customer_name='', customer_phone='',
+            customer_identification_number='',
+        )
+        self._item(order)
+
+        r = self._confirm(order)
+
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(mcreate.call_args.kwargs['client_id_phone'], '999888777')
+
+    def test_retail_order_without_setting_confirms_without_push(self, mstock, mcreate):
+        self._plenty_of_stock(mstock)
+        order = self._order(
+            is_retail=True, customer_name='', customer_phone='',
+            customer_identification_number='',
+        )
+        self._item(order)
+
+        r = self._confirm(order)
+
+        self.assertEqual(r.status_code, 200)
+        mcreate.assert_not_called()
+        order.refresh_from_db()
+        self.assertEqual(order.status, 'confirmed')
+        self.assertEqual(order.external_order_number, '')
+
+    def test_already_pushed_order_skips_push(self, mstock, mcreate):
+        self._plenty_of_stock(mstock)
+        order = self._order(external_order_number='00000000042')
+        self._item(order)
+
+        r = self._confirm(order)
+
+        self.assertEqual(r.status_code, 200)
+        mcreate.assert_not_called()
+        order.refresh_from_db()
+        self.assertEqual(order.external_order_number, '00000000042')
+
+    def test_stock_shortage_blocks_before_push(self, mstock, mcreate):
+        mstock.return_value = {'stock': [{'warehouse': 'W1', 'quantity': 1}]}
+        order = self._order()
+        self._item(order, qty=5)
+
+        r = self._confirm(order)
+
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.json()['code'], 'INSUFFICIENT_STOCK')
+        mcreate.assert_not_called()
+
+    def test_external_order_number_not_writable_via_api(self, mstock, mcreate):
+        order = self._order()
+        self._item(order)
+
+        r = self.api.patch(
+            f'/api/v1/orders/{order.id}/',
+            {'external_order_number': '00000000099'},
+            format='json',
+        )
+
+        self.assertEqual(r.status_code, 200)
+        order.refresh_from_db()
+        self.assertEqual(order.external_order_number, '')
+
+    def test_gift_line_sent_as_normal_line(self, mstock, mcreate):
+        # This 1C base has no gift attribute yet (ClickUp 86cakz72m) — gift
+        # lines go through with their regular pricing.
+        self._plenty_of_stock(mstock)
+        mcreate.return_value = self._success()
+        order = self._order()
+        self._item(order)
+        self._item(order, sku='S2', article='A2', is_gift=True)
+
+        r = self._confirm(order)
+
+        self.assertEqual(r.status_code, 200)
+        items = mcreate.call_args.kwargs['items']
+        self.assertEqual(len(items), 2)
+        self.assertEqual(items[1]['sku'], 'A2')
+        self.assertEqual(items[1]['price'], Decimal('10.00'))
 
 
 @override_settings(SECURE_SSL_REDIRECT=False)
