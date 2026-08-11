@@ -24,6 +24,7 @@ import groupItemsBySku from './groupItemsBySku';
 import {hasProductResult, isStockBlocked, stockStatusMessageKey} from './stockStatus';
 import inheritFromGroup from './inheritFromGroup';
 import formatInsufficientStock from './insufficientStock';
+import formatConfirmError from './confirmError';
 import {warehouseRowView, pickUnit} from './warehouseRowView';
 import {catalogFeatureEnabled} from '../../utils/features';
 import displayCustomerName from '../../utils/orderDisplay';
@@ -678,6 +679,19 @@ const UserDashboard = () => {
                     t.insufficientStockTitle,
                     <span style={{whiteSpace: 'pre-line'}}>
                         {formatInsufficientStock(result.data?.items, t)}
+                    </span>,
+                );
+                return;
+            }
+            // CreateOrder-push guards (ORDER_CREATE_REJECTED, warehouse and
+            // item-key checks) answer with coded 400s — show the localized
+            // message instead of the raw English detail.
+            const confirmError = formatConfirmError(result, t);
+            if (confirmError) {
+                notify.error(
+                    confirmError.title,
+                    <span style={{whiteSpace: 'pre-line'}}>
+                        {confirmError.message}
                     </span>,
                 );
             } else {
