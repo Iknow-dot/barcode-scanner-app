@@ -1,10 +1,12 @@
 import React, {useState, useEffect, useMemo, useCallback, useRef} from 'react';
 import {Button, Drawer, Empty, Flex, Input, List, Spin, Switch, Tag, Typography} from 'antd';
-import {LeftOutlined, QrcodeOutlined, RightOutlined, SearchOutlined, ShoppingCartOutlined} from '@ant-design/icons';
+import {LeftOutlined, QrcodeOutlined, SearchOutlined, ShoppingCartOutlined} from '@ant-design/icons';
 import {catalogService} from '../../api';
 import {useLanguage} from '../../i18n/LanguageContext';
 import {childrenForStack, nodeForStack, breadcrumbForStack, parentStack} from './catalogBrowse';
 import ProductImage from '../Common/ProductImage';
+import './FindProductDrawer.css';
+import {TILE_PALETTE, paletteIndex, monogram} from './categoryTileStyle';
 
 const {Text} = Typography;
 
@@ -125,6 +127,7 @@ const FindProductDrawer = ({
     const children = useMemo(() => childrenForStack(tree, stack), [tree, stack]);
     const crumb = useMemo(() => breadcrumbForStack(tree, stack), [tree, stack]);
     const parentNode = useMemo(() => nodeForStack(tree, parentStack(stack)), [tree, stack]);
+    const currentNode = useMemo(() => nodeForStack(tree, stack), [tree, stack]);
 
     const searching = query.trim().length > 0;
 
@@ -228,73 +231,104 @@ const FindProductDrawer = ({
                     </Spin>
                 ) : (
                     <>
-                        {stack.length > 0 && (
+                        {stack.length === 0 ? (
                             <>
-                                <Text type="secondary" style={{fontSize: 12, display: 'block', margin: '4px 2px'}}>
-                                    {[t.allCategories, ...crumb].join(' › ')}
-                                </Text>
-                                <Button
-                                    type="link"
-                                    icon={<LeftOutlined/>}
-                                    onClick={() => setStack(parentStack(stack))}
-                                    style={{paddingLeft: 0}}
-                                >
-                                    {parentNode ? parentNode.name : t.allCategories}
-                                </Button>
+                                <div className="fpd-seccap">{t.categoriesLabel}</div>
+                                <div className="fpd-tiles">
+                                    {children.map((node) => {
+                                        const palette = TILE_PALETTE[paletteIndex(node.id)];
+                                        return (
+                                            <button
+                                                type="button"
+                                                key={node.id}
+                                                className="fpd-tile"
+                                                style={{background: palette.bg}}
+                                                onClick={() => setStack([...stack, node.id])}
+                                            >
+                                                <span className="fpd-tile-mono" style={{color: palette.fg}} aria-hidden="true">
+                                                    {monogram(node.name)}
+                                                </span>
+                                                <span className="fpd-tile-name">{node.name}</span>
+                                                <span className="fpd-tile-count">
+                                                    {node.product_count} {t.productCountSuffix}
+                                                </span>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
                             </>
-                        )}
-                        <List
-                            size="small"
-                            dataSource={children}
-                            renderItem={(node) => (
-                                <List.Item
-                                    onClick={() => setStack([...stack, node.id])}
-                                    style={{cursor: 'pointer'}}
-                                    extra={<RightOutlined style={{fontSize: 12, opacity: 0.4}}/>}
-                                >
-                                    <Text>{node.name}</Text>
-                                    <Text type="secondary" style={{fontSize: 12, marginLeft: 8}}>
-                                        {node.product_count}
-                                    </Text>
-                                </List.Item>
-                            )}
-                        />
-                        {currentId != null && (
-                            <div style={{marginTop: 8}}>
-                                <Text type="secondary" style={{fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.4}}>
-                                    {t.productsLabel}{count ? ` · ${count}` : ''}
-                                </Text>
-                                <Spin spinning={browseLoading} size="small">
-                                    {rows.length === 0 && !browseLoading ? (
-                                        <Empty
-                                            image={Empty.PRESENTED_IMAGE_SIMPLE}
-                                            description={t.noProductsFound}
-                                            style={{margin: '16px 0'}}
-                                        />
-                                    ) : (
-                                        <>
-                                            <List
-                                                size="small"
-                                                dataSource={rows}
-                                                renderItem={(item) => renderProductRow(item, [
-                                                    item.article,
-                                                    item.price != null ? `${item.price} ₾` : '',
-                                                ])}
-                                            />
-                                            {rows.length < count && (
-                                                <Button
-                                                    block
-                                                    onClick={() => fetchProducts(currentId, page + 1)}
-                                                    loading={browseLoading}
-                                                    style={{marginTop: 8}}
-                                                >
-                                                    {t.loadMore}
-                                                </Button>
-                                            )}
-                                        </>
+                        ) : (
+                            <>
+                                {stack.length >= 2 && (
+                                    <div className="fpd-crumbpath">
+                                        {[t.allCategories, ...crumb].join(' › ')}
+                                    </div>
+                                )}
+                                <div className="fpd-crumbline">
+                                    <button
+                                        type="button"
+                                        className="fpd-backpill"
+                                        onClick={() => setStack(parentStack(stack))}
+                                    >
+                                        <LeftOutlined/> {parentNode ? parentNode.name : t.allCategories}
+                                    </button>
+                                    <span className="fpd-crumbtitle">{currentNode ? currentNode.name : ''}</span>
+                                    {currentNode != null && (
+                                        <span className="fpd-crumbcount">
+                                            {currentNode.product_count} {t.productCountSuffix}
+                                        </span>
                                     )}
-                                </Spin>
-                            </div>
+                                </div>
+                                {children.length > 0 && (
+                                    <div className="fpd-chips">
+                                        {children.map((node) => (
+                                            <button
+                                                type="button"
+                                                key={node.id}
+                                                className="fpd-chip"
+                                                onClick={() => setStack([...stack, node.id])}
+                                            >
+                                                {node.name} <span className="fpd-chip-cnt">{node.product_count}</span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                                <div style={{marginTop: 8}}>
+                                    <Text type="secondary" style={{fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.4}}>
+                                        {t.productsLabel}{count ? ` · ${count}` : ''}
+                                    </Text>
+                                    <Spin spinning={browseLoading} size="small">
+                                        {rows.length === 0 && !browseLoading ? (
+                                            <Empty
+                                                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                                                description={t.noProductsFound}
+                                                style={{margin: '16px 0'}}
+                                            />
+                                        ) : (
+                                            <>
+                                                <List
+                                                    size="small"
+                                                    dataSource={rows}
+                                                    renderItem={(item) => renderProductRow(item, [
+                                                        item.article,
+                                                        item.price != null ? `${item.price} ₾` : '',
+                                                    ])}
+                                                />
+                                                {rows.length < count && (
+                                                    <Button
+                                                        block
+                                                        onClick={() => fetchProducts(currentId, page + 1)}
+                                                        loading={browseLoading}
+                                                        style={{marginTop: 8}}
+                                                    >
+                                                        {t.loadMore}
+                                                    </Button>
+                                                )}
+                                            </>
+                                        )}
+                                    </Spin>
+                                </div>
+                            </>
                         )}
                     </>
                 )}

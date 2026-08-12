@@ -1,0 +1,206 @@
+/* Catalog drawer visual refresh (fpd- prefix). Layout constants mirror
+   .claude/catalog-final-mockup.html; app ships a single light theme. */
+
+.fpd-seccap {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    color: rgba(0, 0, 0, 0.45);
+    margin: 8px 2px 6px;
+}
+
+/* --- root: category tile wall --- */
+.fpd-tiles {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+.fpd-tile {
+    border: 1px solid rgba(0, 0, 0, 0.05);
+    border-radius: 14px;
+    padding: 14px 12px 12px;
+    min-height: 92px;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    align-items: flex-start;
+    gap: 2px;
+    position: relative;
+    overflow: hidden;
+    cursor: pointer;
+    text-align: left;
+    font-family: inherit;
+}
+.fpd-tile-mono {
+    position: absolute;
+    top: 2px;
+    right: 10px;
+    font-size: 42px;
+    font-weight: 800;
+    opacity: 0.16;
+    line-height: 1.2;
+    pointer-events: none;
+}
+.fpd-tile-name {
+    font-weight: 650;
+    font-size: 13.5px;
+    line-height: 1.25;
+    position: relative;
+    color: rgba(0, 0, 0, 0.88);
+}
+.fpd-tile-count {
+    font-size: 11.5px;
+    color: rgba(0, 0, 0, 0.5);
+    position: relative;
+}
+
+/* --- drilled: crumb header + subcategory chips --- */
+.fpd-crumbpath {
+    font-size: 11px;
+    color: rgba(0, 0, 0, 0.4);
+    margin: 6px 2px 2px;
+}
+.fpd-crumbline {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 6px 2px 8px;
+}
+.fpd-backpill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    height: 28px;
+    padding: 0 12px 0 8px;
+    border-radius: 999px;
+    border: none;
+    background: rgba(22, 119, 255, 0.08);
+    color: #1677ff;
+    font-size: 12.5px;
+    font-weight: 500;
+    white-space: nowrap;
+    cursor: pointer;
+    font-family: inherit;
+}
+.fpd-crumbtitle {
+    font-weight: 650;
+    font-size: 15px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.fpd-crumbcount {
+    color: rgba(0, 0, 0, 0.4);
+    font-size: 12px;
+    margin-left: auto;
+    white-space: nowrap;
+}
+.fpd-chips {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding: 2px 2px 10px;
+    scrollbar-width: none;
+}
+.fpd-chips::-webkit-scrollbar {
+    display: none;
+}
+.fpd-chip {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 30px;
+    padding: 0 13px;
+    border-radius: 999px;
+    background: #fff;
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    font-size: 12.5px;
+    font-weight: 500;
+    white-space: nowrap;
+    color: rgba(0, 0, 0, 0.75);
+    cursor: pointer;
+    font-family: inherit;
+}
+.fpd-chip-cnt {
+    font-size: 11px;
+    color: rgba(0, 0, 0, 0.4);
+    font-weight: 400;
+}
+
+/* --- product card rows (used by Task 3) --- */
+.fpd-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: #fff;
+    border: 1px solid rgba(0, 0, 0, 0.06);
+    border-radius: 12px;
+    padding: 10px 12px;
+    margin-bottom: 8px;
+    cursor: pointer;
+}
+.fpd-thumb {
+    flex: none;
+    width: 56px;
+    height: 56px;
+    border-radius: 10px;
+    border: 1px solid rgba(0, 0, 0, 0.05);
+    background: rgba(22, 119, 255, 0.06);
+    color: rgba(22, 119, 255, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    position: relative;
+    overflow: hidden;
+}
+.fpd-thumb-img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+.fpd-row-main {
+    flex: 1;
+    min-width: 0;
+}
+.fpd-row-name {
+    font-weight: 600;
+    font-size: 13.5px;
+    line-height: 1.3;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+.fpd-row-meta {
+    color: rgba(0, 0, 0, 0.45);
+    font-size: 11.5px;
+    margin-top: 2px;
+}
+.fpd-row-side {
+    flex: none;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 4px;
+}
+.fpd-row-price {
+    font-weight: 700;
+    font-size: 14px;
+    font-variant-numeric: tabular-nums;
+}
+.fpd-row-add {
+    width: 26px;
+    height: 26px;
+    border-radius: 8px;
+    background: rgba(22, 119, 255, 0.1);
+    color: #1677ff;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 15px;
+    font-weight: 600;
+}

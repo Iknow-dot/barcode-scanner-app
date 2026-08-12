@@ -29,7 +29,9 @@ beforeAll(() => {
 });
 
 const TREE = [
-  {id: 1, name: 'Snacks', product_count: 2, children: []},
+  {id: 1, name: 'Snacks', product_count: 2, children: [
+    {id: 3, name: 'Salty', product_count: 1, children: []},
+  ]},
   {id: 2, name: 'Beverages', product_count: 1, children: []},
 ];
 
@@ -228,8 +230,39 @@ describe('category browsing', () => {
 
     // …and clearing restores the same branch without refetching.
     typeQuery('');
-    expect(screen.getByText('All categories › Snacks')).toBeInTheDocument();
+    expect(screen.getByRole('button', {name: /All categories/})).toBeInTheDocument();
+    expect(screen.getByText('Snacks')).toBeInTheDocument();
     expect(screen.getByText('Chips')).toBeInTheDocument();
     expect(catalogService.listProducts).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('category navigation chrome', () => {
+  test('root renders category tiles with product counts and no crumb chrome', async () => {
+    await renderDrawer();
+    expect(screen.getByText('Categories')).toBeInTheDocument();
+    expect(document.querySelectorAll('.fpd-tile')).toHaveLength(2);
+    expect(screen.getByText('2 products')).toBeInTheDocument();
+    expect(screen.getByText('1 products')).toBeInTheDocument();
+    expect(document.querySelector('.fpd-crumbline')).not.toBeInTheDocument();
+  });
+
+  test('depth 1: back pill, bold title with count, children as chips, no path line', async () => {
+    await renderDrawer();
+    fireEvent.click(screen.getByText('Snacks'));
+    expect(screen.getByRole('button', {name: /All categories/})).toBeInTheDocument();
+    expect(document.querySelector('.fpd-crumbtitle').textContent).toBe('Snacks');
+    expect(screen.getByText('2 products')).toBeInTheDocument();
+    expect(screen.getByRole('button', {name: /Salty/})).toBeInTheDocument();
+    expect(document.querySelector('.fpd-crumbpath')).not.toBeInTheDocument();
+  });
+
+  test('depth 2: the full path line appears and the back pill names the parent', async () => {
+    await renderDrawer();
+    fireEvent.click(screen.getByText('Snacks'));
+    fireEvent.click(screen.getByRole('button', {name: /Salty/}));
+    expect(screen.getByText('All categories › Snacks › Salty')).toBeInTheDocument();
+    expect(screen.getByRole('button', {name: /Snacks/})).toBeInTheDocument();
+    expect(document.querySelector('.fpd-crumbtitle').textContent).toBe('Salty');
   });
 });
