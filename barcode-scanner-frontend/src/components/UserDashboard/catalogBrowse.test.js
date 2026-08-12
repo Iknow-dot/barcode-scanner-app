@@ -4,6 +4,7 @@ import {
   childrenForStack,
   breadcrumbForStack,
   parentStack,
+  subPath,
 } from './catalogBrowse';
 
 const TREE = [
@@ -47,4 +48,12 @@ test('parentStack drops exactly one level and does not mutate', () => {
   expect(parentStack(stack)).toEqual([1]);
   expect(parentStack([])).toEqual([]);
   expect(stack).toEqual([1, 2]);
+});
+
+test('subPath returns the segments deeper than the current crumb', () => {
+  expect(subPath(['Beverages', 'Coffee'], ['Beverages'])).toBe('Coffee');
+  expect(subPath(['Beverages', 'Coffee', 'Beans'], ['Beverages'])).toBe('Coffee › Beans');
+  expect(subPath(['Beverages'], ['Beverages'])).toBe('');
+  expect(subPath([], ['Beverages'])).toBe('');
+  expect(subPath(undefined, [])).toBe('');
 });

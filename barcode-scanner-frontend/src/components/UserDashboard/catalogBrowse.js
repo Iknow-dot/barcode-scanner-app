@@ -36,3 +36,12 @@ export function breadcrumbForStack(nodes, stack) {
 export function parentStack(stack) {
     return stack.slice(0, -1);
 }
+
+// Display helper for branch product listings: a row's category path minus the
+// current crumb prefix, e.g. inside "Kitchen" a product living in
+// Kitchen › Pans renders "Pans"; a product at the current node renders ''.
+export function subPath(categoryPath, crumbNames) {
+    const path = categoryPath || [];
+    const depth = (crumbNames || []).length;
+    return path.length > depth ? path.slice(depth).join(' › ') : '';
+}
