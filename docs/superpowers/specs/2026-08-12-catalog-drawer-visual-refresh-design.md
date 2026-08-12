@@ -1,7 +1,7 @@
 # Catalog drawer visual refresh (consultant side) — design
 
 Date: 2026-08-12
-Status: direction approved via mockups (`.claude/catalog-mockups.html`); spec pending user review
+Status: approved and implemented (2026-08-12); see docs/superpowers/plans/2026-08-12-catalog-drawer-visual-refresh.md
 
 ## 1. Problem
 
