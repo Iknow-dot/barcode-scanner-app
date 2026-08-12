@@ -58,14 +58,14 @@ const browsePage = (names, count = names.length) => ({
 // onCommit (optional) runs synchronously after every React commit's DOM
 // mutations, before passive effects — the only window where a stale-state
 // flash is observable from a test.
-const renderDrawer = async ({onCommit = () => {}} = {}) => {
+const renderDrawer = async ({onCommit = () => {}, onSelectProduct = jest.fn()} = {}) => {
   const utils = render(
     <React.Profiler id="find-product-drawer" onRender={onCommit}>
       <LanguageProvider>
         <FindProductDrawer
           open
           onClose={jest.fn()}
-          onSelectProduct={jest.fn()}
+          onSelectProduct={onSelectProduct}
           onScan={jest.fn()}
           allWarehouses={false}
           onAllWarehousesChange={jest.fn()}
@@ -76,7 +76,7 @@ const renderDrawer = async ({onCommit = () => {}} = {}) => {
   );
   // Flush the categoryTree load so the root category list is on screen.
   await act(async () => {});
-  return utils;
+  return {...utils, onSelectProduct};
 };
 
 const queryInput = () => screen.getByPlaceholderText('Name, article, or barcode');
@@ -264,5 +264,48 @@ describe('category navigation chrome', () => {
     expect(screen.getByText('All categories › Snacks › Salty')).toBeInTheDocument();
     expect(screen.getByRole('button', {name: /Snacks/})).toBeInTheDocument();
     expect(document.querySelector('.fpd-crumbtitle').textContent).toBe('Salty');
+  });
+});
+
+describe('product card rows', () => {
+  test('a row shows article and price and fires onSelectProduct with the sku', async () => {
+    const snacks = deferred();
+    catalogService.listProducts.mockReturnValueOnce(snacks.promise);
+    const onSelectProduct = jest.fn();
+    await renderDrawer({onSelectProduct});
+
+    fireEvent.click(screen.getByText('Snacks'));
+    await act(async () => snacks.resolve(browsePage(['Chips'])));
+
+    expect(screen.getByText('ART-Chips')).toBeInTheDocument();
+    expect(screen.getByText('5 ₾')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('Chips'));
+    expect(onSelectProduct).toHaveBeenCalledWith('SKU-Chips');
+  });
+
+  test('a product without an image renders the placeholder thumb', async () => {
+    const snacks = deferred();
+    catalogService.listProducts.mockReturnValueOnce(snacks.promise);
+    await renderDrawer();
+
+    fireEvent.click(screen.getByText('Snacks'));
+    await act(async () => snacks.resolve(browsePage(['Chips'])));
+
+    const thumb = document.querySelector('.fpd-row .fpd-thumb');
+    expect(thumb).toBeInTheDocument();
+    expect(thumb.querySelector('.fpd-thumb-img')).toBeNull();
+  });
+
+  test('search rows append the full category path to the meta line', async () => {
+    catalogService.searchByName.mockResolvedValue(
+      {success: true, data: [searchRow('Pretzels')]});
+    await renderDrawer();
+
+    typeQuery('pre');
+    act(() => jest.advanceTimersByTime(300));
+    await act(async () => {});
+
+    expect(screen.getByText('ART-Pretzels · Snacks')).toBeInTheDocument();
   });
 });

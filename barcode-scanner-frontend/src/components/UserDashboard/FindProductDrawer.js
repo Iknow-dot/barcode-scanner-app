@@ -1,9 +1,9 @@
 import React, {useState, useEffect, useMemo, useCallback, useRef} from 'react';
-import {Button, Drawer, Empty, Flex, Input, List, Spin, Switch, Tag, Typography} from 'antd';
-import {LeftOutlined, QrcodeOutlined, SearchOutlined, ShoppingCartOutlined} from '@ant-design/icons';
+import {Button, Drawer, Empty, Flex, Input, Spin, Switch, Tag, Typography} from 'antd';
+import {LeftOutlined, PictureOutlined, QrcodeOutlined, SearchOutlined, ShoppingCartOutlined} from '@ant-design/icons';
 import {catalogService} from '../../api';
 import {useLanguage} from '../../i18n/LanguageContext';
-import {childrenForStack, nodeForStack, breadcrumbForStack, parentStack} from './catalogBrowse';
+import {childrenForStack, nodeForStack, breadcrumbForStack, parentStack, subPath} from './catalogBrowse';
 import ProductImage from '../Common/ProductImage';
 import './FindProductDrawer.css';
 import {TILE_PALETTE, paletteIndex, monogram} from './categoryTileStyle';
@@ -11,6 +11,25 @@ import {TILE_PALETTE, paletteIndex, monogram} from './categoryTileStyle';
 const {Text} = Typography;
 
 const PAGE_SIZE = 25;
+
+// 56px thumb with a built-in placeholder: the ProductImage overlays the tinted
+// box when it loads; a missing src or a failed load (ProductImage renders
+// nothing then) leaves the placeholder visible. ProductImage stays unchanged.
+const RowThumb = ({item}) => {
+    const src = item.image || (item.images && item.images[0]);
+    return (
+        <div className="fpd-thumb">
+            <PictureOutlined/>
+            {src ? (
+                <ProductImage
+                    src={catalogService.imageUrl(src)}
+                    alt={item.name}
+                    className="fpd-thumb-img"
+                />
+            ) : null}
+        </div>
+    );
+};
 
 // Unified "Find product" drawer: a smart search box (name / article / sku /
 // barcode typeahead) on top, drill-down category browsing below. Replaces the
@@ -141,24 +160,18 @@ const FindProductDrawer = ({
         if (visible && inputRef.current) inputRef.current.focus();
     };
 
-    const renderProductRow = (item, metaParts) => (
-        <List.Item onClick={() => handleSelect(item.sku)} style={{cursor: 'pointer'}}>
-            <List.Item.Meta
-                avatar={item.image || (item.images && item.images[0]) ? (
-                    <ProductImage
-                        src={catalogService.imageUrl(item.image || item.images[0])}
-                        alt={item.name}
-                        style={{width: 36, height: 36, objectFit: 'cover', borderRadius: 6}}
-                    />
-                ) : undefined}
-                title={item.name}
-                description={
-                    <Text type="secondary" style={{fontSize: 12}}>
-                        {metaParts.filter(Boolean).join(' · ')}
-                    </Text>
-                }
-            />
-        </List.Item>
+    const renderProductRow = (item, meta) => (
+        <div key={item.sku} className="fpd-row" onClick={() => handleSelect(item.sku)}>
+            <RowThumb item={item}/>
+            <div className="fpd-row-main">
+                <div className="fpd-row-name">{item.name}</div>
+                {meta ? <div className="fpd-row-meta">{meta}</div> : null}
+            </div>
+            <div className="fpd-row-side">
+                {item.price != null && <span className="fpd-row-price">{item.price} ₾</span>}
+                <span className="fpd-row-add" aria-hidden="true">+</span>
+            </div>
+        </div>
     );
 
     return (
@@ -218,15 +231,11 @@ const FindProductDrawer = ({
                                 style={{margin: '24px 0'}}
                             />
                         ) : (
-                            <List
-                                size="small"
-                                dataSource={results}
-                                renderItem={(item) => renderProductRow(item, [
-                                    item.article,
-                                    (item.category_path || []).join(' › '),
-                                    item.price != null ? `${item.price} ₾` : '',
-                                ])}
-                            />
+                            <div>
+                                {results.map((item) => renderProductRow(item,
+                                    [item.article, (item.category_path || []).join(' › ')]
+                                        .filter(Boolean).join(' · ')))}
+                            </div>
                         )}
                     </Spin>
                 ) : (
@@ -294,9 +303,6 @@ const FindProductDrawer = ({
                                     </div>
                                 )}
                                 <div style={{marginTop: 8}}>
-                                    <Text type="secondary" style={{fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.4}}>
-                                        {t.productsLabel}{count ? ` · ${count}` : ''}
-                                    </Text>
                                     <Spin spinning={browseLoading} size="small">
                                         {rows.length === 0 && !browseLoading ? (
                                             <Empty
@@ -306,14 +312,11 @@ const FindProductDrawer = ({
                                             />
                                         ) : (
                                             <>
-                                                <List
-                                                    size="small"
-                                                    dataSource={rows}
-                                                    renderItem={(item) => renderProductRow(item, [
-                                                        item.article,
-                                                        item.price != null ? `${item.price} ₾` : '',
-                                                    ])}
-                                                />
+                                                <div>
+                                                    {rows.map((item) => renderProductRow(item,
+                                                        [item.article, subPath(item.category_path, crumb)]
+                                                            .filter(Boolean).join(' · ')))}
+                                                </div>
                                                 {rows.length < count && (
                                                     <Button
                                                         block
