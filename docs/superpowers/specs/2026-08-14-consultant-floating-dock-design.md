@@ -3,6 +3,8 @@
 Mockup: `.claude/consultant-dock-mockups.html`, Option C (approved 2026-08-14).
 Artifact: https://claude.ai/code/artifact/591ebcf6-0297-4895-b3ad-414b94170ef8
 
+**Status:** Implemented (2026-08-14).
+
 ## Problem
 
 The consultant page's bottom controls read as a web page, not an app:
