@@ -25,6 +25,7 @@ import {hasProductResult, isStockBlocked, stockStatusMessageKey} from './stockSt
 import inheritFromGroup from './inheritFromGroup';
 import formatInsufficientStock from './insufficientStock';
 import formatConfirmError from './confirmError';
+import dockCartView from './dockCartView';
 import {warehouseRowView, pickUnit} from './warehouseRowView';
 import {catalogFeatureEnabled} from '../../utils/features';
 import displayCustomerName from '../../utils/orderDisplay';
@@ -145,9 +146,8 @@ const UserDashboard = () => {
     const activeOrderRef = useRef(null);
 
     const {
-        token: {colorBgContainer, colorBgBase, colorTextSecondary, colorBorderSecondary},
+        token: {colorBgContainer, colorTextSecondary, colorBorderSecondary},
     } = theme.useToken();
-    const isDarkMode = colorBgBase === "#000";
 
     const {notify, contextHolder} = useAppNotification();
 
@@ -797,7 +797,7 @@ const UserDashboard = () => {
     };
 
     const animateAddToCart = (sourceEl) => {
-        const cartEl = document.querySelector('.m-cart-fab');
+        const cartEl = document.querySelector('.m-dock-cart');
         if (!cartEl || !sourceEl) return;
         const sourceRect = sourceEl.getBoundingClientRect();
         const cartRect = cartEl.getBoundingClientRect();
@@ -895,6 +895,7 @@ const UserDashboard = () => {
     const hasResults = hasProductResult(productInfo, balances);
     const showEmptyProductState = !hasResults && !scannerOpen;
     const showOrderPanel = orderMode && activeOrder;
+    const cartView = dockCartView(showOrderPanel ? activeOrder : null);
 
     // ===== Scan/Product Tab Content =====
     const renderScanTab = () => (
@@ -902,27 +903,6 @@ const UserDashboard = () => {
             {/* Active order indicator bar */}
             {showOrderPanel && (
                 <OfflineBanner orderId={activeOrder.id}/>
-            )}
-            {showOrderPanel && (
-                <div
-                    className="m-order-indicator"
-                    onClick={() => setOrderDrawerVisible(true)}
-                >
-                    <Flex align="center" gap={8} style={{flex: 1, minWidth: 0}}>
-                        <Badge count={activeOrder.items?.length || 0} size="small" overflowCount={99}>
-                            <ShoppingCartOutlined style={{fontSize: 18, color: '#fff'}}/>
-                        </Badge>
-                        <Text className="m-order-indicator-text" ellipsis>
-                            {t.activeOrder} #{activeOrder.id} · {displayCustomerName(activeOrder, t)}
-                        </Text>
-                    </Flex>
-                    <Flex align="center" gap={4}>
-                        <Text className="m-order-indicator-total">
-                            {activeOrder.total} ₾
-                        </Text>
-                        <RightOutlined style={{color: '#fff', fontSize: 12}}/>
-                    </Flex>
-                </div>
             )}
 
             {/* Empty product state — daily snapshot */}
@@ -1284,83 +1264,62 @@ const UserDashboard = () => {
                     {activeTab === 'orders' && renderOrdersTab()}
                 </div>
 
-                {/* Floating cart FAB — always available so the active order is
-                    one tap away from any tab. */}
-                {!scannerOpen && !drawerVisible && !orderDrawerVisible && !customerModalOpen && (
-                    <button
-                        type="button"
-                        className={`m-cart-fab${showOrderPanel ? '' : ' m-cart-fab--inactive'}`}
-                        aria-label={t.activeOrder}
-                        onClick={() => {
-                            if (activeOrder) {
-                                setOrderDrawerVisible(true);
-                            } else {
-                                setCustomerModalOpen(true);
-                            }
-                        }}
-                    >
-                        <Badge
-                            count={showOrderPanel ? (activeOrder?.items?.length || 0) : 0}
-                            size="small"
-                            offset={[2, -2]}
-                            color="#ff4d4f"
-                        >
-                            <ShoppingCartOutlined style={{color: '#fff', fontSize: 24}}/>
-                        </Badge>
-                    </button>
-                )}
-
-                {/* ===== Bottom Navigation / Action Bar ===== */}
+                {/* ===== Floating glass dock: tabs + scan + search + cart ===== */}
                 {!scannerOpen && !drawerVisible && (
-                    <div className="m-bottom-bar" style={{
-                        background: isDarkMode ? 'rgba(20, 20, 20, 0.96)' : 'rgba(255, 255, 255, 0.96)',
-                        borderTopColor: isDarkMode ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.06)',
-                    }}>
-                        {/* Primary actions row — kept visible above the tab bar so
-                            scan/search stay within thumb reach on mobile. */}
-                        <div className="m-action-row">
-                            <Button
-                                type="primary"
-                                size="large"
-                                icon={<QrcodeOutlined style={{fontSize: 20}}/>}
-                                onClick={handleOpenScanner}
-                                className="m-fab-scan"
-                            >
-                                {hasResults ? (t.scanAgain || t.scan) : t.scan}
-                            </Button>
-                            {catalogEnabled && (
-                                <Button
-                                    size="large"
-                                    icon={<SearchOutlined style={{fontSize: 18}}/>}
-                                    onClick={handleOpenSearch}
-                                    className="m-fab-search"
-                                >
-                                    {t.search}
-                                </Button>
-                            )}
-                        </div>
-
-                        {/* Tab navigation row */}
-                        <div className="m-tab-bar" style={{
-                            borderTopColor: isDarkMode ? 'rgba(255, 255, 255, 0.06)' : 'rgba(0, 0, 0, 0.04)',
-                        }}>
+                    <div className="m-dock">
+                        <button
+                            type="button"
+                            className={`m-dock-slot ${activeTab === 'scan' ? 'on' : ''}`}
+                            onClick={() => setActiveTab('scan')}
+                        >
+                            <AppstoreOutlined/>
+                            <span>{t.product}</span>
+                        </button>
+                        <button
+                            type="button"
+                            className={`m-dock-slot ${activeTab === 'orders' ? 'on' : ''}`}
+                            onClick={() => setActiveTab('orders')}
+                        >
+                            <UnorderedListOutlined/>
+                            <span>{t.orders}</span>
+                        </button>
+                        <button
+                            type="button"
+                            className="m-dock-orb"
+                            aria-label={t.scan}
+                            onClick={handleOpenScanner}
+                        >
+                            <QrcodeOutlined/>
+                        </button>
+                        {catalogEnabled && (
                             <button
-                                className={`m-tab-item ${activeTab === 'scan' ? 'm-tab-active' : ''}`}
-                                onClick={() => setActiveTab('scan')}
-                                style={activeTab !== 'scan' ? {color: isDarkMode ? 'rgba(255, 255, 255, 0.4)' : undefined} : undefined}
+                                type="button"
+                                className="m-dock-slot"
+                                onClick={handleOpenSearch}
                             >
-                                <AppstoreOutlined style={{fontSize: 20}}/>
-                                <span>{t.product}</span>
+                                <SearchOutlined/>
+                                <span>{t.search}</span>
                             </button>
-                            <button
-                                className={`m-tab-item ${activeTab === 'orders' ? 'm-tab-active' : ''}`}
-                                onClick={() => setActiveTab('orders')}
-                                style={activeTab !== 'orders' ? {color: isDarkMode ? 'rgba(255, 255, 255, 0.4)' : undefined} : undefined}
-                            >
-                                <UnorderedListOutlined style={{fontSize: 20}}/>
-                                <span>{t.orders}</span>
-                            </button>
-                        </div>
+                        )}
+                        <button
+                            type="button"
+                            className={`m-dock-slot m-dock-cart ${cartView.opensDrawer ? 'active' : ''}`}
+                            aria-label={t.activeOrder}
+                            onClick={() => {
+                                if (cartView.opensDrawer) {
+                                    setOrderDrawerVisible(true);
+                                } else {
+                                    setCustomerModalOpen(true);
+                                }
+                            }}
+                        >
+                            <Badge count={cartView.badgeCount} size="small" offset={[2, -2]} color="#ff4d4f">
+                                <ShoppingCartOutlined/>
+                            </Badge>
+                            <span className={cartView.totalLabel ? 'm-dock-total' : ''}>
+                                {cartView.totalLabel || t.cart}
+                            </span>
+                        </button>
                     </div>
                 )}
             </div>

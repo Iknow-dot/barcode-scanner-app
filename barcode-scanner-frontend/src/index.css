@@ -158,7 +158,7 @@
 
 .m-dashboard-body {
   flex: 1;
-  padding-bottom: 140px; /* space for bottom bar */
+  padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px)); /* clear the floating dock */
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
 }
@@ -174,103 +174,101 @@
   to { opacity: 1; transform: translateY(0); }
 }
 
-/* ===== Bottom Bar (Actions + Tabs) ===== */
-.m-bottom-bar {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  z-index: 1000;
-  background: rgba(255, 255, 255, 0.96);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border-top: 1px solid rgba(0, 0, 0, 0.06);
-  padding-bottom: max(0px, env(safe-area-inset-bottom));
-  animation: fabSlideUp 0.3s ease-out;
-}
-
 @keyframes fabSlideUp {
   from { opacity: 0; transform: translateY(100%); }
   to { opacity: 1; transform: translateY(0); }
 }
 
-/* Action buttons row */
-.m-action-row {
+/* ===== Floating glass dock (tabs + scan + search + cart) ===== */
+.m-dock {
+  position: fixed;
+  left: 12px;
+  right: 12px;
+  bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  height: 72px;
+  z-index: 1000;
+  border-radius: 36px;
+  background: rgba(255, 255, 255, 0.78);
+  backdrop-filter: blur(22px) saturate(180%);
+  -webkit-backdrop-filter: blur(22px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  box-shadow: 0 10px 32px rgba(28, 36, 48, 0.18), 0 2px 8px rgba(28, 36, 48, 0.08);
   display: flex;
-  gap: 10px;
-  padding: 10px 16px 6px;
-  justify-content: center;
-}
-
-.m-fab-scan {
-  height: 46px !important;
-  flex: 1;
-  max-width: 200px;
-  border-radius: 23px !important;
-  font-size: 15px !important;
-  font-weight: 600 !important;
-  box-shadow: 0 4px 16px rgba(22, 119, 255, 0.3) !important;
-  display: flex !important;
   align-items: center;
-  justify-content: center;
-  gap: 8px;
+  justify-content: space-between;
+  padding: 0 18px;
+  animation: fabSlideUp 0.3s ease-out;
 }
 
-.m-fab-search {
-  height: 46px !important;
-  flex: 1;
-  max-width: 160px;
-  border-radius: 23px !important;
-  font-size: 15px !important;
-  font-weight: 500 !important;
-  display: flex !important;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-}
-
-/* Tab navigation row */
-.m-tab-bar {
-  display: flex;
-  justify-content: space-around;
-  padding: 4px 16px 8px;
-  border-top: 1px solid rgba(0, 0, 0, 0.04);
-}
-
-.m-tab-item {
+.m-dock-slot {
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: 2px;
-  padding: 6px 20px;
+  min-width: 52px;
+  min-height: 48px;
+  padding: 0 4px;
   border: none;
   background: none;
+  border-radius: 12px;
   cursor: pointer;
   color: rgba(0, 0, 0, 0.4);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 500;
-  transition: all 0.2s ease;
-  border-radius: 8px;
+  transition: color 0.15s ease;
   -webkit-tap-highlight-color: transparent;
-  min-width: 80px;
 }
 
-.m-tab-item .anticon {
-  font-size: 20px;
+.m-dock-slot .anticon {
+  font-size: 21px;
   color: inherit;
 }
 
-.m-tab-item .ant-badge {
+.m-dock-slot .ant-badge {
   color: inherit;
 }
 
-.m-tab-active {
+.m-dock-slot.on {
   color: #1677ff;
   font-weight: 600;
 }
 
-.m-tab-item:active {
-  background: rgba(22, 119, 255, 0.06);
+/* Cart slot brightens while an order is active */
+.m-dock-cart.active {
+  color: rgba(0, 0, 0, 0.65);
+}
+
+.m-dock-total {
+  color: #1677ff;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.m-dock-orb {
+  flex: none;
+  width: 62px;
+  height: 62px;
+  border-radius: 50%;
+  border: 4px solid rgba(255, 255, 255, 0.95);
+  background: #1677ff;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 6px 20px rgba(22, 119, 255, 0.4);
+  margin-top: -26px;
+  cursor: pointer;
+  transition: transform 0.12s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.m-dock-orb .anticon {
+  font-size: 26px;
+}
+
+.m-dock-orb:active {
+  transform: scale(0.95);
 }
 
 /* ===== Empty State (Scan Tab) ===== */
@@ -309,36 +307,6 @@
   height: 48px !important;
   border-radius: 14px !important;
   font-size: 15px !important;
-}
-
-/* ===== Active Order Indicator Bar ===== */
-.m-order-indicator {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 10px 14px;
-  margin: 0 0 12px;
-  background: linear-gradient(135deg, #1677ff 0%, #4096ff 100%);
-  border-radius: 12px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.m-order-indicator:active {
-  transform: scale(0.98);
-}
-
-.m-order-indicator-text {
-  color: #fff !important;
-  font-size: 13px;
-  font-weight: 500;
-}
-
-.m-order-indicator-total {
-  color: #fff !important;
-  font-size: 15px;
-  font-weight: 700;
 }
 
 /* ===== Product Results ===== */
@@ -1330,28 +1298,38 @@
     max-width: 800px;
   }
 
-  .m-bottom-bar {
-    max-width: 800px;
-    left: 50%;
-    transform: translateX(-50%);
-    border-radius: 16px 16px 0 0;
-    border-left: 1px solid rgba(0, 0, 0, 0.06);
-    border-right: 1px solid rgba(0, 0, 0, 0.06);
+  .m-dock {
+    width: 776px;
+    left: calc(50% - 388px);
+    right: auto;
   }
 }
 
 /* ===== Dark mode support (class-based, not OS preference) ===== */
-.dark-theme .m-bottom-bar {
-  background: rgba(20, 20, 20, 0.96);
-  border-top-color: rgba(255, 255, 255, 0.08);
+.dark-theme .m-dock {
+  background: rgba(28, 28, 30, 0.75);
+  border-color: rgba(255, 255, 255, 0.1);
+  box-shadow: 0 10px 32px rgba(0, 0, 0, 0.45), 0 2px 8px rgba(0, 0, 0, 0.3);
 }
 
-.dark-theme .m-tab-item {
-  color: rgba(255, 255, 255, 0.4);
+.dark-theme .m-dock-slot {
+  color: rgba(255, 255, 255, 0.45);
 }
 
-.dark-theme .m-tab-active {
+.dark-theme .m-dock-slot.on {
   color: #4096ff;
+}
+
+.dark-theme .m-dock-cart.active {
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.dark-theme .m-dock-total {
+  color: #4096ff;
+}
+
+.dark-theme .m-dock-orb {
+  border-color: rgba(255, 255, 255, 0.2);
 }
 
 .dark-theme .m-balance-card {
@@ -1678,45 +1656,6 @@
   }
 }
 
-/* ===== Cart FAB (floating action button, bottom-right) ===== */
-.m-cart-fab {
-  position: fixed;
-  right: 16px;
-  /* Bottom bar (.m-bottom-bar, z-index 1000) is ~110-120px tall — sit above
-     it with a small gap and use a higher z-index so the FAB stays visible. */
-  bottom: calc(130px + env(safe-area-inset-bottom, 0px));
-  width: 56px;
-  height: 56px;
-  border-radius: 28px;
-  background: #1677ff;
-  color: #fff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 6px 20px rgba(22, 119, 255, 0.35);
-  border: none;
-  cursor: pointer;
-  z-index: 1100;
-  transition: transform 0.18s ease, box-shadow 0.18s ease;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.m-cart-fab:active {
-  transform: scale(0.94);
-}
-
-/* Gray inactive state — shown when there is no live order to drop into
-   (no activeOrder, or order paused via orderMode toggle). Matches the
-   "badge count = 0" branch in UserDashboard.js. */
-.m-cart-fab.m-cart-fab--inactive {
-  background: #8c8c8c;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
-}
-
-.m-cart-fab .anticon {
-  font-size: 24px;
-}
-
 @keyframes m-cart-pulse {
   0% { transform: scale(1); }
   35% { transform: scale(1.18); box-shadow: 0 8px 26px rgba(22, 119, 255, 0.55); }
@@ -1724,7 +1663,7 @@
   100% { transform: scale(1); }
 }
 
-.m-cart-fab.m-cart-pulse {
+.m-dock-cart.m-cart-pulse {
   animation: m-cart-pulse 0.45s ease-out;
 }
 
