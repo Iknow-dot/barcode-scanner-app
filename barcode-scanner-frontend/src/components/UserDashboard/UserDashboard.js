@@ -895,6 +895,9 @@ const UserDashboard = () => {
     const hasResults = hasProductResult(productInfo, balances);
     const showEmptyProductState = !hasResults && !scannerOpen;
     const showOrderPanel = orderMode && activeOrder;
+    // Passing null unless order mode is on keeps the cart slot idle for a
+    // paused order — if a real pause feature ever keeps activeOrder set with
+    // orderMode off, revisit: tapping the idle slot starts a NEW order.
     const cartView = dockCartView(showOrderPanel ? activeOrder : null);
 
     // ===== Scan/Product Tab Content =====
@@ -1271,6 +1274,7 @@ const UserDashboard = () => {
                             type="button"
                             className={`m-dock-slot ${activeTab === 'scan' ? 'on' : ''}`}
                             onClick={() => setActiveTab('scan')}
+                            aria-pressed={activeTab === 'scan'}
                         >
                             <AppstoreOutlined/>
                             <span>{t.product}</span>
@@ -1279,6 +1283,7 @@ const UserDashboard = () => {
                             type="button"
                             className={`m-dock-slot ${activeTab === 'orders' ? 'on' : ''}`}
                             onClick={() => setActiveTab('orders')}
+                            aria-pressed={activeTab === 'orders'}
                         >
                             <UnorderedListOutlined/>
                             <span>{t.orders}</span>
@@ -1304,7 +1309,7 @@ const UserDashboard = () => {
                         <button
                             type="button"
                             className={`m-dock-slot m-dock-cart ${cartView.opensDrawer ? 'active' : ''}`}
-                            aria-label={t.activeOrder}
+                            aria-label={cartView.opensDrawer ? t.activeOrder : t.cart}
                             onClick={() => {
                                 if (cartView.opensDrawer) {
                                     setOrderDrawerVisible(true);

@@ -1658,7 +1658,7 @@
 
 @keyframes m-cart-pulse {
   0% { transform: scale(1); }
-  35% { transform: scale(1.18); box-shadow: 0 8px 26px rgba(22, 119, 255, 0.55); }
+  35% { transform: scale(1.18); }
   70% { transform: scale(0.96); }
   100% { transform: scale(1); }
 }
@@ -1668,7 +1668,7 @@
 }
 
 /* Flying ball animation: a small circle that travels from a product card
-   to the cart FAB when the user adds an item. */
+   to the dock's cart slot when the user adds an item. */
 .m-cart-fly {
   position: fixed;
   width: 28px;
