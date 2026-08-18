@@ -2804,11 +2804,20 @@ class OrderStatusGuardTests(TestCase):
         order.refresh_from_db()
         self.assertEqual(order.status, 'completed')
 
-    def test_normal_status_transitions_still_work(self):
+    @mock.patch('core.views.ConsultWebExchangeClient.create_order')
+    @mock.patch('core.views.ConsultWebExchangeClient.get_stock_and_prices')
+    def test_normal_status_transitions_still_work(self, mstock, mcreate):
+        mstock.return_value = {'stock': [{'warehouse': 'W1', 'quantity': 999}]}
+        mcreate.return_value = {'success': True, 'message': 'ok', 'OrderNumber': '00000000077'}
         order = self._order(status='draft')
-        # An empty order can no longer be confirmed (EMPTY_ORDER guard, part
-        # of the CreateOrder-push feature) — give it a line item.
-        PurchaseOrderItem.objects.create(order=order, sku='S-guard', quantity=1)
+        # Every confirm now pushes to 1C — the order needs a client and a
+        # pushable line (article + warehouse) to exercise the happy path.
+        order.customer_phone = '+995555000111'
+        order.save(update_fields=['customer_phone', 'updated_at'])
+        PurchaseOrderItem.objects.create(
+            order=order, sku='S-guard', article='A-guard', quantity=1,
+            price='10.00', warehouse_code='W1', warehouse_name='WH W1',
+        )
         r = self._patch(order, {'status': 'confirmed'})
         self.assertEqual(r.status_code, 200)
         order.refresh_from_db()
