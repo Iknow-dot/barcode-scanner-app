@@ -3,6 +3,11 @@
 Date: 2026-08-11 · Branch: djangoRewrite · Approved by: user (all four decision
 points, recommended options)
 
+> **Superseded in part (2026-08-18):** clientless orders no longer confirm
+> without a push — retail orders now push with `ClientIDPhone` omitted, and
+> non-retail orders with no client data block with `MISSING_CLIENT`. See
+> `2026-08-18-retail-clientless-push-design.md`.
+
 ## Goal
 
 When a `PurchaseOrder` transitions to `confirmed`, create the matching
