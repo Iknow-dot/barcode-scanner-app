@@ -3365,6 +3365,9 @@ class ConfirmStockGuardTests(TestCase):
     more than the free stock 1C reports for its warehouse. Lines that cannot
     be verified (no article/barcode lookup key, blank warehouse, upstream
     outage) fail OPEN so a 1C incident never freezes the sales floor.
+    The fail-open applies to the stock check only — every confirm now pushes
+    to 1C, so a line that cannot be sent (no lookup key, blank warehouse)
+    still blocks at the push guards.
     """
 
     def setUp(self):
@@ -3506,26 +3509,36 @@ class ConfirmStockGuardTests(TestCase):
         self.assertEqual(order.status, 'confirmed')
 
     @mock.patch('core.views.ConsultWebExchangeClient.get_stock_and_prices')
-    def test_confirm_fails_open_when_no_lookup_key(self, mstock):
+    def test_stock_guard_skips_line_without_lookup_key_push_still_blocks(self, mstock):
         # No article on the line and no replica product/barcode to fall back
-        # to — the line is unverifiable, so it must not block the confirm.
+        # to — the line is unverifiable, so the stock guard must not block
+        # (or even call 1C). The push guard then rejects the confirm: every
+        # confirm now pushes, and this line cannot be sent to 1C.
         order = self._order()
         self._item(order, article='', qty=999)
 
         r = self._confirm(order)
 
-        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.json()['code'], 'ITEM_LOOKUP_KEY_MISSING')
         mstock.assert_not_called()
+        self.mcreate.assert_not_called()
+        order.refresh_from_db()
+        self.assertEqual(order.status, 'draft')
 
     @mock.patch('core.views.ConsultWebExchangeClient.get_stock_and_prices')
-    def test_confirm_fails_open_when_no_warehouse_on_line(self, mstock):
+    def test_stock_guard_skips_line_without_warehouse_push_still_blocks(self, mstock):
         order = self._order()
         self._item(order, warehouse='', qty=999)
 
         r = self._confirm(order)
 
-        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.json()['code'], 'MISSING_WAREHOUSE')
         mstock.assert_not_called()
+        self.mcreate.assert_not_called()
+        order.refresh_from_db()
+        self.assertEqual(order.status, 'draft')
 
     @mock.patch('core.views.ConsultWebExchangeClient.get_stock_and_prices')
     def test_replica_barcode_is_lookup_fallback_when_no_article(self, mstock):
