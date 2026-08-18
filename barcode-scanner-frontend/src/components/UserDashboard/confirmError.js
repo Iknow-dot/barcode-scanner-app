@@ -32,6 +32,8 @@ const formatConfirmError = (result, t) => {
             return {title: t.orderError, message: t.missingWarehouseError};
         case 'EMPTY_ORDER':
             return {title: t.orderError, message: t.emptyOrderError};
+        case 'MISSING_CLIENT':
+            return {title: t.orderError, message: t.missingClientError};
         case 'ITEM_LOOKUP_KEY_MISSING': {
             const sku = result.data?.sku;
             return {

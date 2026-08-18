@@ -41,6 +41,14 @@ describe('formatConfirmError', () => {
         }
     });
 
+    it('maps MISSING_CLIENT to a localized message', () => {
+        for (const lang of ['ka', 'en']) {
+            const mapped = formatConfirmError({code: 'MISSING_CLIENT', data: {}}, translations[lang]);
+            expect(mapped.title).toBe(translations[lang].orderError);
+            expect(mapped.message).toBe(translations[lang].missingClientError);
+        }
+    });
+
     it('names the product in ITEM_LOOKUP_KEY_MISSING when the backend sent a sku', () => {
         const mapped = formatConfirmError(
             {code: 'ITEM_LOOKUP_KEY_MISSING', data: {sku: 'SKU-42'}},
