@@ -2979,22 +2979,17 @@ class CreateOrderClientTests(TestCase):
         self.assertEqual(result['OrderNumber'], '00000000051')
         self.assertTrue(result['success'])
 
-    def test_create_order_refuses_blank_client_id_phone(self):
-        # Upstream bug: a missing ClientIDPhone returns 200 and creates an
-        # orphan order with no client attached. The client must refuse
-        # locally rather than let that request out.
-        client = ConsultWebExchangeClient(self.org)
+    def test_create_order_omits_blank_client_id_phone(self):
+        # Blank = intentional retail sale: the key is omitted entirely (the
+        # variant verified against the live test base 2026-08-04) and 1C
+        # creates the order with no client attached.
         for blank in ('', None):
-            with mock.patch('httpx.request') as mrequest:
-                with self.assertRaises(ValueError):
-                    client.create_order(
-                        client_id_phone=blank,
-                        user_id='administrator',
-                        stock_id='000000001',
-                        comment='',
-                        items=self._items(),
-                    )
-                mrequest.assert_not_called()
+            result, captured = self._call(
+                self._mock_response(200, self._success_body()),
+                client_id_phone=blank,
+            )
+            self.assertNotIn('ClientIDPhone', captured['json'])
+            self.assertEqual(result['OrderNumber'], '00000000051')
 
     def test_create_order_maps_400_rejection_with_upstream_message(self):
         body = {'success': False, 'message': 'Items array is empty'}

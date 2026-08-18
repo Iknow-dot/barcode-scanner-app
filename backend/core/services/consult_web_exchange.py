@@ -417,19 +417,13 @@ class ConsultWebExchangeClient:
         "message": "..."}`. Those become ORDER_CREATE_REJECTED with the
         upstream message preserved in `detail`.
 
-        A blank `client_id_phone` raises ValueError without any request:
-        omitting it does not fail upstream — it silently creates an orphan
-        order with no client attached (confirmed against the live test base
-        2026-08-04).
+        A blank `client_id_phone` omits the `ClientIDPhone` key from the
+        payload entirely; 1C then creates the order with no client attached
+        (confirmed against the live test base 2026-08-04). That is
+        intentional only for retail sales — the confirm view blocks
+        non-retail orders from reaching here without a client.
         """
-        if not client_id_phone:
-            raise ValueError(
-                "client_id_phone is required — upstream silently creates an "
-                "orphan order without it"
-            )
-
         payload: dict[str, Any] = {
-            "ClientIDPhone": client_id_phone,
             "UserID": user_id,
             "StockID": stock_id,
             "Items": [
@@ -446,6 +440,8 @@ class ConsultWebExchangeClient:
         }
         if comment:
             payload["Comment"] = comment
+        if client_id_phone:
+            payload["ClientIDPhone"] = client_id_phone
 
         response = self._request("POST", "CreateOrder", json=payload)
         self._check_auth(response, "CreateOrder")
