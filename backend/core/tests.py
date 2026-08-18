@@ -3035,8 +3035,9 @@ class CreateOrderOnConfirmTests(TestCase):
     The push runs after the stock guard and before the status saves. Any
     push failure blocks the confirm (the order stays draft) — a confirmed
     order that does not exist in 1C could never be completed by the
-    webhook. Skips: already-pushed orders, and clientless orders when the
-    org has no retail counterparty configured.
+    webhook. Skips: already-pushed orders. Retail orders with no client
+    push with ClientIDPhone omitted; non-retail orders with no client
+    block with MISSING_CLIENT.
     """
 
     def setUp(self):
@@ -3268,8 +3269,9 @@ class CreateOrderOnConfirmTests(TestCase):
         self.assertEqual(r.status_code, 200)
         self.assertEqual(mcreate.call_args.kwargs['client_id_phone'], '999888777')
 
-    def test_retail_order_without_setting_confirms_without_push(self, mstock, mcreate):
+    def test_retail_order_without_setting_pushes_clientless(self, mstock, mcreate):
         self._plenty_of_stock(mstock)
+        mcreate.return_value = self._success()
         order = self._order(
             is_retail=True, customer_name='', customer_phone='',
             customer_identification_number='',
@@ -3279,10 +3281,26 @@ class CreateOrderOnConfirmTests(TestCase):
         r = self._confirm(order)
 
         self.assertEqual(r.status_code, 200)
-        mcreate.assert_not_called()
+        self.assertEqual(mcreate.call_args.kwargs['client_id_phone'], '')
         order.refresh_from_db()
         self.assertEqual(order.status, 'confirmed')
-        self.assertEqual(order.external_order_number, '')
+        self.assertEqual(order.external_order_number, '00000000051')
+
+    def test_non_retail_order_without_client_blocks_confirm(self, mstock, mcreate):
+        self._plenty_of_stock(mstock)
+        order = self._order(
+            customer_name='', customer_phone='',
+            customer_identification_number='',
+        )
+        self._item(order)
+
+        r = self._confirm(order)
+
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.json()['code'], 'MISSING_CLIENT')
+        mcreate.assert_not_called()
+        order.refresh_from_db()
+        self.assertEqual(order.status, 'draft')
 
     def test_already_pushed_order_skips_push(self, mstock, mcreate):
         self._plenty_of_stock(mstock)
@@ -3357,11 +3375,18 @@ class ConfirmStockGuardTests(TestCase):
         )
         self.api = APIClient()
         self.api.force_authenticate(self.user)
+        # Mock create_order for retail order pushes in confirm tests
+        self.mcreate_patcher = mock.patch('core.views.ConsultWebExchangeClient.create_order')
+        self.mcreate = self.mcreate_patcher.start()
+        self.mcreate.return_value = {'success': True, 'message': 'ok', 'OrderNumber': '00000000099'}
+
+    def tearDown(self):
+        self.mcreate_patcher.stop()
 
     def _order(self, status='draft'):
         return PurchaseOrder.objects.create(
             organization=self.org, created_by=self.user,
-            customer_name='Nino', status=status,
+            customer_name='Nino', is_retail=True, status=status,
         )
 
     def _item(self, order, *, sku='S1', article='A1', warehouse='W1', qty=1, **extra):

@@ -1119,8 +1119,10 @@ class PurchaseOrderViewSet(ModelViewSet):
         error Response.
 
         Skipped entirely for orders already pushed (there is no UpdateOrder
-        upstream — edits after a push do not reach 1C) and for clientless /
-        retail orders while the org has no retail counterparty configured.
+        upstream — edits after a push do not reach 1C). Retail orders with
+        no client push with ClientIDPhone omitted (1C creates the order
+        with no client attached); a non-retail order with no client data
+        blocks with MISSING_CLIENT.
         """
         if order.external_order_number:
             logging.info(
@@ -1142,16 +1144,59 @@ class PurchaseOrderViewSet(ModelViewSet):
             or order.organization.retail_client_id_phone
         )
         if not client_id_phone:
-            # Never call CreateOrder without a ClientIDPhone — upstream
-            # silently creates an orphan order with no client attached.
-            logging.warning(
-                "CreateOrder push skipped for order=%s — no client and no "
-                "retail counterparty configured for org=%s",
-                order.id, order.organization_id,
+            if not order.is_retail:
+                # A customer order with no client data is an anomaly — fail
+                # loud rather than create a clientless sale in 1C.
+                return Response(
+                    {
+                        "code": "MISSING_CLIENT",
+                        "detail": "Order has no client; only retail orders can confirm without one.",
+                    },
+                    status=http_status.HTTP_400_BAD_REQUEST,
+                )
+            client_id_phone = ""
+            logging.info(
+                "CreateOrder push for retail order=%s with no client — "
+                "ClientIDPhone omitted", order.id,
             )
-            return None
 
-        warehouse_codes = {item.warehouse_code for item in items}
+        # For retail orders, skip unverifiable items (fail open); for customer
+        # orders, require all items to be verifiable (fail closed).
+        if order.is_retail:
+            # Skip items with no warehouse code (unverifiable); only push items
+            # with a valid warehouse, like the stock guard does.
+            pushable_items = [item for item in items if item.warehouse_code]
+
+            # Build the replica barcode lookup BEFORE filtering for missing
+            # articles/barcodes, so we know which SKUs are verifiable via barcode.
+            barcode_by_sku = PurchaseOrderViewSet._replica_barcode_by_sku(
+                order.organization,
+                {i.sku for i in pushable_items if not i.article and i.sku},
+            )
+
+            # Filter out items with no article and no known barcode (unverifiable);
+            # skip them silently like the stock guard does.
+            pushable_items = [
+                item for item in pushable_items
+                if item.article or barcode_by_sku.get(item.sku)
+            ]
+            if not pushable_items:
+                # All items are unverifiable — still allow the confirm like the
+                # stock guard does (fail open), but skip the push.
+                logging.info(
+                    "CreateOrder push skipped for order=%s — all items unverifiable "
+                    "(no lookup key)", order.id,
+                )
+                return None
+        else:
+            # Customer orders require all items to be verifiable.
+            pushable_items = items
+            barcode_by_sku = PurchaseOrderViewSet._replica_barcode_by_sku(
+                order.organization,
+                {i.sku for i in pushable_items if not i.article and i.sku},
+            )
+
+        warehouse_codes = {item.warehouse_code for item in pushable_items}
         if len(warehouse_codes) > 1:
             return Response(
                 {
@@ -1170,12 +1215,8 @@ class PurchaseOrderViewSet(ModelViewSet):
                 status=http_status.HTTP_400_BAD_REQUEST,
             )
 
-        barcode_by_sku = PurchaseOrderViewSet._replica_barcode_by_sku(
-            order.organization,
-            {i.sku for i in items if not i.article and i.sku},
-        )
         payload_items = []
-        for item in items:
+        for item in pushable_items:
             if item.article:
                 lookup, is_barcode = item.article, False
             elif barcode_by_sku.get(item.sku):
