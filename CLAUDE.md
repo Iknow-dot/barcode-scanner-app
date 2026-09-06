@@ -34,7 +34,7 @@ uv run python manage.py collectstatic --noinput
 uv run python manage.py test                              # all tests
 uv run python manage.py test core                         # one app
 uv run python manage.py test core.tests.test_orders       # one core test module
-uv run python manage.py test users.tests.LoginDeviceLockTests  # one class
+uv run python manage.py test users.tests.test_device_lock.LoginDeviceLockTests  # one class
 
 # Frontend (inside barcode-scanner-frontend/) — note the openssl-legacy-provider flag
 npm install
@@ -99,7 +99,7 @@ Everything is scoped to `Organization`:
 
 ## Conventions worth knowing
 
-- **Core tests are a package** — `core/tests/` split by resource, mirroring `core/views/`. Django discovers `test_*.py` inside it, so a new test module must be named `test_<resource>.py` or it will silently never run. Shared fixtures (`_make_organization`, `_TEST_FERNET_KEY`) live in `core/tests/common.py`, deliberately not `test_*`-named. Most endpoint test classes need `@override_settings(SECURE_SSL_REDIRECT=False)` — see the env-var note above. (`users/tests.py` is still a single module.)
+- **Core tests are a package** — `core/tests/` split by resource, mirroring `core/views/`. Django discovers `test_*.py` inside it, so a new test module must be named `test_<resource>.py` or it will silently never run. Shared fixtures (`_make_organization`, `_TEST_FERNET_KEY`) live in `core/tests/common.py`, deliberately not `test_*`-named. Most endpoint test classes need `@override_settings(SECURE_SSL_REDIRECT=False)` — see the env-var note above. `users/tests/` is a package on the same rules (`test_auth`, `test_device_lock`, `test_users`).
 - **Migrations are checked in** under `core/migrations/` and `users/migrations/` — generate with `makemigrations`, never hand-edit applied ones, and prefer additive changes since data migrations like `0008_migrate_existing_phones_to_customerphone` exist.
 - **Error response shape** — backend errors that the frontend needs to translate or branch on use `{"code": "MACHINE_READABLE_CODE", "detail": "human text", ...}`. Follow this when adding new error responses (see `EXTERNAL_SERVICE_*`, `IP_NOT_ALLOWED`, `USER_LIMIT_REACHED`, `RS_GE_*`, `NO_ORGANIZATION` for examples).
 - **drf-spectacular tags** — every viewset/view is decorated with `@extend_schema(tags=[...])` so Swagger groups them correctly. New endpoints should add an appropriate tag (the canonical list is in `SPECTACULAR_SETTINGS['TAGS']`).
