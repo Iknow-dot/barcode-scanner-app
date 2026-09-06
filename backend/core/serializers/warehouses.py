@@ -3,6 +3,7 @@
 from core.models import Warehouse
 from rest_framework import serializers
 from core.serializers.common import User
+from users.serializers import scope_to_requester_organization, validate_same_organization
 
 
 class WarehouseSerializer(serializers.ModelSerializer):
@@ -25,19 +26,7 @@ class WarehouseSerializer(serializers.ModelSerializer):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # Non-internal-admin requesters may only reference users from their
-        # own organization. Scoping the queryset makes a cross-org id fail
-        # with the same "Invalid pk" error as a nonexistent one, so the
-        # endpoint can't be probed for other orgs' user ids or usernames.
-        request = self.context.get('request')
-        if (
-            request is not None
-            and request.user.is_authenticated
-            and request.user.role != User.Role.INTERNAL_ADMIN
-        ):
-            self.fields['user_ids'].child_relation.queryset = (
-                User.objects.filter(organization=request.user.organization)
-            )
+        scope_to_requester_organization(self, 'user_ids', User)
 
     def validate(self, attrs):
         """Inject organization for company_admin and enforce unique_together."""
@@ -59,21 +48,10 @@ class WarehouseSerializer(serializers.ModelSerializer):
 
         return super().validate(attrs)
 
-    def _validate_users_belong_to_organization(self, users, organization):
-        """Ensure every user in the list belongs to the warehouse's organization."""
-        if not users or not organization:
-            return
-        if any(u.organization_id != organization.pk for u in users):
-            # Keep this generic: naming the offending users (or saying they
-            # exist at all) would leak cross-org account information.
-            raise serializers.ValidationError({
-                'user_ids': "All users must belong to the warehouse's organization.",
-            })
-
     def create(self, validated_data):
         users = validated_data.pop('users', [])
         organization = validated_data.get('organization')
-        self._validate_users_belong_to_organization(users, organization)
+        validate_same_organization(users, organization, 'user_ids', "All users must belong to the warehouse's organization.")
 
         warehouse = Warehouse.objects.create(**validated_data)
         if users:
@@ -88,7 +66,7 @@ class WarehouseSerializer(serializers.ModelSerializer):
 
         if users is not None:
             organization = instance.organization
-            self._validate_users_belong_to_organization(users, organization)
+            validate_same_organization(users, organization, 'user_ids', "All users must belong to the warehouse's organization.")
             instance.users.set(users)
         return instance
 

@@ -186,10 +186,12 @@ class UsersEndpointPermissionTests(TestCase):
 @override_settings(SECURE_SSL_REDIRECT=False)
 class UserWarehouseAssignmentTests(TestCase):
     """
-    warehouse_ids on the user serializers must be scoped to the requesting
-    company admin's organization — otherwise a company admin can attach
-    another organization's warehouse to their users (the M2M set bypasses
-    model validation). Internal admins stay unrestricted.
+    warehouse_ids on the user serializers is scoped to the requesting company
+    admin's organization, and — for every role, internal admins included — the
+    warehouses must belong to the target user's organization (the M2M set
+    bypasses model validation; this mirrors the warehouse endpoint and
+    Warehouse.users.limit_choices_to). Internal admins may still reference
+    any org's warehouses; they just cannot build a cross-org assignment.
     """
 
     def setUp(self):
@@ -254,14 +256,33 @@ class UserWarehouseAssignmentTests(TestCase):
         self.assertEqual(
             list(self.target.warehouses.all()), [self.own_warehouse])
 
-    def test_internal_admin_can_attach_any_warehouse(self):
+    def test_internal_admin_org_mismatch_rejected(self):
         response = self._client(self.internal_admin).patch(
             f'/api/v1/users/{self.target.pk}/',
             {'warehouse_ids': [self.other_warehouse.pk]}, format='json',
         )
+        self.assertEqual(response.status_code, 400, response.data)
+        self.assertEqual(self.target.warehouses.count(), 0)
+        self.assertNotIn(self.other_warehouse.name, str(response.data))
+
+    def test_internal_admin_can_attach_warehouse_of_user_org(self):
+        response = self._client(self.internal_admin).patch(
+            f'/api/v1/users/{self.target.pk}/',
+            {'warehouse_ids': [self.own_warehouse.pk]}, format='json',
+        )
         self.assertEqual(response.status_code, 200, response.data)
-        self.assertEqual(
-            list(self.target.warehouses.all()), [self.other_warehouse])
+        self.assertEqual(list(self.target.warehouses.all()), [self.own_warehouse])
+
+    def test_internal_admin_create_with_other_org_warehouse_rejected(self):
+        response = self._client(self.internal_admin).post(
+            '/api/v1/users/',
+            {'username': 'wh-new-int', 'password': 'pw123456',
+             'role': User.Role.COMPANY_USER, 'organization': self.org.pk,
+             'warehouse_ids': [self.other_warehouse.pk]},
+            format='json',
+        )
+        self.assertEqual(response.status_code, 400, response.data)
+        self.assertFalse(User.objects.filter(username='wh-new-int').exists())
 
     def test_mixed_warehouse_list_rejected_and_attaches_nothing(self):
         response = self._client(self.company_admin).patch(

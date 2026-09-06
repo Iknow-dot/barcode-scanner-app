@@ -221,6 +221,39 @@ class AllowedIPAddressSerializer(serializers.ModelSerializer):
         fields = ["ip_or_network"]
 
 
+def scope_to_requester_organization(serializer, field_name, model):
+    """Narrow a many=True PrimaryKeyRelatedField to the requester's organization.
+
+    Internal admins keep the unscoped queryset. For everyone else a cross-org
+    pk fails with DRF's standard "Invalid pk" error, identical to a nonexistent
+    pk, so the endpoint cannot be used to probe other orgs' ids. (The M2M
+    ``.set()`` bypasses model validation, so this and
+    ``validate_same_organization`` are the only guards.)
+    """
+    request = serializer.context.get('request')
+    if (
+        request is not None
+        and request.user.is_authenticated
+        and request.user.role != User.Role.INTERNAL_ADMIN
+    ):
+        serializer.fields[field_name].child_relation.queryset = (
+            model.objects.filter(organization=request.user.organization)
+        )
+
+
+def validate_same_organization(objs, organization, field_name, message):
+    """Reject objs whose organization differs from ``organization`` — for every role.
+
+    Keep ``message`` generic: naming the offending rows (or admitting they
+    exist) would leak cross-org data. Mirrors Warehouse.users.limit_choices_to,
+    which is form-only and does not protect ``.set()``.
+    """
+    if not objs or not organization:
+        return
+    if any(o.organization_id != organization.pk for o in objs):
+        raise serializers.ValidationError({field_name: message})
+
+
 class _BaseUserSerializer(serializers.ModelSerializer):
     """
     Shared base for user serializers.  Subclasses control which fields
@@ -246,17 +279,7 @@ class _BaseUserSerializer(serializers.ModelSerializer):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # Non-internal-admin requesters may only attach warehouses from
-        # their own organization; the M2M set bypasses model validation.
-        request = self.context.get('request')
-        if (
-            request is not None
-            and request.user.is_authenticated
-            and request.user.role != User.Role.INTERNAL_ADMIN
-        ):
-            self.fields['warehouse_ids'].child_relation.queryset = (
-                Warehouse.objects.filter(organization=request.user.organization)
-            )
+        scope_to_requester_organization(self, 'warehouse_ids', Warehouse)
 
     class Meta:
         model = User
@@ -291,6 +314,9 @@ class _BaseUserSerializer(serializers.ModelSerializer):
     def _create_user(self, validated_data):
         password = validated_data.pop('password')
         warehouses = validated_data.pop('warehouses', [])
+        validate_same_organization(
+            warehouses, validated_data.get('organization'), 'warehouse_ids', "All warehouses must belong to the user's organization.",
+        )
         validated_data.pop('allowed_ips', None)
         # Device lock defaults ON for company users unless explicitly set.
         if (validated_data.get('role') == User.Role.COMPANY_USER
@@ -314,6 +340,11 @@ class _BaseUserSerializer(serializers.ModelSerializer):
             validated_data.pop('device_lock_enabled', None)
         password = validated_data.pop('password', None)
         warehouses = validated_data.pop('warehouses', None)
+        if warehouses is not None:
+            validate_same_organization(
+                warehouses, validated_data.get('organization', instance.organization),
+                'warehouse_ids', "All warehouses must belong to the user's organization.",
+            )
         validated_data.pop('allowed_ips', None)
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
