@@ -267,7 +267,7 @@ class ConsultWebExchangeClient:
     ) -> list[dict[str, Any]] | None:
         """POST /CheckClient.
 
-        Returns a normalized dict on a hit, or `None` if upstream signals
+        Returns a list of normalized dicts on a hit, or `None` if upstream signals
         "not found" (HTTP 404). Raises `ConsultWebExchangeError` on any other
         failure.
         """
@@ -333,6 +333,10 @@ class ConsultWebExchangeClient:
         IsPhys (bool), phone_1, phone_2, Email, address_line. Empty / missing
         string fields are dropped; `IsPhys` is always sent (Boolean, defaults
         to True at the serializer layer).
+
+        Returns the newly-created client normalized to the same shape as one
+        `check_client` entry (`name` / `address` / `phone` where present, plus
+        `raw` = the unwrapped upstream customer object).
         """
         upstream: dict[str, Any] = {"IsPhys": bool(payload.get("is_phys", True))}
         if payload.get("first_name"):
@@ -372,7 +376,9 @@ class ConsultWebExchangeClient:
                 upstream_status=response.status_code,
             )
 
-        return response.json()
+        body = response.json()
+        items = _extract_client_list(body)
+        return _normalize_client_response(items[0]) if items else {"raw": body}
 
     def create_order(
         self,

@@ -303,17 +303,14 @@ class CreateClientPayloadMappingTests(TestCase):
                 'phone_1': '+995555',
             },
         )
-        # `create_client` returns the raw upstream JSON; normalization
-        # happens in the view layer.
+        # `create_client` returns the normalized client, like `check_client`.
         self.assertEqual(
             result,
             {
-                'status': 'created',
-                'customer': {
-                    'name': 'Giorgi Beridze',
-                    'address': 'Tbilisi',
-                    'phone': '+995555',
-                },
+                'raw': {'name': 'Giorgi Beridze', 'address': 'Tbilisi', 'phone': '+995555'},
+                'name': 'Giorgi Beridze',
+                'address': 'Tbilisi',
+                'phone': '+995555',
             },
         )
 

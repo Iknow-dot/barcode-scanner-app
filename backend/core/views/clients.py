@@ -24,8 +24,6 @@ from core.serializers import (
 from core.services.consult_web_exchange import (
     ConsultWebExchangeClient,
     ConsultWebExchangeError,
-    _extract_client_list,
-    _normalize_client_response,
 )
 from core.services.photon import PhotonError, reverse_geocode, search_addresses
 from core.services.rs_ge import RSGeError, lookup_taxpayer
@@ -103,12 +101,8 @@ class CreateClientAPIView(APIView):
         except ConsultWebExchangeError as exc:
             return external_error_response(exc)
 
-        # CreateClient returns a single newly-created client; pull the first
-        # entry out of whatever wrapper shape upstream used.
-        items = _extract_client_list(result)
-        normalized = _normalize_client_response(items[0]) if items else {"raw": result}
         return Response(
-            CheckClientResponseSerializer(normalized).data,
+            CheckClientResponseSerializer(result).data,
             status=http_status.HTTP_201_CREATED,
         )
 
