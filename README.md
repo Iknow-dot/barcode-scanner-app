@@ -25,7 +25,7 @@ Per-user IP/CIDR allowlists can be configured to restrict where each account is 
 
 - **Backend** — Python 3.13, Django 6, Django REST Framework, SimpleJWT, drf-spectacular (OpenAPI), django-jazzmin (admin theme)
 - **Database** — PostgreSQL 17 (SQLite fallback for local development without Docker)
-- **Frontend** — React 18, Ant Design 6, axios, react-router 7, `@ericblade/quagga2` + `html5-qrcode` (barcode scanning), PostHog (analytics), custom Georgian/English i18n
+- **Frontend** — React 18, Ant Design 6, axios, react-router 7, `html5-qrcode` (barcode scanning), TipTap 3 (invoice-template editor), Leaflet (address picker), PostHog (analytics), custom Georgian/English i18n
 - **Packaging** — `uv` for backend (`pyproject.toml` + `uv.lock`), npm for frontend
 - **Deploy** — DigitalOcean App Platform (`.do/app.yaml`)
 
@@ -39,19 +39,21 @@ cd barcode-scanner-app
 docker-compose up --build -d
 ```
 
-- Frontend: <http://localhost:3000>
-- Backend API: <http://localhost:8080>
-- Swagger docs: <http://localhost:8080/api/docs/>
-- Django admin: <http://localhost:8080/admin/>
+- Frontend: <http://localhost:3100>
+- Backend API: <http://localhost:8180>
+- Swagger docs: <http://localhost:8180/api/docs/>
+- Django admin: <http://localhost:8180/admin/>
+
+(Host ports are shifted by `docker-compose.yml`; inside the containers the apps still listen on 3000 and 8080, and Postgres is published on 5532.)
 
 To run the backend without Docker:
 
 ```shell
 cd backend
 uv sync                     # or: pip install -r requirements.txt
-python manage.py migrate
-python manage.py createsuperuser
-python manage.py runserver 0.0.0.0:8080
+uv run python manage.py migrate
+uv run python manage.py createsuperuser
+uv run python manage.py runserver 0.0.0.0:8080
 ```
 
 To run the frontend without Docker:
@@ -66,8 +68,8 @@ To run the Django test suite:
 
 ```shell
 cd backend
-python manage.py test            # all tests
-python manage.py test core       # one app
+uv run python manage.py test            # all tests
+uv run python manage.py test core       # one app
 ```
 
 ## Environment Variables
@@ -110,9 +112,9 @@ Authentication is JWT via `rest_framework_simplejwt`. The login endpoint is `POS
 - **Per-user IP allowlist** — accepts both individual IPs and CIDR networks. Enforced at login.
 - **Three-tier role model** with multi-tenant isolation (every queryset is scoped to the user's organization).
 - **Organization-scoped warehouses** with per-user warehouse assignments.
-- **External product lookup** — proxies barcode/SKU/article searches to each organization's own web service. Credentials are stored encrypted with Fernet. Product images are fetched and base64-inlined in the API response so the frontend can render them without extra round trips.
+- **External product lookup** — proxies barcode/SKU/article searches to each organization's own web service. Credentials are stored encrypted with Fernet. Product images are served through a signed image proxy (`/api/v1/catalog/products/<sku>/image/<idx>/`), never inlined into the search response.
 - **RS.ge taxpayer lookup** — resolves a Georgian identification number to a customer name via the public RS.ge API.
-- **Customer & purchase order management** — customers with multiple phone numbers, draft / confirmed / cancelled orders, line-item discounts, pickup or delivery conditions.
+- **Client lookup & purchase orders** — clients are looked up and created in each organization's own 1C service (there is no local customer table); orders keep denormalized customer fields and move through draft / confirmed / completed / cancelled, with line-item discounts, gift marking, and pickup or delivery conditions.
 - **Bilingual UI** — Georgian and English, driven by error `code` fields returned by the backend.
 - **Admin analytics** — PostHog dashboard embedded directly into the Django admin.
 
