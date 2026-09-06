@@ -1,22 +1,35 @@
-"""Order confirm guards: the 1C stock check and the CreateOrder push.
+"""Order confirm guards on top of the 1C client.
 
-Extracted from ``PurchaseOrderViewSet`` unchanged. These stay in the view
-layer rather than under ``core/services`` because they return DRF
-``Response`` objects on failure, which the confirm path returns verbatim.
+The free-stock check (fails OPEN) and the CreateOrder push (fails CLOSED).
+Pure of DRF: a guard failure raises ``OrderPushError``, an upstream failure
+propagates as ``ConsultWebExchangeError``, and ``PurchaseOrderViewSet.update``
+translates both into the ``{code, detail}`` envelope.
 """
 
 import logging
 from decimal import Decimal, InvalidOperation
-
-from rest_framework import status as http_status
-from rest_framework.response import Response
 
 from core.models import ProductBarcode
 from core.services.consult_web_exchange import (
     ConsultWebExchangeClient,
     ConsultWebExchangeError,
 )
-from core.views.common import external_error_response
+
+
+class OrderPushError(Exception):
+    """A confirm-time guard failed.
+
+    The view answers ``{code, detail, **extra}`` with ``http_status``. Not an
+    ExternalServiceError on purpose: nothing upstream was called, and the
+    ``extra`` payload (``sku`` for ITEM_LOOKUP_KEY_MISSING) must survive.
+    """
+
+    def __init__(self, code: str, detail: str, http_status: int = 400, **extra):
+        super().__init__(detail)
+        self.code = code
+        self.detail = detail
+        self.http_status = http_status
+        self.extra = extra
 
 
 def insufficient_stock_lines(order):
@@ -123,9 +136,10 @@ def push_order_to_consult(order):
 
     Unlike the stock guard above, a failure here blocks the confirm: a
     confirmed order that does not exist in 1C can never be completed by
-    the webhook and silently loses the sale upstream. Returns None when
-    the order was pushed (or the push is intentionally skipped), else an
-    error Response.
+    the webhook and silently loses the sale upstream. Returns None when the
+    order was pushed (or the push is intentionally skipped). Raises
+    OrderPushError for a guard failure and ConsultWebExchangeError when
+    1C rejects the order or is unreachable.
 
     Skipped entirely for orders already pushed (there is no UpdateOrder
     upstream — edits after a push do not reach 1C). Retail orders with
@@ -142,10 +156,7 @@ def push_order_to_consult(order):
 
     items = list(order.items.all())
     if not items:
-        return Response(
-            {"code": "EMPTY_ORDER", "detail": "Cannot confirm an order with no items."},
-            status=http_status.HTTP_400_BAD_REQUEST,
-        )
+        raise OrderPushError("EMPTY_ORDER", "Cannot confirm an order with no items.")
 
     client_id_phone = (
         order.customer_identification_number
@@ -156,12 +167,9 @@ def push_order_to_consult(order):
         if not order.is_retail:
             # A customer order with no client data is an anomaly — fail
             # loud rather than create a clientless sale in 1C.
-            return Response(
-                {
-                    "code": "MISSING_CLIENT",
-                    "detail": "Order has no client; only retail orders can confirm without one.",
-                },
-                status=http_status.HTTP_400_BAD_REQUEST,
+            raise OrderPushError(
+                "MISSING_CLIENT",
+                "Order has no client; only retail orders can confirm without one.",
             )
         client_id_phone = ""
         logging.info(
@@ -171,21 +179,15 @@ def push_order_to_consult(order):
 
     warehouse_codes = {item.warehouse_code for item in items}
     if len(warehouse_codes) > 1:
-        return Response(
-            {
-                "code": "MULTIPLE_WAREHOUSES",
-                "detail": "1C accepts one warehouse per order; all items must share a warehouse to confirm.",
-            },
-            status=http_status.HTTP_400_BAD_REQUEST,
+        raise OrderPushError(
+            "MULTIPLE_WAREHOUSES",
+            "1C accepts one warehouse per order; all items must share a warehouse to confirm.",
         )
     stock_id = next(iter(warehouse_codes))
     if not stock_id:
-        return Response(
-            {
-                "code": "MISSING_WAREHOUSE",
-                "detail": "Order items have no warehouse; a warehouse is required to confirm.",
-            },
-            status=http_status.HTTP_400_BAD_REQUEST,
+        raise OrderPushError(
+            "MISSING_WAREHOUSE",
+            "Order items have no warehouse; a warehouse is required to confirm.",
         )
 
     barcode_by_sku = replica_barcode_by_sku(
@@ -199,13 +201,10 @@ def push_order_to_consult(order):
         elif barcode_by_sku.get(item.sku):
             lookup, is_barcode = barcode_by_sku[item.sku], True
         else:
-            return Response(
-                {
-                    "code": "ITEM_LOOKUP_KEY_MISSING",
-                    "detail": f"Item '{item.sku_name or item.sku}' has no article or known barcode to send to 1C.",
-                    "sku": item.sku,
-                },
-                status=http_status.HTTP_400_BAD_REQUEST,
+            raise OrderPushError(
+                "ITEM_LOOKUP_KEY_MISSING",
+                f"Item '{item.sku_name or item.sku}' has no article or known barcode to send to 1C.",
+                sku=item.sku,
             )
         # Keep 1C's computed Amount identical to our line_total: an
         # absolute discounted price replaces Price (a derived percent
@@ -230,17 +229,15 @@ def push_order_to_consult(order):
     if order.notes:
         comment = f"{comment} — {order.notes}"[:500]
 
-    client = ConsultWebExchangeClient(order.organization)
-    try:
-        body = client.create_order(
-            client_id_phone=client_id_phone,
-            user_id=order.organization.web_service_username or "",
-            stock_id=stock_id,
-            comment=comment,
-            items=payload_items,
-        )
-    except ConsultWebExchangeError as exc:
-        return external_error_response(exc)
+    # A ConsultWebExchangeError propagates: the confirm fails closed and the
+    # view answers with the shared external-service envelope.
+    body = ConsultWebExchangeClient(order.organization).create_order(
+        client_id_phone=client_id_phone,
+        user_id=order.organization.web_service_username or "",
+        stock_id=stock_id,
+        comment=comment,
+        items=payload_items,
+    )
 
     number = body.get("OrderNumber") or ""
     if not number:

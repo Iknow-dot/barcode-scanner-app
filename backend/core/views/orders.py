@@ -26,7 +26,9 @@ from core.services.invoice_template_sanitizer import (
     sanitize_and_validate,
 )
 from core.services.invoice_tokens import DEFAULT_INVOICE_TEMPLATE_HTML
-from core.views.order_push import insufficient_stock_lines, push_order_to_consult
+from core.services.consult_web_exchange import ConsultWebExchangeError
+from core.services.order_push import OrderPushError, insufficient_stock_lines, push_order_to_consult
+from core.views.common import external_error_response
 
 
 def _enforce_discount_permission(user, *, base_price, discount_percent, discounted_price):
@@ -259,9 +261,15 @@ class PurchaseOrderViewSet(ModelViewSet):
                         },
                         status=http_status.HTTP_400_BAD_REQUEST,
                     )
-                error = push_order_to_consult(order)
-                if error is not None:
-                    return error
+                try:
+                    push_order_to_consult(order)
+                except ConsultWebExchangeError as exc:
+                    return external_error_response(exc)
+                except OrderPushError as exc:
+                    return Response(
+                        {"code": exc.code, "detail": exc.detail, **exc.extra},
+                        status=exc.http_status,
+                    )
         return super().update(request, *args, **kwargs)
 
     def destroy(self, request, *args, **kwargs):
