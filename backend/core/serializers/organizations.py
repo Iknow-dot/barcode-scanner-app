@@ -33,6 +33,20 @@ def _validate_consult_web_exchange_base_url(value: str) -> str:
     return cleaned
 
 
+def _apply_web_service_password(instance, validated_data):
+    """Consume the write-only password fields: clearing wins over a new value.
+
+    Shared by every serializer that can set or clear the 1C password so the
+    rule lives in one place; the caller then applies the remaining fields.
+    """
+    clear = validated_data.pop('clear_password', False)
+    password = validated_data.pop('web_service_password', None)
+    if clear:
+        instance.web_service_password = None
+    elif password:
+        instance.encrypt_password(password)
+
+
 class OrganizationSerializer(serializers.ModelSerializer):
     users = UserSerializer(many=True, read_only=True)
     has_password = serializers.SerializerMethodField()
@@ -99,17 +113,9 @@ class OrganizationSerializer(serializers.ModelSerializer):
         return organization
 
     def update(self, instance, validated_data):
-        clear_password = validated_data.pop('clear_password', False)
-        password = validated_data.pop('web_service_password', None)
-
+        _apply_web_service_password(instance, validated_data)
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
-
-        if clear_password:
-            instance.web_service_password = None
-        elif password:
-            instance.encrypt_password(password)
-
         instance.save()
         return instance
 
@@ -135,19 +141,9 @@ class OrganizationExternalServiceSerializer(serializers.ModelSerializer):
         return _validate_consult_web_exchange_base_url(value)
 
     def update(self, instance, validated_data):
-        clear_password = validated_data.pop('clear_password', False)
-
-        if clear_password:
-            instance.web_service_password = None
-            instance.web_service_username = validated_data.get('web_service_username', instance.web_service_username)
-            instance.web_service_url = validated_data.get('web_service_url', instance.web_service_url)
-        else:
-            password = validated_data.pop('web_service_password', None)
-            for attr, value in validated_data.items():
-                setattr(instance, attr, value)
-            if password:
-                instance.encrypt_password(password)
-
+        _apply_web_service_password(instance, validated_data)
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
         instance.save()
         return instance
 
