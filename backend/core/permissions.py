@@ -4,24 +4,28 @@ from users.models import User
 
 
 
+COMPANY_ADMIN_ONLY_ACTIONS = (
+    'external_service', 'rotate_external_service_token',
+    'invoice_template', 'security_settings',
+)
+
+
 class OrganizationPermission(BasePermission):
     """
-    - Internal admins: full access.
-    - Company admins / company users: read-only on their own organization.
+    - Internal admins: full access, except the my-organization sub-resources
+      (external service, push token, invoice template, security), which are
+      company-admin only — an internal admin has no organization to manage.
+    - Company admins: those sub-resources on their own org, otherwise read-only.
+    - Company users: read-only on their own organization.
     """
 
     def has_permission(self, request, view):
         if not request.user or not request.user.is_authenticated:
             return False
-
+        if view.action in COMPANY_ADMIN_ONLY_ACTIONS:
+            return request.user.role == User.Role.COMPANY_ADMIN
         if request.user.role == User.Role.INTERNAL_ADMIN:
             return True
-
-        # Company admins can manage their external service settings and invoice template
-        if view.action in ('external_service', 'rotate_external_service_token', 'invoice_template', 'security_settings') and request.user.role == User.Role.COMPANY_ADMIN:
-            return True
-
-        # Non-admin roles: read-only actions only
         return view.action in ('retrieve', 'list', 'get_user_organization', 'used_ips')
 
     def has_object_permission(self, request, view, obj):

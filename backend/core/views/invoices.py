@@ -12,6 +12,7 @@ from core.services.invoice_tokens import (
     TOKEN_CATALOG,
     resolve_all_sample_values,
 )
+from core.views.common import no_organization_response
 
 
 @extend_schema(tags=['Invoice Templates'])
@@ -29,10 +30,7 @@ class InvoiceSampleValuesAPIView(APIView):
         user = request.user
         org = getattr(user, 'organization', None)
         if org is None:
-            return Response(
-                {'code': 'NO_ORGANIZATION', 'detail': 'User has no organization.'},
-                status=http_status.HTTP_404_NOT_FOUND,
-            )
+            return no_organization_response()
 
         order_id = request.query_params.get('order_id')
         order = None

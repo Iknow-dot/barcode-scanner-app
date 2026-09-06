@@ -320,3 +320,62 @@ class OrganizationPasswordTests(TestCase):
         self._update(OrganizationExternalServiceSerializer, {'web_service_url': 'https://1c.example'})
         self.assertEqual(self.org.web_service_url, 'https://1c.example')
         self.assertEqual(self.org.decrypt_password(), 'old-pw')
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
+class MyOrganizationSubResourcePermissionTests(TestCase):
+    """The role decision for the my-organization sub-resources lives in
+    OrganizationPermission, not in each action body."""
+
+    URLS = (
+        ('get', '/api/v1/organizations/my-organization/external-service/'),
+        ('post', '/api/v1/organizations/my-organization/external-service/rotate-token/'),
+        ('get', '/api/v1/organizations/my-organization/invoice-template/'),
+        ('get', '/api/v1/organizations/my-organization/security/'),
+    )
+
+    def setUp(self):
+        self.org = Organization.objects.create(
+            name='PermOrg', identification_number='131313131',
+            web_service_url='http://example.com/db', employees_count=5,
+        )
+        self.company_admin = User.objects.create_user(
+            username='perm-admin', password='pw12345',
+            role=User.Role.COMPANY_ADMIN, organization=self.org,
+        )
+        self.company_user = User.objects.create_user(
+            username='perm-user', password='pw12345',
+            role=User.Role.COMPANY_USER, organization=self.org,
+        )
+        self.internal_admin = User.objects.create_user(
+            username='perm-root', password='pw12345',
+            role=User.Role.INTERNAL_ADMIN, is_staff=True, is_superuser=True,
+        )
+
+    def _call(self, user, method, url):
+        client = APIClient()
+        client.force_authenticate(user=user)
+        return getattr(client, method)(url)
+
+    def test_internal_admin_is_forbidden(self):
+        for method, url in self.URLS:
+            with self.subTest(url=url):
+                self.assertEqual(self._call(self.internal_admin, method, url).status_code, 403)
+
+    def test_company_user_is_forbidden(self):
+        for method, url in self.URLS:
+            with self.subTest(url=url):
+                self.assertEqual(self._call(self.company_user, method, url).status_code, 403)
+
+    def test_company_admin_is_allowed(self):
+        for method, url in self.URLS:
+            with self.subTest(url=url):
+                self.assertEqual(self._call(self.company_admin, method, url).status_code, 200)
+
+    def test_no_organization_envelope_is_shared(self):
+        # An org-less internal admin hits the one NO_ORGANIZATION helper, whichever
+        # module answers — here the invoice sample-values endpoint.
+        response = self._call(self.internal_admin, 'get', '/api/v1/invoice-tokens/sample-values/')
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.data['code'], 'NO_ORGANIZATION')
+        self.assertEqual(response.data['detail'], 'User does not belong to any organization.')

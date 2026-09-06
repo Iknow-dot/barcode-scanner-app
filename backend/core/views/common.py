@@ -33,3 +33,12 @@ def catalog_disabled_response(org):
             status=http_status.HTTP_403_FORBIDDEN,
         )
     return None
+
+
+def no_organization_response() -> Response:
+    """The 404 returned when the requester has no organization to act on."""
+    return Response(
+        {"code": "NO_ORGANIZATION",
+         "detail": "User does not belong to any organization."},
+        status=http_status.HTTP_404_NOT_FOUND,
+    )

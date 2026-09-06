@@ -17,7 +17,21 @@ from core.serializers import (
     OrganizationInvoiceTemplateSerializer,
     OrganizationSecuritySerializer,
 )
+from core.views.common import no_organization_response
 from users.models import AllowedIP, User
+
+
+def _external_service_payload(organization: Organization) -> dict:
+    """Shape shared by GET and PATCH of my-organization/external-service."""
+    return {
+        'web_service_url': organization.web_service_url,
+        'web_service_username': organization.web_service_username,
+        'has_password': bool(organization.web_service_password),
+        'webhook_token': organization.webhook_token,
+        'push_allowed_ips': list(
+            organization.push_allowed_ips.values_list('ip_or_network', flat=True)
+        ),
+    }
 
 
 @extend_schema_view(
@@ -53,13 +67,7 @@ class OrganizationViewSet(ModelViewSet):
         if user.organization:
             serializer = self.get_serializer(user.organization)
             return Response(serializer.data)
-        return Response(
-            {
-                "code": "NO_ORGANIZATION",
-                "detail": "User does not belong to any organization.",
-            },
-            status=404,
-        )
+        return no_organization_response()
 
     @action(detail=False, methods=['get', 'patch'], url_path='my-organization/external-service')
     def external_service(self, request: Request) -> Response:
@@ -67,31 +75,16 @@ class OrganizationViewSet(ModelViewSet):
         GET: Retrieve the current user's organization external service details.
         PATCH: Update the current user's organization external service details.
 
-        Only accessible by company admins.
+        Company-admin only; enforced by OrganizationPermission.
         """
         user = request.user
-        if user.role != User.Role.COMPANY_ADMIN:
-            return Response(
-                {"detail": "Only company admins can manage external service settings."},
-                status=http_status.HTTP_403_FORBIDDEN,
-            )
         if not user.organization:
-            return Response(
-                {"code": "NO_ORGANIZATION", "detail": "User does not belong to any organization."},
-                status=http_status.HTTP_404_NOT_FOUND,
-            )
+            return no_organization_response()
 
         organization = user.organization
 
         if request.method == 'GET':
-            data = {
-                'web_service_url': organization.web_service_url,
-                'web_service_username': organization.web_service_username,
-                'has_password': bool(organization.web_service_password),
-                'webhook_token': organization.webhook_token,
-                'push_allowed_ips': list(organization.push_allowed_ips.values_list('ip_or_network', flat=True)),
-            }
-            return Response(data)
+            return Response(_external_service_payload(organization))
 
         # PATCH
         serializer = OrganizationExternalServiceSerializer(organization, data=request.data, partial=True)
@@ -118,33 +111,18 @@ class OrganizationViewSet(ModelViewSet):
                 for ip in dict.fromkeys(cleaned)  # de-dupe, preserve order
             ])
 
-        data = {
-            'web_service_url': organization.web_service_url,
-            'web_service_username': organization.web_service_username,
-            'has_password': bool(organization.web_service_password),
-            'webhook_token': organization.webhook_token,
-            'push_allowed_ips': list(organization.push_allowed_ips.values_list('ip_or_network', flat=True)),
-        }
-        return Response(data)
+        return Response(_external_service_payload(organization))
 
     @action(detail=False, methods=['post'], url_path='my-organization/external-service/rotate-token')
     def rotate_external_service_token(self, request: Request) -> Response:
         """POST: Rotate (regenerate) the organization's catalog-push token.
 
-        Only accessible by company admins. Invalidates the previous token — the
+        Company-admin only (OrganizationPermission). Invalidates the previous token — the
         org's 1C must be reconfigured with the new value before it can push again.
         """
         user = request.user
-        if user.role != User.Role.COMPANY_ADMIN:
-            return Response(
-                {"detail": "Only company admins can rotate the push token."},
-                status=http_status.HTTP_403_FORBIDDEN,
-            )
         if not user.organization:
-            return Response(
-                {"code": "NO_ORGANIZATION", "detail": "User does not belong to any organization."},
-                status=http_status.HTTP_404_NOT_FOUND,
-            )
+            return no_organization_response()
         organization = user.organization
         organization.rotate_webhook_token()
         return Response({"webhook_token": organization.webhook_token})
@@ -155,19 +133,11 @@ class OrganizationViewSet(ModelViewSet):
         GET: Retrieve the current user's organization invoice template fields.
         PATCH: Update the current user's organization invoice template fields.
 
-        Only accessible by company admins.
+        Company-admin only; enforced by OrganizationPermission.
         """
         user = request.user
-        if user.role != User.Role.COMPANY_ADMIN:
-            return Response(
-                {"detail": "Only company admins can manage the invoice template."},
-                status=http_status.HTTP_403_FORBIDDEN,
-            )
         if not user.organization:
-            return Response(
-                {"code": "NO_ORGANIZATION", "detail": "User does not belong to any organization."},
-                status=http_status.HTTP_404_NOT_FOUND,
-            )
+            return no_organization_response()
 
         organization = user.organization
 
@@ -187,19 +157,11 @@ class OrganizationViewSet(ModelViewSet):
         GET: Retrieve the current user's organization security settings.
         PATCH: Update the current user's organization security settings.
 
-        Only accessible by company admins.
+        Company-admin only; enforced by OrganizationPermission.
         """
         user = request.user
-        if user.role != User.Role.COMPANY_ADMIN:
-            return Response(
-                {"detail": "Only company admins can manage security settings."},
-                status=http_status.HTTP_403_FORBIDDEN,
-            )
         if not user.organization:
-            return Response(
-                {"code": "NO_ORGANIZATION", "detail": "User does not belong to any organization."},
-                status=http_status.HTTP_404_NOT_FOUND,
-            )
+            return no_organization_response()
 
         organization = user.organization
 
