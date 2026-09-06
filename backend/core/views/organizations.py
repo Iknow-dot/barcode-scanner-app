@@ -94,9 +94,18 @@ class OrganizationViewSet(ModelViewSet):
         # Optional: replace the source-IP allowlist for the push token. Sending the
         # full desired list replaces the set; sending [] clears it (unrestricted).
         if 'push_allowed_ips' in request.data:
+            raw = request.data.get('push_allowed_ips')
+            # Shape first: a non-string entry used to reach .strip() as a 500,
+            # and [null] used to clear the allowlist with a 200 — silently
+            # making the push token unrestricted.
+            if not isinstance(raw, list) or not all(isinstance(e, str) for e in raw):
+                return Response(
+                    {"code": "INVALID_IP", "detail": "push_allowed_ips must be a list of strings."},
+                    status=http_status.HTTP_400_BAD_REQUEST,
+                )
             cleaned = []
-            for entry in (request.data.get('push_allowed_ips') or []):
-                entry = (entry or '').strip()
+            for entry in raw:
+                entry = entry.strip()
                 if not entry:
                     continue
                 if not is_valid_ip_or_network(entry):

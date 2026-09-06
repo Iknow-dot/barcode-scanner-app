@@ -3,6 +3,7 @@ from datetime import timedelta
 from uuid import uuid4
 
 from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
 from django.utils import timezone
 from django.utils.crypto import constant_time_compare
@@ -266,6 +267,20 @@ def validate_same_organization(objs, organization, field_name, message):
         raise serializers.ValidationError({field_name: message})
 
 
+def save_user(user):
+    """Save a User, surfacing its model-level rules as a 400 rather than a 500.
+
+    ``User.save()`` calls ``full_clean()``, so the role/organization invariants
+    in ``User.clean()`` raise a *Django* ValidationError, which DRF does not
+    translate — e.g. PATCH ``{"organization": null}`` on a company user, or
+    ``{"role": "internal_admin"}`` on one. Both are legitimate 400s.
+    """
+    try:
+        user.save()
+    except DjangoValidationError as exc:
+        raise serializers.ValidationError(serializers.as_serializer_error(exc))
+
+
 class _BaseUserSerializer(serializers.ModelSerializer):
     """
     Shared base for user serializers.  Subclasses control which fields
@@ -336,11 +351,14 @@ class _BaseUserSerializer(serializers.ModelSerializer):
             validated_data['device_lock_enabled'] = True
         user = User(**validated_data)
         user.set_password(password)
-        user.save()
-        for ip_data in allowed_ips:
-            AllowedIP.objects.get_or_create(user=user, ip_or_network=ip_data['ip_or_network'])
-        if warehouses:
-            user.warehouses.set(warehouses)
+        # Atomic so the row is never visible to a concurrent PATCH (which
+        # validates against its organization) before its memberships land.
+        with transaction.atomic():
+            save_user(user)
+            for ip_data in allowed_ips:
+                AllowedIP.objects.get_or_create(user=user, ip_or_network=ip_data['ip_or_network'])
+            if warehouses:
+                user.warehouses.set(warehouses)
         return user
 
     def update(self, instance, validated_data):
@@ -352,25 +370,34 @@ class _BaseUserSerializer(serializers.ModelSerializer):
             validated_data.pop('device_lock_enabled', None)
         password = validated_data.pop('password', None)
         warehouses = validated_data.pop('warehouses', None)
-        organization = validated_data.get('organization', instance.organization)
-        # Also run when only `organization` changes: the memberships the user
-        # will END UP with must belong to the org they will have after this
-        # request, so an org move must restate warehouse_ids (possibly []).
-        if warehouses is not None or organization != instance.organization:
-            validate_same_organization(
-                warehouses if warehouses is not None else instance.warehouses.all(),
-                organization, 'warehouse_ids', "All warehouses must belong to the user's organization.",
-            )
         allowed_ips = validated_data.pop('allowed_ips', None)
-        for attr, value in validated_data.items():
-            setattr(instance, attr, value)
-        if password:
-            instance.set_password(password)
-        instance.save()
-        if warehouses is not None:
-            instance.warehouses.set(warehouses)
-        if allowed_ips is not None:  # absent -> untouched; [] -> cleared
-            with transaction.atomic():  # never leave the list half-replaced
+        # One transaction for the whole update: the same-org check below is a
+        # check-then-write, so its precondition (this user's organization) must
+        # be held until the write lands, and the allowed_ips replace must never
+        # be left half-applied.
+        with transaction.atomic():
+            # Re-read under a row lock: the warehouse endpoint validates a user
+            # against the org it reads here, so without it an org move and a
+            # concurrent user-attach can interleave into a cross-org membership.
+            # (Postgres FOR UPDATE; SQLite ignores it, so tests are unaffected.)
+            locked = User.objects.select_for_update().get(pk=instance.pk)
+            organization = validated_data.get('organization', locked.organization)
+            # Also run when only `organization` changes: the memberships the user
+            # will END UP with must belong to the org they will have after this
+            # request, so an org move must restate warehouse_ids (possibly []).
+            if warehouses is not None or organization != locked.organization:
+                validate_same_organization(
+                    warehouses if warehouses is not None else instance.warehouses.all(),
+                    organization, 'warehouse_ids', "All warehouses must belong to the user's organization.",
+                )
+            for attr, value in validated_data.items():
+                setattr(instance, attr, value)
+            if password:
+                instance.set_password(password)
+            save_user(instance)
+            if warehouses is not None:
+                instance.warehouses.set(warehouses)
+            if allowed_ips is not None:  # absent -> untouched; [] -> cleared
                 instance.allowed_ips.all().delete()
                 for ip_data in allowed_ips:
                     AllowedIP.objects.get_or_create(

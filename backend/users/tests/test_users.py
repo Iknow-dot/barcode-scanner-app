@@ -355,6 +355,27 @@ class UserWarehouseAssignmentTests(TestCase):
         )
         self.assertEqual(response.status_code, 200, response.data)
 
+    def test_org_move_to_null_is_400_not_500(self):
+        """User.save() runs full_clean(), and DRF does not translate a Django
+        ValidationError — clearing a company user's org used to be a 500."""
+        response = self._client(self.internal_admin).patch(
+            f'/api/v1/users/{self.target.pk}/',
+            {'organization': None, 'warehouse_ids': []}, format='json',
+        )
+        self.assertEqual(response.status_code, 400, response.data)
+        self.assertIn('organization', response.data)
+        self.target.refresh_from_db()
+        self.assertEqual(self.target.organization, self.org)
+
+    def test_role_change_breaking_a_model_rule_is_400_not_500(self):
+        response = self._client(self.internal_admin).patch(
+            f'/api/v1/users/{self.target.pk}/',
+            {'role': User.Role.INTERNAL_ADMIN}, format='json',
+        )
+        self.assertEqual(response.status_code, 400, response.data)
+        self.target.refresh_from_db()
+        self.assertEqual(self.target.role, User.Role.COMPANY_USER)
+
 
 @override_settings(SECURE_SSL_REDIRECT=False)
 class UserAllowedIPValidationTests(TestCase):
@@ -493,3 +514,19 @@ class UserAdminChangeFormTests(TestCase):
         self.warehouse.users.add(self.user)
         form = self._form(first_name='Renamed')
         self.assertTrue(form.is_valid(), form.errors)
+
+    def test_org_move_allowed_when_memberships_already_belong_to_the_target(self):
+        """The rule is about the END state, as on the API: a legacy row whose
+        warehouse is right and whose user.organization is wrong is repairable."""
+        other_warehouse = Warehouse.objects.create(
+            organization=self.other_org, code='AF-2', name='AF Two',
+        )
+        other_warehouse.users.add(self.user)
+        form = self._form(organization=self.other_org.pk)
+        self.assertTrue(form.is_valid(), form.errors)
+
+    def test_org_move_to_none_with_memberships_is_rejected(self):
+        self.warehouse.users.add(self.user)
+        form = self._form(organization='')
+        self.assertFalse(form.is_valid())
+        self.assertIn('warehouses', str(form.errors))

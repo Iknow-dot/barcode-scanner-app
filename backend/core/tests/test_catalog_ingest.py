@@ -324,6 +324,21 @@ class PushIPAllowlistTests(TestCase):
         self.assertEqual(r.status_code, 400)
         self.assertEqual(r.json()["code"], "INVALID_IP")
 
+    def test_non_string_entries_rejected_and_allowlist_untouched(self):
+        """A non-string entry used to 500 on .strip(); [None] used to clear the
+        list with a 200, silently making the push token unrestricted."""
+        OrganizationPushAllowedIP.objects.create(organization=self.org, ip_or_network="203.0.113.0/24")
+        self._admin()
+        for bad in ([1], [True], [["1.1.1.1"]], [None], 5, "203.0.113.9", None):
+            with self.subTest(bad=bad):
+                r = self.client.patch(self.EXT, {"push_allowed_ips": bad}, format="json")
+                self.assertEqual(r.status_code, 400, r.data)
+                self.assertEqual(r.json()["code"], "INVALID_IP")
+                self.assertEqual(
+                    list(self.org.push_allowed_ips.values_list("ip_or_network", flat=True)),
+                    ["203.0.113.0/24"],
+                )
+
 
 @override_settings(SECURE_SSL_REDIRECT=False)
 class CatalogIngestCategoryAttributeTests(TestCase):

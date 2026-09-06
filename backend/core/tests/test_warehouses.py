@@ -1,10 +1,16 @@
 from __future__ import annotations
 
+from io import StringIO
+
 from core.models import Warehouse
+from core.serializers import WarehouseSerializer
+from django.core.management import call_command
 from django.test import TestCase, override_settings
 from django.urls import reverse
-from rest_framework.test import APIClient
+from rest_framework.exceptions import ValidationError as DRFValidationError
+from rest_framework.test import APIClient, APIRequestFactory
 from users.models import User
+from users.serializers import InternalAdminUserSerializer
 from core.tests.common import _make_organization
 
 
@@ -176,6 +182,104 @@ class WarehouseUpdateOrderingTests(TestCase):
 
 
 @override_settings(SECURE_SSL_REDIRECT=False)
+class WarehouseCodeUniquenessTests(TestCase):
+    """`organization` is not a serializer field, so DRF adds no
+    UniqueTogetherValidator: nothing but the manual check stands between a
+    duplicate code and the UNIQUE constraint. An internal admin has no org
+    injected, so the check must fall back to the warehouse's own."""
+
+    def setUp(self):
+        self.org = _make_organization(name='CodeOrgA', identification_number='331111111')
+        self.other_org = _make_organization(name='CodeOrgB', identification_number='332222222')
+        self.internal_admin = User.objects.create_user(
+            username='code-root', password='pw12345',
+            role=User.Role.INTERNAL_ADMIN, is_staff=True, is_superuser=True,
+        )
+        self.warehouse = Warehouse.objects.create(organization=self.org, code='WH-A', name='A')
+        self.sibling = Warehouse.objects.create(organization=self.org, code='WH-B', name='B')
+        # Same code in another org: must not block a rename in self.org.
+        Warehouse.objects.create(organization=self.other_org, code='WH-FREE', name='Elsewhere')
+        self.api = APIClient()
+        self.api.force_authenticate(self.internal_admin)
+        self.url = reverse('warehouse-detail', args=[self.warehouse.pk])
+
+    def test_duplicate_code_patch_is_400_not_integrity_error(self):
+        response = self.api.patch(self.url, {'code': 'WH-B'}, format='json')
+        self.assertEqual(response.status_code, 400, response.data)
+        self.assertIn('code', response.data)
+        self.warehouse.refresh_from_db()
+        self.assertEqual(self.warehouse.code, 'WH-A')
+
+    def test_duplicate_code_put_is_400(self):
+        response = self.api.put(self.url, {'name': 'A', 'code': 'WH-B'}, format='json')
+        self.assertEqual(response.status_code, 400, response.data)
+        self.warehouse.refresh_from_db()
+        self.assertEqual(self.warehouse.code, 'WH-A')
+
+    def test_code_free_in_this_org_still_applies(self):
+        response = self.api.patch(self.url, {'code': 'WH-FREE'}, format='json')
+        self.assertEqual(response.status_code, 200, response.data)
+        self.warehouse.refresh_from_db()
+        self.assertEqual(self.warehouse.code, 'WH-FREE')
+
+    def test_create_without_an_organization_is_400_not_integrity_error(self):
+        response = self.api.post(
+            reverse('warehouse-list'), {'name': 'New', 'code': 'WH-NEW'}, format='json',
+        )
+        self.assertEqual(response.status_code, 400, response.data)
+        self.assertIn('organization', response.data)
+        self.assertFalse(Warehouse.objects.filter(code='WH-NEW').exists())
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
+class WarehouseAttachOrgMoveRaceTests(TestCase):
+    """The same-org rule is a check-then-write on `user.organization`, and the
+    user endpoint can move a user between orgs concurrently. The attach re-reads
+    (and, on Postgres, locks) the users it validated, so an attach that was
+    valid when validated is rejected if the user has since moved.
+
+    The lock itself is Postgres-only — SQLite ignores FOR UPDATE — so this test
+    pins the re-read half by driving the two serializers in the interleaved
+    order rather than by racing threads."""
+
+    def setUp(self):
+        self.org = _make_organization(name='RaceOrgA', identification_number='441111111')
+        self.other_org = _make_organization(name='RaceOrgB', identification_number='442222222')
+        self.internal_admin = User.objects.create_user(
+            username='race-root', password='pw12345',
+            role=User.Role.INTERNAL_ADMIN, is_staff=True, is_superuser=True,
+        )
+        self.user = User.objects.create_user(
+            username='race-user', password='pw12345',
+            role=User.Role.COMPANY_USER, organization=self.org,
+        )
+        self.warehouse = Warehouse.objects.create(organization=self.org, code='WH-R', name='Race WH')
+        request = APIRequestFactory().patch('/')
+        request.user = self.internal_admin
+        self.context = {'request': request}
+
+    def test_attach_validated_before_an_org_move_is_rejected_at_save(self):
+        attach = WarehouseSerializer(
+            instance=self.warehouse, data={'name': 'Renamed', 'user_ids': [self.user.pk]},
+            partial=True, context=self.context,
+        )
+        self.assertTrue(attach.is_valid(), attach.errors)  # user is still in self.org here
+
+        move = InternalAdminUserSerializer(
+            instance=self.user, data={'organization': self.other_org.pk, 'warehouse_ids': []},
+            partial=True, context=self.context,
+        )
+        self.assertTrue(move.is_valid(), move.errors)
+        move.save()
+
+        with self.assertRaises(DRFValidationError):
+            attach.save()
+        self.warehouse.refresh_from_db()
+        self.assertEqual(self.warehouse.users.count(), 0)
+        self.assertEqual(self.warehouse.name, 'Race WH')  # the rename rolled back too
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
 class WarehouseAdminInlineTests(TestCase):
     """The Organization admin's warehouse inline can only attach the org's own
     users — limit_choices_to on the M2M is a no-op, so the inline scopes itself."""
@@ -226,3 +330,50 @@ class WarehouseAdminInlineTests(TestCase):
         self.assertEqual(response.status_code, 200)
         picker = response.context['inline_admin_formsets'][0].formset.forms[0].fields['users']
         self.assertEqual(picker.queryset.count(), 0)
+
+
+class AuditWarehouseMembershipsCommandTests(TestCase):
+    """Legacy rows written before the same-org guards are invisible in the
+    admin (the inline picker is org-scoped), so a command has to surface them.
+    `.add()` bypasses every guard exactly as the old write paths did."""
+
+    def setUp(self):
+        self.org = _make_organization(name='AuditOrgA', identification_number='551111111')
+        self.other_org = _make_organization(name='AuditOrgB', identification_number='552222222')
+        self.warehouse = Warehouse.objects.create(organization=self.org, code='AU-1', name='Audit WH')
+        self.same_org_user = User.objects.create_user(
+            username='audit-same', password='pw12345',
+            role=User.Role.COMPANY_USER, organization=self.org,
+        )
+        self.other_org_user = User.objects.create_user(
+            username='audit-other', password='pw12345',
+            role=User.Role.COMPANY_USER, organization=self.other_org,
+        )
+        self.orgless_user = User.objects.create_user(
+            username='audit-root', password='pw12345',
+            role=User.Role.INTERNAL_ADMIN, is_staff=True, is_superuser=True,
+        )
+
+    def _run(self, **kwargs):
+        out = StringIO()
+        call_command('audit_warehouse_memberships', stdout=out, **kwargs)
+        return out.getvalue()
+
+    def test_clean_database_reports_nothing(self):
+        self.warehouse.users.add(self.same_org_user)
+        output = self._run()
+        self.assertIn('No cross-organization warehouse memberships', output)
+        self.assertEqual(self.warehouse.users.count(), 1)
+
+    def test_reports_cross_org_and_orgless_without_touching_them(self):
+        self.warehouse.users.add(self.same_org_user, self.other_org_user, self.orgless_user)
+        output = self._run()
+        self.assertIn('audit-other', output)
+        self.assertIn('audit-root', output)
+        self.assertNotIn('audit-same', output)
+        self.assertEqual(self.warehouse.users.count(), 3)  # report only
+
+    def test_detach_removes_only_the_offending_rows(self):
+        self.warehouse.users.add(self.same_org_user, self.other_org_user, self.orgless_user)
+        self._run(detach=True)
+        self.assertEqual(list(self.warehouse.users.all()), [self.same_org_user])
