@@ -54,7 +54,7 @@ class WarehouseSerializer(serializers.ModelSerializer):
                 qs = qs.exclude(pk=self.instance.pk)
             if qs.exists():
                 raise serializers.ValidationError({
-                    'code': f'Warehouse with this code already exists in this organization.',
+                    'code': 'Warehouse with this code already exists in this organization.',
                 })
 
         return super().validate(attrs)
