@@ -1,4 +1,4 @@
-import {apiRequest} from './request';
+import {apiRequest, extractErrorMessage} from './request';
 
 describe('apiRequest failure envelope', () => {
     const axiosError = (status, data) => ({
@@ -26,5 +26,21 @@ describe('apiRequest failure envelope', () => {
 
         expect(result.success).toBe(false);
         expect(result.data).toBeUndefined();
+    });
+});
+
+describe('extractErrorMessage', () => {
+    const axiosError = (status, data) => ({message: 'Request failed', response: {status, data}});
+
+    it('keeps the flat "field: messages" shape', () => {
+        expect(extractErrorMessage(axiosError(400, {username: ['Required.', 'Too short.']})))
+            .toBe('username: Required., Too short.');
+    });
+
+    it('flattens nested serializer errors instead of printing [object Object]', () => {
+        const message = extractErrorMessage(axiosError(400, {
+            allowed_ips: [{}, {ip_or_network: ['Invalid IP or network: office']}],
+        }));
+        expect(message).toBe('allowed_ips: Invalid IP or network: office');
     });
 });

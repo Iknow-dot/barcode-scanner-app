@@ -24,6 +24,19 @@ const getT = () => translations[getCurrentLanguage()] || translations.ka;
  * @param {Error} error - Axios error object
  * @returns {string} Human-readable error message
  */
+// DRF reports nested-serializer errors as one entry per item — `{}` for a
+// valid item, `{sub_field: ["msg"]}` for a bad one — so a naive join prints
+// "[object Object]". Flatten to the messages, dropping the empty entries.
+const flattenMessages = (messages) => {
+    if (Array.isArray(messages)) {
+        return messages.map(flattenMessages).filter(Boolean).join(', ');
+    }
+    if (messages && typeof messages === 'object') {
+        return Object.values(messages).map(flattenMessages).filter(Boolean).join(', ');
+    }
+    return messages == null ? '' : String(messages);
+};
+
 export const extractErrorMessage = (error) => {
     const t = getT();
     const data = error.response?.data;
@@ -39,9 +52,7 @@ export const extractErrorMessage = (error) => {
     if (typeof data === 'object') {
         return Object.entries(data)
             .filter(([key]) => key !== 'code') // skip custom error codes
-            .map(([field, messages]) =>
-                `${field}: ${Array.isArray(messages) ? messages.join(', ') : messages}`
-            )
+            .map(([field, messages]) => `${field}: ${flattenMessages(messages)}`)
             .join('; ');
     }
 
