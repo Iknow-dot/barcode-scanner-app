@@ -6,7 +6,7 @@ from django.core.exceptions import ValidationError
 from django.test import TestCase, override_settings
 from rest_framework.test import APIClient, APIRequestFactory
 from users.models import User
-from core.tests.common import _make_organization
+from core.tests.common import _TEST_FERNET_KEY, _make_organization
 
 
 class OrganizationSessionTimeoutFieldTests(TestCase):
@@ -272,3 +272,51 @@ class ExternalServiceTokenTests(TestCase):
     def test_company_user_cannot_rotate(self):
         self.client.force_authenticate(self.member)
         self.assertEqual(self.client.post(self.ROTATE).status_code, 403)
+
+
+@override_settings(FERNET_KEY=_TEST_FERNET_KEY)
+class OrganizationPasswordTests(TestCase):
+    """The web-service password round-trips through the two serializers that
+    can set or clear it. Pinned before their update() bodies were unified."""
+
+    def setUp(self):
+        self.org = _make_organization()
+        self.org.encrypt_password('old-pw')
+        self.org.save()
+
+    def _update(self, serializer_class, data):
+        serializer = serializer_class(self.org, data=data, partial=True)
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+        serializer.save()
+        self.org.refresh_from_db()
+
+    def test_full_serializer_new_password_re_encrypts(self):
+        self._update(OrganizationSerializer, {'web_service_password': 'new-pw'})
+        self.assertEqual(self.org.decrypt_password(), 'new-pw')
+
+    def test_full_serializer_clear_password_wins_over_new_password(self):
+        self._update(OrganizationSerializer, {'clear_password': True, 'web_service_password': 'new-pw'})
+        self.assertIsNone(self.org.web_service_password)
+
+    def test_full_serializer_other_fields_leave_password_alone(self):
+        self._update(OrganizationSerializer, {'web_service_username': 'someone'})
+        self.assertEqual(self.org.web_service_username, 'someone')
+        self.assertEqual(self.org.decrypt_password(), 'old-pw')
+
+    def test_external_service_serializer_new_password_re_encrypts(self):
+        self._update(OrganizationExternalServiceSerializer, {'web_service_password': 'new-pw'})
+        self.assertEqual(self.org.decrypt_password(), 'new-pw')
+
+    def test_external_service_serializer_clear_password_wins_and_keeps_other_fields(self):
+        self._update(OrganizationExternalServiceSerializer, {
+            'clear_password': True, 'web_service_password': 'new-pw',
+            'web_service_username': 'someone', 'web_service_url': 'https://1c.example',
+        })
+        self.assertIsNone(self.org.web_service_password)
+        self.assertEqual(self.org.web_service_username, 'someone')
+        self.assertEqual(self.org.web_service_url, 'https://1c.example')
+
+    def test_external_service_serializer_url_only_leaves_password_alone(self):
+        self._update(OrganizationExternalServiceSerializer, {'web_service_url': 'https://1c.example'})
+        self.assertEqual(self.org.web_service_url, 'https://1c.example')
+        self.assertEqual(self.org.decrypt_password(), 'old-pw')
