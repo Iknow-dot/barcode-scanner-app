@@ -50,7 +50,7 @@ class CustomTokenObtainPairView(TokenObtainPairView):
     def post(self, request: Request, *args, **kwargs) -> Response:
         try:
             return super().post(request, *args, **kwargs)
-        except IPNotAllowedError as exc:
+        except IPNotAllowedError:
             return Response(
                 {
                     "code": "IP_NOT_ALLOWED",

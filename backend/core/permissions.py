@@ -3,16 +3,6 @@ from rest_framework.permissions import BasePermission, SAFE_METHODS
 from users.models import User
 
 
-class IsInternalAdmin(BasePermission):
-    """Full access for internal admins only."""
-
-    def has_permission(self, request, view):
-        return (
-                request.user
-                and request.user.is_authenticated
-                and request.user.role == User.Role.INTERNAL_ADMIN
-        )
-
 
 class OrganizationPermission(BasePermission):
     """
@@ -50,16 +40,6 @@ class IsCompanyAdmin(BasePermission):
                 and request.user.role == User.Role.COMPANY_ADMIN
         )
 
-
-class IsCompanyUser(BasePermission):
-    """Access for company users (scoped to their organization)."""
-
-    def has_permission(self, request, view):
-        return (
-                request.user
-                and request.user.is_authenticated
-                and request.user.role == User.Role.COMPANY_USER
-        )
 
 
 class IsCompanyUserOrAdmin(BasePermission):

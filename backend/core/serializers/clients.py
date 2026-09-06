@@ -63,10 +63,6 @@ class CreateClientRequestSerializer(serializers.Serializer):
     address_line = serializers.CharField(max_length=500, required=False, allow_blank=True, default='')
 
 
-# ---------------------------------------------------------------------------
-# Purchase Order Items
-# ---------------------------------------------------------------------------
-
 class RSGeLookupSerializer(serializers.Serializer):
     identification_number = serializers.CharField(
         max_length=50,
@@ -75,10 +71,6 @@ class RSGeLookupSerializer(serializers.Serializer):
         help_text="Taxpayer identification number to look up on RS.ge.",
     )
 
-
-# ---------------------------------------------------------------------------
-# Reverse Geocode (Nominatim)
-# ---------------------------------------------------------------------------
 
 class ReverseGeocodeRequestSerializer(serializers.Serializer):
     lat = serializers.FloatField(min_value=-90, max_value=90)
@@ -99,8 +91,3 @@ class SearchAddressesRequestSerializer(serializers.Serializer):
         default=8,
         help_text="Maximum number of suggestions to return (1–15, default 8).",
     )
-
-
-# ---------------------------------------------------------------------------
-# Product Search
-# ---------------------------------------------------------------------------

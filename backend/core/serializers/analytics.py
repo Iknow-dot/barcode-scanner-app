@@ -10,8 +10,3 @@ class ConsultantOrderStatsSerializer(serializers.Serializer):
     orders_created = serializers.IntegerField()
     orders_confirmed = serializers.IntegerField()
     conversion_rate = serializers.FloatField()
-
-
-# ---------------------------------------------------------------------------
-# Catalog name search
-# ---------------------------------------------------------------------------

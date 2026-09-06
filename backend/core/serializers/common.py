@@ -9,10 +9,6 @@ from rest_framework import serializers
 User = get_user_model()
 
 
-# ---------------------------------------------------------------------------
-# Organization
-# ---------------------------------------------------------------------------
-
 _WEB_SERVICE_URL_PATH_RE = re.compile(r'/+hs/consultwebexchange.*$', re.IGNORECASE)
 
 

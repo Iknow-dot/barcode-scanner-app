@@ -84,8 +84,3 @@ class InvoiceTokensAPIView(APIView):
             'tokens': public_catalog,
             'default_template_html': DEFAULT_INVOICE_TEMPLATE_HTML,
         })
-
-
-# ---------------------------------------------------------------------------
-# Purchase Order
-# ---------------------------------------------------------------------------

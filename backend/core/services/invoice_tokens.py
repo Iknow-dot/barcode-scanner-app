@@ -2,9 +2,10 @@
 
 The catalog is consumed by:
 - `invoice_renderer.py` — resolves tokens during render.
-- `OrganizationViewSet.invoice_tokens` action — exposes the catalog and
-  the default template HTML to the frontend so the editor's
-  Insert-token menu and first-open seed cannot drift.
+- `invoice_template_sanitizer.py` — validates token names/scopes at save time.
+- `InvoiceTokensAPIView` (`core/views/invoices.py`) — exposes the catalog and
+  the default template HTML to the frontend so the editor's Insert-token
+  menu and first-open seed cannot drift.
 
 Tokens with scope `item.*` MUST only appear inside the items-table
 body row (`<tr data-repeat="items">`). Structural validation enforces
@@ -139,8 +140,10 @@ def resolve_token(token: str, *, org=None, order=None, item=None, index: int = 1
     raise KeyError(f'unknown scope: {scope}')
 
 
-# The default template is a faithful HTML+tokens port of today's
-# `core/templates/core/invoice.html` body. Layout-related class names
+# Built-in invoice template. Used as the render fallback when
+# `Organization.invoice_template_html` is blank (`PurchaseOrderViewSet.invoice`)
+# and served to the editor as `default_template_html` (`views/invoices.py`),
+# so this constant is the single canonical default. Layout-related class names
 # (header, org-block, etc.) are styled by the print skeleton in
 # `invoice_renderer.wrap_in_skeleton`.
 DEFAULT_INVOICE_TEMPLATE_HTML = """\

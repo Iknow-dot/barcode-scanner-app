@@ -14,9 +14,11 @@ Wraps per-organization calls to four endpoints under
 `HS/ConsultWebExchange/` segment). Basic-auth credentials are reused from the
 existing `web_service_username` + Fernet-encrypted `web_service_password`.
 
-Field-name mapping is centralized in the *_FIELDS dicts below so a 1C-side
-rename is a one-line fix; every normalized response also echoes `raw` so the
-frontend can recover unmapped fields without a backend code change.
+Request payloads are built inline: `check_client` posts a single
+`{"IDPhone": ...}` and `create_client` a flat dict. The only field map is
+CHECK_CLIENT_RESPONSE_FIELDS, applied by `_normalize_client_response` to both
+CheckClient and CreateClient responses; every normalized response also echoes
+`raw` so the frontend can recover an unmapped field without a code change.
 """
 
 from __future__ import annotations
@@ -33,27 +35,17 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # 1C ConsultWebExchange field mapping — confirmed with API owner
 # ---------------------------------------------------------------------------
-# - Lookup endpoint accepts the same identifier names as CreateClient
-#   (`personal_number`, `phone`).
-# - Lookup response carries first_name / last_name / phone (id_1c +
-#   personal_number when 1C has them).
-# - Create endpoint takes flat fields:
-#       first_name, last_name, personal_number, IsPhys (bool),
-#       phone_1, phone_2, Email, address_line.
+# - CheckClient request is a single `{"IDPhone": <personal number or phone>}`.
 # - Lookup response is a list of customers (one or more matches), possibly
 #       wrapped in keys like `clients` / `customers` / `data` / `result`.
 # - Create response is a single customer (possibly wrapped under a
 #       `customer` / `client` key).
 
-CHECK_CLIENT_REQUEST_FIELDS = {
-    # internal → 1C
-    "identification_number": "personal_number",
-    "phone": "phone",
-}
-
 CHECK_CLIENT_RESPONSE_FIELDS = {
     # 1C → internal. The lookup response carries the customer's display
     # fields (`name`, `address`, `phone`) plus a wrapper-level `status`.
+    # Applied to CreateClient responses too (views/clients.py normalizes the
+    # create result through `_normalize_client_response`).
     # Callers preserve the original lookup query (personal_number / phone)
     # if they need to attach it to a downstream record.
     #
@@ -67,11 +59,6 @@ CHECK_CLIENT_RESPONSE_FIELDS = {
     "phone": "phone",
     "phone_1": "phone",
 }
-
-# CreateClient request is built imperatively (see `create_client`) because
-# the upstream payload nests address under an `address` object. CHECK uses
-# the response field map above for both endpoints.
-CREATE_CLIENT_RESPONSE_FIELDS = CHECK_CLIENT_RESPONSE_FIELDS
 
 # Wrapper keys that the upstream may use to nest the customer object.
 _RESPONSE_WRAPPER_KEYS = ("customer", "Client", "client", "data", "result")
@@ -131,7 +118,7 @@ class ConsultWebExchangeClient:
         return base + "/"
 
     def endpoint_url(self, name: str) -> str:
-        """Build the full URL for one of the three ConsultWebExchange endpoints."""
+        """Build the full URL for a ConsultWebExchange endpoint (e.g. ``CheckClient``)."""
         return urljoin(self._base_url(), f"{self.PATH_PREFIX}/{name}")
 
     def _auth(self) -> tuple[str, str] | None:
@@ -353,9 +340,10 @@ class ConsultWebExchangeClient:
         """POST /CreateClient.
 
         `payload` uses internal field names (first_name, last_name, ...). The
-        upstream shape is flat — see the field-map comment at the top of
-        this module. Empty / missing string fields are dropped; `IsPhys` is
-        always sent (Boolean, defaults to True at the serializer layer).
+        upstream shape is flat: first_name, last_name, personal_number,
+        IsPhys (bool), phone_1, phone_2, Email, address_line. Empty / missing
+        string fields are dropped; `IsPhys` is always sent (Boolean, defaults
+        to True at the serializer layer).
         """
         upstream: dict[str, Any] = {"IsPhys": bool(payload.get("is_phys", True))}
         if payload.get("first_name"):

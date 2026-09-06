@@ -170,8 +170,3 @@ class OrganizationSecuritySerializer(serializers.ModelSerializer):
     class Meta:
         model = Organization
         fields = ['session_timeout_minutes']
-
-
-# ---------------------------------------------------------------------------
-# Warehouse �� full access (internal_admin, company_admin)
-# ---------------------------------------------------------------------------

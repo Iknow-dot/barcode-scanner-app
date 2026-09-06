@@ -34,17 +34,3 @@ class ProductSearchSerializer(serializers.Serializer):
     stock_status = serializers.CharField(read_only=True, required=False)
     category_path = serializers.JSONField(read_only=True, required=False)
     attributes = serializers.JSONField(read_only=True, required=False)
-
-    class Meta:
-        read_only_fields = [
-            'article',
-            'price',
-            'sku',
-            'sku_name',
-            'unit',
-            'stock',
-            'images',
-            'stock_status',
-            'category_path',
-            'attributes',
-        ]

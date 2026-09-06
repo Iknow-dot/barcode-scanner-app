@@ -102,7 +102,3 @@ class WarehouseReadOnlySerializer(serializers.ModelSerializer):
         model = Warehouse
         fields = ['id', 'name', 'organization', 'code']
         read_only_fields = fields
-
-# ---------------------------------------------------------------------------
-# Client (1C ConsultWebExchange)
-# ---------------------------------------------------------------------------

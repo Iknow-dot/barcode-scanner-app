@@ -12,14 +12,6 @@ class CatalogProductSerializer(serializers.Serializer):
     category_path = serializers.JSONField(required=False)
 
 
-# ---------------------------------------------------------------------------
-# Catalog ingest (external integration) — documentation serializers
-#
-# These describe the request/response shapes of the 1C push endpoints for the
-# integration OpenAPI schema (see core/schema.py). The ingest views read
-# request.data directly; these serializers are for drf-spectacular only.
-# ---------------------------------------------------------------------------
-
 class CatalogSyncStatusSerializer(serializers.Serializer):
     """Company-admin sync-health snapshot for the org's catalog replica."""
     health = serializers.CharField(help_text="never | error | stale | ok")

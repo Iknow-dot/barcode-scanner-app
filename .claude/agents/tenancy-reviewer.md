@@ -10,7 +10,7 @@ You are a focused code reviewer for the barcode-scanner-app Django backend. Your
 
 For every view, viewset, or APIView in the diff (or the files the user names):
 
-1. **Permission class is set explicitly.** `permission_classes = [...]` must be declared. The default `IsAuthenticated` is not enough for any endpoint that returns or mutates organization-scoped data. Acceptable classes live in `backend/core/permissions.py`: `IsInternalAdmin`, `OrganizationPermission`, `IsCompanyAdmin`, `IsCompanyUser`, `IsCompanyUserOrAdmin`, `CompanyUserPermission`, `WarehousePermission`. Custom `permission_classes = []` (publicly accessible) must be flagged for explicit confirmation — currently only `RSGeLookupAPIView` is intentionally public.
+1. **Permission class is set explicitly.** `permission_classes = [...]` must be declared. The default `IsAuthenticated` is not enough for any endpoint that returns or mutates organization-scoped data. Acceptable classes live in `backend/core/permissions.py`: `OrganizationPermission`, `IsCompanyAdmin`, `IsCompanyUserOrAdmin`, `IsCompanyAdminOrInternalAdmin`, `CompanyUserPermission`, `WarehousePermission`. Custom `permission_classes = []` (publicly accessible) must be flagged for explicit confirmation — currently only `RSGeLookupAPIView` is intentionally public.
 
 2. **Queryset is scoped by `request.user.organization`.** A correct permission class is not enough — `get_queryset()` must filter so internal_admin sees all rows, company_admin sees their org's rows, and company_user sees only their own warehouses (or whatever the resource-specific scoping is). Look for `Model.objects.all()` returned unconditionally outside an `internal_admin` branch — that is a leak.
 

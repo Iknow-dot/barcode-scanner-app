@@ -150,8 +150,3 @@ class ProductSearchAPIView(APIView):
         )
         if is_barcode:
             ProductBarcode.objects.get_or_create(product=obj, barcode=scanned)
-
-
-# ---------------------------------------------------------------------------
-# RS.ge Taxpayer Lookup
-# ---------------------------------------------------------------------------

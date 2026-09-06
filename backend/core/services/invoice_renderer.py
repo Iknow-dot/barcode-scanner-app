@@ -20,7 +20,7 @@ from html import escape
 
 from lxml import html as lxml_html
 
-from core.services.invoice_tokens import TOKEN_CATALOG, resolve_token
+from core.services.invoice_tokens import resolve_token
 
 
 _PAGE_CSS = """
@@ -66,13 +66,6 @@ table.items td.num, table.items th.num { text-align: right; }
 }
 """.strip()
 
-
-def _multiline(text: str) -> str:
-    """Convert newlines in a resolved token value into `<br>` so the
-    template renders multi-line strings the way an admin expects."""
-    if not text:
-        return ''
-    return '<br>'.join(escape(line) for line in text.splitlines())
 
 
 def _replace_with_text(element, text: str) -> None:
