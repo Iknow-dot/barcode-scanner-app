@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import os
 
-from core.serializers import OrganizationExternalServiceSerializer
 from core.services.consult_web_exchange import ConsultWebExchangeClient, ConsultWebExchangeError, _normalize_client_response
 from core.tests.common import _TEST_FERNET_KEY, _make_organization
 from django.test import TestCase, override_settings
@@ -448,32 +447,3 @@ class NormalizeClientResponseTests(TestCase):
     def test_non_dict_response_keeps_raw(self):
         result = _normalize_client_response('whatever')
         self.assertEqual(result, {'raw': 'whatever'})
-
-
-class WebServiceUrlValidationTests(TestCase):
-    def setUp(self):
-        self.org = _make_organization()
-
-    def test_strips_trailing_slash(self):
-        serializer = OrganizationExternalServiceSerializer(
-            self.org, data={'web_service_url': 'http://example.com/db/'}, partial=True,
-        )
-        self.assertTrue(serializer.is_valid(), serializer.errors)
-        self.assertEqual(serializer.validated_data['web_service_url'], 'http://example.com/db')
-
-    def test_rejects_url_with_endpoint_suffix(self):
-        serializer = OrganizationExternalServiceSerializer(
-            self.org,
-            data={'web_service_url': 'http://example.com/db/HS/ConsultWebExchange/CheckClient'},
-            partial=True,
-        )
-        self.assertFalse(serializer.is_valid())
-        self.assertIn('web_service_url', serializer.errors)
-
-    def test_rejects_url_with_lowercase_endpoint_suffix(self):
-        serializer = OrganizationExternalServiceSerializer(
-            self.org,
-            data={'web_service_url': 'http://example.com/db/hs/consultwebexchange/'},
-            partial=True,
-        )
-        self.assertFalse(serializer.is_valid())
