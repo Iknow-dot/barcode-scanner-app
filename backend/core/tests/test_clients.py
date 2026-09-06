@@ -279,3 +279,28 @@ class RSGeLookupAPIViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data['first_name'], 'ალფა')
         self.assertEqual(response.data['last_name'], '')
+
+    def test_timeout_is_504(self):
+        with mock.patch('httpx.post', side_effect=httpx.TimeoutException('slow')):
+            response = self._lookup()
+        self.assertEqual(response.status_code, 504)
+        self.assertEqual(response.data['code'], 'RS_GE_TIMEOUT')
+
+    def test_connection_error_is_502(self):
+        with mock.patch('httpx.post', side_effect=httpx.ConnectError('refused')):
+            response = self._lookup()
+        self.assertEqual(response.status_code, 502)
+        self.assertEqual(response.data['code'], 'RS_GE_ERROR')
+
+    def test_upstream_non_200_is_not_found_with_upstream_status(self):
+        with mock.patch('httpx.post', return_value=_mock_httpx_response(500)):
+            response = self._lookup()
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.data['code'], 'RS_GE_NOT_FOUND')
+        self.assertEqual(response.data['external_service_status_code'], 500)
+
+    def test_unparseable_body_is_502(self):
+        with mock.patch('httpx.post', return_value=_mock_httpx_response(200, json_raises=True)):
+            response = self._lookup()
+        self.assertEqual(response.status_code, 502)
+        self.assertEqual(response.data['code'], 'RS_GE_PARSE_ERROR')
