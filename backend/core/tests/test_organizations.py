@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from core.models import Organization
+from core.models import Organization, OrganizationPushAllowedIP
 from core.serializers import OrganizationExternalServiceSerializer, OrganizationSerializer
 from django.core.exceptions import ValidationError
 from django.test import TestCase, override_settings
@@ -379,3 +379,18 @@ class MyOrganizationSubResourcePermissionTests(TestCase):
         self.assertEqual(response.status_code, 404)
         self.assertEqual(response.data['code'], 'NO_ORGANIZATION')
         self.assertEqual(response.data['detail'], 'User does not belong to any organization.')
+
+
+class PushAllowedIPValidationTests(TestCase):
+    """The org push allowlist carries the same validator as users.AllowedIP, so the
+    admin inline rejects what the API's INVALID_IP check rejects."""
+
+    def test_model_validator_rejects_garbage(self):
+        row = OrganizationPushAllowedIP(organization=_make_organization(), ip_or_network='office')
+        with self.assertRaises(ValidationError):
+            row.full_clean()
+
+    def test_model_validator_accepts_ip_and_cidr(self):
+        org = _make_organization()
+        OrganizationPushAllowedIP(organization=org, ip_or_network='203.0.113.9').full_clean()
+        OrganizationPushAllowedIP(organization=org, ip_or_network='10.0.0.0/8').full_clean()

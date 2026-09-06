@@ -2,6 +2,8 @@ import secrets
 
 from cryptography.fernet import Fernet
 from django.conf import settings
+
+from core.ip_utils import validate_ip_or_network
 from django.core.validators import MinValueValidator, MaxValueValidator
 from django.db import models
 from django.contrib.auth import get_user_model
@@ -116,6 +118,7 @@ class OrganizationPushAllowedIP(models.Model):
     )
     ip_or_network = models.CharField(
         max_length=50, help_text='IP address or CIDR network allowed to push the catalog',
+        validators=[validate_ip_or_network],
     )
 
     class Meta:

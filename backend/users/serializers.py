@@ -317,7 +317,7 @@ class _BaseUserSerializer(serializers.ModelSerializer):
         validate_same_organization(
             warehouses, validated_data.get('organization'), 'warehouse_ids', "All warehouses must belong to the user's organization.",
         )
-        validated_data.pop('allowed_ips', None)
+        allowed_ips = validated_data.pop('allowed_ips', [])
         # Device lock defaults ON for company users unless explicitly set.
         if (validated_data.get('role') == User.Role.COMPANY_USER
                 and 'device_lock_enabled' not in validated_data):
@@ -325,7 +325,7 @@ class _BaseUserSerializer(serializers.ModelSerializer):
         user = User(**validated_data)
         user.set_password(password)
         user.save()
-        for ip_data in self.initial_data.get('allowed_ips', []):
+        for ip_data in allowed_ips:
             AllowedIP.objects.get_or_create(user=user, **ip_data)
         if warehouses:
             user.warehouses.set(warehouses)
@@ -345,7 +345,7 @@ class _BaseUserSerializer(serializers.ModelSerializer):
                 warehouses, validated_data.get('organization', instance.organization),
                 'warehouse_ids', "All warehouses must belong to the user's organization.",
             )
-        validated_data.pop('allowed_ips', None)
+        allowed_ips = validated_data.pop('allowed_ips', None)
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         if password:
@@ -353,9 +353,9 @@ class _BaseUserSerializer(serializers.ModelSerializer):
         instance.save()
         if warehouses is not None:
             instance.warehouses.set(warehouses)
-        if 'allowed_ips' in self.initial_data:
+        if allowed_ips is not None:  # absent -> untouched; [] -> cleared
             instance.allowed_ips.all().delete()
-            for ip_data in self.initial_data.get('allowed_ips', []):
+            for ip_data in allowed_ips:
                 AllowedIP.objects.get_or_create(user=instance, **ip_data)
         return instance
 

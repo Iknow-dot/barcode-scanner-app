@@ -1,7 +1,8 @@
 from core.models import Organization, Warehouse
+from django.core.exceptions import ValidationError
 from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
-from users.models import User
+from users.models import AllowedIP, User
 
 
 @override_settings(SECURE_SSL_REDIRECT=False)
@@ -292,3 +293,77 @@ class UserWarehouseAssignmentTests(TestCase):
         )
         self.assertEqual(response.status_code, 400, response.data)
         self.assertEqual(self.target.warehouses.count(), 0)
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
+class UserAllowedIPValidationTests(TestCase):
+    """allowed_ips entries are validated like the org push allowlist: a typo used
+    to be stored and then silently skipped at login, locking the user out."""
+
+    def setUp(self):
+        self.org = Organization.objects.create(
+            name='IpValOrg', identification_number='555666777',
+            web_service_url='http://example.com/db', employees_count=5,
+        )
+        self.admin = User.objects.create_user(
+            username='ipval-admin', password='pw12345',
+            role=User.Role.COMPANY_ADMIN, organization=self.org,
+        )
+        self.target = User.objects.create_user(
+            username='ipval-target', password='pw12345',
+            role=User.Role.COMPANY_USER, organization=self.org,
+        )
+        self.client_api = APIClient()
+        self.client_api.force_authenticate(self.admin)
+
+    def test_model_validator_rejects_garbage(self):
+        row = AllowedIP(user=self.target, ip_or_network='office')
+        with self.assertRaises(ValidationError):
+            row.full_clean()
+
+    def test_create_with_malformed_entry_is_400_and_creates_nothing(self):
+        response = self.client_api.post(
+            '/api/v1/users/',
+            {'username': 'ipval-new', 'password': 'pw123456', 'role': User.Role.COMPANY_USER,
+             'allowed_ips': [{'ip_or_network': 'not-an-ip'}]},
+            format='json',
+        )
+        self.assertEqual(response.status_code, 400, response.data)
+        self.assertIn('allowed_ips', response.data)
+        self.assertFalse(User.objects.filter(username='ipval-new').exists())
+
+    def test_patch_with_malformed_entry_is_400_and_keeps_existing_rows(self):
+        AllowedIP.objects.create(user=self.target, ip_or_network='203.0.113.9')
+        response = self.client_api.patch(
+            f'/api/v1/users/{self.target.pk}/',
+            {'allowed_ips': [{'ip_or_network': 'office'}]}, format='json',
+        )
+        self.assertEqual(response.status_code, 400, response.data)
+        self.assertIn('allowed_ips', response.data)
+        self.assertEqual(
+            list(self.target.allowed_ips.values_list('ip_or_network', flat=True)), ['203.0.113.9'])
+
+    def test_valid_ip_and_cidr_are_stored(self):
+        response = self.client_api.patch(
+            f'/api/v1/users/{self.target.pk}/',
+            {'allowed_ips': [{'ip_or_network': ' 203.0.113.9 '}, {'ip_or_network': '10.0.0.0/8'}]},
+            format='json',
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(
+            sorted(self.target.allowed_ips.values_list('ip_or_network', flat=True)),
+            ['10.0.0.0/8', '203.0.113.9'],  # whitespace trimmed like the org side
+        )
+
+    def test_empty_list_clears_and_absent_key_leaves_alone(self):
+        AllowedIP.objects.create(user=self.target, ip_or_network='203.0.113.9')
+        untouched = self.client_api.patch(
+            f'/api/v1/users/{self.target.pk}/', {'first_name': 'X'}, format='json',
+        )
+        self.assertEqual(untouched.status_code, 200, untouched.data)
+        self.assertEqual(self.target.allowed_ips.count(), 1)
+        cleared = self.client_api.patch(
+            f'/api/v1/users/{self.target.pk}/', {'allowed_ips': []}, format='json',
+        )
+        self.assertEqual(cleared.status_code, 200, cleared.data)
+        self.assertEqual(self.target.allowed_ips.count(), 0)

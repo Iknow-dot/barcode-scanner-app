@@ -9,6 +9,8 @@ strings, so callers pass a queryset ``values_list``.
 import ipaddress
 import logging
 
+from django.core.exceptions import ValidationError
+
 logger = logging.getLogger(__name__)
 
 
@@ -70,3 +72,14 @@ def is_valid_ip_or_network(value: str) -> bool:
         return True
     except ValueError:
         return False
+
+
+def validate_ip_or_network(value: str) -> None:
+    """Model-field validator: reject anything ``is_valid_ip_or_network`` rejects.
+
+    Attached to users.AllowedIP and core.OrganizationPushAllowedIP so the admin
+    inline and the API agree; a malformed entry used to be accepted and then
+    silently skipped at match time, locking the user out with IP_NOT_ALLOWED.
+    """
+    if not is_valid_ip_or_network(value):
+        raise ValidationError(f"Invalid IP or network: {value}", code="invalid_ip")
