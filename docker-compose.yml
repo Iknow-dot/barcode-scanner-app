@@ -12,6 +12,7 @@ services:
       - db
     volumes:
       - ./backend:/app
+      - /app/.venv
     environment:
       - DJANGO_SECRET_KEY=dev-secret-key-change-in-production
       - DATABASE_URL=postgres://postgres:postgres@db:5432/postgres

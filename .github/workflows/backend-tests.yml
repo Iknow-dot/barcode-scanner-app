@@ -18,6 +18,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
+    # pyproject.toml and uv.lock live in backend/; every step runs there.
+    defaults:
+      run:
+        working-directory: backend
+
     steps:
       - uses: actions/checkout@v4
 
@@ -25,7 +30,7 @@ jobs:
         uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
-          cache-dependency-glob: uv.lock
+          cache-dependency-glob: backend/uv.lock
 
       # Honours requires-python (>=3.13) from pyproject.toml.
       - name: Install Python
@@ -48,7 +53,6 @@ jobs:
       #     override_settings(FERNET_KEY=...). Leaving it unset makes a class that
       #     forgot the override fail loudly instead of passing on a leaked value.
       - name: Run tests
-        working-directory: backend
         env:
           DJANGO_SECRET_KEY: ci-insecure-key-for-tests-only
         run: uv run python manage.py test --verbosity 2 --noinput

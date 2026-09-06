@@ -50,7 +50,7 @@ To run the backend without Docker:
 
 ```shell
 cd backend
-uv sync                     # or: pip install -r requirements.txt
+uv sync --locked
 uv run python manage.py migrate
 uv run python manage.py createsuperuser
 uv run python manage.py runserver 0.0.0.0:8080
@@ -140,7 +140,8 @@ barcode-scanner-app/
 │   │   └── migrations/
 │   ├── manage.py
 │   ├── Dockerfile
-│   └── requirements.txt
+│   ├── pyproject.toml
+│   └── uv.lock
 ├── barcode-scanner-frontend/        # React app (Create React App)
 │   ├── src/
 │   │   ├── api/                     # axios client + endpoints + per-resource services
@@ -154,9 +155,7 @@ barcode-scanner-app/
 │   ├── package.json
 │   └── Dockerfile
 ├── .do/app.yaml                     # DigitalOcean App Platform spec
-├── docker-compose.yml
-├── pyproject.toml
-└── uv.lock
+└── docker-compose.yml
 ```
 
 ## License

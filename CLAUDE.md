@@ -6,9 +6,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Stack
 
-- **Backend** — Python 3.13, Django 6, DRF, SimpleJWT, drf-spectacular, django-jazzmin admin theme; PostgreSQL in Docker / SQLite fallback; managed with `uv` (`pyproject.toml` + `uv.lock` — the lock is committed and CI installs with `uv sync --locked`, so run `uv lock` and commit the result with every dependency change). A duplicate `backend/requirements.txt` exists for the Docker build.
+- **Backend** — Python 3.13, Django 6, DRF, SimpleJWT, drf-spectacular, django-jazzmin admin theme; PostgreSQL in Docker / SQLite fallback; managed with `uv` (`backend/pyproject.toml` + `backend/uv.lock` — the lock is committed, and CI and the Docker image both install it with `uv sync --locked`, so run `uv lock` in `backend/` and commit the result with every dependency change).
 - **Frontend** — React 18 (CRA), Ant Design 6, axios, react-router 7, `html5-qrcode` for barcode scanning (`@ericblade/quagga2` is still pinned in `package.json` but nothing under `src/` imports it — dead since Quagga was swapped out), TipTap 3 for the invoice-template editor, `leaflet`/`react-leaflet` for the client address picker, PostHog for analytics, i18n via a custom context (Georgian/English).
-- **Deploy** — DigitalOcean App Platform via `.do/app.yaml`. The backend image is `backend/Dockerfile`, built with `backend/` as the context (`.do/app.yaml` and `docker-compose.yml` both point at it), so `backend/.dockerignore` governs what reaches the image.
+- **Deploy** — DigitalOcean App Platform via `.do/app.yaml`. The backend image is `backend/Dockerfile`, built with `backend/` as the context (`.do/app.yaml` and `docker-compose.yml` both point at it), so `backend/.dockerignore` governs what reaches the image. The image installs from `uv.lock` and its `CMD` runs migrate → collectstatic → gunicorn; DO uses it as-is, `docker-compose.yml` overrides the command with `runserver` for dev.
 
 ## Common commands
 
@@ -21,10 +21,10 @@ docker-compose up --build -d
 #   (host ports are shifted; containers still listen on 3000/8080/5432)
 # → API docs at http://localhost:8180/api/docs/ (Swagger) or /api/redoc/
 
-# Backend only — run from backend/, but the uv venv is the repo-root `.venv`
-# (pyproject.toml + uv.lock live at the root; backend/ has neither). Always
-# prefix with `uv run` — bare `python` resolves to a global Python 3.11 with
-# Django 5.2 and will silently emit wrong-version migrations. CI does the same.
+# Backend only — run from backend/, where pyproject.toml, uv.lock and the
+# .venv live. Always prefix with `uv run` — bare `python` resolves to a
+# global Python 3.11 with Django 5.2 and will silently emit wrong-version
+# migrations. CI does the same.
 cd backend
 uv run python manage.py runserver 0.0.0.0:8080
 uv run python manage.py migrate
