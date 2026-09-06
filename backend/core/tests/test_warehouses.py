@@ -173,3 +173,56 @@ class WarehouseUpdateOrderingTests(TestCase):
         self.warehouse.refresh_from_db()
         self.assertEqual(self.warehouse.name, 'Renamed')
         self.assertEqual(list(self.warehouse.users.all()), [self.other_user])
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
+class WarehouseAdminInlineTests(TestCase):
+    """The Organization admin's warehouse inline can only attach the org's own
+    users — limit_choices_to on the M2M is a no-op, so the inline scopes itself."""
+
+    def setUp(self):
+        self.org1 = _make_organization(name='AdmOrgA', identification_number='333333333')
+        self.org2 = _make_organization(name='AdmOrgB', identification_number='444444444')
+        self.wh1 = Warehouse.objects.create(organization=self.org1, code='W1', name='WH One')
+        self.superuser = User.objects.create_user(
+            username='adm-root', password='pw12345',
+            role=User.Role.INTERNAL_ADMIN, is_staff=True, is_superuser=True,
+        )
+        self.org1_user = User.objects.create_user(
+            username='adm-u1', password='pw12345', role=User.Role.COMPANY_USER, organization=self.org1,
+        )
+        self.org2_user = User.objects.create_user(
+            username='adm-u2', password='pw12345', role=User.Role.COMPANY_USER, organization=self.org2,
+        )
+        self.client.force_login(self.superuser)
+
+    def _post_change(self, user_pk):
+        return self.client.post(reverse('admin:core_organization_change', args=[self.org1.pk]), {
+            'name': self.org1.name, 'identification_number': self.org1.identification_number,
+            'employees_count': 5, 'web_service_url': self.org1.web_service_url,
+            'warehouses-TOTAL_FORMS': 1, 'warehouses-INITIAL_FORMS': 1,
+            'warehouses-MIN_NUM_FORMS': 0, 'warehouses-MAX_NUM_FORMS': 1000,
+            'warehouses-0-id': self.wh1.pk, 'warehouses-0-organization': self.org1.pk,
+            'warehouses-0-name': self.wh1.name, 'warehouses-0-code': self.wh1.code,
+            'warehouses-0-users': [user_pk],
+            'push_allowed_ips-TOTAL_FORMS': 0, 'push_allowed_ips-INITIAL_FORMS': 0,
+            'push_allowed_ips-MIN_NUM_FORMS': 0, 'push_allowed_ips-MAX_NUM_FORMS': 1000,
+            '_save': 'Save',
+        })
+
+    def test_admin_rejects_cross_org_user(self):
+        response = self._post_change(self.org2_user.pk)
+        self.assertEqual(response.status_code, 200)  # re-rendered with errors, not saved
+        self.assertIn('users', response.context['inline_admin_formsets'][0].formset.errors[0])
+        self.assertEqual(self.wh1.users.count(), 0)
+
+    def test_admin_accepts_same_org_user(self):
+        response = self._post_change(self.org1_user.pk)
+        self.assertEqual(response.status_code, 302, getattr(response, 'context', None) and response.context.get('errors'))
+        self.assertEqual(list(self.wh1.users.all()), [self.org1_user])
+
+    def test_admin_add_view_picker_is_empty(self):
+        response = self.client.get(reverse('admin:core_organization_add'))
+        self.assertEqual(response.status_code, 200)
+        picker = response.context['inline_admin_formsets'][0].formset.forms[0].fields['users']
+        self.assertEqual(picker.queryset.count(), 0)

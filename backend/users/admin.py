@@ -3,7 +3,7 @@ from django.utils.translation import gettext_lazy as _
 from users.models import AllowedIP
 from django.contrib.auth import get_user_model
 from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
-from users.admin_forms import AdminUserCreationForm
+from users.admin_forms import AdminUserChangeForm, AdminUserCreationForm
 
 User = get_user_model()
 
@@ -36,6 +36,7 @@ class AllowedIPFilter(admin.SimpleListFilter):
 class UserAdmin(DjangoUserAdmin):
     inlines = [AllowedIPInline]
     add_form = AdminUserCreationForm
+    form = AdminUserChangeForm
 
     list_display = DjangoUserAdmin.list_display + ('role', 'organization')
     list_filter = DjangoUserAdmin.list_filter + ('organization', 'warehouses', 'role', AllowedIPFilter)

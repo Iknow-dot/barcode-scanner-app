@@ -8,12 +8,28 @@ from core.models import (
     PurchaseOrderItem, Product, CatalogIngestState, ProductCategory,
     ProductAttribute,
 )
+from users.models import User
 
 
 class WarehouseInline(admin.StackedInline):
     model = Warehouse
     filter_horizontal = ["users"]
     extra = 1
+
+    def get_formset(self, request, obj=None, **kwargs):
+        # Warehouse.users.limit_choices_to=Q(organization=F('organization'))
+        # resolves F() against User ("organization_id = organization_id"), so it
+        # scopes nothing. Restrict the picker to the parent organization; the
+        # queryset is also what the form validates a hand-crafted POST against.
+        # On the add view the org has no pk yet, so nobody can belong to it.
+        formset = super().get_formset(request, obj, **kwargs)
+        users = formset.form.base_fields.get("users")
+        if users is not None:
+            users.queryset = (
+                User.objects.filter(organization=obj) if obj is not None
+                else User.objects.none()
+            )
+        return formset
 
 
 class PushAllowedIPInline(admin.TabularInline):

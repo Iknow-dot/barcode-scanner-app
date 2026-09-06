@@ -1,7 +1,9 @@
 from core.models import Organization, Warehouse
 from django.core.exceptions import ValidationError
+from django.forms.models import model_to_dict
 from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
+from users.admin_forms import AdminUserChangeForm
 from users.models import AllowedIP, User
 
 
@@ -189,10 +191,12 @@ class UserWarehouseAssignmentTests(TestCase):
     """
     warehouse_ids on the user serializers is scoped to the requesting company
     admin's organization, and — for every role, internal admins included — the
-    warehouses must belong to the target user's organization (the M2M set
-    bypasses model validation; this mirrors the warehouse endpoint and
-    Warehouse.users.limit_choices_to). Internal admins may still reference
-    any org's warehouses; they just cannot build a cross-org assignment.
+    warehouses must belong to the target user's organization. The M2M set
+    bypasses model validation and Warehouse.users.limit_choices_to is a no-op
+    (F() resolves against User), so the serializers and the admin inline are
+    the only guards. Internal admins may still reference any org's warehouses;
+    they just cannot build a cross-org assignment, and an org move must
+    restate warehouse_ids.
     """
 
     def setUp(self):
@@ -449,3 +453,43 @@ class UserAllowedIPValidationTests(TestCase):
         self.assertEqual(response.status_code, 400, response.data)
         self.assertEqual(
             list(self.target.allowed_ips.values_list('ip_or_network', flat=True)), ['203.0.113.9'])
+
+
+class UserAdminChangeFormTests(TestCase):
+    """The admin change form refuses an org move while warehouse memberships
+    exist (they are attached from the Warehouse side and not on this form)."""
+
+    def setUp(self):
+        self.org = Organization.objects.create(
+            name='AdmFormOrg', identification_number='888999000',
+            web_service_url='http://example.com/db', employees_count=5,
+        )
+        self.other_org = Organization.objects.create(
+            name='AdmFormOther', identification_number='000999888',
+            web_service_url='http://example.com/db2', employees_count=5,
+        )
+        self.warehouse = Warehouse.objects.create(organization=self.org, code='AF-1', name='AF One')
+        self.user = User.objects.create_user(
+            username='adm-form-user', password='pw12345',
+            role=User.Role.COMPANY_USER, organization=self.org,
+        )
+
+    def _form(self, **overrides):
+        data = model_to_dict(self.user)
+        data.update(overrides)
+        return AdminUserChangeForm(data=data, instance=self.user)
+
+    def test_org_move_with_memberships_is_rejected(self):
+        self.warehouse.users.add(self.user)
+        form = self._form(organization=self.other_org.pk)
+        self.assertFalse(form.is_valid())
+        self.assertIn('warehouses', str(form.errors))
+
+    def test_org_move_without_memberships_is_allowed(self):
+        form = self._form(organization=self.other_org.pk)
+        self.assertTrue(form.is_valid(), form.errors)
+
+    def test_same_org_edit_with_memberships_is_allowed(self):
+        self.warehouse.users.add(self.user)
+        form = self._form(first_name='Renamed')
+        self.assertTrue(form.is_valid(), form.errors)
