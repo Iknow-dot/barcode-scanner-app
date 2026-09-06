@@ -153,7 +153,6 @@ barcode-scanner-app/
 │   └── Dockerfile
 ├── .do/app.yaml                     # DigitalOcean App Platform spec
 ├── docker-compose.yml
-├── Dockerfile                       # alternative root-level backend image
 ├── pyproject.toml
 └── uv.lock
 ```

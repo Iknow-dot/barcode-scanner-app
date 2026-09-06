@@ -22,3 +22,8 @@ dependencies = [
     "bleach[css]>=6.1.0",
     "lxml>=5.0.0",
 ]
+
+[tool.uv]
+# Django project, not a distributable package: never build/install it into the venv.
+# Explicit so adding a [build-system] later does not flip uv to package mode.
+package = false

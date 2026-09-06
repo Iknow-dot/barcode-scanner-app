@@ -4,6 +4,9 @@ __pycache__/
 *.pyo
 *.pyd
 
+# Python packaging artefacts (a stray `pip install -e .` produces these; uv never does)
+*.egg-info/
+
 # Virtual environment
 .venv/
 venv/
@@ -23,13 +26,9 @@ Thumbs.db
 
 # Django
 backend/staticfiles/
-backend/db.sqlite3
 
 # Node
 **/node_modules/
-
-# uv lock (regenerate with `uv lock`)
-uv.lock
 
 # Git worktrees
 .worktrees/
