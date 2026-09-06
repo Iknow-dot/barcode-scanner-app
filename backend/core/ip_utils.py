@@ -1,9 +1,10 @@
 """Client-IP extraction and allowlist matching.
 
-Generic (string-based) versions of the logic the JWT login flow uses for its
-per-user IP allowlist, reused here for the per-org catalog-push allowlist. The
-login serializer keeps its own copy over model querysets; these helpers work on
-plain strings so any caller can use them.
+The single implementation shared by the JWT login allowlist (per-user
+``users.AllowedIP``, enforced in ``users.serializers.CustomTokenObtainPairSerializer``),
+the ``GET /api/v1/users/ip/`` helper the admin UI uses to prefill that allowlist,
+and the per-org catalog-push allowlist (``core.ingest_auth``). Works on plain
+strings, so callers pass a queryset ``values_list``.
 """
 import ipaddress
 import logging

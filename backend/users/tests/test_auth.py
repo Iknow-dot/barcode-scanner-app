@@ -293,3 +293,12 @@ class ClientIPEndpointTests(TestCase):
             HTTP_X_FORWARDED_FOR='203.0.113.9, 10.0.0.1', REMOTE_ADDR='10.0.0.1',
         )
         self.assertEqual(response.data, {'ip': '203.0.113.9'})
+
+    def test_single_hop_forwarded_header_returns_that_hop(self):
+        # Behind one reverse proxy X-Forwarded-For has no comma. Login honours
+        # it (see LoginIPAllowlistTests), so this endpoint must too — otherwise
+        # it prefills the allowlist with the proxy's address.
+        response = self.client_api.get(
+            '/api/v1/users/ip/', HTTP_X_FORWARDED_FOR='203.0.113.9', REMOTE_ADDR='10.0.0.1',
+        )
+        self.assertEqual(response.data, {'ip': '203.0.113.9'})

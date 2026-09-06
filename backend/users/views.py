@@ -12,6 +12,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from rest_framework_simplejwt.exceptions import TokenError
 
+from core.ip_utils import get_client_ip
 from core.models import Organization
 from core.permissions import CompanyUserPermission
 from users.exceptions import DeviceNotAllowedError, IPNotAllowedError
@@ -29,12 +30,9 @@ class GetClientIPAPIView(APIView):
     serializer_class = ClientIPSerializer
 
     def get(self, request: Request) -> Response:
-        xff = request.META.get("HTTP_X_FORWARDED_FOR")
-        if xff and "," in xff:
-            ip = xff.split(",")[0].strip()
-        else:
-            ip = request.META.get("REMOTE_ADDR")
-
+        # Same extraction the login allowlist uses, so the address this
+        # endpoint suggests is the one login will actually evaluate.
+        ip = get_client_ip(request)
         serializer = self.serializer_class({"ip": ip})
         return Response(serializer.data)
 
