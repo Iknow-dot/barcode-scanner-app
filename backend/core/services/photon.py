@@ -23,6 +23,8 @@ from typing import Any
 import httpx
 from django.conf import settings
 
+from core.exceptions import ExternalServiceError
+
 logger = logging.getLogger(__name__)
 
 
@@ -47,19 +49,8 @@ DEFAULT_BIAS_LAT = 41.7151
 DEFAULT_BIAS_LNG = 44.8271
 
 
-class PhotonError(Exception):
-    def __init__(
-        self,
-        code: str,
-        detail: str,
-        http_status: int,
-        upstream_status: int | None = None,
-    ):
-        super().__init__(detail)
-        self.code = code
-        self.detail = detail
-        self.http_status = http_status
-        self.upstream_status = upstream_status
+class PhotonError(ExternalServiceError):
+    """Raised by the Photon client; the view layer turns it into the shared envelope."""
 
 
 def _format_feature(feature: dict) -> str:

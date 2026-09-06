@@ -17,7 +17,7 @@ from core.services.consult_web_exchange import (
     ConsultWebExchangeClient,
     ConsultWebExchangeError,
 )
-from core.views.common import consult_error_response
+from core.views.common import external_error_response
 
 
 @extend_schema(tags=['Products'])
@@ -88,7 +88,7 @@ class ProductSearchAPIView(APIView):
         try:
             product_data = client.get_stock_and_prices(sku, is_barcode=bool(is_barcode), warehouses=selected_warehouses)
         except ConsultWebExchangeError as exc:
-            return consult_error_response(exc)
+            return external_error_response(exc)
 
         # 1C answers 201 "No Stock" with a plain-text body carrying no product
         # data, and uses it both for an unknown barcode and for a known item

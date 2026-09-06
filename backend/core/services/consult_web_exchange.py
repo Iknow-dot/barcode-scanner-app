@@ -29,6 +29,8 @@ from urllib.parse import urljoin
 
 import httpx
 
+from core.exceptions import ExternalServiceError
+
 logger = logging.getLogger(__name__)
 
 
@@ -72,25 +74,12 @@ _NOT_FOUND_STATUSES = {"not_found", "not found", "missing", "no_match", "none"}
 # Errors
 # ---------------------------------------------------------------------------
 
-class ConsultWebExchangeError(Exception):
+class ConsultWebExchangeError(ExternalServiceError):
     """Single exception type the view layer translates to an HTTP response.
 
     Attributes mirror the existing `EXTERNAL_SERVICE_*` error envelope so the
     frontend error mapping stays unchanged.
     """
-
-    def __init__(
-        self,
-        code: str,
-        detail: str,
-        http_status: int,
-        upstream_status: int | None = None,
-    ):
-        super().__init__(detail)
-        self.code = code
-        self.detail = detail
-        self.http_status = http_status
-        self.upstream_status = upstream_status
 
 
 # ---------------------------------------------------------------------------

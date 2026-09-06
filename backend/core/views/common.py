@@ -1,18 +1,17 @@
-"""Helpers shared by two or more core view modules: the ConsultWebExchange
+"""Helpers shared by two or more core view modules: the external-service
 error envelope and the catalog feature gate."""
 
 from rest_framework import status as http_status
 from rest_framework.response import Response
 
-from core.services.consult_web_exchange import ConsultWebExchangeError
+from core.exceptions import ExternalServiceError
 
 
-def consult_error_response(exc: ConsultWebExchangeError) -> Response:
-    """Translate a ConsultWebExchangeError into a DRF Response.
+def external_error_response(exc: ExternalServiceError) -> Response:
+    """Translate any ExternalServiceError (1C, Photon, RS.ge) into a DRF Response.
 
-    Mirrors the {"code", "detail", "external_service_status_code"} envelope
-    used by the previous inline implementation of ProductSearchAPIView so the
-    frontend error mapping does not change.
+    The {"code", "detail"[, "external_service_status_code"]} envelope is what the
+    frontend's error mapping keys off, so every outbound client shares it.
     """
     body: dict = {"code": exc.code, "detail": exc.detail}
     if exc.upstream_status is not None:

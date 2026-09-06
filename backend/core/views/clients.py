@@ -31,7 +31,7 @@ from core.services.consult_web_exchange import (
     _normalize_client_response,
 )
 from core.services.photon import PhotonError, reverse_geocode, search_addresses
-from core.views.common import consult_error_response
+from core.views.common import external_error_response
 
 
 @extend_schema(tags=['Clients'])
@@ -149,7 +149,7 @@ class CheckClientAPIView(APIView):
                 phone=data.get('phone') or None,
             )
         except ConsultWebExchangeError as exc:
-            return consult_error_response(exc)
+            return external_error_response(exc)
 
         if not result:
             return Response(
@@ -177,7 +177,7 @@ class CreateClientAPIView(APIView):
         try:
             result = client.create_client(serializer.validated_data)
         except ConsultWebExchangeError as exc:
-            return consult_error_response(exc)
+            return external_error_response(exc)
 
         # CreateClient returns a single newly-created client; pull the first
         # entry out of whatever wrapper shape upstream used.
@@ -221,10 +221,7 @@ class ReverseGeocodeAPIView(APIView):
         try:
             address = reverse_geocode(lat, lng)
         except PhotonError as exc:
-            body: dict = {"code": exc.code, "detail": exc.detail}
-            if exc.upstream_status is not None:
-                body["external_service_status_code"] = exc.upstream_status
-            return Response(body, status=exc.http_status)
+            return external_error_response(exc)
 
         cache.set(cache_key, address, self.CACHE_TTL_SECONDS)
         return Response({"address": address})
@@ -265,10 +262,7 @@ class SearchAddressesAPIView(APIView):
         try:
             suggestions = search_addresses(query, limit=limit)
         except PhotonError as exc:
-            body: dict = {"code": exc.code, "detail": exc.detail}
-            if exc.upstream_status is not None:
-                body["external_service_status_code"] = exc.upstream_status
-            return Response(body, status=exc.http_status)
+            return external_error_response(exc)
 
         cache.set(cache_key, suggestions, self.CACHE_TTL_SECONDS)
         return Response({"suggestions": suggestions})
