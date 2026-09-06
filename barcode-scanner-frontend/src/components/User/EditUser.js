@@ -1,4 +1,4 @@
-import React, {useState, useEffect, useContext} from 'react';
+import React, {useState, useEffect, useContext, useMemo} from 'react';
 import {userService, organizationService, warehouseService} from '../../api';
 import AuthContext from '../Auth/AuthContext';
 import {Button, Divider, Flex, Form, Input, InputNumber, Popconfirm, Select, Space, Switch, Tag, theme, Tooltip} from "antd";
@@ -399,25 +399,29 @@ const EditUser = ({visible, setVisible, onFinish, object, onDeviceReset}) => {
     // Extract IP addresses from allowed_ips array of objects
     const existingIps = (object.allowed_ips || []).map(ip => ip.ip_or_network);
 
-    // Extract warehouse IDs from the user object (API returns warehouse_ids_read for reading)
-    const existingWarehouseIds = (object.warehouse_ids_read || object.warehouse_ids || []);
+    // Memoized: ModalForm re-seeds the form whenever this object's identity
+    // changes, so a fresh literal per render would wipe unsaved edits on any
+    // parent re-render — e.g. Reset device inside this very modal re-renders
+    // UsersTab and would silently restore an IP list the admin just cleared.
+    const formObject = useMemo(() => ({
+        username: object.username,
+        email: object.email || '',
+        role: object.role,
+        first_name: object.first_name || '',
+        last_name: object.last_name || '',
+        is_active: object.is_active,
+        organization: object.organization,
+        ip_address: (object.allowed_ips || []).map(ip => ip.ip_or_network),
+        // API returns warehouse_ids_read for reading
+        warehouse_ids: (object.warehouse_ids_read || object.warehouse_ids || []),
+        can_apply_discount: !!object.can_apply_discount,
+        max_discount_percent: Number(object.max_discount_percent || 0),
+        device_lock_enabled: !!object.device_lock_enabled,
+    }), [object]);
 
     return (
         <ModalForm
-            object={{
-                username: object.username,
-                email: object.email || '',
-                role: object.role,
-                first_name: object.first_name || '',
-                last_name: object.last_name || '',
-                is_active: object.is_active,
-                organization: object.organization,
-                ip_address: existingIps,
-                warehouse_ids: existingWarehouseIds,
-                can_apply_discount: !!object.can_apply_discount,
-                max_discount_percent: Number(object.max_discount_percent || 0),
-                device_lock_enabled: !!object.device_lock_enabled,
-            }}
+            object={formObject}
             name="editUser"
             visible={visible}
             setVisible={setVisible}

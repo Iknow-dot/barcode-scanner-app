@@ -1,4 +1,4 @@
-import React, {useState, useEffect, useContext} from 'react';
+import React, {useState, useEffect, useContext, useMemo} from 'react';
 import ModalForm, {RenderOption, useModalFormLoading} from "../ModalForm";
 import {Button, Divider, Flex, Form, Input, Select, Tag} from "antd";
 import {SaveOutlined} from "@ant-design/icons";
@@ -152,10 +152,13 @@ const EditWarehouseModal = ({visible, setVisible, onFinish, object}) => {
     const {t} = useLanguage();
 
     // Map user_ids_read to user_ids for the form initial values
-    const formObject = object ? {
+    // Memoized: ModalForm re-seeds the form on every change of this object's
+    // identity, so a fresh literal per render would wipe unsaved edits whenever
+    // the parent re-renders.
+    const formObject = useMemo(() => (object ? {
         ...object,
         user_ids: object.user_ids_read || [],
-    } : object;
+    } : object), [object]);
 
     return (
         <ModalForm
