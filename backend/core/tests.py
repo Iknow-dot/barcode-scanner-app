@@ -612,9 +612,9 @@ class ProductSearchIncludeImagesTests(TestCase):
         }
 
     def test_include_images_false_still_returns_proxy_paths(self):
-        with mock.patch('core.views.ConsultWebExchangeClient') as cls:
+        with mock.patch('core.views.products.ConsultWebExchangeClient') as cls:
             cls.return_value.get_stock_and_prices.return_value = self._stock_response()
-            with mock.patch('core.views.httpx.get') as httpx_get:
+            with mock.patch('httpx.get') as httpx_get:
                 response = self.client_api.post(
                     self.url,
                     {'sku': 'SKU1', 'is_barcode': True, 'warehouses': ['W1'],
@@ -626,9 +626,9 @@ class ProductSearchIncludeImagesTests(TestCase):
         httpx_get.assert_not_called()
 
     def test_include_images_default_true_returns_proxy_paths_without_fetching(self):
-        with mock.patch('core.views.ConsultWebExchangeClient') as cls:
+        with mock.patch('core.views.products.ConsultWebExchangeClient') as cls:
             cls.return_value.get_stock_and_prices.return_value = self._stock_response()
-            with mock.patch('core.views.httpx.get') as httpx_get:
+            with mock.patch('httpx.get') as httpx_get:
                 response = self.client_api.post(
                     self.url,
                     {'sku': 'SKU1', 'is_barcode': True, 'warehouses': ['W1']},
@@ -2804,8 +2804,8 @@ class OrderStatusGuardTests(TestCase):
         order.refresh_from_db()
         self.assertEqual(order.status, 'completed')
 
-    @mock.patch('core.views.ConsultWebExchangeClient.create_order')
-    @mock.patch('core.views.ConsultWebExchangeClient.get_stock_and_prices')
+    @mock.patch('core.services.consult_web_exchange.ConsultWebExchangeClient.create_order')
+    @mock.patch('core.services.consult_web_exchange.ConsultWebExchangeClient.get_stock_and_prices')
     def test_normal_status_transitions_still_work(self, mstock, mcreate):
         mstock.return_value = {'stock': [{'warehouse': 'W1', 'quantity': 999}]}
         mcreate.return_value = {'success': True, 'message': 'ok', 'OrderNumber': '00000000077'}
@@ -3036,8 +3036,8 @@ class CreateOrderClientTests(TestCase):
 
 
 @override_settings(SECURE_SSL_REDIRECT=False)
-@mock.patch('core.views.ConsultWebExchangeClient.create_order')
-@mock.patch('core.views.ConsultWebExchangeClient.get_stock_and_prices')
+@mock.patch('core.services.consult_web_exchange.ConsultWebExchangeClient.create_order')
+@mock.patch('core.services.consult_web_exchange.ConsultWebExchangeClient.get_stock_and_prices')
 class CreateOrderOnConfirmTests(TestCase):
     """Confirming an order pushes it to 1C CreateOrder, fail closed.
 
@@ -3388,7 +3388,7 @@ class ConfirmStockGuardTests(TestCase):
         self.api = APIClient()
         self.api.force_authenticate(self.user)
         # Mock create_order for retail order pushes in confirm tests
-        self.mcreate_patcher = mock.patch('core.views.ConsultWebExchangeClient.create_order')
+        self.mcreate_patcher = mock.patch('core.services.consult_web_exchange.ConsultWebExchangeClient.create_order')
         self.mcreate = self.mcreate_patcher.start()
         self.mcreate.return_value = {'success': True, 'message': 'ok', 'OrderNumber': '00000000099'}
 
@@ -3421,7 +3421,7 @@ class ConfirmStockGuardTests(TestCase):
             for code, qty in rows
         ]}
 
-    @mock.patch('core.views.ConsultWebExchangeClient.get_stock_and_prices')
+    @mock.patch('core.services.consult_web_exchange.ConsultWebExchangeClient.get_stock_and_prices')
     def test_confirm_blocked_when_free_stock_insufficient(self, mstock):
         mstock.return_value = self._stock(('W1', 3))
         order = self._order()
@@ -3441,7 +3441,7 @@ class ConfirmStockGuardTests(TestCase):
         order.refresh_from_db()
         self.assertEqual(order.status, 'draft')
 
-    @mock.patch('core.views.ConsultWebExchangeClient.get_stock_and_prices')
+    @mock.patch('core.services.consult_web_exchange.ConsultWebExchangeClient.get_stock_and_prices')
     def test_confirm_allowed_when_stock_sufficient(self, mstock):
         mstock.return_value = self._stock(('W1', 5))
         order = self._order()
@@ -3454,7 +3454,7 @@ class ConfirmStockGuardTests(TestCase):
         self.assertEqual(order.status, 'confirmed')
         mstock.assert_called_once_with('A1', is_barcode=False, warehouses='W1')
 
-    @mock.patch('core.views.ConsultWebExchangeClient.get_stock_and_prices')
+    @mock.patch('core.services.consult_web_exchange.ConsultWebExchangeClient.get_stock_and_prices')
     def test_lines_of_same_sku_and_warehouse_are_summed(self, mstock):
         mstock.return_value = self._stock(('W1', 3))
         order = self._order()
@@ -3467,7 +3467,7 @@ class ConfirmStockGuardTests(TestCase):
         self.assertEqual(r.json()['code'], 'INSUFFICIENT_STOCK')
         self.assertEqual(Decimal(r.json()['items'][0]['requested']), Decimal(4))
 
-    @mock.patch('core.views.ConsultWebExchangeClient.get_stock_and_prices')
+    @mock.patch('core.services.consult_web_exchange.ConsultWebExchangeClient.get_stock_and_prices')
     def test_gift_lines_consume_stock_too(self, mstock):
         mstock.return_value = self._stock(('W1', 3))
         order = self._order()
@@ -3479,7 +3479,7 @@ class ConfirmStockGuardTests(TestCase):
         self.assertEqual(r.status_code, 400)
         self.assertEqual(r.json()['code'], 'INSUFFICIENT_STOCK')
 
-    @mock.patch('core.views.ConsultWebExchangeClient.get_stock_and_prices')
+    @mock.patch('core.services.consult_web_exchange.ConsultWebExchangeClient.get_stock_and_prices')
     def test_missing_warehouse_row_counts_as_zero(self, mstock):
         # 1C answered, but reported no row for the line's warehouse — that IS
         # the answer "0 free there", not an unverifiable line.
@@ -3492,7 +3492,7 @@ class ConfirmStockGuardTests(TestCase):
         self.assertEqual(r.status_code, 400)
         self.assertEqual(Decimal(r.json()['items'][0]['available']), Decimal(0))
 
-    @mock.patch('core.views.ConsultWebExchangeClient.get_stock_and_prices')
+    @mock.patch('core.services.consult_web_exchange.ConsultWebExchangeClient.get_stock_and_prices')
     def test_fractional_free_stock_is_compared_exactly(self, mstock):
         mstock.return_value = self._stock(('W1', '2.5'))
         order = self._order()
@@ -3503,7 +3503,7 @@ class ConfirmStockGuardTests(TestCase):
         self.assertEqual(r.status_code, 400)
         self.assertEqual(Decimal(r.json()['items'][0]['available']), Decimal('2.5'))
 
-    @mock.patch('core.views.ConsultWebExchangeClient.get_stock_and_prices')
+    @mock.patch('core.services.consult_web_exchange.ConsultWebExchangeClient.get_stock_and_prices')
     def test_confirm_fails_open_when_service_unreachable(self, mstock):
         mstock.side_effect = ConsultWebExchangeError(
             code='EXTERNAL_SERVICE_TIMEOUT', detail='t', http_status=504,
@@ -3517,7 +3517,7 @@ class ConfirmStockGuardTests(TestCase):
         order.refresh_from_db()
         self.assertEqual(order.status, 'confirmed')
 
-    @mock.patch('core.views.ConsultWebExchangeClient.get_stock_and_prices')
+    @mock.patch('core.services.consult_web_exchange.ConsultWebExchangeClient.get_stock_and_prices')
     def test_stock_guard_skips_line_without_lookup_key_push_still_blocks(self, mstock):
         # No article on the line and no replica product/barcode to fall back
         # to — the line is unverifiable, so the stock guard must not block
@@ -3535,7 +3535,7 @@ class ConfirmStockGuardTests(TestCase):
         order.refresh_from_db()
         self.assertEqual(order.status, 'draft')
 
-    @mock.patch('core.views.ConsultWebExchangeClient.get_stock_and_prices')
+    @mock.patch('core.services.consult_web_exchange.ConsultWebExchangeClient.get_stock_and_prices')
     def test_stock_guard_skips_line_without_warehouse_push_still_blocks(self, mstock):
         order = self._order()
         self._item(order, warehouse='', qty=999)
@@ -3549,7 +3549,7 @@ class ConfirmStockGuardTests(TestCase):
         order.refresh_from_db()
         self.assertEqual(order.status, 'draft')
 
-    @mock.patch('core.views.ConsultWebExchangeClient.get_stock_and_prices')
+    @mock.patch('core.services.consult_web_exchange.ConsultWebExchangeClient.get_stock_and_prices')
     def test_replica_barcode_is_lookup_fallback_when_no_article(self, mstock):
         p = Product.objects.create(organization=self.org, sku='S1', name='Candle', price='10.00')
         ProductBarcode.objects.create(product=p, barcode='4870001')
@@ -3562,7 +3562,7 @@ class ConfirmStockGuardTests(TestCase):
         self.assertEqual(r.status_code, 200)
         mstock.assert_called_once_with('4870001', is_barcode=True, warehouses='W1')
 
-    @mock.patch('core.views.ConsultWebExchangeClient.get_stock_and_prices')
+    @mock.patch('core.services.consult_web_exchange.ConsultWebExchangeClient.get_stock_and_prices')
     def test_non_status_patch_does_not_call_service(self, mstock):
         order = self._order()
         self._item(order, qty=999)
@@ -3574,7 +3574,7 @@ class ConfirmStockGuardTests(TestCase):
         self.assertEqual(r.status_code, 200)
         mstock.assert_not_called()
 
-    @mock.patch('core.views.ConsultWebExchangeClient.get_stock_and_prices')
+    @mock.patch('core.services.consult_web_exchange.ConsultWebExchangeClient.get_stock_and_prices')
     def test_patch_to_same_confirmed_status_does_not_call_service(self, mstock):
         order = self._order(status='confirmed')
         self._item(order, qty=999)
@@ -3606,11 +3606,11 @@ class ImageProxyTests(TestCase):
             organization=self.org, sku="S1", name="Candle", image_urls=["http://1c/img0.jpg"],
         )
 
-    @mock.patch("core.views.httpx.get")
+    @mock.patch("core.views.catalog_read.httpx.get")
     def test_proxies_first_image(self, mget):
         mget.return_value = mock.Mock(status_code=200, content=b"JPEGBYTES", headers={"Content-Type": "image/jpeg"})
         url = "/api/v1/" + signed_image_path(self.org.id, "S1", 0)
-        with mock.patch("core.views.assert_safe_image_url", return_value=None):
+        with mock.patch("core.views.catalog_read.assert_safe_image_url", return_value=None):
             r = self.client.get(url)
         self.assertEqual(r.status_code, 200)
         self.assertEqual(r.content, b"JPEGBYTES")
@@ -3632,7 +3632,7 @@ class ImageProxyTests(TestCase):
 
     def test_blocked_url_returns_502(self):
         url = "/api/v1/" + signed_image_path(self.org.id, "S1", 0)
-        with mock.patch("core.views.assert_safe_image_url", side_effect=UnsafeImageURL("blocked")):
+        with mock.patch("core.views.catalog_read.assert_safe_image_url", side_effect=UnsafeImageURL("blocked")):
             r = self.client.get(url)
         self.assertEqual(r.status_code, 502)
 
@@ -3640,7 +3640,7 @@ class ImageProxyTests(TestCase):
         r = self.client.get("/api/v1/catalog/products/S1/image/0/")  # no org/sig
         self.assertEqual(r.status_code, 403)
 
-    @mock.patch("core.views.httpx.get")
+    @mock.patch("core.views.catalog_read.httpx.get")
     def test_sends_org_auth_only_to_matching_host(self, mget):
         # image host == web_service_url host -> auth attached
         self.org.web_service_url = "https://imghost.example"
@@ -3657,7 +3657,7 @@ class ImageProxyTests(TestCase):
         url = "/api/v1/" + signed_image_path(self.org.id, "S1", 0)
         os.environ['FERNET_KEY'] = _TEST_FERNET_KEY
         try:
-            with mock.patch("core.views.assert_safe_image_url", return_value=None):
+            with mock.patch("core.views.catalog_read.assert_safe_image_url", return_value=None):
                 self.client.get(url)
         finally:
             os.environ.pop('FERNET_KEY', None)
@@ -3777,7 +3777,7 @@ class ScanFastPathTests(TestCase):
         )
         ProductBarcode.objects.create(product=p, barcode="123")
 
-    @mock.patch("core.views.ConsultWebExchangeClient.get_stock_and_prices")
+    @mock.patch("core.services.consult_web_exchange.ConsultWebExchangeClient.get_stock_and_prices")
     def test_replica_hit_returns_proxy_images_and_live_stock(self, mstock):
         mstock.return_value = {"stock": [{"warehouse": "W1", "warehouse_name": "Main", "quantity": 3, "price": "9.90"}]}
         r = self.client.post(
@@ -3790,7 +3790,7 @@ class ScanFastPathTests(TestCase):
         # Serialized as a decimal string so fractional 1C quantities survive.
         self.assertEqual(Decimal(body["stock"][0]["quantity"]), Decimal(3))
 
-    @mock.patch("core.views.ConsultWebExchangeClient.get_stock_and_prices")
+    @mock.patch("core.services.consult_web_exchange.ConsultWebExchangeClient.get_stock_and_prices")
     def test_stock_failure_degrades_gracefully(self, mstock):
         mstock.side_effect = ConsultWebExchangeError(code="EXTERNAL_SERVICE_TIMEOUT", detail="t", http_status=504)
         r = self.client.post(
@@ -3799,7 +3799,7 @@ class ScanFastPathTests(TestCase):
         self.assertEqual(r.status_code, 200)
         self.assertEqual(r.json()["stock_status"], "unavailable")
 
-    @mock.patch("core.views.ConsultWebExchangeClient.get_stock_and_prices")
+    @mock.patch("core.services.consult_web_exchange.ConsultWebExchangeClient.get_stock_and_prices")
     def test_stock_rows_carry_1c_automatic_discount_fields(self, mstock):
         # 1C sends the program-side automatic discount per stock row as
         # (undocumented) `discountpercent` / `discountedprice` — they must
@@ -3816,7 +3816,7 @@ class ScanFastPathTests(TestCase):
         self.assertEqual(Decimal(row["discount_percent"]), Decimal(5))
         self.assertEqual(Decimal(row["discounted_price"]), Decimal("29.45"))
 
-    @mock.patch("core.views.ConsultWebExchangeClient.get_stock_and_prices")
+    @mock.patch("core.services.consult_web_exchange.ConsultWebExchangeClient.get_stock_and_prices")
     def test_stock_rows_omit_discount_fields_when_1c_does_not_send_them(self, mstock):
         # Bases that predate the discount fields simply omit the keys — the
         # row must serialize without them rather than erroring.
@@ -4345,7 +4345,7 @@ class ScanResponseCategoryAttributeTests(TestCase):
         self.api = APIClient()
         self.api.force_authenticate(self.user)
 
-    @patch("core.views.ConsultWebExchangeClient.get_stock_and_prices", return_value={"stock": []})
+    @patch("core.services.consult_web_exchange.ConsultWebExchangeClient.get_stock_and_prices", return_value={"stock": []})
     def test_scan_returns_breadcrumb_and_only_visible_attributes(self, _mock):
         resp = self.api.post(
             reverse("product-search"),
@@ -4944,7 +4944,7 @@ class ProductSearchNoStockUpsertTests(TestCase):
         os.environ.pop('FERNET_KEY', None)
 
     def _search(self, upstream_body):
-        with mock.patch('core.views.ConsultWebExchangeClient') as cls:
+        with mock.patch('core.views.products.ConsultWebExchangeClient') as cls:
             cls.return_value.get_stock_and_prices.return_value = upstream_body
             return self.client_api.post(
                 self.url,
@@ -5058,7 +5058,7 @@ class ProductSearchReplicaLookupKeyTests(TestCase):
         os.environ.pop('FERNET_KEY', None)
 
     def _search(self, sku, is_barcode):
-        with mock.patch('core.views.ConsultWebExchangeClient') as cls:
+        with mock.patch('core.views.products.ConsultWebExchangeClient') as cls:
             cls.return_value.get_stock_and_prices.return_value = {'stock': []}
             response = self.client_api.post(
                 self.url,
@@ -5128,7 +5128,7 @@ class ProductSearchCachedUnitTests(TestCase):
         os.environ.pop('FERNET_KEY', None)
 
     def _search(self, live_body):
-        with mock.patch('core.views.ConsultWebExchangeClient') as cls:
+        with mock.patch('core.views.products.ConsultWebExchangeClient') as cls:
             cls.return_value.get_stock_and_prices.return_value = live_body
             return self.client_api.post(
                 self.url,
