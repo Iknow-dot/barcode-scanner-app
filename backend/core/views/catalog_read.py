@@ -5,7 +5,7 @@ the category tree.
 """
 
 from decimal import Decimal, InvalidOperation
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlunparse
 
 import httpx
 from django.db import connection, models
@@ -33,8 +33,15 @@ from core.serializers import (
     CatalogAdminProductSerializer,
     CatalogCategoryNodeSerializer,
 )
-from core.views.common import _catalog_disabled_response, _convert_to_https
+from core.views.common import catalog_disabled_response
 from users.models import User
+
+
+def _convert_to_https(url):
+    """Helper function to convert a URL to HTTPS."""
+    parsed_url = urlparse(url)
+    secure_url = parsed_url._replace(scheme='https')
+    return urlunparse(secure_url)
 
 
 @extend_schema(tags=["Catalog"])
@@ -43,7 +50,7 @@ class CatalogProductSearchAPIView(APIView):
     http_method_names = ["get"]
 
     def get(self, request: Request) -> Response:
-        denied = _catalog_disabled_response(request.user.organization)
+        denied = catalog_disabled_response(request.user.organization)
         if denied is not None:
             return denied
         q = (request.query_params.get("q") or "").strip()
@@ -150,7 +157,7 @@ class CatalogSyncStatusAPIView(APIView):
 
     def get(self, request: Request) -> Response:
         org = request.user.organization
-        denied = _catalog_disabled_response(org)
+        denied = catalog_disabled_response(org)
         if denied is not None:
             return denied
         state = CatalogIngestState.objects.filter(organization=org).first()
@@ -278,7 +285,7 @@ class CatalogProductListAPIView(ListAPIView):
         return qs
 
     def list(self, request, *args, **kwargs):
-        denied = _catalog_disabled_response(request.user.organization)
+        denied = catalog_disabled_response(request.user.organization)
         if denied is not None:
             return denied
         queryset = self.filter_queryset(self.get_queryset())
@@ -311,7 +318,7 @@ class CatalogCategoryTreeAPIView(APIView):
 
     def get(self, request: Request) -> Response:
         org = request.user.organization
-        denied = _catalog_disabled_response(org)
+        denied = catalog_disabled_response(org)
         if denied is not None:
             return denied
         cats = list(ProductCategory.objects.filter(organization=org).order_by("name", "id"))

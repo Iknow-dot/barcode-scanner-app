@@ -6,7 +6,7 @@ order-complete webhook. The partner-facing ReDoc renders exactly these.
 
 from django.db import transaction
 from django.utils import timezone
-from drf_spectacular.utils import extend_schema, OpenApiExample
+from drf_spectacular.utils import extend_schema, OpenApiExample, OpenApiParameter
 from rest_framework import status as http_status
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -30,7 +30,16 @@ from core.serializers import (
     OrderCompleteRequestSerializer,
     OrderCompleteResponseSerializer,
 )
-from core.views.common import _PUSH_TOKEN_PARAM, _catalog_disabled_response
+from core.views.common import catalog_disabled_response
+
+
+_PUSH_TOKEN_PARAM = OpenApiParameter(
+    name="X-Webhook-Token",
+    location=OpenApiParameter.HEADER,
+    required=True,
+    type=str,
+    description="Per-organization push token. Alternatively send `Authorization: Bearer <token>`. The org is derived from the token; the body never names an org.",
+)
 
 
 @extend_schema(
@@ -157,7 +166,7 @@ class CatalogProductIngestAPIView(APIView):
 
     def post(self, request: Request) -> Response:
         org = organization_from_push(request)  # raises AuthenticationFailed on bad/missing token
-        denied = _catalog_disabled_response(org)
+        denied = catalog_disabled_response(org)
         if denied is not None:
             return denied
         products = request.data.get("products") or []
@@ -261,7 +270,7 @@ class CatalogProductDeactivateAPIView(APIView):
 
     def post(self, request: Request) -> Response:
         org = organization_from_push(request)
-        denied = _catalog_disabled_response(org)
+        denied = catalog_disabled_response(org)
         if denied is not None:
             return denied
         skus = request.data.get("skus") or []
@@ -295,7 +304,7 @@ class CatalogProductDeactivateAPIView(APIView):
 class OrderCompleteWebhookAPIView(APIView):
     # Default JWT auth would intercept "Authorization: Bearer <push-token>" and
     # 401 before the view runs, breaking the documented Bearer fallback (see
-    # _PUSH_TOKEN_PARAM below) — disable it so the push-token check below decides.
+    # _PUSH_TOKEN_PARAM at the top of this module) — disable it so the push-token check below decides.
     authentication_classes = []
     permission_classes = []  # authenticated by per-org push token, not JWT
     http_method_names = ["post"]

@@ -17,11 +17,87 @@ from core.serializers import (
     AddOrderItemSerializer,
     BulkUpdateOrderItemsSerializer,
 )
-from core.views.common import (
-    _enforce_discount_permission,
-    _enforce_gift_permission,
-)
 from core.views.order_push import insufficient_stock_lines, push_order_to_consult
+
+
+def _enforce_discount_permission(user, *, base_price, discount_percent, discounted_price):
+    """Check that *user* is allowed to apply this discount on a line item.
+
+    Returns ``None`` if no real discount is being applied (caller can proceed),
+    otherwise returns a DRF ``Response`` with a ``DISCOUNT_*`` error envelope
+    that the view should return as-is.
+
+    A "real discount" is any non-zero ``discount_percent`` or any
+    ``discounted_price`` strictly below ``base_price``. Both modes are
+    normalized to an effective percent and compared against the user's
+    ``max_discount_percent`` cap.
+    """
+    from decimal import Decimal
+
+    pct = Decimal(discount_percent or 0)
+    base = Decimal(base_price or 0)
+    set_price = Decimal(discounted_price) if discounted_price is not None else None
+
+    # Reject markups disguised as discounts: setting `discounted_price`
+    # higher than `base_price` would otherwise slip past the discount check
+    # below (it isn't a "discount") yet still inflate the line total via
+    # PurchaseOrderItem.effective_price. This was producing invoices whose
+    # total exceeded the product price.
+    if set_price is not None and base > 0 and set_price > base:
+        return Response(
+            {"code": "DISCOUNTED_PRICE_ABOVE_BASE",
+             "detail": "The amount cannot exceed the base product price.",
+             "base_price": str(base)},
+            status=http_status.HTTP_400_BAD_REQUEST,
+        )
+
+    set_price_is_discount = (
+        set_price is not None and base > 0 and set_price < base
+    )
+    has_discount = pct > 0 or set_price_is_discount
+    if not has_discount:
+        return None
+
+    if not user.can_apply_discount:
+        return Response(
+            {"code": "DISCOUNT_NOT_ALLOWED",
+             "detail": "You are not permitted to apply discounts."},
+            status=http_status.HTTP_403_FORBIDDEN,
+        )
+
+    effective_pct = pct
+    if set_price_is_discount:
+        implied = (Decimal(1) - (set_price / base)) * Decimal(100)
+        if implied > effective_pct:
+            effective_pct = implied
+
+    cap = Decimal(user.max_discount_percent or 0)
+    if effective_pct > cap:
+        return Response(
+            {"code": "DISCOUNT_EXCEEDS_LIMIT",
+             "detail": f"Discount exceeds your limit ({cap}%).",
+             "max_discount_percent": str(cap)},
+            status=http_status.HTTP_403_FORBIDDEN,
+        )
+    return None
+
+
+def _enforce_gift_permission(user, *, is_gift):
+    """Reject setting the gift flag when the user's organization has not
+    enabled gift marking (ClickUp 86ca495uu). Clearing the flag is always
+    allowed. Returns ``None`` when the caller can proceed, otherwise a DRF
+    ``Response`` with the ``GIFT_NOT_ENABLED`` envelope to return as-is.
+    """
+    if not is_gift:
+        return None
+    org = user.organization
+    if org is None or not org.gift_marking_enabled:
+        return Response(
+            {"code": "GIFT_NOT_ENABLED",
+             "detail": "Gift marking is not enabled for your organization."},
+            status=http_status.HTTP_403_FORBIDDEN,
+        )
+    return None
 
 
 @extend_schema_view(

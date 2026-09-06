@@ -16,7 +16,7 @@ from core.services.consult_web_exchange import (
     ConsultWebExchangeClient,
     ConsultWebExchangeError,
 )
-from core.views.common import _consult_error_response
+from core.views.common import consult_error_response
 
 
 def insufficient_stock_lines(order):
@@ -240,7 +240,7 @@ def push_order_to_consult(order):
             items=payload_items,
         )
     except ConsultWebExchangeError as exc:
-        return _consult_error_response(exc)
+        return consult_error_response(exc)
 
     number = body.get("OrderNumber") or ""
     if not number:

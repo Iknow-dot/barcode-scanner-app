@@ -31,7 +31,7 @@ from core.services.consult_web_exchange import (
     _normalize_client_response,
 )
 from core.services.photon import PhotonError, reverse_geocode, search_addresses
-from core.views.common import _consult_error_response
+from core.views.common import consult_error_response
 
 
 @extend_schema(tags=['Clients'])
@@ -149,7 +149,7 @@ class CheckClientAPIView(APIView):
                 phone=data.get('phone') or None,
             )
         except ConsultWebExchangeError as exc:
-            return _consult_error_response(exc)
+            return consult_error_response(exc)
 
         if not result:
             return Response(
@@ -177,7 +177,7 @@ class CreateClientAPIView(APIView):
         try:
             result = client.create_client(serializer.validated_data)
         except ConsultWebExchangeError as exc:
-            return _consult_error_response(exc)
+            return consult_error_response(exc)
 
         # CreateClient returns a single newly-created client; pull the first
         # entry out of whatever wrapper shape upstream used.
