@@ -190,11 +190,12 @@ LOGGING = {
     },
 }
 
-# Nominatim (OSM reverse geocoder) — public instance requires a User-Agent
-# string identifying the app per their usage policy.
-NOMINATIM_USER_AGENT = os.environ.get(
-    'NOMINATIM_USER_AGENT',
-    'BarcodeScannerApp/1.0 (admin@example.com)',
+# Photon (komoot) geocoder — identifying User-Agent sent on /api and /reverse.
+# NOMINATIM_USER_AGENT is honoured as a legacy alias (the pre-Photon name);
+# drop it once no deployment sets it.
+PHOTON_USER_AGENT = (
+    os.environ.get('PHOTON_USER_AGENT')
+    or os.environ.get('NOMINATIM_USER_AGENT', 'BarcodeScannerApp/1.0 (admin@example.com)')
 )
 
 # Django REST Framework

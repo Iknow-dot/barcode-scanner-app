@@ -38,7 +38,7 @@ class PhotonReverseServiceTests(TestCase):
                 200, _photon_collection(_photon_feature(name='X')),
             )
 
-        with override_settings(NOMINATIM_USER_AGENT='TestAgent/9.9'):
+        with override_settings(PHOTON_USER_AGENT='TestAgent/9.9'):
             with mock.patch('httpx.get', side_effect=fake_get):
                 reverse_geocode(41.7, 44.8)
 

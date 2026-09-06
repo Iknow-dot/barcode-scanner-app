@@ -33,6 +33,14 @@ DEFAULT_USER_AGENT = "BarcodeScannerApp/1.0"
 SEARCH_DEFAULT_LIMIT = 8
 SEARCH_MAX_LIMIT = 15
 
+
+def _headers() -> dict[str, str]:
+    # Resolved per call, not at import, so override_settings works in tests.
+    return {
+        "User-Agent": getattr(settings, "PHOTON_USER_AGENT", DEFAULT_USER_AGENT),
+        "Accept": "application/json",
+    }
+
 # Tbilisi center, used as a soft proximity bias so Georgian results rank
 # higher when the user types ambiguous queries (e.g. "rustaveli").
 DEFAULT_BIAS_LAT = 41.7151
@@ -121,13 +129,7 @@ def search_addresses(
     Raises `PhotonError` with code `EXTERNAL_SERVICE_*` on transport or
     upstream failure.
     """
-    user_agent = getattr(settings, "PHOTON_USER_AGENT", None) or getattr(
-        settings, "NOMINATIM_USER_AGENT", DEFAULT_USER_AGENT
-    )
-    headers = {
-        "User-Agent": user_agent,
-        "Accept": "application/json",
-    }
+    headers = _headers()
     bounded_limit = max(1, min(limit, SEARCH_MAX_LIMIT))
     params: dict[str, Any] = {
         "q": query,
@@ -226,13 +228,7 @@ def reverse_geocode(
     upstream failure, or `REVERSE_GEOCODE_NOT_FOUND` when Photon returns
     no usable feature for the coordinates.
     """
-    user_agent = getattr(settings, "PHOTON_USER_AGENT", None) or getattr(
-        settings, "NOMINATIM_USER_AGENT", DEFAULT_USER_AGENT
-    )
-    headers = {
-        "User-Agent": user_agent,
-        "Accept": "application/json",
-    }
+    headers = _headers()
     params: dict[str, Any] = {"lat": lat, "lon": lng, "lang": lang}
 
     try:
