@@ -304,3 +304,83 @@ class RSGeLookupAPIViewTests(TestCase):
             response = self._lookup()
         self.assertEqual(response.status_code, 502)
         self.assertEqual(response.data['code'], 'RS_GE_PARSE_ERROR')
+
+
+def _upstream(status_code, body=None):
+    """A 1C reply as the client transport (httpx.request) returns it."""
+    resp = _mock_httpx_response(status_code, body)
+    resp.text = ''  # the client logs response.text[:n]; a bare Mock cannot be sliced
+    return resp
+
+
+@override_settings(SECURE_SSL_REDIRECT=False, FERNET_KEY=_TEST_FERNET_KEY)
+class CreateClientAPIViewTests(TestCase):
+    """The wire contract ClientLookupModal.js reads (name / phone / address / raw)."""
+
+    def setUp(self):
+        self.org = _make_organization()
+        self.org.encrypt_password('svc-pw')
+        self.org.save()
+        self.user = User.objects.create_user(
+            username='cc-user', password='p', role=User.Role.COMPANY_USER, organization=self.org,
+        )
+        self.client_api = APIClient()
+        self.client_api.force_authenticate(self.user)
+        self.url = reverse('client-create')
+        self.payload = {'first_name': 'Giorgi', 'last_name': 'Beridze', 'phone': '+995555'}
+
+    def test_created_client_is_normalized_from_the_wrapped_customer(self):
+        body = {'status': 'created', 'customer': {'name': 'Giorgi Beridze', 'address': 'Tbilisi', 'phone': '+995555'}}
+        with mock.patch('httpx.request', return_value=_upstream(201, body)):
+            response = self.client_api.post(self.url, self.payload, format='json')
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(response.data['name'], 'Giorgi Beridze')
+        self.assertEqual(response.data['address'], 'Tbilisi')
+        self.assertEqual(response.data['phone'], '+995555')
+        self.assertEqual(response.data['raw'], body['customer'])
+
+    def test_unwrappable_body_falls_back_to_raw(self):
+        with mock.patch('httpx.request', return_value=_upstream(200, 'ok')):
+            response = self.client_api.post(self.url, self.payload, format='json')
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(response.data['raw'], 'ok')
+        self.assertFalse(response.data.get('name'))
+
+    def test_upstream_409_is_client_already_exists(self):
+        with mock.patch('httpx.request', return_value=_upstream(409, {})):
+            response = self.client_api.post(self.url, self.payload, format='json')
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.data['code'], 'CLIENT_ALREADY_EXISTS')
+
+    def test_anonymous_request_is_rejected(self):
+        response = APIClient().post(self.url, self.payload, format='json')
+        self.assertIn(response.status_code, (401, 403))
+
+
+@override_settings(SECURE_SSL_REDIRECT=False, FERNET_KEY=_TEST_FERNET_KEY)
+class CheckClientAPIViewTests(TestCase):
+    def setUp(self):
+        self.org = _make_organization()
+        self.org.encrypt_password('svc-pw')
+        self.org.save()
+        self.user = User.objects.create_user(
+            username='ck-user', password='p', role=User.Role.COMPANY_USER, organization=self.org,
+        )
+        self.client_api = APIClient()
+        self.client_api.force_authenticate(self.user)
+        self.url = reverse('client-check')
+
+    def test_hit_returns_normalized_clients(self):
+        body = [{'name': 'Giorgi Beridze', 'address': 'Tbilisi', 'phone': '+995555'}]
+        with mock.patch('httpx.request', return_value=_upstream(200, body)):
+            response = self.client_api.post(self.url, {'phone': '+995555'}, format='json')
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(len(response.data['clients']), 1)
+        self.assertEqual(response.data['clients'][0]['name'], 'Giorgi Beridze')
+        self.assertEqual(response.data['clients'][0]['raw'], body[0])
+
+    def test_upstream_404_is_client_not_found(self):
+        with mock.patch('httpx.request', return_value=_upstream(404, {})):
+            response = self.client_api.post(self.url, {'phone': '+995555'}, format='json')
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.data['code'], 'CLIENT_NOT_FOUND')
