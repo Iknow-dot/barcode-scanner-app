@@ -18,13 +18,13 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from core.attributes import project_attributes
-from core.image_proxy_safety import (
+from core.catalog.attributes import project_attributes
+from core.catalog.image_proxy_safety import (
     assert_safe_image_url,
     sanitized_image_content_type,
     UnsafeImageURL,
 )
-from core.image_urls import signed_image_paths, verify_image_sig
+from core.catalog.image_urls import signed_image_paths, verify_image_sig
 from core.models import CatalogIngestState, Product, ProductAttribute, ProductCategory
 from core.permissions import IsCompanyAdmin, IsCompanyUserOrAdmin
 from core.serializers import (
@@ -85,7 +85,7 @@ class CatalogProductSearchAPIView(APIView):
 @extend_schema(tags=["Catalog"])
 class CatalogProductImageAPIView(APIView):
     # Fetched by a native <img src> tag — no Authorization header rides along, so this
-    # endpoint is signature-gated (see core.image_urls) rather than JWT-authenticated.
+    # endpoint is signature-gated (see core.catalog.image_urls) rather than JWT-authenticated.
     authentication_classes = []
     permission_classes = []
     http_method_names = ["get"]

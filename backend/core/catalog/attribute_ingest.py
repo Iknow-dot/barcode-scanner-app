@@ -1,8 +1,8 @@
 """DB-touching registration of newly-seen attribute keys. Org-scoped, capped."""
-from .attributes import (
+from core.catalog.attributes import (
     humanize_key, infer_type, MAX_ATTRIBUTE_KEYS_PER_ORG, MAX_ATTRIBUTE_KEY_LEN,
 )
-from .models import ProductAttribute
+from core.models import ProductAttribute
 
 
 def register_attribute_keys(organization, keys, first_seen_values=None):

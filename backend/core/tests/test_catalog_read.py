@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import os
 
-from core.category_ingest import CategoryResolver
-from core.image_proxy_safety import UnsafeImageURL, assert_safe_image_url, sanitized_image_content_type
-from core.image_urls import _sig, signed_image_path, signed_image_paths, verify_image_sig
+from core.catalog.category_ingest import CategoryResolver
+from core.catalog.image_proxy_safety import UnsafeImageURL, assert_safe_image_url, sanitized_image_content_type
+from core.catalog.image_urls import _sig, signed_image_path, signed_image_paths, verify_image_sig
 from core.models import CatalogIngestState, Organization, Product, ProductAttribute, ProductBarcode
 from django.test import TestCase, override_settings
 from django.urls import reverse
@@ -126,18 +126,18 @@ class ImageProxySafetyTests(TestCase):
             assert_safe_image_url("http://example.com/a.jpg")
 
     def test_rejects_private_address(self):
-        with mock.patch("core.image_proxy_safety.socket.getaddrinfo", return_value=self._addrinfo("10.0.0.5")):
+        with mock.patch("core.catalog.image_proxy_safety.socket.getaddrinfo", return_value=self._addrinfo("10.0.0.5")):
             with self.assertRaises(UnsafeImageURL):
                 assert_safe_image_url("https://internal.example/a.jpg")
 
     def test_rejects_loopback_and_metadata(self):
         for ip in ("127.0.0.1", "169.254.169.254"):
-            with mock.patch("core.image_proxy_safety.socket.getaddrinfo", return_value=self._addrinfo(ip)):
+            with mock.patch("core.catalog.image_proxy_safety.socket.getaddrinfo", return_value=self._addrinfo(ip)):
                 with self.assertRaises(UnsafeImageURL):
                     assert_safe_image_url("https://x.example/a.jpg")
 
     def test_allows_public_address(self):
-        with mock.patch("core.image_proxy_safety.socket.getaddrinfo", return_value=self._addrinfo("93.184.216.34")):
+        with mock.patch("core.catalog.image_proxy_safety.socket.getaddrinfo", return_value=self._addrinfo("93.184.216.34")):
             assert_safe_image_url("https://example.com/a.jpg")  # no raise
 
     def test_content_type_allowlist(self):

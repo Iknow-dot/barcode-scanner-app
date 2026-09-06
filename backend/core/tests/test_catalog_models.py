@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from core.attribute_ingest import register_attribute_keys
-from core.attributes import MAX_ATTRIBUTE_KEYS_PER_ORG, MAX_ATTRIBUTE_KEY_LEN, humanize_key, infer_type, project_attributes
-from core.catalog import proxy_image_paths, row_hash
-from core.categories import normalize_category_chain, path_ids_string, path_names
-from core.category_ingest import CategoryResolver
+from core.catalog.attribute_ingest import register_attribute_keys
+from core.catalog.attributes import MAX_ATTRIBUTE_KEYS_PER_ORG, MAX_ATTRIBUTE_KEY_LEN, humanize_key, infer_type, project_attributes
+from core.catalog.fingerprint import row_hash
+from core.catalog.categories import normalize_category_chain, path_ids_string, path_names
+from core.catalog.category_ingest import CategoryResolver
 from core.models import CatalogIngestState, Organization, Product, ProductAttribute, ProductBarcode, ProductCategory
 from django.core.management import call_command
 from django.db import IntegrityError, transaction
@@ -44,12 +44,6 @@ class CatalogHelperTests(TestCase):
         a = row_hash({"name": "X", "barcodes": [], "image_urls": [], "article": "", "price": "1"})
         b = row_hash({"name": "Y", "barcodes": [], "image_urls": [], "article": "", "price": "1"})
         self.assertNotEqual(a, b)
-
-    def test_proxy_image_paths(self):
-        self.assertEqual(
-            proxy_image_paths("S1", 2),
-            ["catalog/products/S1/image/0/", "catalog/products/S1/image/1/"],
-        )
 
 
 class StalenessCommandTests(TestCase):

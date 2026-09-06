@@ -7,9 +7,9 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from core.attributes import project_attributes
-from core.catalog import row_hash
-from core.image_urls import signed_image_paths
+from core.catalog.attributes import project_attributes
+from core.catalog.fingerprint import row_hash
+from core.catalog.image_urls import signed_image_paths
 from core.models import Product, ProductAttribute, ProductBarcode
 from core.permissions import IsCompanyUserOrAdmin
 from core.serializers import ProductSearchSerializer

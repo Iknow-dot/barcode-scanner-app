@@ -1,8 +1,8 @@
 """Per-batch category upsert for catalog ingest. DB-touching; strictly org-scoped."""
 from django.db import IntegrityError, transaction
 
-from .categories import normalize_category_chain, path_ids_string, path_names
-from .models import ProductCategory
+from core.catalog.categories import normalize_category_chain, path_ids_string, path_names
+from core.models import ProductCategory
 
 
 class CategoryResolver:

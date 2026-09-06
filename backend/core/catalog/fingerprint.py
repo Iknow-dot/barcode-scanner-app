@@ -2,7 +2,7 @@
 import hashlib
 import json
 
-from .categories import normalize_category_chain
+from core.catalog.categories import normalize_category_chain
 
 
 def row_hash(product: dict) -> str:
@@ -21,7 +21,3 @@ def row_hash(product: dict) -> str:
     )
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
-
-def proxy_image_paths(sku: str, count: int) -> list[str]:
-    """Relative proxy paths the frontend loads instead of raw 1C URLs."""
-    return [f"catalog/products/{sku}/image/{i}/" for i in range(count)]

@@ -3,8 +3,8 @@ from __future__ import annotations
 import httpx
 import os
 
-from core.category_ingest import CategoryResolver
-from core.image_urls import signed_image_path
+from core.catalog.category_ingest import CategoryResolver
+from core.catalog.image_urls import signed_image_path
 from core.models import Organization, Product, ProductAttribute, ProductBarcode, Warehouse
 from core.serializers import ProductSearchSerializer
 from core.services.consult_web_exchange import ConsultWebExchangeError

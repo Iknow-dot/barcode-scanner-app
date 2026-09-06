@@ -12,9 +12,9 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from core.attribute_ingest import register_attribute_keys
-from core.catalog import row_hash
-from core.category_ingest import CategoryResolver
+from core.catalog.attribute_ingest import register_attribute_keys
+from core.catalog.fingerprint import row_hash
+from core.catalog.category_ingest import CategoryResolver
 from core.ingest_auth import organization_from_push
 from core.models import (
     CatalogIngestState,
