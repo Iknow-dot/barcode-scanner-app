@@ -31,7 +31,6 @@ SECRET_KEY = os.environ.get(
 DEBUG = os.environ.get('DEBUG', 'False').lower() in ('true', '1', 'yes')
 
 ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
-DISABLE_COLLECTSTATIC = True
 
 # Application definition
 
@@ -115,6 +114,8 @@ else:
 # Password validation
 # https://docs.djangoproject.com/en/6.0/ref/settings/#auth-password-validators
 
+AUTH_USER_MODEL = 'users.User'
+
 AUTH_PASSWORD_VALIDATORS = [
     {
         'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
@@ -149,11 +150,10 @@ APPEND_SLASH = True
 
 STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
-# STORAGES = {
-#     'staticfiles': {
-#         'BACKEND': 'whitenoise.storage.CompressedManifestStaticFilesStorage',
-#     },
-# }
+# WhiteNoise serves STATIC_ROOT as-is (default STORAGES). Do not switch to
+# whitenoise.storage.CompressedManifestStaticFilesStorage: jazzmin's vendored
+# bootstrap references a missing .map file and collectstatic aborts with
+# MissingFileError.
 
 # Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
@@ -189,8 +189,6 @@ LOGGING = {
         'level': os.environ.get('LOG_LEVEL', 'INFO'),
     },
 }
-
-AUTH_USER_MODEL = 'users.User'
 
 # Nominatim (OSM reverse geocoder) — public instance requires a User-Agent
 # string identifying the app per their usage policy.
@@ -277,7 +275,6 @@ JAZZMIN_SETTINGS = {
         'auth': 'fas fa-users-cog',
         'users.User': 'fas fa-user',
         'core.Organization': 'fas fa-building',
-        'core.Warehouse': 'fas fa-warehouse',
         'core.Product': 'fas fa-barcode',
     },
     'default_icon_parents': 'fas fa-chevron-circle-right',
@@ -287,33 +284,8 @@ JAZZMIN_SETTINGS = {
 }
 
 JAZZMIN_UI_TWEAKS = {
-    'navbar_small_text': False,
-    'footer_small_text': False,
-    'body_small_text': False,
-    'brand_small_text': False,
-    'brand_colour': False,
-    'accent': 'accent-primary',
     'navbar': 'navbar-dark',
-    'no_navbar_border': False,
-    'navbar_fixed': False,
-    'layout_boxed': False,
-    'footer_fixed': False,
-    'sidebar_fixed': False,
-    'sidebar': 'sidebar-dark-primary',
-    'sidebar_nav_small_text': False,
-    'sidebar_disable_expand': False,
-    'sidebar_nav_child_indent': False,
-    'sidebar_nav_compact_style': False,
-    'sidebar_nav_legacy_style': False,
-    'sidebar_nav_flat_style': False,
-    'theme': 'default',
-    'dark_mode_theme': None,
-    'button_classes': {
-        'primary': 'btn-primary',
-        'secondary': 'btn-secondary',
-        'info': 'btn-info',
-        'warning': 'btn-warning',
-        'danger': 'btn-danger',
-        'success': 'btn-success',
-    },
+    # Follow the OS light/dark preference. Replaces the removed 2.x key
+    # 'dark_mode_theme', which jazzmin 3.x mapped to 'auto' with a warning.
+    'default_theme_mode': 'auto',
 }
