@@ -1,5 +1,4 @@
-import os
-
+from django.conf import settings
 from django.contrib import admin
 from django.template.response import TemplateResponse
 from django.urls import path
@@ -138,7 +137,7 @@ def analytics_view(request):
     context = {
         **admin.site.each_context(request),
         "title": "Analytics",
-        "posthog_dashboard_url": os.getenv("POSTHOG_DASHBOARD_URL", ""),
+        "posthog_dashboard_url": settings.POSTHOG_DASHBOARD_URL,
     }
     return TemplateResponse(request, "admin/analytics.html", context)
 

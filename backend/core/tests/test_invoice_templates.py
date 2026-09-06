@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import base64
-import os
 
 from core.models import Organization
 from core.serializers import OrganizationSerializer
@@ -89,10 +88,9 @@ class OrganizationInvoiceLogoValidationTests(TestCase):
         self.assertIn('invoice_logo', serializer.errors)
 
 
-@override_settings(SECURE_SSL_REDIRECT=False)
+@override_settings(SECURE_SSL_REDIRECT=False, FERNET_KEY=_TEST_FERNET_KEY)
 class InvoiceTemplateEndpointTests(TestCase):
     def setUp(self):
-        os.environ['FERNET_KEY'] = _TEST_FERNET_KEY
         self.org = _make_organization(name='OrgT', identification_number='300')
         self.admin = User.objects.create_user(
             username='admin', password='p',
@@ -105,8 +103,6 @@ class InvoiceTemplateEndpointTests(TestCase):
         )
         self.url = '/api/v1/organizations/my-organization/invoice-template/'
 
-    def tearDown(self):
-        os.environ.pop('FERNET_KEY', None)
 
     def _admin_client(self):
         c = APIClient()

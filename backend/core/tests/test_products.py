@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import httpx
-import os
 
 from core.catalog.category_ingest import CategoryResolver
 from core.catalog.image_urls import signed_image_path
@@ -18,14 +17,13 @@ from users.models import User
 from core.tests.common import _TEST_FERNET_KEY, _make_organization
 
 
-@override_settings(SECURE_SSL_REDIRECT=False)
+@override_settings(SECURE_SSL_REDIRECT=False, FERNET_KEY=_TEST_FERNET_KEY)
 class ProductSearchIncludeImagesTests(TestCase):
     """Scan-miss path never inlines images anymore — it always returns proxy paths,
     regardless of the (now-inert) include_images flag, and never calls httpx.get."""
 
     def setUp(self):
         self.org = _make_organization()
-        os.environ['FERNET_KEY'] = _TEST_FERNET_KEY
         self.org.encrypt_password('s3cret')
         self.org.save()
         self.user = User.objects.create_user(
@@ -40,8 +38,6 @@ class ProductSearchIncludeImagesTests(TestCase):
         self.client_api.force_authenticate(self.user)
         self.url = reverse('product-search')
 
-    def tearDown(self):
-        os.environ.pop('FERNET_KEY', None)
 
     def _stock_response(self):
         return {
@@ -274,14 +270,13 @@ class ProductSearchResponseFieldTests(TestCase):
         self.assertNotIn('reserve', data['stock'][0])
 
 
-@override_settings(SECURE_SSL_REDIRECT=False)
+@override_settings(SECURE_SSL_REDIRECT=False, FERNET_KEY=_TEST_FERNET_KEY)
 class ProductSearchNoStockUpsertTests(TestCase):
     """A 201 'No Stock' body that carries no product identity must not seed the
     catalog replica with a nameless row."""
 
     def setUp(self):
         self.org = _make_organization()
-        os.environ['FERNET_KEY'] = _TEST_FERNET_KEY
         self.org.encrypt_password('s3cret')
         self.org.save()
         self.user = User.objects.create_user(
@@ -296,8 +291,6 @@ class ProductSearchNoStockUpsertTests(TestCase):
         self.client_api.force_authenticate(self.user)
         self.url = reverse('product-search')
 
-    def tearDown(self):
-        os.environ.pop('FERNET_KEY', None)
 
     def _search(self, upstream_body):
         with mock.patch('core.views.products.ConsultWebExchangeClient') as cls:
@@ -329,14 +322,13 @@ class ProductSearchNoStockUpsertTests(TestCase):
         )
 
 
-@override_settings(SECURE_SSL_REDIRECT=False)
+@override_settings(SECURE_SSL_REDIRECT=False, FERNET_KEY=_TEST_FERNET_KEY)
 class ProductSearchStockStatusTests(TestCase):
     """A cached product that is merely out of stock must not be reported with
     stock_status='unavailable' — that value means 1C could not be reached."""
 
     def setUp(self):
         self.org = _make_organization()
-        os.environ['FERNET_KEY'] = _TEST_FERNET_KEY
         self.org.encrypt_password('s3cret')
         self.org.save()
         self.user = User.objects.create_user(
@@ -354,8 +346,6 @@ class ProductSearchStockStatusTests(TestCase):
         self.client_api.force_authenticate(self.user)
         self.url = reverse('product-search')
 
-    def tearDown(self):
-        os.environ.pop('FERNET_KEY', None)
 
     def _search(self):
         return self.client_api.post(
@@ -383,7 +373,7 @@ class ProductSearchStockStatusTests(TestCase):
         self.assertEqual(response.data['stock_status'], 'unavailable')
 
 
-@override_settings(SECURE_SSL_REDIRECT=False)
+@override_settings(SECURE_SSL_REDIRECT=False, FERNET_KEY=_TEST_FERNET_KEY)
 class ProductSearchReplicaLookupKeyTests(TestCase):
     """1C's GetStockAndPrices matches a barcode or an article — never the 1C
     nomenclature code. Verified live: sending the code with IsBarcode=false
@@ -391,7 +381,6 @@ class ProductSearchReplicaLookupKeyTests(TestCase):
 
     def setUp(self):
         self.org = _make_organization()
-        os.environ['FERNET_KEY'] = _TEST_FERNET_KEY
         self.org.encrypt_password('s3cret')
         self.org.save()
         self.user = User.objects.create_user(
@@ -410,8 +399,6 @@ class ProductSearchReplicaLookupKeyTests(TestCase):
         self.client_api.force_authenticate(self.user)
         self.url = reverse('product-search')
 
-    def tearDown(self):
-        os.environ.pop('FERNET_KEY', None)
 
     def _search(self, sku, is_barcode):
         with mock.patch('core.views.products.ConsultWebExchangeClient') as cls:
@@ -455,7 +442,7 @@ class ProductSearchReplicaLookupKeyTests(TestCase):
         self.assertEqual(response.data['stock_status'], 'no_lookup_key')
 
 
-@override_settings(SECURE_SSL_REDIRECT=False)
+@override_settings(SECURE_SSL_REDIRECT=False, FERNET_KEY=_TEST_FERNET_KEY)
 class ProductSearchCachedUnitTests(TestCase):
     """The replica does not store `unit`, and 1C reports it per lookup key (a
     package barcode and the product's article can disagree), so the cached path
@@ -463,7 +450,6 @@ class ProductSearchCachedUnitTests(TestCase):
 
     def setUp(self):
         self.org = _make_organization()
-        os.environ['FERNET_KEY'] = _TEST_FERNET_KEY
         self.org.encrypt_password('s3cret')
         self.org.save()
         self.user = User.objects.create_user(
@@ -480,8 +466,6 @@ class ProductSearchCachedUnitTests(TestCase):
         self.client_api.force_authenticate(self.user)
         self.url = reverse('product-search')
 
-    def tearDown(self):
-        os.environ.pop('FERNET_KEY', None)
 
     def _search(self, live_body):
         with mock.patch('core.views.products.ConsultWebExchangeClient') as cls:

@@ -44,8 +44,9 @@ jobs:
       #     that whole class of failure from CI.
       #   - DATABASE_URL unset -> SQLite. Production is Postgres; see the note
       #     in the workflow README comment below.
-      #   - FERNET_KEY unset -> the tests that need it set and clear it
-      #     themselves, and pre-setting it would change what they observe.
+      #   - FERNET_KEY unset -> it is a Django setting; classes that need it use
+      #     override_settings(FERNET_KEY=...). Leaving it unset makes a class that
+      #     forgot the override fail loudly instead of passing on a leaked value.
       - name: Run tests
         working-directory: backend
         env:

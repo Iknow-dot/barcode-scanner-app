@@ -1,7 +1,7 @@
-import os
 import secrets
 
 from cryptography.fernet import Fernet
+from django.conf import settings
 from django.core.validators import MinValueValidator, MaxValueValidator
 from django.db import models
 from django.contrib.auth import get_user_model
@@ -11,6 +11,13 @@ from django.utils import timezone
 
 User = get_user_model()
 
+
+
+def _fernet() -> Fernet:
+    key = settings.FERNET_KEY
+    if not key:
+        raise ValueError("FERNET_KEY is not set or is invalid")
+    return Fernet(key)
 
 
 class Organization(models.Model):
@@ -82,19 +89,11 @@ class Organization(models.Model):
 
     def encrypt_password(self, password: str) -> None:
         """Encrypt and store the web-service password using Fernet symmetric encryption."""
-        key = os.getenv('FERNET_KEY')
-        if not key:
-            raise ValueError("FERNET_KEY is not set or is invalid")
-        cipher_suite = Fernet(key)
-        self.web_service_password = cipher_suite.encrypt(password.encode()).decode()
+        self.web_service_password = _fernet().encrypt(password.encode()).decode()
 
     def decrypt_password(self) -> str:
         """Decrypt and return the stored web-service password."""
-        key = os.getenv('FERNET_KEY')
-        if not key:
-            raise ValueError("FERNET_KEY is not set or is invalid")
-        cipher_suite = Fernet(key)
-        return cipher_suite.decrypt(self.web_service_password.encode()).decode()
+        return _fernet().decrypt(self.web_service_password.encode()).decode()
 
     def rotate_webhook_token(self) -> None:
         self.webhook_token = secrets.token_urlsafe()

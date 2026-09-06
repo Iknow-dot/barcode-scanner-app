@@ -1,14 +1,14 @@
 from __future__ import annotations
 
-import os
 
 from core.services.consult_web_exchange import ConsultWebExchangeClient, ConsultWebExchangeError
 from core.tests.common import _TEST_FERNET_KEY, _make_organization
 from decimal import Decimal
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from unittest import mock
 
 
+@override_settings(FERNET_KEY=_TEST_FERNET_KEY)
 class CreateOrderClientTests(TestCase):
     """ConsultWebExchangeClient.create_order — payload shape + real error contract.
 
@@ -20,10 +20,7 @@ class CreateOrderClientTests(TestCase):
 
     def setUp(self):
         self.org = _make_organization()
-        os.environ['FERNET_KEY'] = _TEST_FERNET_KEY
 
-    def tearDown(self):
-        os.environ.pop('FERNET_KEY', None)
 
     @staticmethod
     def _success_body():

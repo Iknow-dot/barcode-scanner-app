@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 
 from core.services.consult_web_exchange import ConsultWebExchangeClient, ConsultWebExchangeError, _normalize_client_response
 from core.tests.common import _TEST_FERNET_KEY, _make_organization
@@ -44,19 +43,16 @@ class ConsultWebExchangeClientUrlTests(TestCase):
         self.assertEqual(ctx.exception.code, 'EXTERNAL_SERVICE_ERROR')
 
 
+@override_settings(FERNET_KEY=_TEST_FERNET_KEY)
 class ConsultWebExchangeAuthTests(TestCase):
     def setUp(self):
         self.org = _make_organization(web_service_username='alice')
-        os.environ['FERNET_KEY'] = _TEST_FERNET_KEY
         self.org.encrypt_password('s3cret')
         self.org.save()
 
-    def tearDown(self):
-        os.environ.pop('FERNET_KEY', None)
 
     def test_auth_returns_basic_credentials(self):
         client = ConsultWebExchangeClient(self.org)
-        os.environ['FERNET_KEY'] = _TEST_FERNET_KEY
         self.assertEqual(client._auth(), ('alice', 's3cret'))
 
     def test_auth_returns_none_when_no_username(self):
@@ -65,13 +61,11 @@ class ConsultWebExchangeAuthTests(TestCase):
         self.assertIsNone(client._auth())
 
 
+@override_settings(FERNET_KEY=_TEST_FERNET_KEY)
 class CheckClientResultTests(TestCase):
     def setUp(self):
         self.org = _make_organization()
-        os.environ['FERNET_KEY'] = _TEST_FERNET_KEY
 
-    def tearDown(self):
-        os.environ.pop('FERNET_KEY', None)
 
     def _mock_response(self, status_code: int, body: object = None, reason: str = ''):
         resp = mock.Mock()
@@ -248,13 +242,11 @@ class CheckClientResultTests(TestCase):
             client.check_client()
 
 
+@override_settings(FERNET_KEY=_TEST_FERNET_KEY)
 class CreateClientPayloadMappingTests(TestCase):
     def setUp(self):
         self.org = _make_organization()
-        os.environ['FERNET_KEY'] = _TEST_FERNET_KEY
 
-    def tearDown(self):
-        os.environ.pop('FERNET_KEY', None)
 
     def _fake_request(self, captured: dict):
         def _inner(method, url, **kwargs):

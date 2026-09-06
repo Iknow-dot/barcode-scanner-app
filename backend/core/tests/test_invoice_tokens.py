@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 
 from core.models import Organization, PurchaseOrder, PurchaseOrderItem
 from core.services.invoice_tokens import TOKEN_CATALOG, resolve_token
@@ -137,12 +136,11 @@ class InvoiceTokensEndpointTests(TestCase):
         self.assertIn('data-items-table', resp.data['default_template_html'])
 
 
-@override_settings(SECURE_SSL_REDIRECT=False)
+@override_settings(SECURE_SSL_REDIRECT=False, FERNET_KEY=_TEST_FERNET_KEY)
 class InvoiceSampleValuesEndpointTests(TestCase):
     URL = '/api/v1/invoice-tokens/sample-values/'
 
     def setUp(self):
-        os.environ['FERNET_KEY'] = _TEST_FERNET_KEY
         self.org_a = _make_organization(name='OrgSV-A', identification_number='700',
                                         invoice_display_name='Acme Sample Ltd')
         self.org_b = _make_organization(name='OrgSV-B', identification_number='800')
@@ -165,8 +163,6 @@ class InvoiceSampleValuesEndpointTests(TestCase):
         self.client_a = APIClient()
         self.client_a.force_authenticate(self.user_a)
 
-    def tearDown(self):
-        os.environ.pop('FERNET_KEY', None)
 
     def test_unauthenticated_returns_401(self):
         anon = APIClient()

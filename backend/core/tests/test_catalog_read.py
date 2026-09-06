@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 
 from core.catalog.category_ingest import CategoryResolver
 from core.catalog.image_proxy_safety import UnsafeImageURL, assert_safe_image_url, sanitized_image_content_type
@@ -15,7 +14,7 @@ from users.models import User
 from core.tests.common import _TEST_FERNET_KEY, _make_organization
 
 
-@override_settings(SECURE_SSL_REDIRECT=False)
+@override_settings(SECURE_SSL_REDIRECT=False, FERNET_KEY=_TEST_FERNET_KEY)
 class ImageProxyTests(TestCase):
     def setUp(self):
         self.client = APIClient()
@@ -75,22 +74,14 @@ class ImageProxyTests(TestCase):
         # image host == web_service_url host -> auth attached
         self.org.web_service_url = "https://imghost.example"
         self.org.web_service_username = "u"
-        os.environ['FERNET_KEY'] = _TEST_FERNET_KEY
-        try:
-            self.org.encrypt_password("pw")
-        finally:
-            os.environ.pop('FERNET_KEY', None)
+        self.org.encrypt_password("pw")
         self.org.save()
         self.product.image_urls = ["https://imghost.example/a.jpg"]
         self.product.save()
         mget.return_value = mock.Mock(status_code=200, content=b"X", headers={"Content-Type": "image/jpeg"})
         url = "/api/v1/" + signed_image_path(self.org.id, "S1", 0)
-        os.environ['FERNET_KEY'] = _TEST_FERNET_KEY
-        try:
-            with mock.patch("core.views.catalog_read.assert_safe_image_url", return_value=None):
-                self.client.get(url)
-        finally:
-            os.environ.pop('FERNET_KEY', None)
+        with mock.patch("core.views.catalog_read.assert_safe_image_url", return_value=None):
+            self.client.get(url)
         _, kwargs = mget.call_args
         self.assertEqual(kwargs.get("auth"), ("u", "pw"))
 

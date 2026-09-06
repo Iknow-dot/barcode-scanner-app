@@ -198,6 +198,11 @@ PHOTON_USER_AGENT = (
     or os.environ.get('NOMINATIM_USER_AGENT', 'BarcodeScannerApp/1.0 (admin@example.com)')
 )
 
+# Secrets / integrations. Read here, like every other env var, so app code
+# uses settings.* and tests use override_settings().
+FERNET_KEY = os.environ.get('FERNET_KEY')  # Fernet key for Organization.web_service_password
+POSTHOG_DASHBOARD_URL = os.environ.get('POSTHOG_DASHBOARD_URL', '')  # admin /analytics/ embed
+
 # Django REST Framework
 REST_FRAMEWORK = {
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',

@@ -1,22 +1,19 @@
 from __future__ import annotations
 
-import os
 
 from core.services.consult_web_exchange import ConsultWebExchangeClient, ConsultWebExchangeError
 from core.tests.common import _TEST_FERNET_KEY, _make_organization
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from unittest import mock
 
 
+@override_settings(FERNET_KEY=_TEST_FERNET_KEY)
 class GetStockAndPricesStatusTests(TestCase):
     """201 means 'found, but out of stock' — it must not read as 'not found'."""
 
     def setUp(self):
         self.org = _make_organization()
-        os.environ['FERNET_KEY'] = _TEST_FERNET_KEY
 
-    def tearDown(self):
-        os.environ.pop('FERNET_KEY', None)
 
     def _mock_response(self, status_code: int, body: object = None, json_raises: bool = False):
         resp = mock.Mock()
@@ -71,6 +68,7 @@ class GetStockAndPricesStatusTests(TestCase):
         self.assertEqual(result, body)
 
 
+@override_settings(FERNET_KEY=_TEST_FERNET_KEY)
 class GetStockAndPricesUpstreamErrorTests(TestCase):
     """Only a genuine "nomenclature not found" is PRODUCT_NOT_FOUND. Any other
     upstream failure is an external-service error — reporting a 422 or a 500 as
@@ -78,10 +76,7 @@ class GetStockAndPricesUpstreamErrorTests(TestCase):
 
     def setUp(self):
         self.org = _make_organization()
-        os.environ['FERNET_KEY'] = _TEST_FERNET_KEY
 
-    def tearDown(self):
-        os.environ.pop('FERNET_KEY', None)
 
     def _raise_for(self, status_code):
         client = ConsultWebExchangeClient(self.org)

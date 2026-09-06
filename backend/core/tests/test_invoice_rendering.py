@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 
 from core.models import Organization, PurchaseOrder, PurchaseOrderItem
 from core.services.invoice_renderer import render_invoice_template, wrap_in_skeleton
@@ -10,10 +9,9 @@ from rest_framework.test import APIClient
 from users.models import User
 
 
-@override_settings(SECURE_SSL_REDIRECT=False)
+@override_settings(SECURE_SSL_REDIRECT=False, FERNET_KEY=_TEST_FERNET_KEY)
 class InvoiceEndpointTests(TestCase):
     def setUp(self):
-        os.environ['FERNET_KEY'] = _TEST_FERNET_KEY
         self.org_a = _make_organization(name='OrgA', identification_number='100')
         self.org_b = _make_organization(name='OrgB', identification_number='200')
         self.user_a = User.objects.create_user(
@@ -31,8 +29,6 @@ class InvoiceEndpointTests(TestCase):
         self.client_a = APIClient()
         self.client_a.force_authenticate(self.user_a)
 
-    def tearDown(self):
-        os.environ.pop('FERNET_KEY', None)
 
     def _url(self, order_id):
         return f'/api/v1/orders/{order_id}/invoice/'

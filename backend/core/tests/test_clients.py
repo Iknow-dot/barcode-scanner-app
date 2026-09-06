@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import httpx
-import os
 
 from django.core.cache import cache
 from django.test import TestCase, override_settings
@@ -12,12 +11,11 @@ from users.models import User
 from core.tests.common import _TEST_FERNET_KEY, _make_organization, _mock_httpx_response, _photon_collection, _photon_feature, _rs_ge_record
 
 
-@override_settings(SECURE_SSL_REDIRECT=False)
+@override_settings(SECURE_SSL_REDIRECT=False, FERNET_KEY=_TEST_FERNET_KEY)
 class ReverseGeocodeAPIViewTests(TestCase):
     def setUp(self):
         cache.clear()
         self.org = _make_organization()
-        os.environ['FERNET_KEY'] = _TEST_FERNET_KEY
         self.user = User.objects.create_user(
             username='u', password='p',
             role=User.Role.COMPANY_USER, organization=self.org,
@@ -28,7 +26,6 @@ class ReverseGeocodeAPIViewTests(TestCase):
 
     def tearDown(self):
         cache.clear()
-        os.environ.pop('FERNET_KEY', None)
 
     def test_anonymous_request_is_rejected(self):
         anon = APIClient()
@@ -105,12 +102,11 @@ class ReverseGeocodeAPIViewTests(TestCase):
         self.assertEqual(call_count['n'], 1)
 
 
-@override_settings(SECURE_SSL_REDIRECT=False)
+@override_settings(SECURE_SSL_REDIRECT=False, FERNET_KEY=_TEST_FERNET_KEY)
 class SearchAddressesAPIViewTests(TestCase):
     def setUp(self):
         cache.clear()
         self.org = _make_organization()
-        os.environ['FERNET_KEY'] = _TEST_FERNET_KEY
         self.user = User.objects.create_user(
             username='u', password='p',
             role=User.Role.COMPANY_USER, organization=self.org,
@@ -121,7 +117,6 @@ class SearchAddressesAPIViewTests(TestCase):
 
     def tearDown(self):
         cache.clear()
-        os.environ.pop('FERNET_KEY', None)
 
     def test_anonymous_request_is_rejected(self):
         anon = APIClient()
