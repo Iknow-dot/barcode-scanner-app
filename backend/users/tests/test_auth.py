@@ -4,7 +4,7 @@ from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 from rest_framework_simplejwt.token_blacklist.models import OutstandingToken
 from rest_framework_simplejwt.tokens import RefreshToken
-from users.models import User
+from users.models import AllowedIP, User
 
 
 @override_settings(SECURE_SSL_REDIRECT=False)
@@ -214,3 +214,82 @@ class RefreshSessionTimeoutTests(TestCase):
         refresh_str = self._login_refresh_token(self._make_org())
         self.assertEqual(self._refresh(refresh_str).status_code, 200)
         self.assertEqual(self._refresh(refresh_str).status_code, 401)
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
+class LoginIPAllowlistTests(TestCase):
+    """Per-user IP allowlist enforced at login; no rows means unrestricted."""
+
+    def setUp(self):
+        org = Organization.objects.create(
+            name='IPOrg', identification_number='900800701',
+            web_service_url='http://example.com/db', employees_count=5,
+        )
+        self.user = User.objects.create_user(
+            username='ip-user', password='pw12345',
+            role=User.Role.COMPANY_USER, organization=org,
+        )
+
+    def _login(self, **environ):
+        return APIClient().post(
+            '/api/v1/users/auth/login/',
+            {'username': 'ip-user', 'password': 'pw12345'},
+            format='json', **environ,
+        )
+
+    def test_no_rows_is_unrestricted(self):
+        response = self._login(REMOTE_ADDR='198.51.100.7')
+        self.assertEqual(response.status_code, 200, response.data)
+
+    def test_exact_ip_row_matches(self):
+        AllowedIP.objects.create(user=self.user, ip_or_network='203.0.113.9')
+        response = self._login(REMOTE_ADDR='203.0.113.9')
+        self.assertEqual(response.status_code, 200, response.data)
+
+    def test_cidr_row_matches(self):
+        AllowedIP.objects.create(user=self.user, ip_or_network='203.0.113.0/24')
+        response = self._login(REMOTE_ADDR='203.0.113.77')
+        self.assertEqual(response.status_code, 200, response.data)
+
+    def test_non_matching_address_is_403_with_code(self):
+        AllowedIP.objects.create(user=self.user, ip_or_network='203.0.113.9')
+        response = self._login(REMOTE_ADDR='198.51.100.7')
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.data['code'], 'IP_NOT_ALLOWED')
+
+    def test_first_forwarded_hop_is_honoured(self):
+        AllowedIP.objects.create(user=self.user, ip_or_network='203.0.113.9')
+        response = self._login(
+            HTTP_X_FORWARDED_FOR='203.0.113.9, 10.0.0.1', REMOTE_ADDR='10.0.0.1',
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+
+    def test_single_hop_forwarded_header_is_honoured(self):
+        AllowedIP.objects.create(user=self.user, ip_or_network='203.0.113.9')
+        response = self._login(HTTP_X_FORWARDED_FOR='203.0.113.9', REMOTE_ADDR='10.0.0.1')
+        self.assertEqual(response.status_code, 200, response.data)
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
+class ClientIPEndpointTests(TestCase):
+    """GET /users/ip/ prefills the allowlist editor, so it must report the same
+    address the login check evaluates."""
+
+    def setUp(self):
+        self.client_api = APIClient()
+        self.client_api.force_authenticate(User.objects.create_user(
+            username='ip-viewer', password='pw12345',
+            role=User.Role.INTERNAL_ADMIN, is_staff=True, is_superuser=True,
+        ))
+
+    def test_remote_addr_without_forwarded_header(self):
+        response = self.client_api.get('/api/v1/users/ip/', REMOTE_ADDR='10.0.0.1')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data, {'ip': '10.0.0.1'})
+
+    def test_multi_hop_forwarded_header_returns_first_hop(self):
+        response = self.client_api.get(
+            '/api/v1/users/ip/',
+            HTTP_X_FORWARDED_FOR='203.0.113.9, 10.0.0.1', REMOTE_ADDR='10.0.0.1',
+        )
+        self.assertEqual(response.data, {'ip': '203.0.113.9'})
