@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-> **Note:** The top-level `README.md` was rewritten alongside this file and its stack section is accurate. It has drifted in smaller ways since: its project tree still lists `core/views.py` (now the `core/views/` package) and a `Customer` model (dropped in migrations 0010–0014), and its "Run Locally" URLs use the pre-shift ports. Trust this file and the code where they disagree.
+> **Note:** The top-level `README.md` is accurate as of 2026-09-06 (stack, ports, commands, project tree). Where this file and the README ever disagree, trust this file and the code.
 
 ## Stack
 

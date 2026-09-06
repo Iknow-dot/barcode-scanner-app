@@ -128,7 +128,7 @@ barcode-scanner-app/
 │   │   ├── models.py
 │   │   ├── views/                   # DRF views, split by resource (orders, catalog, clients, ...)
 │   │   ├── services/                # 1C ConsultWebExchange client, invoice rendering, Photon
-│   │   ├── serializers.py
+│   │   ├── serializers/             # DRF serializers, split by resource (mirrors views/)
 │   │   ├── permissions.py           # role + org scoping
 │   │   ├── urls.py
 │   │   └── migrations/
