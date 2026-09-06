@@ -122,9 +122,10 @@ Authentication is JWT via `rest_framework_simplejwt`. The login endpoint is `POS
 barcode-scanner-app/
 ├── backend/                         # Django project
 │   ├── backend/                     # settings.py, urls.py, wsgi.py
-│   ├── core/                        # Organization, Warehouse, Customer, PurchaseOrder
+│   ├── core/                        # Organization, Warehouse, PurchaseOrder, Product catalog
 │   │   ├── models.py
-│   │   ├── views.py                 # DRF viewsets + product search + RS.ge lookup
+│   │   ├── views/                   # DRF views, split by resource (orders, catalog, clients, ...)
+│   │   ├── services/                # 1C ConsultWebExchange client, invoice rendering, Photon
 │   │   ├── serializers.py
 │   │   ├── permissions.py           # role + org scoping
 │   │   ├── urls.py
