@@ -3,6 +3,7 @@ from datetime import timedelta
 from uuid import uuid4
 
 from django.contrib.auth import get_user_model
+from django.db import transaction
 from django.utils import timezone
 from django.utils.crypto import constant_time_compare
 from rest_framework import serializers
@@ -220,6 +221,14 @@ class AllowedIPAddressSerializer(serializers.ModelSerializer):
         model = AllowedIP
         fields = ["ip_or_network"]
 
+    def validate(self, attrs):
+        # Under a partial (PATCH) root serializer DRF skips every missing nested
+        # key, so an item without ip_or_network would reach the DB as a blank
+        # row — which is a lockout. Require it regardless of partial.
+        if 'ip_or_network' not in attrs:
+            raise serializers.ValidationError({'ip_or_network': 'This field is required.'})
+        return attrs
+
 
 def scope_to_requester_organization(serializer, field_name, model):
     """Narrow a many=True PrimaryKeyRelatedField to the requester's organization.
@@ -245,12 +254,15 @@ def validate_same_organization(objs, organization, field_name, message):
     """Reject objs whose organization differs from ``organization`` — for every role.
 
     Keep ``message`` generic: naming the offending rows (or admitting they
-    exist) would leak cross-org data. Mirrors Warehouse.users.limit_choices_to,
-    which is form-only and does not protect ``.set()``.
+    exist) would leak cross-org data. Nothing below this layer enforces the
+    rule: Warehouse.users.limit_choices_to=Q(organization=F('organization'))
+    resolves F() against User and is a no-op, so the serializers and the admin
+    inline (core/admin.py) are the only guards. A target with no organization
+    can hold no memberships at all.
     """
-    if not objs or not organization:
+    if not objs:
         return
-    if any(o.organization_id != organization.pk for o in objs):
+    if organization is None or any(o.organization_id != organization.pk for o in objs):
         raise serializers.ValidationError({field_name: message})
 
 
@@ -326,7 +338,7 @@ class _BaseUserSerializer(serializers.ModelSerializer):
         user.set_password(password)
         user.save()
         for ip_data in allowed_ips:
-            AllowedIP.objects.get_or_create(user=user, **ip_data)
+            AllowedIP.objects.get_or_create(user=user, ip_or_network=ip_data['ip_or_network'])
         if warehouses:
             user.warehouses.set(warehouses)
         return user
@@ -340,10 +352,14 @@ class _BaseUserSerializer(serializers.ModelSerializer):
             validated_data.pop('device_lock_enabled', None)
         password = validated_data.pop('password', None)
         warehouses = validated_data.pop('warehouses', None)
-        if warehouses is not None:
+        organization = validated_data.get('organization', instance.organization)
+        # Also run when only `organization` changes: the memberships the user
+        # will END UP with must belong to the org they will have after this
+        # request, so an org move must restate warehouse_ids (possibly []).
+        if warehouses is not None or organization != instance.organization:
             validate_same_organization(
-                warehouses, validated_data.get('organization', instance.organization),
-                'warehouse_ids', "All warehouses must belong to the user's organization.",
+                warehouses if warehouses is not None else instance.warehouses.all(),
+                organization, 'warehouse_ids', "All warehouses must belong to the user's organization.",
             )
         allowed_ips = validated_data.pop('allowed_ips', None)
         for attr, value in validated_data.items():
@@ -354,9 +370,12 @@ class _BaseUserSerializer(serializers.ModelSerializer):
         if warehouses is not None:
             instance.warehouses.set(warehouses)
         if allowed_ips is not None:  # absent -> untouched; [] -> cleared
-            instance.allowed_ips.all().delete()
-            for ip_data in allowed_ips:
-                AllowedIP.objects.get_or_create(user=instance, **ip_data)
+            with transaction.atomic():  # never leave the list half-replaced
+                instance.allowed_ips.all().delete()
+                for ip_data in allowed_ips:
+                    AllowedIP.objects.get_or_create(
+                        user=instance, ip_or_network=ip_data['ip_or_network'],
+                    )
         return instance
 
 

@@ -127,3 +127,49 @@ class WarehouseUserIdsScopingTests(TestCase):
         self.assertEqual(response.status_code, 400, response.data)
         self.assertNotIn(self.own_user.username, str(response.data))
         self.assertEqual(warehouse.users.count(), 0)
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
+class WarehouseUpdateOrderingTests(TestCase):
+    """A rejected user_ids must leave the warehouse's other fields untouched:
+    the same-org check runs before any write."""
+
+    def setUp(self):
+        self.org = _make_organization(name='WhOrgA', identification_number='111111111')
+        self.other_org = _make_organization(name='WhOrgB', identification_number='222222222')
+        self.internal_admin = User.objects.create_user(
+            username='wh-root', password='pw12345',
+            role=User.Role.INTERNAL_ADMIN, is_staff=True, is_superuser=True,
+        )
+        self.own_user = User.objects.create_user(
+            username='wh-own-user', password='pw12345',
+            role=User.Role.COMPANY_USER, organization=self.org,
+        )
+        self.other_user = User.objects.create_user(
+            username='wh-other-user', password='pw12345',
+            role=User.Role.COMPANY_USER, organization=self.other_org,
+        )
+        self.warehouse = Warehouse.objects.create(
+            organization=self.other_org, code='WH-ORD', name='Other Org WH',
+        )
+        self.client_api = APIClient()
+        self.client_api.force_authenticate(self.internal_admin)
+        self.url = reverse('warehouse-detail', args=[self.warehouse.pk])
+
+    def test_rejected_user_ids_does_not_persist_the_rename(self):
+        response = self.client_api.patch(
+            self.url, {'name': 'Renamed', 'user_ids': [self.own_user.pk]}, format='json',
+        )
+        self.assertEqual(response.status_code, 400, response.data)
+        self.warehouse.refresh_from_db()
+        self.assertEqual(self.warehouse.name, 'Other Org WH')
+        self.assertEqual(self.warehouse.users.count(), 0)
+
+    def test_valid_rename_and_same_org_user_both_apply(self):
+        response = self.client_api.patch(
+            self.url, {'name': 'Renamed', 'user_ids': [self.other_user.pk]}, format='json',
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        self.warehouse.refresh_from_db()
+        self.assertEqual(self.warehouse.name, 'Renamed')
+        self.assertEqual(list(self.warehouse.users.all()), [self.other_user])

@@ -294,6 +294,63 @@ class UserWarehouseAssignmentTests(TestCase):
         self.assertEqual(response.status_code, 400, response.data)
         self.assertEqual(self.target.warehouses.count(), 0)
 
+    def test_internal_admin_cannot_attach_warehouse_to_orgless_user(self):
+        other_admin = User.objects.create_user(
+            username='wh-internal-2', password='pw12345',
+            role=User.Role.INTERNAL_ADMIN, is_staff=True, is_superuser=True,
+        )
+        response = self._client(self.internal_admin).patch(
+            f'/api/v1/users/{other_admin.pk}/',
+            {'warehouse_ids': [self.own_warehouse.pk]}, format='json',
+        )
+        self.assertEqual(response.status_code, 400, response.data)
+        self.assertIn('warehouse_ids', response.data)
+        self.assertEqual(other_admin.warehouses.count(), 0)
+
+    def test_internal_admin_org_move_without_warehouse_ids_rejected(self):
+        self.target.warehouses.set([self.own_warehouse])
+        response = self._client(self.internal_admin).patch(
+            f'/api/v1/users/{self.target.pk}/',
+            {'organization': self.other_org.pk}, format='json',
+        )
+        self.assertEqual(response.status_code, 400, response.data)
+        self.assertIn('warehouse_ids', response.data)
+        self.assertNotIn(self.own_warehouse.name, str(response.data))
+        self.target.refresh_from_db()
+        self.assertEqual(self.target.organization, self.org)
+        self.assertEqual(list(self.target.warehouses.all()), [self.own_warehouse])
+
+    def test_internal_admin_org_move_with_new_org_warehouses_ok(self):
+        self.target.warehouses.set([self.own_warehouse])
+        response = self._client(self.internal_admin).patch(
+            f'/api/v1/users/{self.target.pk}/',
+            {'organization': self.other_org.pk, 'warehouse_ids': [self.other_warehouse.pk]},
+            format='json',
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        self.target.refresh_from_db()
+        self.assertEqual(self.target.organization, self.other_org)
+        self.assertEqual(list(self.target.warehouses.all()), [self.other_warehouse])
+
+    def test_internal_admin_org_move_with_empty_warehouse_ids_clears(self):
+        self.target.warehouses.set([self.own_warehouse])
+        response = self._client(self.internal_admin).patch(
+            f'/api/v1/users/{self.target.pk}/',
+            {'organization': self.other_org.pk, 'warehouse_ids': []}, format='json',
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        self.target.refresh_from_db()
+        self.assertEqual(self.target.organization, self.other_org)
+        self.assertEqual(self.target.warehouses.count(), 0)
+        self.assertEqual(self._client(self.target).get('/api/v1/warehouses/').data, [])
+
+    def test_internal_admin_org_move_of_unassigned_user_ok(self):
+        response = self._client(self.internal_admin).patch(
+            f'/api/v1/users/{self.target.pk}/',
+            {'organization': self.other_org.pk}, format='json',
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+
 
 @override_settings(SECURE_SSL_REDIRECT=False)
 class UserAllowedIPValidationTests(TestCase):
@@ -367,3 +424,28 @@ class UserAllowedIPValidationTests(TestCase):
         )
         self.assertEqual(cleared.status_code, 200, cleared.data)
         self.assertEqual(self.target.allowed_ips.count(), 0)
+
+    def test_patch_item_without_key_is_400_and_does_not_lock_out(self):
+        response = self.client_api.patch(
+            f'/api/v1/users/{self.target.pk}/', {'allowed_ips': [{}]}, format='json',
+        )
+        self.assertEqual(response.status_code, 400, response.data)
+        self.assertIn('allowed_ips', response.data)
+        self.assertEqual(self.target.allowed_ips.count(), 0)
+        login = APIClient().post(
+            '/api/v1/users/auth/login/',
+            {'username': 'ipval-target', 'password': 'pw12345'},
+            format='json', REMOTE_ADDR='127.0.0.1',
+        )
+        self.assertEqual(login.status_code, 200, login.data)
+
+    def test_patch_mixed_items_with_keyless_entry_keeps_existing_rows(self):
+        AllowedIP.objects.create(user=self.target, ip_or_network='203.0.113.9')
+        response = self.client_api.patch(
+            f'/api/v1/users/{self.target.pk}/',
+            {'allowed_ips': [{'ip_or_network': '1.1.1.1'}, {'ip_or_network': '2.2.2.2'}, {}]},
+            format='json',
+        )
+        self.assertEqual(response.status_code, 400, response.data)
+        self.assertEqual(
+            list(self.target.allowed_ips.values_list('ip_or_network', flat=True)), ['203.0.113.9'])

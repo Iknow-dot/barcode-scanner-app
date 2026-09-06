@@ -60,13 +60,17 @@ class WarehouseSerializer(serializers.ModelSerializer):
 
     def update(self, instance, validated_data):
         users = validated_data.pop('users', None)
+        # Validate before any write so a rejected user_ids leaves the scalar
+        # fields untouched too (there is no ATOMIC_REQUESTS to roll them back).
+        if users is not None:
+            validate_same_organization(
+                users, instance.organization, 'user_ids',
+                "All users must belong to the warehouse's organization.",
+            )
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
-
         if users is not None:
-            organization = instance.organization
-            validate_same_organization(users, organization, 'user_ids', "All users must belong to the warehouse's organization.")
             instance.users.set(users)
         return instance
 
