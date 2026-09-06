@@ -1,4 +1,4 @@
-import {apiRequest, extractErrorMessage} from './request';
+import {apiRequest, extractErrorMessage, getErrorCode} from './request';
 
 describe('apiRequest failure envelope', () => {
     const axiosError = (status, data) => ({
@@ -42,5 +42,21 @@ describe('extractErrorMessage', () => {
             allowed_ips: [{}, {ip_or_network: ['Invalid IP or network: office']}],
         }));
         expect(message).toBe('allowed_ips: Invalid IP or network: office');
+    });
+
+    it('renders errors on a field literally named "code" instead of swallowing them as the envelope key', () => {
+        const err = axiosError(400, {code: ['Warehouse with this code already exists in this organization.']});
+        expect(extractErrorMessage(err)).toBe('code: Warehouse with this code already exists in this organization.');
+        expect(getErrorCode(err)).toBeNull();
+    });
+
+    it('drops the machine code from a nested {code, detail} envelope', () => {
+        const message = extractErrorMessage(axiosError(400, {
+            invoice_template_html: {
+                code: 'INVOICE_TEMPLATE_INVALID',
+                detail: 'Template may contain at most one items table.',
+            },
+        }));
+        expect(message).toBe('invoice_template_html: Template may contain at most one items table.');
     });
 });

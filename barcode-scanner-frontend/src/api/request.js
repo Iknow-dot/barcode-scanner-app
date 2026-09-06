@@ -32,6 +32,9 @@ const flattenMessages = (messages) => {
         return messages.map(flattenMessages).filter(Boolean).join(', ');
     }
     if (messages && typeof messages === 'object') {
+        // A hand-built {code, detail} envelope raised inside a field validator
+        // (e.g. invoice_template_html): show only the human text.
+        if (typeof messages.detail === 'string') return messages.detail;
         return Object.values(messages).map(flattenMessages).filter(Boolean).join(', ');
     }
     return messages == null ? '' : String(messages);
@@ -51,7 +54,9 @@ export const extractErrorMessage = (error) => {
     // DRF field-level validation errors: { field: ["msg", ...], ... }
     if (typeof data === 'object') {
         return Object.entries(data)
-            .filter(([key]) => key !== 'code') // skip custom error codes
+            // Skip the envelope's machine code, but not a DRF error on a model
+            // field literally named `code` (Warehouse.code) — that one is a list.
+            .filter(([key, value]) => !(key === 'code' && typeof value === 'string'))
             .map(([field, messages]) => `${field}: ${flattenMessages(messages)}`)
             .join('; ');
     }
@@ -66,7 +71,8 @@ export const extractErrorMessage = (error) => {
  * @returns {string|null}
  */
 export const getErrorCode = (error) => {
-    return error.response?.data?.code || null;
+    const code = error.response?.data?.code;
+    return typeof code === 'string' ? code : null;
 };
 
 /**

@@ -247,7 +247,13 @@ const EditUserForm = ({object, hasExistingIps, onDeviceReset}) => {
                 </Space>
                 <Switch
                     checked={restrictByIp}
-                    onChange={setRestrictByIp}
+                    onChange={(checked) => {
+                        setRestrictByIp(checked);
+                        // A `hidden` Form.Item is still collected on submit; clear it so
+                        // the payload carries allowed_ips: [] (server: [] clears, absent
+                        // leaves the rows alone).
+                        if (!checked) form.setFieldValue('ip_address', []);
+                    }}
                     size="small"
                 />
             </Flex>
