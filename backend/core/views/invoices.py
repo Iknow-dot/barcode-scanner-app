@@ -7,6 +7,11 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from core.models import PurchaseOrder
+from core.services.invoice_tokens import (
+    DEFAULT_INVOICE_TEMPLATE_HTML,
+    TOKEN_CATALOG,
+    resolve_all_sample_values,
+)
 
 
 @extend_schema(tags=['Invoice Templates'])
@@ -21,8 +26,6 @@ class InvoiceSampleValuesAPIView(APIView):
     http_method_names = ['get']
 
     def get(self, request: Request) -> Response:
-        from core.services.invoice_tokens import resolve_all_sample_values
-
         user = request.user
         org = getattr(user, 'organization', None)
         if org is None:
@@ -72,10 +75,6 @@ class InvoiceTokensAPIView(APIView):
     http_method_names = ['get']
 
     def get(self, request: Request) -> Response:
-        from core.services.invoice_tokens import (
-            DEFAULT_INVOICE_TEMPLATE_HTML,
-            TOKEN_CATALOG,
-        )
         public_catalog = {
             scope: sorted(names.keys())
             for scope, names in TOKEN_CATALOG.items()

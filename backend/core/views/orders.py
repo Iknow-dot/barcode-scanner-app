@@ -1,6 +1,9 @@
 """Purchase order CRUD, line-item actions and invoice rendering."""
 
-from django.db import models
+import json
+
+from django.db import models, transaction
+from django.http import HttpResponse
 from drf_spectacular.utils import extend_schema, extend_schema_view
 from rest_framework import status as http_status
 from rest_framework.decorators import action
@@ -17,6 +20,12 @@ from core.serializers import (
     AddOrderItemSerializer,
     BulkUpdateOrderItemsSerializer,
 )
+from core.services.invoice_renderer import render_invoice_template, wrap_in_skeleton
+from core.services.invoice_template_sanitizer import (
+    InvoiceTemplateValidationError,
+    sanitize_and_validate,
+)
+from core.services.invoice_tokens import DEFAULT_INVOICE_TEMPLATE_HTML
 from core.views.order_push import insufficient_stock_lines, push_order_to_consult
 
 
@@ -412,8 +421,6 @@ class PurchaseOrderViewSet(ModelViewSet):
         whole batch. On denial, returns the `_enforce_discount_permission`
         403 body augmented with `failed_item_id`.
         """
-        from django.db import transaction
-
         order = self.get_object()
         serializer = BulkUpdateOrderItemsSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -478,9 +485,6 @@ class PurchaseOrderViewSet(ModelViewSet):
     )
     def invoice(self, request, pk=None):
         """Render a printable HTML invoice for the order."""
-        from core.services.invoice_renderer import render_invoice_template, wrap_in_skeleton
-        from core.services.invoice_tokens import DEFAULT_INVOICE_TEMPLATE_HTML
-
         order = self.get_object()
         org = order.organization
         template_html = org.invoice_template_html or DEFAULT_INVOICE_TEMPLATE_HTML
@@ -500,21 +504,13 @@ class PurchaseOrderViewSet(ModelViewSet):
     )
     def invoice_preview(self, request, pk=None):
         """Render an unsaved template against this order. No persistence."""
-        import json as _json
-        from django.http import HttpResponse
-        from core.services.invoice_renderer import render_invoice_template, wrap_in_skeleton
-        from core.services.invoice_template_sanitizer import (
-            InvoiceTemplateValidationError,
-            sanitize_and_validate,
-        )
-
         order = self.get_object()
         template_html = request.data.get('invoice_template_html', '') or ''
         try:
             sanitized = sanitize_and_validate(template_html)
         except InvoiceTemplateValidationError as exc:
             return HttpResponse(
-                _json.dumps({'code': exc.code, 'detail': exc.detail}),
+                json.dumps({'code': exc.code, 'detail': exc.detail}),
                 status=400,
                 content_type='application/json',
             )

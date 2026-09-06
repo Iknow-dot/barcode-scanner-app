@@ -5,6 +5,10 @@ import base64
 import re
 
 from core.models import Organization
+from core.services.invoice_template_sanitizer import (
+    InvoiceTemplateValidationError,
+    sanitize_and_validate,
+)
 from rest_framework import serializers
 from users.serializers import UserSerializer
 from core.serializers.common import User
@@ -172,10 +176,6 @@ class OrganizationInvoiceTemplateSerializer(serializers.ModelSerializer):
         return OrganizationSerializer().validate_invoice_logo(value)
 
     def validate_invoice_template_html(self, value):
-        from core.services.invoice_template_sanitizer import (
-            InvoiceTemplateValidationError,
-            sanitize_and_validate,
-        )
         try:
             return sanitize_and_validate(value or '')
         except InvoiceTemplateValidationError as exc:
