@@ -51,7 +51,6 @@ INSTALLED_APPS = [
     'rest_framework_simplejwt.token_blacklist',
     'drf_spectacular',
     'django_filters',
-    'guardian',
 
     'core',
     'users',
@@ -131,12 +130,6 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
-
-AUTHENTICATION_BACKENDS = (
-    'django.contrib.auth.backends.ModelBackend',
-    'guardian.backends.ObjectPermissionBackend',
-)
-
 # Internationalization
 # https://docs.djangoproject.com/en/6.0/topics/i18n/
 
@@ -198,9 +191,6 @@ LOGGING = {
 }
 
 AUTH_USER_MODEL = 'users.User'
-
-# django-guardian settings
-ANONYMOUS_USER_NAME = None  # Disable guardian's anonymous user creation
 
 # Nominatim (OSM reverse geocoder) — public instance requires a User-Agent
 # string identifying the app per their usage policy.

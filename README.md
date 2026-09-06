@@ -23,7 +23,7 @@ Per-user IP/CIDR allowlists can be configured to restrict where each account is 
 
 ## Tech Stack
 
-- **Backend** — Python 3.13, Django 6, Django REST Framework, SimpleJWT, drf-spectacular (OpenAPI), django-guardian, django-jazzmin (admin theme)
+- **Backend** — Python 3.13, Django 6, Django REST Framework, SimpleJWT, drf-spectacular (OpenAPI), django-jazzmin (admin theme)
 - **Database** — PostgreSQL 17 (SQLite fallback for local development without Docker)
 - **Frontend** — React 18, Ant Design 6, axios, react-router 7, `@ericblade/quagga2` + `html5-qrcode` (barcode scanning), PostHog (analytics), custom Georgian/English i18n
 - **Packaging** — `uv` for backend (`pyproject.toml` + `uv.lock`), npm for frontend
