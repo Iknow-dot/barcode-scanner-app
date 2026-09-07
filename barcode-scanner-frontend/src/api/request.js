@@ -40,13 +40,20 @@ const flattenMessages = (messages) => {
     return messages == null ? '' : String(messages);
 };
 
+// A proxy/gateway error page, not our API: the body is a whole HTML document.
+const looksLikeHtml = (text) => /^\s*(<!DOCTYPE|<html)/i.test(text);
+
 export const extractErrorMessage = (error) => {
     const t = getT();
     const data = error.response?.data;
     if (!data) return error.message || t.networkError;
 
     // Plain string response
-    if (typeof data === 'string') return data;
+    if (typeof data === 'string') {
+        // Dumping a gateway's HTML into a toast shows the user a wall of markup
+        // (and hides that the request may have been processed anyway).
+        return looksLikeHtml(data) ? t.gatewayError : data;
+    }
 
     // DRF detail string (e.g. 404, permission denied)
     if (data.detail) return data.detail;

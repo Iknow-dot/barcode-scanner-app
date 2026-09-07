@@ -1,4 +1,5 @@
 import {apiRequest, extractErrorMessage, getErrorCode} from './request';
+import translations from '../i18n/translations';
 
 describe('apiRequest failure envelope', () => {
     const axiosError = (status, data) => ({
@@ -48,6 +49,21 @@ describe('extractErrorMessage', () => {
         const err = axiosError(400, {code: ['Warehouse with this code already exists in this organization.']});
         expect(extractErrorMessage(err)).toBe('code: Warehouse with this code already exists in this organization.');
         expect(getErrorCode(err)).toBeNull();
+    });
+
+    it('shows a short message instead of a gateway HTML page', () => {
+        // What the platform router returns after abandoning a request: a whole
+        // HTML document, which used to be rendered verbatim into a toast.
+        const page = '<!DOCTYPE html> <html> <head><style>body{}</style></head>'
+            + ' <body> <p class="code"> Error code: 502 </p> <p class="text">'
+            + ' Well, This is unexpected. </p> </body> </html>';
+        const message = extractErrorMessage(axiosError(502, page));
+        expect(message).toBe(translations.ka.gatewayError);
+        expect(message).not.toContain('<');
+    });
+
+    it('still passes a plain-text error body through unchanged', () => {
+        expect(extractErrorMessage(axiosError(400, 'Bad request'))).toBe('Bad request');
     });
 
     it('drops the machine code from a nested {code, detail} envelope', () => {

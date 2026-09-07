@@ -1,6 +1,7 @@
 import React, {useState, useEffect, useRef, useCallback} from 'react';
 import {clientService} from '../../api';
 import {useLanguage} from '../../i18n/LanguageContext';
+import {isIndeterminateFailure, recoverCreatedClient} from './clientCreateRecovery';
 import AddressMapPicker from './AddressMapPicker';
 import {
     Modal,
@@ -32,6 +33,7 @@ import {
 const {Text} = Typography;
 
 const ERROR_CODE_MESSAGES = {
+    CLIENT_CREATE_UNVERIFIED: 'clientCreateUnverified',
     EXTERNAL_SERVICE_TIMEOUT: 'externalServiceTimeout',
     EXTERNAL_SERVICE_UNAVAILABLE: 'externalServiceUnavailable',
     EXTERNAL_SERVICE_UNAUTHORIZED: 'externalServiceUnauthorized',
@@ -43,6 +45,9 @@ const STEP_LOOKUP = 'lookup';
 const STEP_CREATE = 'create';
 
 const AUTO_LOOKUP_DEBOUNCE_MS = 1500;
+// The upstream write may still be in flight when we gave up on the request, so
+// a first "not found" is not proof the client was never created.
+const CREATE_RECOVERY_RETRY_MS = 2500;
 const ADDRESS_SEARCH_MIN_CHARS = 3;
 const ADDRESS_SEARCH_DEBOUNCE_MS = 300;
 
@@ -286,7 +291,25 @@ const ClientLookupModal = ({open, onSelect, onClose, onRetail}) => {
                 email: values.email || '',
                 address_line: values.address_line || '',
             };
-            const result = await clientService.createClient(payload);
+            let result = await clientService.createClient(payload);
+            if (isIndeterminateFailure(result)) {
+                // We cannot tell whether 1C committed: the platform router may
+                // have discarded our API's answer (its own 502 page), or the
+                // API may have failed to confirm. Ask whether the client is
+                // there now rather than sending the consultant to create a
+                // duplicate.
+                const {found, checked} = await recoverCreatedClient(
+                    payload,
+                    clientService.checkClient,
+                    {delay: () => new Promise((r) => setTimeout(r, CREATE_RECOVERY_RETRY_MS))},
+                );
+                if (found) {
+                    result = {success: true, data: found};
+                } else if (!checked) {
+                    message.warning(t.clientCreateUnverified);
+                    return;
+                }
+            }
             if (result.success) {
                 message.success(t.clientCreated);
                 // Upstream returns name/address/phone; fold the typed values

@@ -2,8 +2,15 @@ import axios from 'axios';
 import API_ENDPOINTS from './endpoints';
 
 // Set up the base URL for the API
+// Below the 60s at which the platform router abandons a request and answers
+// with its own HTML error page: give up first so callers get a clean, coded
+// failure they can act on (see components/UserDashboard/clientCreateRecovery.js)
+// instead of a gateway page, and so a dropped request cannot hang the UI.
+export const REQUEST_TIMEOUT_MS = 50000;
+
 const client = axios.create({
     baseURL: process.env.REACT_APP_API_BASE_URL || "http://localhost:8000",
+    timeout: REQUEST_TIMEOUT_MS,
     headers: {
         'Content-Type': 'application/json',
     },
