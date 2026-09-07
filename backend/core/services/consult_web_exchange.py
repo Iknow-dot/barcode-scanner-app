@@ -30,6 +30,7 @@ from urllib.parse import urljoin
 import httpx
 
 from core.exceptions import ExternalServiceError
+from core.services.timeouts import budget
 
 logger = logging.getLogger(__name__)
 
@@ -88,7 +89,7 @@ class ConsultWebExchangeError(ExternalServiceError):
 
 class ConsultWebExchangeClient:
     PATH_PREFIX = "HS/ConsultWebExchange"
-    DEFAULT_TIMEOUT = 15.0
+    DEFAULT_TIMEOUT = 15.0  # the read budget; core.services.timeouts fixes the rest
 
     def __init__(self, organization, *, timeout: float | None = None):
         self.organization = organization
@@ -145,7 +146,7 @@ class ConsultWebExchangeClient:
                 headers=request_headers,
                 json=json,
                 params=params,
-                timeout=self.timeout,
+                timeout=budget(self.timeout),
             )
         except httpx.TimeoutException as exc:
             logger.error(
@@ -364,7 +365,10 @@ class ConsultWebExchangeClient:
                 http_status=409,
                 upstream_status=409,
             )
-        if response.status_code not in (200, 201):
+        # Any 2xx means the client was created: 1C has answered 204 (created,
+        # no content) and 202, and calling those "unexpected" told the
+        # consultant the registration failed for a client that now exists.
+        if not 200 <= response.status_code < 300:
             logger.warning(
                 "ConsultWebExchange CreateClient non-2xx org=%s status=%s body=%r",
                 self.organization.id, response.status_code, response.text[:500],
@@ -376,7 +380,13 @@ class ConsultWebExchangeClient:
                 upstream_status=response.status_code,
             )
 
-        body = response.json()
+        # A success body is not always JSON — 1C answers other endpoints on this
+        # integration with plain text — and the create has already happened by
+        # the time we parse, so a parse failure must not become an error.
+        try:
+            body = response.json()
+        except ValueError:
+            body = response.text or None
         items = _extract_client_list(body)
         return _normalize_client_response(items[0]) if items else {"raw": body}
 

@@ -356,6 +356,105 @@ class CreateClientAPIViewTests(TestCase):
         response = APIClient().post(self.url, self.payload, format='json')
         self.assertIn(response.status_code, (401, 403))
 
+    def test_upstream_204_is_a_success(self):
+        with mock.patch('httpx.request', return_value=_upstream(204, {})):
+            response = self.client_api.post(self.url, self.payload, format='json')
+        self.assertEqual(response.status_code, 201, response.data)
+
+
+@override_settings(SECURE_SSL_REDIRECT=False, FERNET_KEY=_TEST_FERNET_KEY)
+class CreateClientPartialSuccessTests(TestCase):
+    """CreateClient is a non-idempotent write: when the call fails after 1C has
+    committed, the consultant is told the registration failed for a client that
+    now exists, and retrying either duplicates them or hits CLIENT_ALREADY_EXISTS.
+    Every failing branch is verified against CheckClient before it is reported."""
+
+    def setUp(self):
+        self.org = _make_organization()
+        self.org.encrypt_password('svc-pw')
+        self.org.save()
+        self.user = User.objects.create_user(
+            username='cc-partial', password='p', role=User.Role.COMPANY_USER, organization=self.org,
+        )
+        self.client_api = APIClient()
+        self.client_api.force_authenticate(self.user)
+        self.url = reverse('client-create')
+        self.payload = {
+            'first_name': 'Giorgi', 'last_name': 'Beridze',
+            'phone': '+995555', 'identification_number': '01001012345',
+        }
+
+    def _upstream_router(self, *, create, check):
+        """Route by endpoint: `create` and `check` are each a response or an exception."""
+        calls = []
+
+        def _inner(method, url, **kwargs):
+            calls.append(url)
+            outcome = check if url.endswith('CheckClient') else create
+            if isinstance(outcome, Exception):
+                raise outcome
+            return outcome
+
+        return _inner, calls
+
+    def test_recovers_the_client_that_landed_despite_a_timeout(self):
+        found = [{'name': 'Giorgi Beridze', 'address': 'Tbilisi', 'phone': '+995555'}]
+        router, calls = self._upstream_router(
+            create=httpx.ReadTimeout('timed out'), check=_upstream(200, found),
+        )
+        with mock.patch('httpx.request', side_effect=router):
+            response = self.client_api.post(self.url, self.payload, format='json')
+
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(response.data['name'], 'Giorgi Beridze')
+        self.assertTrue(any(url.endswith('CheckClient') for url in calls))
+
+    def test_recovers_after_an_unexpected_upstream_status(self):
+        found = [{'name': 'Giorgi Beridze', 'phone': '+995555'}]
+        router, _ = self._upstream_router(create=_upstream(500, {}), check=_upstream(200, found))
+        with mock.patch('httpx.request', side_effect=router):
+            response = self.client_api.post(self.url, self.payload, format='json')
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(response.data['name'], 'Giorgi Beridze')
+
+    def test_original_error_stands_when_the_client_is_confirmed_absent(self):
+        """Verification found nothing, so the write did not land and the
+        consultant can safely retry — the real error is the useful answer."""
+        router, _ = self._upstream_router(
+            create=httpx.ReadTimeout('timed out'), check=_upstream(404, {}),
+        )
+        with mock.patch('httpx.request', side_effect=router):
+            response = self.client_api.post(self.url, self.payload, format='json')
+        self.assertEqual(response.status_code, 504, response.data)
+        self.assertEqual(response.data['code'], 'EXTERNAL_SERVICE_TIMEOUT')
+
+    def test_unverified_when_the_payload_carries_no_lookup_key(self):
+        router, calls = self._upstream_router(
+            create=httpx.ReadTimeout('timed out'), check=_upstream(200, []),
+        )
+        with mock.patch('httpx.request', side_effect=router):
+            response = self.client_api.post(
+                self.url, {'first_name': 'Giorgi', 'last_name': 'Beridze'}, format='json',
+            )
+        self.assertEqual(response.data['code'], 'CLIENT_CREATE_UNVERIFIED')
+        self.assertFalse(any(url.endswith('CheckClient') for url in calls))
+
+    def test_unverified_when_the_verification_call_also_fails(self):
+        router, _ = self._upstream_router(
+            create=httpx.ReadTimeout('timed out'), check=httpx.ConnectError('down'),
+        )
+        with mock.patch('httpx.request', side_effect=router):
+            response = self.client_api.post(self.url, self.payload, format='json')
+        self.assertEqual(response.data['code'], 'CLIENT_CREATE_UNVERIFIED')
+
+    def test_already_exists_is_reported_as_is_without_a_verification_call(self):
+        router, calls = self._upstream_router(create=_upstream(409, {}), check=_upstream(200, []))
+        with mock.patch('httpx.request', side_effect=router):
+            response = self.client_api.post(self.url, self.payload, format='json')
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.data['code'], 'CLIENT_ALREADY_EXISTS')
+        self.assertEqual(len(calls), 1)
+
 
 @override_settings(SECURE_SSL_REDIRECT=False, FERNET_KEY=_TEST_FERNET_KEY)
 class CheckClientAPIViewTests(TestCase):

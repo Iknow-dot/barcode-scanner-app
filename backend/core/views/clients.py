@@ -5,6 +5,8 @@ here is a proxy: RS.ge taxpayer lookup, CheckClient/CreateClient, and the
 Photon-backed address helpers.
 """
 
+import logging
+
 from django.core.cache import cache
 from drf_spectacular.utils import extend_schema
 from rest_framework import status as http_status
@@ -28,6 +30,8 @@ from core.services.consult_web_exchange import (
 from core.services.photon import PhotonError, reverse_geocode, search_addresses
 from core.services.rs_ge import RSGeError, lookup_taxpayer
 from core.views.common import external_error_response
+
+logger = logging.getLogger(__name__)
 
 
 @extend_schema(tags=['Clients'])
@@ -85,25 +89,82 @@ class CheckClientAPIView(APIView):
 
 @extend_schema(tags=['Clients'])
 class CreateClientAPIView(APIView):
-    """Create a client in the org's 1C ConsultWebExchange service."""
+    """Create a client in the org's 1C ConsultWebExchange service.
+
+    CreateClient is a non-idempotent write with no upstream transaction id, so
+    a call that fails *after* 1C has committed used to be reported as a plain
+    failure: the consultant was told the registration failed for a client that
+    now exists, and retrying either duplicated them or hit CLIENT_ALREADY_EXISTS.
+    Every failing branch is therefore verified against CheckClient before it is
+    reported — see ``_respond_to_failure``.
+    """
 
     permission_classes = [IsCompanyUserOrAdmin]
     serializer_class = CreateClientRequestSerializer
     http_method_names = ["post"]
 
+    # The verification runs after the create has already spent its own budget,
+    # so keep it short: the whole request must still answer before the
+    # platform router gives up on it (60s on DigitalOcean App Platform).
+    VERIFY_TIMEOUT = 5.0
+
     def post(self, request: Request) -> Response:
         serializer = self.serializer_class(data=request.data)
         serializer.is_valid(raise_exception=True)
+        payload = serializer.validated_data
 
         client = ConsultWebExchangeClient(request.user.organization)
         try:
-            result = client.create_client(serializer.validated_data)
+            result = client.create_client(payload)
         except ConsultWebExchangeError as exc:
-            return external_error_response(exc)
+            return self._respond_to_failure(request.user.organization, payload, exc)
 
         return Response(
             CheckClientResponseSerializer(result).data,
             status=http_status.HTTP_201_CREATED,
+        )
+
+    def _respond_to_failure(self, organization, payload, exc) -> Response:
+        """Did the client land anyway? Answer that before reporting a failure."""
+        # An "already exists" answer is itself accurate and actionable.
+        if exc.code == "CLIENT_ALREADY_EXISTS":
+            return external_error_response(exc)
+
+        identification_number = payload.get('identification_number') or None
+        phone = payload.get('phone') or None
+        if identification_number or phone:
+            try:
+                found = ConsultWebExchangeClient(
+                    organization, timeout=self.VERIFY_TIMEOUT,
+                ).check_client(identification_number=identification_number, phone=phone)
+            except ConsultWebExchangeError:
+                found = None  # cannot tell — fall through to UNVERIFIED
+            else:
+                if found:
+                    logger.warning(
+                        "CreateClient reported %s for org=%s but the client is present "
+                        "upstream — returning it as created.",
+                        exc.code, organization.id,
+                    )
+                    return Response(
+                        CheckClientResponseSerializer(found[0]).data,
+                        status=http_status.HTTP_201_CREATED,
+                    )
+                # Confirmed absent: the write did not land, so the real error is
+                # the useful answer and retrying is safe.
+                return external_error_response(exc)
+
+        return Response(
+            {
+                "code": "CLIENT_CREATE_UNVERIFIED",
+                "detail": (
+                    "The client may or may not have been created — the web service "
+                    "could not be reached to confirm. Search for the client before "
+                    "creating them again."
+                ),
+                "external_service_status_code": exc.upstream_status,
+            },
+            status=exc.http_status,
         )
 
 

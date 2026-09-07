@@ -12,6 +12,8 @@ from typing import Any
 
 import httpx
 
+from core.services.timeouts import budget
+
 from core.exceptions import ExternalServiceError
 
 logger = logging.getLogger(__name__)
@@ -39,7 +41,7 @@ def lookup_taxpayer(identification_number: str, *, timeout: float | None = None)
             RS_GE_API_URL,
             json={"IdentCode": identification_number},
             headers={"Accept": "application/json"},
-            timeout=timeout if timeout is not None else DEFAULT_TIMEOUT,
+            timeout=budget(timeout if timeout is not None else DEFAULT_TIMEOUT),
         )
     except httpx.TimeoutException:
         logger.error("RS.ge lookup timeout for ID %s", identification_number)

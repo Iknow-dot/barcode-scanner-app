@@ -21,6 +21,8 @@ import logging
 from typing import Any
 
 import httpx
+
+from core.services.timeouts import budget
 from django.conf import settings
 
 from core.exceptions import ExternalServiceError
@@ -136,7 +138,7 @@ def search_addresses(
             PHOTON_SEARCH_URL,
             params=params,
             headers=headers,
-            timeout=timeout if timeout is not None else DEFAULT_TIMEOUT,
+            timeout=budget(timeout if timeout is not None else DEFAULT_TIMEOUT),
         )
     except httpx.TimeoutException as exc:
         logger.error("Photon search timeout q=%r: %s", query, exc)
@@ -227,7 +229,7 @@ def reverse_geocode(
             PHOTON_REVERSE_URL,
             params=params,
             headers=headers,
-            timeout=timeout if timeout is not None else DEFAULT_TIMEOUT,
+            timeout=budget(timeout if timeout is not None else DEFAULT_TIMEOUT),
         )
     except httpx.TimeoutException as exc:
         logger.error("Photon reverse timeout lat=%s lng=%s: %s", lat, lng, exc)

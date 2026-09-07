@@ -4,6 +4,7 @@ from __future__ import annotations
 from core.services.consult_web_exchange import ConsultWebExchangeClient, ConsultWebExchangeError, _normalize_client_response
 from core.tests.common import _TEST_FERNET_KEY, _make_organization
 from django.test import TestCase, override_settings
+import httpx
 from unittest import mock
 
 
@@ -394,6 +395,53 @@ class CreateClientPayloadMappingTests(TestCase):
         # 1C field name is `Email` (capitalized).
         self.assertEqual(captured['json']['Email'], 'a@b.com')
         self.assertNotIn('email', captured['json'])
+
+    def test_create_client_accepts_every_2xx(self):
+        """202/204 mean "created" — reporting them as an upstream error told the
+        consultant the registration failed for a client that exists."""
+        client = ConsultWebExchangeClient(self.org)
+        for status in (200, 201, 202, 204):
+            with self.subTest(status=status):
+                request = httpx.Request('POST', 'http://x/')
+                resp = (
+                    httpx.Response(204, request=request) if status == 204
+                    else httpx.Response(status, json={'customer': {'name': 'G'}}, request=request)
+                )
+                with mock.patch('httpx.request', return_value=resp):
+                    result = client.create_client({'first_name': 'A', 'last_name': 'B'})
+                self.assertIsInstance(result, dict)
+
+    def test_create_client_survives_a_non_json_success_body(self):
+        """1C answers some endpoints with plain text (the 201 "No Stock" body is
+        never JSON), and an unguarded .json() turned that into a 500."""
+        client = ConsultWebExchangeClient(self.org)
+        resp = httpx.Response(
+            200, text='OK', headers={'Content-Type': 'text/plain'},
+            request=httpx.Request('POST', 'http://x/'),
+        )
+        with mock.patch('httpx.request', return_value=resp):
+            result = client.create_client({'first_name': 'A', 'last_name': 'B'})
+        self.assertEqual(result, {'raw': 'OK'})
+
+    def test_request_timeout_is_a_bounded_budget_under_the_router_limit(self):
+        """httpx applies a scalar timeout per phase, so `timeout=15` allowed a
+        single call to outlive DigitalOcean's 60s router timeout — after which
+        our response is discarded and the consultant sees the router's own 502."""
+        client = ConsultWebExchangeClient(self.org)
+        captured = {}
+
+        def fake_request(method, url, **kwargs):
+            captured['timeout'] = kwargs.get('timeout')
+            return httpx.Response(200, json={}, request=httpx.Request('POST', url))
+
+        with mock.patch('httpx.request', side_effect=fake_request):
+            client.create_client({'first_name': 'A', 'last_name': 'B'})
+
+        timeout = captured['timeout']
+        self.assertIsInstance(timeout, httpx.Timeout)
+        phases = [timeout.connect, timeout.read, timeout.write, timeout.pool]
+        self.assertTrue(all(phase is not None for phase in phases), timeout)
+        self.assertLess(sum(phases), 60, 'worst case must stay under the 60s router timeout')
 
     def test_create_client_raises_on_409(self):
         client = ConsultWebExchangeClient(self.org)
