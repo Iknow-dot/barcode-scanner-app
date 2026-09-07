@@ -51,10 +51,17 @@ const CREATE_RECOVERY_RETRY_MS = 2500;
 const ADDRESS_SEARCH_MIN_CHARS = 3;
 const ADDRESS_SEARCH_DEBOUNCE_MS = 300;
 
-// Georgian personal IDs are exactly 11 digits. Anything else is almost
-// certainly a phone typed into the wrong field — reject before contacting 1C
-// so we don't return a false-positive client match against the phone column.
-const PERSONAL_ID_RE = /^\d{11}$/;
+// Identifier lengths vary — a personal number is 11 digits, a legal entity's
+// tax ID is 9, and upstream accepts other shapes — so the only thing we reject
+// here is non-numeric input, which is almost certainly a phone (or a name)
+// typed into the wrong field.
+const PERSONAL_ID_RE = /^\d+$/;
+// Shortest identifier worth an unprompted round-trip: a 9-digit legal-entity
+// tax ID. Shorter values are almost always a half-typed ID, and 1C matches
+// `IDPhone` against the phone column too, so a stray short number can come
+// back as a false-positive client. Submitting the form still looks any
+// length up.
+const AUTO_LOOKUP_MIN_ID_DIGITS = 9;
 // Georgian mobile numbers are 9 digits beginning with 5 (the operator prefix).
 // Strip a leading +995 / 995 / 0 if the user pasted an international form.
 const normalizePhone = (raw) => {
@@ -238,6 +245,7 @@ const ClientLookupModal = ({open, onSelect, onClose, onRetail}) => {
         // either return nothing or, worse, match against the phone column
         // when the user is mid-typing a phone-shaped value.
         if (!isValidPersonalId(value)) return;
+        if (value.length < AUTO_LOOKUP_MIN_ID_DIGITS) return;
         if (lastAutoLookupId.current === value) return;
         autoLookupTimer.current = setTimeout(() => {
             autoLookupTimer.current = null;
@@ -600,7 +608,7 @@ const ClientLookupModal = ({open, onSelect, onClose, onRetail}) => {
                     </Form.Item>
                 </Flex>
 
-                <Flex gap={12}>
+                <Flex gap={12} align="flex-end">
                     <Form.Item name="phone" label={t.customerPhone} style={{flex: 1}}>
                         <Input
                             size="large"
