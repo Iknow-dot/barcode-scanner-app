@@ -31,3 +31,15 @@ export const PRODUCT_COUNT = Number(__ENV.PRODUCT_COUNT || 5000);
 export const SECRET_KEY = __ENV.DJANGO_SECRET_KEY || 'loadtest-secret-key-not-for-production';
 export const PUSH_TOKEN = __ENV.PUSH_TOKEN || 'loadtest-push-token-1';
 export const FAKE_1C_CONTROL = __ENV.FAKE_1C_CONTROL || 'http://localhost:8099/_control';
+// smoke.js's catalog_image check and images.js's imageGrid() both assert this
+// status literally. Locally it's always 502: every seeded/pushed image_url
+// points at fake-1c, a Docker-internal-only host, so
+// core/catalog/image_proxy_safety.py's SSRF guard rejects it before the real
+// upstream fetch ever happens (see loadtest/README.md's "The image proxy
+// cannot be measured locally" for the full reasoning — a 502 there is proof
+// the HMAC signature and request path are correct, not a failure). Phase 2
+// points BASE_URL at a deployment whose images are real public HTTPS, where
+// that SAME request legitimately gets a 200 — set IMAGE_EXPECT_STATUS=200
+// there, or both thresholds breach the moment the rig starts working against
+// real infrastructure.
+export const IMAGE_EXPECT_STATUS = Number(__ENV.IMAGE_EXPECT_STATUS || 502);

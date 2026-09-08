@@ -34,7 +34,7 @@
 // does with a grid of <img> tags, all at once.
 import http from 'k6/http';
 import { check } from 'k6';
-import { BASE_URL, PRODUCT_COUNT } from '../lib/config.js';
+import { BASE_URL, PRODUCT_COUNT, IMAGE_EXPECT_STATUS } from '../lib/config.js';
 import { login } from '../lib/auth.js';
 import { signedImagePath } from '../lib/endpoints.js';
 import { expectStatus } from '../lib/metrics.js';
@@ -74,13 +74,24 @@ export function imageGrid(iterationIndex) {
   // http.batch mirrors what a browser does with a grid of <img> tags.
   const responses = http.batch(requests);
   responses.forEach((res) => {
-    // 502 is the correct, expected result everywhere in this stack — see
-    // the file-level comment. A 403 here would mean the signature is wrong,
-    // and a 200 is structurally impossible against fake-1c's image_urls.
-    expectStatus(res, 'catalog_image', 502);
-    check(res, {
-      'catalog_image body code == IMAGE_FETCH_FAILED': (r) => r.json().code === 'IMAGE_FETCH_FAILED',
-    });
+    // IMAGE_EXPECT_STATUS (config.js), default 502 — correct and expected
+    // everywhere in THIS stack (see the file-level comment: fake-1c's
+    // image_urls can never pass the SSRF guard). A 403 here would mean the
+    // signature is wrong, and a 200 is structurally impossible against
+    // fake-1c's image_urls. Phase 2 points BASE_URL at a deployment with
+    // real public-HTTPS images, where 200 is the correct answer instead —
+    // set IMAGE_EXPECT_STATUS=200 there, or this scenario (and its
+    // threshold) fails at the exact moment the proxy starts working for
+    // real. The body-code check only applies to the 502
+    // IMAGE_FETCH_FAILED error envelope — a real 200 image response isn't
+    // JSON, and `.json()` on it would throw — so it's skipped whenever a
+    // different status is expected.
+    expectStatus(res, 'catalog_image', IMAGE_EXPECT_STATUS);
+    if (IMAGE_EXPECT_STATUS === 502) {
+      check(res, {
+        'catalog_image body code == IMAGE_FETCH_FAILED': (r) => r.json().code === 'IMAGE_FETCH_FAILED',
+      });
+    }
   });
 }
 

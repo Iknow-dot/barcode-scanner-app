@@ -7,7 +7,9 @@ import { check } from 'k6';
 import { authGet, authPost, login, loginAdmin, loadWarehouseCodes } from '../lib/auth.js';
 import { PATHS, signedImagePath } from '../lib/endpoints.js';
 import { expectStatus } from '../lib/metrics.js';
-import { BASE_URL, FAKE_1C_CONTROL, PUSH_TOKEN, USER_COUNT, PRODUCT_COUNT } from '../lib/config.js';
+import {
+  BASE_URL, FAKE_1C_CONTROL, PUSH_TOKEN, USER_COUNT, PRODUCT_COUNT, IMAGE_EXPECT_STATUS,
+} from '../lib/config.js';
 
 export const options = {
   vus: 1,
@@ -191,11 +193,23 @@ export default function () {
   // lower bound, not a full measurement: the proxy's true cost (a live
   // HTTPS fetch plus streaming the response back) is a Phase 2 question,
   // against a real or realistically-fronted 1C image host.
+  //
+  // IMAGE_EXPECT_STATUS (config.js), not a literal 502: this stack's SSRF
+  // guard always produces 502 here (see above), but Phase 2 points BASE_URL
+  // at a deployment with real public-HTTPS images, where the SAME request
+  // legitimately gets 200 — a hard-coded 502 would fail smoke at exactly the
+  // moment the rig starts working against real infrastructure. Set
+  // IMAGE_EXPECT_STATUS=200 there. The body-code check only makes sense
+  // against the 502 IMAGE_FETCH_FAILED error envelope, so it's skipped
+  // whenever a different status is expected — a real 200 image response
+  // isn't JSON at all, and `.json()` on it would throw.
   const imageRes = authGet(session, signedImagePath(orgId, 'LT-SKU-1', 0), 'catalog_image');
-  expectStatus(imageRes, 'catalog_image', 502);
-  check(imageRes, {
-    'catalog_image body code == IMAGE_FETCH_FAILED': (r) => r.json().code === 'IMAGE_FETCH_FAILED',
-  });
+  expectStatus(imageRes, 'catalog_image', IMAGE_EXPECT_STATUS);
+  if (IMAGE_EXPECT_STATUS === 502) {
+    check(imageRes, {
+      'catalog_image body code == IMAGE_FETCH_FAILED': (r) => r.json().code === 'IMAGE_FETCH_FAILED',
+    });
+  }
 
   expectStatus(
     authPost(session, PATHS.refresh, { refresh: session.refresh }, 'auth_refresh'),
