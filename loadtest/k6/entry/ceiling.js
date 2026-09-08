@@ -137,7 +137,12 @@ export const options = {
 };
 
 export default function () {
-  consultantJourney(__ITER);
+  // consultantJourney() derives its own iteration counter internally, from
+  // exec.scenario.iterationInTest rather than __ITER — see journey.js's own
+  // comment for why: __ITER is per-VU and, under this file's
+  // ramping-arrival-rate ramp, that used to collapse both the endpoint mix
+  // and the scanned SKU onto every new VU's first iteration (N5).
+  consultantJourney();
 }
 
 // Only scheduled when WITH_INGEST is set (see options.scenarios.ingest
