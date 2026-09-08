@@ -15,6 +15,19 @@ export const options = {
   thresholds: {
     // A smoke run with any failure is a broken setup, not a slow backend.
     endpoint_failures: ['rate==0'],
+    // Belt-and-braces on top of endpoint_failures: this task landed three
+    // bare check()s (the two product_search body assertions below, plus the
+    // catalog_image body-code check) that go straight to k6's built-in
+    // `checks` metric and never touch endpoint_failures at all, since they
+    // aren't routed through expectStatus. Without this, one of those could
+    // fail — a real regression of exactly the bug class it exists to catch —
+    // and the run would still print checks_succeeded < 100% but cross no
+    // threshold and exit 0, which is invisible to anything reading only the
+    // exit code. `checks: ['rate==1.00']` fails the run on ANY failed
+    // check(), current or future, without needing every new check routed
+    // through expectStatus by hand. Later entry points (the scenario tasks)
+    // should carry this same threshold for the same reason.
+    checks: ['rate==1.00'],
   },
 };
 
