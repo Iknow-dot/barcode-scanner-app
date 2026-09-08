@@ -56,7 +56,7 @@ class Handler(BaseHTTPRequestHandler):
         """Override handle to suppress connection errors from client disconnects."""
         try:
             super().handle()
-        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError, OSError):
+        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
             # Client disconnected before completing request/response cycle
             pass
 
@@ -70,7 +70,7 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Content-Length", str(len(payload)))
             self.end_headers()
             self.wfile.write(payload)
-        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError, OSError):
+        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
             # Client disconnected before receiving response (e.g., timeout, network issue)
             pass
 
@@ -78,7 +78,7 @@ class Handler(BaseHTTPRequestHandler):
         try:
             self.send_response(204)
             self.end_headers()
-        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError, OSError):
+        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
             # Client disconnected before receiving response
             pass
 

@@ -3,15 +3,15 @@
 Run from the repo root:  python -m unittest loadtest.fake_1c.test_server -v
 Stdlib only — no uv, no Django.
 """
+import contextlib
+import io
 import json
-import socket
 import threading
-import time
 import unittest
 import urllib.error
 import urllib.request
 
-from loadtest.fake_1c.server import make_server, set_mode
+from loadtest.fake_1c.server import make_server, set_mode, Handler
 
 
 def _post(url, payload):
@@ -89,39 +89,76 @@ class FakeOneCTests(unittest.TestCase):
             urllib.request.urlopen(req, timeout=10)
         self.assertEqual(caught.exception.code, 421)
 
-    def test_client_disconnect_before_response_does_not_crash_server(self):
-        """A client that closes the connection before reading response must
-        not cause the server to log exceptions or become unhealthy.
+    def test_send_json_suppresses_connection_errors_silently(self):
+        """Connection errors during response write must not log tracebacks.
 
-        This reproduces the scenario where hang_30s mode times out client-side
-        (15 s read budget) and closes the socket before the server wakes up.
+        When a client disconnects before reading the response (e.g., timeout),
+        _send_json must catch the error and not output anything to stderr.
+        This test verifies the error is suppressed by checking stderr is clean.
         """
-        # Set mode to hang_30s so the server will sleep during response writing
-        _post(f"{self.base}/_control", {"mode": "hang_30s"})
+        # Create a mock wfile that raises ConnectionAbortedError on write()
+        class FailingWFile:
+            def write(self, data):
+                raise ConnectionAbortedError("simulated client disconnect")
 
-        # Send a request and close immediately without waiting for response
-        host, port = self.base.split("://")[1].split(":")
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        try:
-            sock.connect((host, int(port)))
-            request = b"GET /HS/ConsultWebExchange/GetStockAndPrices HTTP/1.1\r\nHost: localhost\r\nWarehouse: W1\r\n\r\n"
-            sock.sendall(request)
-            sock.close()  # Close without reading response
-        finally:
-            try:
-                sock.close()
-            except:
+        # Create a mock handler with no real socket
+        class MockHandler:
+            def __init__(self):
+                self.wfile = FailingWFile()
+                self._headers_sent = False
+
+            def send_response(self, status):
+                self._status = status
+
+            def send_header(self, key, value):
                 pass
 
-        # Give the handler time to wake up from sleep and attempt to write
-        time.sleep(31)
+            def end_headers(self):
+                self._headers_sent = True
 
-        # Reset mode and verify server is still healthy
-        set_mode("fast")
-        req = urllib.request.Request(
-            f"{self.base}/HS/ConsultWebExchange/GetStockAndPrices",
-            headers={"Sku": "SKU-1", "Warehouse": "W1", "IsBarcode": "false"},
-        )
-        body = json.loads(urllib.request.urlopen(req, timeout=10).read())
-        self.assertEqual(body["unit"], "pcs")
-        self.assertEqual(len(body["stock"]), 1)
+        # Capture stderr while calling the real _send_json method
+        handler = MockHandler()
+        stderr_capture = io.StringIO()
+        with contextlib.redirect_stderr(stderr_capture):
+            # Bind the real _send_json to the mock handler and call it
+            Handler._send_json(handler, 200, {"test": "data"})
+
+        # Assert nothing was written to stderr (the fix suppresses the error)
+        stderr_output = stderr_capture.getvalue()
+        self.assertEqual(stderr_output, "", f"Expected clean stderr but got: {stderr_output}")
+
+    def test_send_no_content_suppresses_connection_errors_silently(self):
+        """Connection errors during no-content response must not log tracebacks.
+
+        When a client disconnects before reading the 204 response,
+        _send_no_content must catch the error and not output anything to stderr.
+        """
+        # Create a mock wfile that raises ConnectionAbortedError on write()
+        class FailingWFile:
+            def write(self, data):
+                raise ConnectionAbortedError("simulated client disconnect")
+
+        # Create a mock handler with no real socket
+        class MockHandler:
+            def __init__(self):
+                self.wfile = FailingWFile()
+
+            def send_response(self, status):
+                self._status = status
+
+            def send_header(self, key, value):
+                pass
+
+            def end_headers(self):
+                pass
+
+        # Capture stderr while calling the real _send_no_content method
+        handler = MockHandler()
+        stderr_capture = io.StringIO()
+        with contextlib.redirect_stderr(stderr_capture):
+            # Bind the real _send_no_content to the mock handler and call it
+            Handler._send_no_content(handler)
+
+        # Assert nothing was written to stderr (the fix suppresses the error)
+        stderr_output = stderr_capture.getvalue()
+        self.assertEqual(stderr_output, "", f"Expected clean stderr but got: {stderr_output}")
