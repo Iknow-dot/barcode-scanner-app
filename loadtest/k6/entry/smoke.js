@@ -1,12 +1,13 @@
 // One VU, one pass over every endpoint the suite touches. Run this before any
-// real load test: it catches a bad seed, a wrong SECRET_KEY, or a renamed route
-// in seconds instead of halfway through a twenty-minute ramp.
+// real load test: it catches a bad seed, a wrong SECRET_KEY, a renamed route,
+// or a seed-size mismatch (see the two guards below) in seconds instead of
+// halfway through a twenty-minute ramp.
 import http from 'k6/http';
 import { check } from 'k6';
 import { authGet, authPost, login, loginAdmin, loadWarehouseCodes } from '../lib/auth.js';
 import { PATHS, signedImagePath } from '../lib/endpoints.js';
 import { expectStatus } from '../lib/metrics.js';
-import { BASE_URL, FAKE_1C_CONTROL, PUSH_TOKEN } from '../lib/config.js';
+import { BASE_URL, FAKE_1C_CONTROL, PUSH_TOKEN, USER_COUNT, PRODUCT_COUNT } from '../lib/config.js';
 
 export const options = {
   vus: 1,
@@ -18,7 +19,33 @@ export const options = {
 };
 
 export default function () {
-  const session = login(0); // exercises auth_login
+  // USER_COUNT / PRODUCT_COUNT (config.js) MUST be kept in step with what
+  // seed_loadtest.py actually seeded (--users-per-org / --products) — this
+  // is not checked anywhere else, and a mismatch does not fail loudly on
+  // its own: every scenario's working set just silently narrows to whatever
+  // subset of users/SKUs actually exists, the database and OS caches run
+  // far warmer than the real seed would produce, and every later
+  // measurement quietly reports optimistic. The two guards below (this
+  // login, and the product_search probe further down) are what turn that
+  // into a loud failure instead. See config.js's own comments on USER_COUNT
+  // and PRODUCT_COUNT for the same note.
+  //
+  // Logging in as the HIGHEST-numbered seeded user (loadtest-user-<USER_COUNT>),
+  // not a fixed low index, doubles this call as the USER_COUNT guard at zero
+  // extra requests: if fewer users were actually seeded, login fails right
+  // here with a clear cause instead of silently running the rest of the
+  // suite against a narrower user pool than intended.
+  let session;
+  try {
+    session = login(USER_COUNT - 1); // exercises auth_login
+  } catch (e) {
+    throw new Error(
+      `Seed-size mismatch: config.js's USER_COUNT=${USER_COUNT} claims ` +
+      `'loadtest-user-${USER_COUNT}' exists, but logging in as it failed (${e.message}). ` +
+      'Either USER_COUNT does not match what seed_loadtest.py actually seeded ' +
+      '(--users-per-org), or pass -e USER_COUNT=<actual count>.',
+    );
+  }
 
   // session.organizationId (from the login response), never the ORG_ID
   // fallback constant: Postgres sequences don't reset on delete, so after any
@@ -31,6 +58,27 @@ export default function () {
   // own doc comment in lib/auth.js for the full reason. Fetched once here,
   // at session setup, not per iteration.
   session.warehouseCodes = loadWarehouseCodes(session);
+
+  // PRODUCT_COUNT guard: probe that the HIGHEST-numbered SKU the config
+  // claims exists actually does, via an exact (non-barcode) lookup — a
+  // miss 404s cleanly here rather than letting every check below pass
+  // green over a false start with a narrower product set than intended.
+  // See the USER_COUNT guard above for why this matters and why it must
+  // fail loudly rather than just leave one more red check among many.
+  const topSku = `LT-SKU-${PRODUCT_COUNT}`;
+  const topSkuRes = authPost(
+    session, PATHS.productSearch,
+    { sku: topSku, is_barcode: false, warehouses: session.warehouseCodes },
+    'product_search',
+  );
+  if (!expectStatus(topSkuRes, 'product_search')) {
+    throw new Error(
+      `Seed-size mismatch: config.js's PRODUCT_COUNT=${PRODUCT_COUNT} claims ` +
+      `'${topSku}' exists, but product_search returned ${topSkuRes.status} for it. ` +
+      'Either PRODUCT_COUNT does not match what seed_loadtest.py actually seeded ' +
+      '(--products), or pass -e PRODUCT_COUNT=<actual count>.',
+    );
+  }
 
   expectStatus(authGet(session, PATHS.categoryTree, 'catalog_tree'), 'catalog_tree');
 
@@ -48,12 +96,28 @@ export default function () {
   // LT-SKU-1's seeded barcode (seed_loadtest.py: f"48600{sku_number:08d}").
   // warehouseCodes (not session.warehouses) is what ProductSearchAPIView
   // actually matches against (`user.warehouses.filter(code__in=...)`).
-  expectStatus(
-    authPost(session, PATHS.productSearch,
-      { sku: '4860000000001', is_barcode: true, warehouses: session.warehouseCodes },
-      'product_search'),
+  //
+  // Body assertions here, not just the status code, on purpose: a clean 200
+  // with `stock: []` is EXACTLY what this endpoint returns when the
+  // warehouse list is empty or wrong — which is precisely how both the R11
+  // warehouse-codes bug and the fake-1C's missing warehouse_name field (see
+  // the earlier report addendum) stayed hidden for as long as they did: an
+  // empty/wrong warehouse list means StockSerializer never runs on a real
+  // row, so the status-only check kept passing while quietly re-measuring a
+  // truncated code path. Asserting a non-empty `stock` array with at least
+  // one row carrying a non-empty `warehouse_name` means a repeat of either
+  // bug fails this check instead of passing it.
+  const productRes = authPost(
+    session, PATHS.productSearch,
+    { sku: '4860000000001', is_barcode: true, warehouses: session.warehouseCodes },
     'product_search',
   );
+  expectStatus(productRes, 'product_search');
+  check(productRes, {
+    'product_search stock is non-empty': (r) => (r.json().stock || []).length > 0,
+    'product_search stock row has warehouse_name': (r) =>
+      (r.json().stock || []).some((row) => !!row.warehouse_name),
+  });
 
   // Push-token authenticated (core/ingest_auth.py), not JWT — a raw call, not
   // authPost, since it must NOT carry the user's Bearer token (the org for
