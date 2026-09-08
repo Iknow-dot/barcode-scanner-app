@@ -242,6 +242,50 @@ class CheckClientResultTests(TestCase):
         with self.assertRaises(ValueError):
             client.check_client()
 
+    def test_check_client_sends_a_name_as_idphone(self):
+        client = ConsultWebExchangeClient(self.org)
+        captured = self._capture_request()
+
+        with mock.patch('httpx.request', side_effect=captured['fake']):
+            client.check_client(name='Giorgi Beridze')
+
+        # Upstream matches the same single `IDPhone` field against the client
+        # name, so a name search needs no new request key.
+        self.assertEqual(captured['json'], {'IDPhone': 'Giorgi Beridze'})
+
+    def test_check_client_prefers_an_identifier_over_a_name(self):
+        client = ConsultWebExchangeClient(self.org)
+        captured = self._capture_request()
+
+        with mock.patch('httpx.request', side_effect=captured['fake']):
+            client.check_client(identification_number='01001012345', name='Giorgi')
+
+        self.assertEqual(captured['json'], {'IDPhone': '01001012345'})
+
+    def test_check_client_prefers_a_phone_over_a_name(self):
+        client = ConsultWebExchangeClient(self.org)
+        captured = self._capture_request()
+
+        with mock.patch('httpx.request', side_effect=captured['fake']):
+            client.check_client(phone='+995555000111', name='Giorgi')
+
+        self.assertEqual(captured['json'], {'IDPhone': '+995555000111'})
+
+    def _capture_request(self):
+        """A stubbed `httpx.request` that records the JSON body it was given."""
+        captured: dict = {}
+
+        def fake_request(method, url, **kwargs):
+            captured['json'] = kwargs.get('json')
+            resp = mock.Mock()
+            resp.status_code = 200
+            resp.json.return_value = {'status': 'not_found'}
+            resp.text = ''
+            return resp
+
+        captured['fake'] = fake_request
+        return captured
+
 
 @override_settings(FERNET_KEY=_TEST_FERNET_KEY)
 class CreateClientPayloadMappingTests(TestCase):

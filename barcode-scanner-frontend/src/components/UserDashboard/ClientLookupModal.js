@@ -41,6 +41,15 @@ const ERROR_CODE_MESSAGES = {
     CLIENT_ALREADY_EXISTS: 'clientAlreadyExists',
 };
 
+// Everything the lookup step hands to the create step when the client turns
+// out not to exist upstream.
+const EMPTY_LOOKUP_SEED = {
+    identification_number: '',
+    phone: '',
+    first_name: '',
+    last_name: '',
+};
+
 const STEP_LOOKUP = 'lookup';
 const STEP_CREATE = 'create';
 
@@ -74,6 +83,20 @@ const normalizePhone = (raw) => {
 const MOBILE_RE = /^5\d{8}$/;
 const isValidPersonalId = (v) => PERSONAL_ID_RE.test(v || '');
 const isValidPhone = (v) => MOBILE_RE.test(normalizePhone(v));
+// A one- or two-letter fragment is a half-typed name, not a query: it spends
+// an upstream round-trip to hand back a list nobody can pick from.
+const NAME_MIN_CHARS = 3;
+// 1C stores the client as a single display name; the create form wants it in
+// two fields. Split on the first space — "გიორგი ბერიძე" is first + last —
+// and leave the surname empty for a single token, which the consultant fills
+// in anyway before registering.
+const splitName = (raw) => {
+    const value = (raw || '').trim().replace(/\s+/g, ' ');
+    if (!value) return {first_name: '', last_name: ''};
+    const cut = value.indexOf(' ');
+    if (cut === -1) return {first_name: value, last_name: ''};
+    return {first_name: value.slice(0, cut), last_name: value.slice(cut + 1)};
+};
 
 const ClientLookupModal = ({open, onSelect, onClose, onRetail}) => {
     const {t} = useLanguage();
@@ -86,7 +109,7 @@ const ClientLookupModal = ({open, onSelect, onClose, onRetail}) => {
     const [resolvingAddress, setResolvingAddress] = useState(false);
     const [foundClients, setFoundClients] = useState([]);
     const [foundClientsFilter, setFoundClientsFilter] = useState('');
-    const [lookupSeed, setLookupSeed] = useState({identification_number: '', phone: ''});
+    const [lookupSeed, setLookupSeed] = useState(EMPTY_LOOKUP_SEED);
     const [addressOptions, setAddressOptions] = useState([]);
     const [addressSearching, setAddressSearching] = useState(false);
     const [mapPosition, setMapPosition] = useState(null);
@@ -100,7 +123,7 @@ const ClientLookupModal = ({open, onSelect, onClose, onRetail}) => {
             setStep(STEP_LOOKUP);
             setFoundClients([]);
             setFoundClientsFilter('');
-            setLookupSeed({identification_number: '', phone: ''});
+            setLookupSeed(EMPTY_LOOKUP_SEED);
             setAddressOptions([]);
             setAddressSearching(false);
             setMapPosition(null);
@@ -143,9 +166,9 @@ const ClientLookupModal = ({open, onSelect, onClose, onRetail}) => {
         message.error(text);
     };
 
-    const performLookup = async (idNumber, phone) => {
-        if (!idNumber && !phone) {
-            message.warning(t.enterIdOrPhone);
+    const performLookup = async (idNumber, phone, name = '') => {
+        if (!idNumber && !phone && !name) {
+            message.warning(t.enterIdPhoneOrName);
             return;
         }
         // Reject the lookup unless the typed values look like the right kind
@@ -160,6 +183,10 @@ const ClientLookupModal = ({open, onSelect, onClose, onRetail}) => {
             message.warning(t.invalidPhone);
             return;
         }
+        if (name && name.length < NAME_MIN_CHARS) {
+            message.warning(t.nameTooShort);
+            return;
+        }
         setLookupLoading(true);
         setFoundClients([]);
         setFoundClientsFilter('');
@@ -167,6 +194,7 @@ const ClientLookupModal = ({open, onSelect, onClose, onRetail}) => {
             const result = await clientService.checkClient({
                 identification_number: idNumber,
                 phone,
+                name,
             });
             if (result.success) {
                 // Upstream returns a list of {name, address, phone}; preserve
@@ -188,12 +216,15 @@ const ClientLookupModal = ({open, onSelect, onClose, onRetail}) => {
                 }
                 setFoundClients(merged);
             } else if (result.code === 'CLIENT_NOT_FOUND') {
-                setLookupSeed({identification_number: idNumber, phone});
-                createForm.setFieldsValue({
+                // Carry whatever was typed into the create form, including a
+                // name searched for and not found — it is the client's name.
+                const seed = {
                     identification_number: idNumber,
-                    phone: phone,
-                    is_phys: true,
-                });
+                    phone,
+                    ...splitName(name),
+                };
+                setLookupSeed(seed);
+                createForm.setFieldsValue({...seed, is_phys: true});
                 setStep(STEP_CREATE);
             } else {
                 showErrorMessage(result.code, t.clientLookupError, result.error);
@@ -207,6 +238,7 @@ const ClientLookupModal = ({open, onSelect, onClose, onRetail}) => {
         return performLookup(
             (values.identification_number || '').trim(),
             (values.phone || '').trim(),
+            (values.name || '').trim(),
         );
     };
 
@@ -216,14 +248,13 @@ const ClientLookupModal = ({open, onSelect, onClose, onRetail}) => {
             autoLookupTimer.current = null;
         }
         const values = lookupForm.getFieldsValue();
-        const idNumber = (values.identification_number || '').trim();
-        const phone = (values.phone || '').trim();
-        setLookupSeed({identification_number: idNumber, phone});
-        createForm.setFieldsValue({
-            identification_number: idNumber,
-            phone,
-            is_phys: true,
-        });
+        const seed = {
+            identification_number: (values.identification_number || '').trim(),
+            phone: (values.phone || '').trim(),
+            ...splitName(values.name),
+        };
+        setLookupSeed(seed);
+        createForm.setFieldsValue({...seed, is_phys: true});
         setStep(STEP_CREATE);
     };
 
@@ -415,7 +446,7 @@ const ClientLookupModal = ({open, onSelect, onClose, onRetail}) => {
                 onValuesChange={handleLookupValuesChange}
             >
                 <Text type="secondary" style={{display: 'block', marginBottom: 12}}>
-                    {t.enterIdOrPhone}
+                    {t.enterIdPhoneOrName}
                 </Text>
                 <Form.Item
                     name="identification_number"
@@ -441,6 +472,20 @@ const ClientLookupModal = ({open, onSelect, onClose, onRetail}) => {
                         allowClear
                         inputMode="tel"
                         type="tel"
+                    />
+                </Form.Item>
+                {/* Name search is submit-only: unlike an ID, a name is never
+                    complete mid-typing, so auto-lookup would fire on every
+                    pause. `onValuesChange` ignores this field. */}
+                <Form.Item
+                    name="name"
+                    label={t.customerName}
+                >
+                    <Input
+                        size="large"
+                        placeholder={t.customerName}
+                        prefix={<UserOutlined style={{opacity: 0.4}}/>}
+                        allowClear
                     />
                 </Form.Item>
                 <Flex justify="space-between" gap={8}>

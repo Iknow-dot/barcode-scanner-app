@@ -4,7 +4,7 @@
 Wraps per-organization calls to four endpoints under
 `{org.web_service_url}/HS/ConsultWebExchange/`:
 
-    - CheckClient        — look up a client by identification number or phone
+    - CheckClient        — look up a client by identification number, phone or name
     - CreateClient       — create a client externally
     - GetStockAndPrices  — product / stock / price lookup (formerly inlined in
                             ProductSearchAPIView)
@@ -38,7 +38,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # 1C ConsultWebExchange field mapping — confirmed with API owner
 # ---------------------------------------------------------------------------
-# - CheckClient request is a single `{"IDPhone": <personal number or phone>}`.
+# - CheckClient request is a single `{"IDPhone": <personal number, phone or name>}`.
 # - Lookup response is a list of customers (one or more matches), possibly
 #       wrapped in keys like `clients` / `customers` / `data` / `result`.
 # - Create response is a single customer (possibly wrapped under a
@@ -265,18 +265,23 @@ class ConsultWebExchangeClient:
         *,
         identification_number: str | None = None,
         phone: str | None = None,
+        name: str | None = None,
     ) -> list[dict[str, Any]] | None:
         """POST /CheckClient.
+
+        Looks up by identification number, phone or name — upstream matches all
+        three against the same single `IDPhone` field, so only one value is sent
+        and an exact identifier wins over a name when both are given.
 
         Returns a list of normalized dicts on a hit, or `None` if upstream signals
         "not found" (HTTP 404). Raises `ConsultWebExchangeError` on any other
         failure.
         """
-        if not identification_number and not phone:
-            raise ValueError("identification_number or phone is required")
+        if not identification_number and not phone and not name:
+            raise ValueError("identification_number, phone or name is required")
 
         payload: dict[str, Any] = {
-            "IDPhone": identification_number or phone
+            "IDPhone": identification_number or phone or name
         }
 
         response = self._request("POST", "CheckClient", json=payload)

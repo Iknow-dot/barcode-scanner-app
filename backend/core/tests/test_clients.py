@@ -483,3 +483,38 @@ class CheckClientAPIViewTests(TestCase):
             response = self.client_api.post(self.url, {'phone': '+995555'}, format='json')
         self.assertEqual(response.status_code, 404)
         self.assertEqual(response.data['code'], 'CLIENT_NOT_FOUND')
+
+    def test_name_only_lookup_reaches_upstream(self):
+        captured = {}
+
+        def fake_request(method, url, **kwargs):
+            captured['json'] = kwargs.get('json')
+            return _upstream(200, [{'name': 'Giorgi Beridze', 'phone': '+995555'}])
+
+        with mock.patch('httpx.request', side_effect=fake_request):
+            response = self.client_api.post(
+                self.url, {'name': 'Giorgi Beridze'}, format='json',
+            )
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(captured['json'], {'IDPhone': 'Giorgi Beridze'})
+        self.assertEqual(response.data['clients'][0]['name'], 'Giorgi Beridze')
+
+    def test_name_lookup_returns_every_match(self):
+        body = [
+            {'name': 'Giorgi Beridze', 'phone': '+995555000111'},
+            {'name': 'Giorgi Beridzishvili', 'phone': '+995555000222'},
+        ]
+        with mock.patch('httpx.request', return_value=_upstream(200, body)):
+            response = self.client_api.post(self.url, {'name': 'Giorgi'}, format='json')
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(len(response.data['clients']), 2)
+
+    def test_blank_payload_is_still_rejected(self):
+        with mock.patch('httpx.request') as upstream:
+            response = self.client_api.post(
+                self.url, {'identification_number': '', 'phone': '', 'name': ''},
+                format='json',
+            )
+        self.assertEqual(response.status_code, 400)
+        upstream.assert_not_called()

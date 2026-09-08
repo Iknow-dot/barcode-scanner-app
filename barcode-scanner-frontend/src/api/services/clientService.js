@@ -4,17 +4,20 @@ import API_ENDPOINTS from '../endpoints';
 /**
  * Look up a client in the org's 1C ConsultWebExchange service.
  *
- * Provide identification_number, phone, or both — backend requires at least
- * one. Returns success=true with the normalized client on a hit; on a miss
- * returns success=false with code === 'CLIENT_NOT_FOUND' (HTTP 404). Other
- * codes (EXTERNAL_SERVICE_*) indicate transport / auth / upstream failures.
+ * Provide identification_number, phone or name — backend requires at least
+ * one, and upstream matches all three against the same field, so an exact
+ * identifier wins over a name when both are sent. Returns success=true with
+ * the matched clients on a hit; on a miss returns success=false with
+ * code === 'CLIENT_NOT_FOUND' (HTTP 404). Other codes (EXTERNAL_SERVICE_*)
+ * indicate transport / auth / upstream failures.
  *
- * @param {object} payload - { identification_number?, phone? }
+ * @param {object} payload - { identification_number?, phone?, name? }
  */
-export const checkClient = ({ identification_number, phone } = {}) => {
+export const checkClient = ({ identification_number, phone, name } = {}) => {
     return api.post(API_ENDPOINTS.client_check, {
         identification_number: identification_number || '',
         phone: phone || '',
+        name: name || '',
     });
 };
 

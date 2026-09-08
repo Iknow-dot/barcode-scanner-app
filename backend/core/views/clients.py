@@ -57,7 +57,11 @@ class RSGeLookupAPIView(APIView):
 
 @extend_schema(tags=['Clients'])
 class CheckClientAPIView(APIView):
-    """Look up a client in the org's 1C ConsultWebExchange service."""
+    """Look up a client in the org's 1C ConsultWebExchange service.
+
+    Accepts an identification number, a phone or a name; a name normally
+    matches several clients, so the response is always a list.
+    """
 
     permission_classes = [IsCompanyUserOrAdmin]
     serializer_class = CheckClientRequestSerializer
@@ -73,6 +77,7 @@ class CheckClientAPIView(APIView):
             result = client.check_client(
                 identification_number=data.get('identification_number') or None,
                 phone=data.get('phone') or None,
+                name=data.get('name') or None,
             )
         except ConsultWebExchangeError as exc:
             return external_error_response(exc)

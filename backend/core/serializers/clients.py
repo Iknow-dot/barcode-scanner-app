@@ -5,7 +5,11 @@ from rest_framework import serializers
 
 
 class CheckClientRequestSerializer(serializers.Serializer):
-    """User must provide identification_number OR phone (or both)."""
+    """User must provide identification_number, phone OR name (or several).
+
+    Upstream matches all three against its single `IDPhone` field; the client
+    layer picks which one to send.
+    """
 
     identification_number = serializers.CharField(
         max_length=50, required=False, allow_blank=True, default='',
@@ -13,11 +17,17 @@ class CheckClientRequestSerializer(serializers.Serializer):
     phone = serializers.CharField(
         max_length=50, required=False, allow_blank=True, default='',
     )
+    name = serializers.CharField(
+        max_length=255, required=False, allow_blank=True, default='',
+    )
 
     def validate(self, attrs):
-        if not attrs.get('identification_number') and not attrs.get('phone'):
+        if not any(
+            attrs.get(field)
+            for field in ('identification_number', 'phone', 'name')
+        ):
             raise serializers.ValidationError(
-                "Provide identification_number or phone."
+                "Provide identification_number, phone or name."
             )
         return attrs
 
