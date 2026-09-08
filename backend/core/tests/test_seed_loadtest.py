@@ -1,9 +1,10 @@
+from decimal import Decimal
 from io import StringIO
 
 from django.core.management import call_command
 from django.test import TestCase, override_settings
 
-from core.models import Organization, Product, ProductBarcode, Warehouse
+from core.models import Organization, Product, ProductBarcode, PurchaseOrder, Warehouse
 from core.tests.common import _TEST_FERNET_KEY, _make_organization
 from users.models import AllowedIP, User
 
@@ -124,6 +125,51 @@ class SeedLoadtestTests(TestCase):
         self.assertTrue(Organization.objects.filter(pk=keeper.pk).exists())
         self.assertTrue(User.objects.filter(pk=keeper_user.pk).exists())
 
+    def test_reset_and_reseed_in_one_call_spares_a_keepers_own_products_and_orders(self):
+        """The reset test above (`orgs=0, users_per_org=0, products=0`) never
+        actually seeds anything in the SAME call that deletes — it only proves
+        the delete is prefix-scoped in isolation. The realistic Phase 2
+        invocation (`seed.sh --reset`) does both in one command/transaction:
+        `--reset` deletes every `loadtest-org-*`, and the very same call then
+        reseeds a fresh one. That is the only path that both deletes AND
+        writes, and the whole safety case of `--reset` rests on the delete's
+        organization-name-prefix scoping never reaching a real customer org's
+        OWN products/orders (not just its org/user rows) along the way.
+        """
+        keeper = _make_organization(name="RealOrg", identification_number="55555")
+        keeper_user = User.objects.create_user(
+            username="real-user", password="x", role=User.Role.COMPANY_USER, organization=keeper,
+        )
+        keeper_warehouse = Warehouse.objects.create(
+            organization=keeper, code="RW1", name="Real Warehouse",
+        )
+        keeper_product = Product.objects.create(
+            organization=keeper, sku="REAL-SKU-1", name="Real product",
+            price=Decimal("5.00"), is_active=True,
+        )
+        keeper_order = PurchaseOrder.objects.create(
+            organization=keeper, created_by=keeper_user, customer_name="Real customer",
+            status=PurchaseOrder.Status.DRAFT,
+        )
+        self._seed()
+
+        # Reset AND reseed in one call — not two separate ones.
+        self._seed(reset=True)
+
+        # The loadtest org was genuinely rebuilt from scratch...
+        org = Organization.objects.get(name="loadtest-org-1")
+        self.assertEqual(Product.objects.filter(organization=org).count(), 5)
+        self.assertEqual(
+            User.objects.filter(username__startswith="loadtest-user-").count(), 3,
+        )
+        # ...and the keeper's OWN rows survived the cascade untouched, not just
+        # the keeper org/user pair the simpler reset test already covers.
+        self.assertTrue(Organization.objects.filter(pk=keeper.pk).exists())
+        self.assertTrue(User.objects.filter(pk=keeper_user.pk).exists())
+        self.assertTrue(Warehouse.objects.filter(pk=keeper_warehouse.pk).exists())
+        self.assertTrue(Product.objects.filter(pk=keeper_product.pk).exists())
+        self.assertTrue(PurchaseOrder.objects.filter(pk=keeper_order.pk).exists())
+
     def test_products_carry_a_category_tree_and_image_urls(self):
         self._seed(products=5)
 
@@ -136,7 +182,38 @@ class SeedLoadtestTests(TestCase):
     def test_orders_are_seeded_with_items(self):
         self._seed(orders=4)
 
-        from core.models import PurchaseOrder
         orders = PurchaseOrder.objects.filter(organization__name="loadtest-org-1")
         self.assertEqual(orders.count(), 4)
         self.assertTrue(all(o.items.exists() for o in orders))
+
+    def test_orders_are_attributed_round_robin_across_company_users_not_the_admin(self):
+        """OrderAnalyticsAPIView (core/views/analytics.py) groups its results by
+        created_by. _company_admin() runs before _users() in handle(), so the
+        admin always held the lowest id in the org — `.order_by("id").first()`
+        used to attribute EVERY seeded order to that one admin account,
+        collapsing the endpoint's GROUP BY to a single row no matter how many
+        company users were seeded."""
+        self._seed(users_per_org=3, orders=6)
+
+        orders = PurchaseOrder.objects.filter(organization__name="loadtest-org-1")
+        creator_usernames = set(orders.values_list("created_by__username", flat=True))
+
+        self.assertGreater(len(creator_usernames), 1)
+        self.assertNotIn("loadtest-admin-1", creator_usernames)
+        self.assertEqual(
+            creator_usernames, {"loadtest-user-1", "loadtest-user-2", "loadtest-user-3"},
+        )
+
+    def test_orders_are_spread_across_a_realistic_date_window(self):
+        """created_at must not all land at the exact seeding moment.
+        OrderAnalyticsAPIView defaults `date_from` to the 1st of the CURRENT
+        month; if every seeded order shares one timestamp, the endpoint's
+        result set is complete only until the next month boundary and then
+        silently reports zero rows with no error — reporting its
+        best-ever (and least honest) numbers."""
+        self._seed(orders=10)
+
+        orders = PurchaseOrder.objects.filter(organization__name="loadtest-org-1")
+        timestamps = set(orders.values_list("created_at", flat=True))
+        self.assertEqual(orders.count(), 10)
+        self.assertGreater(len(timestamps), 1)

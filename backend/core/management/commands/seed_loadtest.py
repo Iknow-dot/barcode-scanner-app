@@ -16,11 +16,13 @@ name starts with ORG_PREFIX; User.organization is on_delete=CASCADE, so their
 users go with them. Nothing here truncates a table — the same command runs
 against the staging database in Phase 2, which holds data worth keeping.
 """
+from datetime import timedelta
 from decimal import Decimal
 
 from django.contrib.auth.hashers import make_password
 from django.core.management.base import BaseCommand
 from django.db import transaction
+from django.utils import timezone
 
 from core.models import (
     Organization,
@@ -40,6 +42,11 @@ ADMIN_PREFIX = "loadtest-admin-"
 SKU_PREFIX = "LT-SKU-"
 WAREHOUSE_PREFIX = "LT-W"
 ORDER_CUSTOMER_PREFIX = "Loadtest customer "
+# Seeded orders are spread across this many days back from "now" (seeding
+# time) so OrderAnalyticsAPIView's default date_from (the 1st of the CURRENT
+# month) doesn't profile an empty result set the moment a month boundary
+# passes — see _orders()'s own comment.
+ORDER_WINDOW_DAYS = 90
 
 DEFAULT_PASSWORD = "loadtest-pass-1234"
 DEFAULT_1C_PASSWORD = "loadtest-1c-password"
@@ -241,7 +248,23 @@ class Command(BaseCommand):
     def _orders(self, org, warehouses, count):
         if not count:
             return
-        creator = User.objects.filter(organization=org).order_by("id").first()
+        # Round-robin across the seeded COMPANY users only — never the admin.
+        # _company_admin() runs before _users() in handle(), so the admin
+        # always holds the lowest id in the org; the previous
+        # `.order_by("id").first()` therefore attributed EVERY seeded order
+        # to that one admin account. OrderAnalyticsAPIView
+        # (core/views/analytics.py) groups its results by created_by, so that
+        # collapsed the whole GROUP BY to a single row no matter how many
+        # company users were seeded — degenerate for the one endpoint RULING
+        # R13 added the admin to help measure, not something the admin's
+        # existence was ever meant to cause.
+        creators = list(
+            User.objects.filter(organization=org, role=User.Role.COMPANY_USER).order_by("id")
+        )
+        if not creators:
+            # Only reachable with users_per_org=0 (a narrow test) — fall back
+            # to whichever user exists so orders still get a valid creator FK.
+            creators = list(User.objects.filter(organization=org).order_by("id"))
         existing = PurchaseOrder.objects.filter(
             organization=org, customer_name__startswith=ORDER_CUSTOMER_PREFIX,
         ).count()
@@ -251,14 +274,17 @@ class Command(BaseCommand):
         )
         if not skus:
             return
+        now = timezone.now()
+        new_orders = []
         for i in range(existing + 1, count + 1):
             order = PurchaseOrder.objects.create(
                 organization=org,
-                created_by=creator,
+                created_by=creators[i % len(creators)] if creators else None,
                 customer_name=f"{ORDER_CUSTOMER_PREFIX}{i}",
                 customer_phone=f"5{i:08d}",
                 status=PurchaseOrder.Status.DRAFT,
             )
+            new_orders.append((order, i))
             PurchaseOrderItem.objects.bulk_create([
                 PurchaseOrderItem(
                     order=order,
@@ -269,3 +295,21 @@ class Command(BaseCommand):
                 )
                 for n, (sku, name, price) in enumerate(skus[(i * 3) % len(skus):][:3] or skus[:3])
             ])
+
+        # created_at is auto_now_add (core/models.py::PurchaseOrder), which
+        # blocks setting it at INSERT time — this follow-up bulk_update is a
+        # deliberate second write, not a workaround for a mistake above. It
+        # spreads the seeded orders across ORDER_WINDOW_DAYS instead of
+        # leaving every one stamped at the exact moment seeding ran: without
+        # this, OrderAnalyticsAPIView's default `date_from` (the 1st of the
+        # CURRENT month) profiles the full seeded set only until the next
+        # month boundary, then silently measures an empty result set with no
+        # error — reporting the endpoint's best-ever (and least honest)
+        # numbers. bulk_update() issues a raw UPDATE, so it does not re-run
+        # auto_now_add.
+        for order, i in new_orders:
+            order.created_at = now - timedelta(
+                days=i % ORDER_WINDOW_DAYS, hours=(i * 7) % 24, minutes=(i * 13) % 60,
+            )
+        if new_orders:
+            PurchaseOrder.objects.bulk_update([o for o, _ in new_orders], ["created_at"])
