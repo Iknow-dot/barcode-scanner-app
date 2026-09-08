@@ -46,6 +46,11 @@ class FakeOneCTests(unittest.TestCase):
         body = json.loads(urllib.request.urlopen(req, timeout=10).read())
         self.assertEqual([r["warehouse"] for r in body["stock"]], ["W1", "W2"])
         self.assertEqual(body["unit"], "pcs")
+        # warehouse_name is a required field on the backend's StockSerializer
+        # (backend/core/serializers/products.py) — a row missing it 500s
+        # ProductSearchAPIView. Every returned row must carry a non-empty one.
+        for row in body["stock"]:
+            self.assertTrue(row.get("warehouse_name"))
 
     def test_create_order_returns_a_unique_order_number(self):
         first = json.loads(_post(f"{self.base}/HS/ConsultWebExchange/CreateOrder", {}).read())

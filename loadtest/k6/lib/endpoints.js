@@ -12,6 +12,7 @@ export const PATHS = {
   orders: '/api/v1/orders/',
   analytics: '/api/v1/analytics/orders/',
   catalogIngest: '/api/v1/catalog/products/',
+  warehouses: '/api/v1/warehouses/',
 };
 
 // Mirrors core/catalog/image_urls.py: HMAC-SHA256 over "org:sku:idx" keyed by

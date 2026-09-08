@@ -132,7 +132,14 @@ class Handler(BaseHTTPRequestHandler):
         self._send_json(200, {
             "unit": "pcs",
             "stock": [
-                {"warehouse": code, "quantity": 100, "price": "9.90"}
+                # warehouse_name is required, not decorative: ProductSearchSerializer's
+                # StockSerializer (backend/core/serializers/products.py) declares it a
+                # plain CharField with no default, so a row missing it 500s
+                # ProductSearchAPIView with a KeyError while rendering the response.
+                # This was masked for a long time by a load-test client bug that always
+                # sent an empty Warehouse header, so `stock` was always `[]` and this
+                # branch never ran with a real row.
+                {"warehouse": code, "warehouse_name": f"Warehouse {code}", "quantity": 100, "price": "9.90"}
                 for code in warehouses
             ],
         })
