@@ -39,6 +39,6 @@ class PerfHeadersMiddleware:
         total_seconds = time.perf_counter() - request_started
 
         response["X-Query-Count"] = str(count)
-        response["X-Db-Ms"] = f"{db_seconds * 1000:.1f}"
-        response["X-Total-Ms"] = f"{total_seconds * 1000:.1f}"
+        response["X-Db-Ms"] = f"{db_seconds * 1000:.3f}"
+        response["X-Total-Ms"] = f"{total_seconds * 1000:.3f}"
         return response
