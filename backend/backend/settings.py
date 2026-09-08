@@ -67,6 +67,15 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
+# Load-test instrumentation. Read like every other setting so tests override it
+# with override_settings, never os.environ. Unset in every environment except a
+# load-test run, where it costs one wrapper per query and nothing elsewhere:
+# with the flag off the middleware is absent from the list entirely.
+PERF_HEADERS_ENABLED = os.environ.get('PERF_HEADERS_ENABLED', 'False').lower() in ('true', '1', 'yes')
+
+if PERF_HEADERS_ENABLED:
+    MIDDLEWARE.append('core.middleware.perf_headers.PerfHeadersMiddleware')
+
 # CORS settings
 CORS_ALLOWED_ORIGINS = os.environ.get('CORS_ALLOWED_ORIGINS', 'http://localhost:3000').split(',')
 CORS_ALLOW_CREDENTIALS = True
