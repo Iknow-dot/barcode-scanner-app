@@ -12,6 +12,7 @@
 // below asserts exactly 200 for that reason, not a looser "200 or 404".
 import http from 'k6/http';
 import { check } from 'k6';
+import exec from 'k6/execution';
 import { Trend } from 'k6/metrics';
 import { authPost, login, loadWarehouseCodes } from '../lib/auth.js';
 import { PATHS } from '../lib/endpoints.js';
@@ -76,12 +77,26 @@ export function scanUnderMode(mode) {
 export function loginStorm() {
   // Shift change: everyone logs in at once. Every login runs the password
   // hasher, writes last_login, and (on refresh) inserts a blacklist row that
-  // nothing prunes. __VU * 1000 + __ITER (rather than __VU alone) means each
-  // iteration is a genuinely fresh login, not the one-login-per-VU session
-  // reuse every other scenario in this suite deliberately does — that reuse
-  // is what makes this scenario different: it is the ONLY place in this
-  // whole loadtest suite that logs in on every iteration on purpose.
-  const s = login(__VU * 1000 + __ITER);
+  // nothing prunes. A genuinely fresh login every iteration, not the
+  // one-login-per-VU session reuse every other scenario in this suite
+  // deliberately does — that reuse is what makes this scenario different: it
+  // is the ONLY place in this whole loadtest suite that logs in on every
+  // iteration on purpose.
+  //
+  // exec.scenario.iterationInTest, NOT `__VU * 1000 + __ITER` (N4): that old
+  // formula's multiplier and USER_COUNT (config.js, default 50) shared a
+  // factor — `1000 % 50 === 0` — so the __VU term vanished from
+  // `login()`'s `(userIndex % USER_COUNT) + 1` (lib/auth.js) entirely, and
+  // EVERY VU at iteration k logged in as the exact same user. With
+  // UPDATE_LAST_LOGIN on, concurrent logins for that one row serialize on a
+  // single Postgres row lock, so the quoted storm latency partly measured
+  // that row-lock convoy, not what a real many-person shift change (spread
+  // across many distinct accounts) actually costs.
+  // exec.scenario.iterationInTest is ONE counter shared by every VU in the
+  // scenario, so it climbs monotonically regardless of __VU/__ITER
+  // arithmetic and genuinely spreads logins across the seeded user pool —
+  // same fix, same reasoning as journey.js's N5 fix.
+  const s = login(exec.scenario.iterationInTest);
   expectStatus(
     http.post(`${BASE_URL}${PATHS.refresh}`,
       JSON.stringify({ refresh: s.refresh }),

@@ -181,15 +181,28 @@ export const options = {
     //
     // THESE TWO ARE EXPECTED TO BREACH at the committed storm rate (10/s
     // combined login+refresh) — confirmed on every verification run, not a
-    // one-off: auth_login p95 observed ~4.7-7.0s, auth_refresh p95 observed
-    // ~3.8-6.5s. Same rule as upstream_failure_duration above: do NOT raise
-    // these to force a green run. The breach itself IS the finding — a
-    // shift-change burst measurably costs more than these bounds allow, and
-    // that cost is what this scenario exists to surface. A future run that
-    // exits 99 with THESE two red and upstream_failure_duration (and its
-    // per-mode breakdown) green has reproduced this known result, not found
-    // a new regression; a run where upstream_failure_duration itself turns
-    // red is the one that means something changed.
+    // one-off. Numbers UPDATED 2026-09-08 after fixing N4 (loginStorm() used
+    // to divide `__VU * 1000 + __ITER` by USER_COUNT=50, and 1000 % 50 === 0
+    // made the __VU term vanish entirely — every VU at a given iteration
+    // logged in as the SAME seeded user, so this scenario was secretly
+    // hammering one Postgres row instead of the documented many-account
+    // shift change). With logins now genuinely spread across the seeded
+    // user pool (confirmed directly: 30 consecutive iterations landed on 30
+    // distinct users), the observed numbers got WORSE, not better:
+    // auth_login p95 ~12.7-15.3s, auth_refresh p95 ~12.0-14.8s (previously
+    // ~4.7-7.0s / ~3.8-6.5s) — see loadtest/README.md's "Measured results"
+    // for the full re-measurement, including evidence this is CPU-bound
+    // PBKDF2 contention on the container's `cpus: 1.0` cap, not a database
+    // row lock, and that dropped_iterations can now be non-zero even though
+    // peak VUs stays under this scenario's own 220 cap. Same rule as
+    // upstream_failure_duration above: do NOT raise these to force a green
+    // run. The breach itself IS the finding — a shift-change burst
+    // measurably costs more than these bounds allow, and that cost is what
+    // this scenario exists to surface. A future run that exits 99 with
+    // THESE two red and upstream_failure_duration (and its per-mode
+    // breakdown) green has reproduced this known result, not found a new
+    // regression; a run where upstream_failure_duration itself turns red is
+    // the one that means something changed.
     'http_req_duration{endpoint:auth_login}': ['p(95)<5000'],
     'http_req_duration{endpoint:auth_refresh}': ['p(95)<3000'],
     // RULING R16 — every entry point declares this. scanUnderMode's two
