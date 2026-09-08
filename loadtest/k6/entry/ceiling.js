@@ -109,12 +109,26 @@ export default function () {
   consultantJourney(__ITER);
 }
 
-// Distinguishes "the app saturated" from "k6 ran out of VUs to send
-// requests with" — see the MAX_VUS comment above for why nothing else in
-// this run's numbers can tell the two apart. Prints a loud, hard-to-miss
-// warning the moment peak concurrently-active VUs reaches the configured
-// cap, and otherwise confirms explicitly that it didn't (so a report quoting
+// Distinguishes "the app saturated" from "k6 could not drive the nominal
+// arrival rate" — see the MAX_VUS comment above for why nothing else in
+// this run's numbers can tell those apart. Prints a loud, hard-to-miss
+// warning for either of TWO distinct disqualifying conditions, and
+// otherwise confirms explicitly that neither happened (so a report quoting
 // this run's throughput can say so with evidence, not an assumption).
+//
+// The two conditions are checked independently, not as one combined
+// "starved" flag: peak vus reaching MAX_VUS means the configured cap itself
+// was the constraint (raise it). But k6's own docs are explicit that
+// dropped_iterations can be non-zero even when peak vus stays comfortably
+// under the cap — k6's reactive VU allocator does not always grow the pool
+// fast enough as the app slows down, so arrivals get dropped at any
+// allocation level, cap or no cap. A run with peak vus under the cap but
+// dropped_iterations > 0 is JUST AS untrustworthy as one that hit the cap:
+// in both cases the app never actually saw every intended arrival, so the
+// nominal target rate was not what was delivered. Verified against this
+// exact failure mode: a 60 req/s run had peak vus=255 (well under
+// MAX_VUS=4000) yet dropped_iterations=157 — "under the cap" alone is not
+// sufficient evidence of a clean run.
 //
 // Hand-rolled rather than built on the jslib.k6.io `textSummary` helper
 // (which would reproduce k6's own colorized default report): that import is
@@ -128,10 +142,12 @@ export default function () {
 export function handleSummary(data) {
   const vus = data.metrics.vus;
   const peakVUs = vus && vus.values && typeof vus.values.max === 'number' ? vus.values.max : undefined;
-  const starved = peakVUs !== undefined && peakVUs >= MAX_VUS;
+  const cappedOut = peakVUs !== undefined && peakVUs >= MAX_VUS;
+  const dropped = metricCount(data.metrics.dropped_iterations);
+  const hadDrops = typeof dropped === 'number' && dropped > 0;
 
   const lines = [''];
-  if (starved) {
+  if (cappedOut) {
     lines.push('################################################################################');
     lines.push(`# WARNING: peak VUs (${peakVUs}) reached the configured maxVUs (${MAX_VUS}).`);
     lines.push('# ramping-arrival-rate does NOT queue once its VU pool is exhausted — it');
@@ -142,10 +158,23 @@ export function handleSummary(data) {
     lines.push('# the top of this file) and re-run, or lower the ramp target to a rate this');
     lines.push('# box can actually deliver honestly.');
     lines.push('################################################################################');
+  } else if (hadDrops) {
+    lines.push('################################################################################');
+    lines.push(`# WARNING: ${dropped} iterations were DROPPED even though peak VUs (${peakVUs})`);
+    lines.push(`# stayed under the configured maxVUs (${MAX_VUS}). This is a DIFFERENT failure`);
+    lines.push('# from hitting the VU cap: k6\'s reactive VU allocator could not spin up new VUs');
+    lines.push('# fast enough once the app slowed down, so it dropped arrivals rather than ever');
+    lines.push('# sending them. Either way, the DELIVERED rate was below the nominal ramp');
+    lines.push('# target — DO NOT quote this run\'s nominal target as an achieved throughput or');
+    lines.push('# capacity figure. The latency/query-count numbers below are still real');
+    lines.push('# measurements of whatever traffic DID get through, but were measured at a');
+    lines.push('# lower rate than intended.');
+    lines.push('################################################################################');
   } else if (peakVUs !== undefined) {
     lines.push(
-      `peak VUs used: ${peakVUs} / ${MAX_VUS} configured — stayed below the cap, so this ` +
-      "run's throughput reflects the application, not the harness.",
+      `peak VUs used: ${peakVUs} / ${MAX_VUS} configured, 0 dropped iterations — this run's ` +
+      "nominal target rate was actually delivered, so its throughput/latency reflect the " +
+      'application, not the harness.',
     );
   } else {
     lines.push('NOTE: no vus metric found in this run\'s summary — could not verify whether ' +
