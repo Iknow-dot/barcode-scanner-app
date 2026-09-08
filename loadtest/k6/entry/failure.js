@@ -14,19 +14,20 @@ const WINDOW = __ENV.FAILURE_WINDOW || '30s';
 const WINDOW_MS = parseDurationMs(WINDOW);
 // NOT sweep.js's 5s GAP_MS — confirmed by running it: 5s is nowhere near
 // enough here. hang_30s's iterations that arrive right at the END of its
-// own window each still take ~15-16s (the client's read timeout) to
+// own window each still take ~15-24s (the client's read timeout, plus
+// whatever queueing has built up — see the SCENARIOS comment below) to
 // complete AFTER that window has nominally closed. With only a 5s gap, the
 // NEXT scenario's traffic starts while those stragglers are still holding
 // real Gunicorn slots on the shared backend — contaminating the next
 // window's numbers with leftover hang_30s queueing rather than measuring
-// that window's own mode in isolation, and (confirmed by a live run) also
-// pushing some of hang_30s's OWN arrivals past its Little's-Law VU sizing
-// as the extra contention inflates iteration duration beyond the ~16s the
-// sizing in the comment above `SCENARIOS` assumed, which showed up as
-// dropped_iterations even with peak VUs comfortably under the cap. 20s
-// covers hang_30s's worst observed tail (max=16091ms in that run) with a
-// real margin, for every gap, not just the one after hang.
-const GAP_MS = 20000;
+// that window's own mode in isolation. 30s was chosen after running the
+// suite at its own committed default (FAILURE_WINDOW=30s, this file's
+// default) end to end: at 20s, a hang_30s straggler (p95=22605ms in that
+// run) got forcibly INTERRUPTED by k6's own 30s gracefulStop before it
+// could even finish, and the backlog was still detectably elevating
+// http_500's own p95 (492ms vs a normal ~26ms) in the very next window.
+// 30s gives real margin over every worst-case tail observed so far.
+const GAP_MS = 30000;
 
 function startTimeAt(index) {
   return msToDuration(index * (WINDOW_MS + GAP_MS));
@@ -46,66 +47,88 @@ function window(exec, index, rate, preAllocatedVUs, maxVUs, timeUnit = '1s') {
 }
 
 // Rate sizing here is NOT just Little's Law VU-pool math (concurrently-held
-// VUs ~= rate x mean iteration duration) — confirmed by running it. The
-// backend genuinely has ~8 concurrent execution slots (basic-xxs,
+// VUs ~= rate x mean iteration duration) — confirmed by running it, twice.
+// The backend genuinely has ~8 concurrent execution slots (basic-xxs,
 // `--workers 2 --threads 4`, per CLAUDE.md), and slow_5s/hang_30s each hold
 // ONE of those slots for the full duration of their blocking upstream call
 // (5s / ~15s respectively — httpx.request() blocks the Gunicorn thread
 // synchronously). That caps this app's SUSTAINABLE throughput for those two
 // modes at roughly 8-slots / mean-duration, independent of how many VUs k6
-// throws at it:
-//   - slow_5s:  ~8 / 5.3s  ~= 1.5 req/s sustainable
-//   - hang_30s: ~8 / 15.5s ~= 0.5 req/s sustainable
-// A rate ABOVE that ceiling doesn't just need more VUs to hold the extra
-// in-flight iterations — it queues UNBOUNDED, because arrivals keep
-// outpacing what the backend can drain. Confirmed empirically: at the
-// brief's original rate=5/s for hang_30s, the queue grew for the ENTIRE
-// 12s window and the backlog was still draining well into the NEXT
-// scenario's window minutes later (even with a 20s inter-window gap),
-// producing dropped_iterations, "interrupted" iterations, and contaminated
-// latency in later windows that had nothing to do with their own mode. That
-// is itself a real, reportable finding in its own right (a hang_30s burst
-// at a rate exceeding ~0.5 req/s will hold ALL 8 slots and queue everyone
-// else, consultants included, until it drains) — see the task report for a
-// deliberate, isolated demonstration of it. It is NOT what this committed
-// suite measures by default, because an unbounded queue is exactly the kind
-// of thing the dispatch's safety constraint warns against reproducing here.
+// throws at it — a NAIVE ceiling of ~1.5 req/s for slow_5s and ~0.5 req/s
+// for hang_30s. A rate ABOVE that ceiling doesn't just need more VUs to
+// hold the extra in-flight iterations — it queues UNBOUNDED, because
+// arrivals keep outpacing what the backend can drain. Confirmed
+// empirically: at the brief's original rate=5/s for hang_30s (10x this
+// naive ceiling), the queue grew for the entire window and the backlog was
+// still draining well over a minute later, into and past several
+// subsequent windows — dropped_iterations, forcibly "interrupted"
+// iterations, and contaminated latency in modes that had nothing to do
+// with hang_30s. That is itself a real, reportable finding in its own
+// right (a hang_30s burst at a rate exceeding its ceiling will hold ALL 8
+// slots and queue everyone else, consultants included, until it drains) —
+// see the task report. It is NOT what this suite measures by default,
+// because an unbounded queue is exactly what the dispatch's safety
+// constraint warns against reproducing here.
 //
-// slow_5s and hang_30s below therefore run at a rate UNDER their own
-// sustainable ceiling, so each window cleanly measures "does one request
-// honor its own budget" without inducing a queue that outlives the window:
-//   - slow_5s:  rate 1/s (< 1.5/s ceiling). ~5.5 VUs needed; 20 gives
-//     ~4x headroom.
-//   - hang_30s: rate 0.5/s (< 0.5/s ceiling, deliberately conservative
-//     given how close that ceiling is to the target rate). ~8 VUs needed;
-//     30 gives ~4x headroom — still the tightest-margin mode, so still the
-//     one most worth erring generous on.
+// The naive per-mode ceiling above is NOT the whole story either — running
+// this file at its own committed FAILURE_WINDOW=30s default (not just the
+// short verification windows used while first tuning these numbers)
+// surfaced a SECOND, smaller effect: even a rate comfortably under the
+// naive ceiling shows real, if bounded, drift over a full 30s window that
+// a short 8-12s window doesn't run long enough to reveal. At the first
+// "conservative" pass (slow_5s=1/s, hang_30s=0.5/s — each nominally 33-67%
+// of its naive ceiling), a full-length run showed:
+//   - slow_5s avg climbing from ~5.1s (short window) to ~7.0s (30s window)
+//   - hang_30s avg/p95 climbing from ~15.3s/~16.2s to ~17.1s/~22.6s — close
+//     enough to BUDGET_MS (25000ms) to be a real concern, and close enough
+//     to hang_30s's own 30s gracefulStop that one straggler got forcibly
+//     interrupted rather than allowed to finish
+//   - dropped_iterations=43 despite peak VUs staying under the cap
+// i.e. the naive "8 slots / duration" ceiling assumes perfect, lossless
+// slot utilization; in practice there is enough per-request overhead
+// (Django/DRF dispatch, the warehouse-scoping query, JWT auth, etc. on top
+// of the raw upstream wait) that the REAL sustainable rate sits measurably
+// below the naive number. slow_5s and hang_30s below run at HALF the
+// already-conservative first pass to build in real margin against this,
+// re-verified by running the full 30s-default suite again afterward (see
+// the task report for the confirming numbers):
+//   - slow_5s:  rate 0.5/s (~1/3 of the 1.5/s naive ceiling). ~5-6 VUs
+//     needed even allowing for the observed drift; 20 gives real headroom.
+//   - hang_30s: rate 0.25/s (~1/2 of the 0.5/s naive ceiling) — still the
+//     tightest-margin mode, so still the one most worth erring generous
+//     on. ~8-10 VUs needed even allowing for drift; 30 gives real headroom.
 // http_500 / refuse have no such ceiling problem — both fail in well under
 // a second, so even rate 5/s is nowhere near 8-slots-worth of concurrent
-// holding.
+// holding, and neither showed meaningful drift at the 30s window once
+// slow_5s/hang_30s stopped bleeding a backlog into their windows.
 //
 // storm (login + refresh) is NOT sub-second under its own rate, contrary to
 // a naive guess — confirmed by running it: PBKDF2 plus the refresh
 // blacklist-row insert (see loginStorm's own comment) queue behind the same
-// 8 slots too, so at rate 10/s the combined login+refresh duration averaged
-// ~4.2s (p95 ~8.8s combined) once the storm was actually under way, not the
-// <1s assumed when this was first sized at preAllocatedVUs:30 — which was
-// too low and produced the same reactive-allocator-lag drops documented in
-// the hang_30s discussion above. 80/150 gives real headroom over the
-// observed ~42 VUs (mean-based) to ~90 VUs (p95-based) demand, while
-// staying nowhere near the 1000+ VUs that wedged the backend in Task 6
-// (that was a RAMPING scenario growing into the thousands within seconds;
-// this is a flat, bounded rate with a capped pool — the dispatch's safety
-// constraint is about that distinction, not about VU count in isolation).
+// 8 slots too. Its RATE (10/s) is deliberate and is not being tuned down
+// here — measuring what a real shift-change burst costs is this
+// scenario's entire purpose, and that cost showing up as elevated latency
+// (see the two thresholds below, which ARE expected to breach) is the
+// finding, not a defect to engineer away. Its VU POOL, however, needed
+// raising twice for purely measurement-validity reasons (so the
+// trustworthiness verdict isn't itself contaminated by VU starvation): the
+// combined login+refresh duration under load averages several seconds, not
+// the <1s a naive guess would assume, and at the full 30s default window
+// peak VUs reached 133 against the previous 150 cap — too close for
+// comfort. 100/220 gives real headroom over that, while staying nowhere
+// near the 1000+ VUs that wedged the backend in Task 6 (that was a RAMPING
+// scenario growing into the thousands within seconds; this is a flat,
+// bounded rate with a capped pool — the dispatch's safety constraint is
+// about that distinction, not about VU count in isolation).
 const SCENARIOS = {
-  slow: window('slow', 0, 1, 10, 20),
-  // rate:1, timeUnit:'2s' (0.5 req/s) — k6's constant-arrival-rate wants an
-  // integer rate, so this is expressed as "1 per 2 seconds" rather than a
-  // fractional 0.5.
-  hang: window('hang', 1, 1, 15, 30, '2s'),
+  // rate:1, timeUnit:'2s' (0.5 req/s) / hang's timeUnit:'4s' (0.25 req/s) —
+  // k6's constant-arrival-rate wants an integer rate, so these are
+  // expressed as "1 per N seconds" rather than a fractional rate.
+  slow: window('slow', 0, 1, 10, 20, '2s'),
+  hang: window('hang', 1, 1, 15, 30, '4s'),
   broken: window('broken', 2, 5, 10, 30),
   refused: window('refused', 3, 5, 10, 30),
-  storm: window('storm', 4, 10, 80, 150),
+  storm: window('storm', 4, 10, 100, 220),
 };
 
 // Largest single-scenario cap in the run — the reference point for the
@@ -113,6 +136,22 @@ const SCENARIOS = {
 // windows (see startTimeAt), so the run-wide peak `vus` metric is really
 // whichever scenario's own peak was highest, not a sum across scenarios;
 // dropped_iterations is likewise a run-wide total, not broken out per mode.
+//
+// Confirmed by running the full FAILURE_WINDOW=30s default end to end (not
+// just the short windows used while tuning SCENARIOS above): at the current
+// rates, a WARNING from this verdict is expected to come from storm's own
+// window, not from slow_5s/hang_30s bleeding through. storm's rate (10/s)
+// deliberately exceeds its real sustained capacity — see storm's own
+// comment above — so its window genuinely queues over a full 30s run
+// (VUs climbing from ~7 to ~130+ before draining in gracefulStop, same
+// shape hang_30s showed at its own too-high original rate). slow_5s and
+// hang_30s were independently confirmed clean in that same run (near-zero
+// variance: hang_30s avg=15036ms/p95=15038ms/max=15039ms, slow_5s
+// avg=5024ms/p95=5028ms/max=5028ms — no queueing signature at all). So a
+// WARNING here does not, by itself, cast doubt on the upstream_failure_duration
+// numbers reported for slow_5s/hang_30s/http_500/refuse; check THOSE
+// modes' own tight, low-variance distributions as the real trust signal
+// for the headline budget assertion, rather than only the global verdict.
 const MAX_VUS = Math.max(...Object.values(SCENARIOS).map((s) => s.maxVUs));
 
 export const options = {
@@ -139,6 +178,18 @@ export const options = {
     // bounds, not throwaway: a shift-change burst genuinely should not push
     // an individual login past 5s or a refresh past 3s even while PBKDF2
     // and the blacklist-row insert queue behind the same 8 slots.
+    //
+    // THESE TWO ARE EXPECTED TO BREACH at the committed storm rate (10/s
+    // combined login+refresh) — confirmed on every verification run, not a
+    // one-off: auth_login p95 observed ~4.7-7.0s, auth_refresh p95 observed
+    // ~3.8-6.5s. Same rule as upstream_failure_duration above: do NOT raise
+    // these to force a green run. The breach itself IS the finding — a
+    // shift-change burst measurably costs more than these bounds allow, and
+    // that cost is what this scenario exists to surface. A future run that
+    // exits 99 with THESE two red and upstream_failure_duration (and its
+    // per-mode breakdown) green has reproduced this known result, not found
+    // a new regression; a run where upstream_failure_duration itself turns
+    // red is the one that means something changed.
     'http_req_duration{endpoint:auth_login}': ['p(95)<5000'],
     'http_req_duration{endpoint:auth_refresh}': ['p(95)<3000'],
     // RULING R16 — every entry point declares this. scanUnderMode's two
