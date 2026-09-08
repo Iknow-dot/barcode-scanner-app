@@ -36,9 +36,26 @@ export function sweepEndpoint(name, iterationIndex) {
   const n = (iterationIndex % PRODUCT_COUNT) + 1;
 
   switch (name) {
-    case 'catalog_list':
+    case 'catalog_list': {
+      // Coordinator Finding 2 (Task 6/7 review) — CatalogProductPagination's
+      // page_size is fixed at 25 (backend/core/views/catalog_read.py:199)
+      // and nothing here overrode it, so every sampled request returned
+      // exactly 25 rows: varying only the page NUMBER (1-10) is guaranteed
+      // to show a flat server_query_count whether or not an N+1 exists — an
+      // N+1 would just show a larger flat number, never a scaling one. The
+      // brief's own criterion ("query count scales with page size") needs
+      // page SIZE varied, so every other iteration requests page_size=100
+      // (CatalogProductPagination.max_page_size) instead of the 25-row
+      // default, tagged separately (catalog_list_page100) so the two are
+      // distinguishable Trends rather than blending into one average — a
+      // flat comparison between them is real evidence of no N+1; a ~4x
+      // scale-up is one caught by measurement, not by a separate code read.
+      const large = iterationIndex % 2 === 1;
+      const tag = large ? 'catalog_list_page100' : name;
+      const pageSizeParam = large ? '&page_size=100' : '';
       return expectStatus(
-        authGet(s, `${PATHS.catalogList}?page=${(iterationIndex % 10) + 1}`, name), name);
+        authGet(s, `${PATHS.catalogList}?page=${(iterationIndex % 10) + 1}${pageSizeParam}`, tag), tag);
+    }
     case 'catalog_search':
       // Trigram similarity on Postgres. The GIN index from migration 0021
       // accelerates the `%` operator, but this view filters on
