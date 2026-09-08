@@ -5,6 +5,8 @@
 // smooth curve over the cliff. An open model keeps issuing requests regardless
 // of how long they take, so queueing surfaces as latency where it belongs.
 import { consultantJourney } from '../scenarios/journey.js';
+import { pushCatalogPage } from '../scenarios/ingest.js';
+import { parseDurationMs, msToDuration } from '../lib/duration.js';
 
 // How many VUs an open-model executor needs to drive a given arrival rate
 // honestly is NOT the arrival rate itself — it's Little's Law: concurrently
@@ -70,6 +72,23 @@ const DEFAULT_STAGES = [
 // env var is the equivalent lever for that executor shape.
 const stages = __ENV.CEILING_STAGES ? JSON.parse(__ENV.CEILING_STAGES) : DEFAULT_STAGES;
 
+// Opt-in bulk catalog-ingest scenario colliding with the ramp above — the
+// real production collision, since the ingest endpoint shares the same 8
+// Gunicorn slots as every consultant request. Off by default (WITH_INGEST is
+// unset) so the plain ceiling run is unchanged; enable with -e WITH_INGEST=1.
+//
+// RULING R7 — start/duration are DERIVED from `stages` (DEFAULT_STAGES or a
+// caller's CEILING_STAGES override), never hard-coded: a short verification
+// ramp must produce a short collision window too, not an ingest scenario
+// that starts after the whole ramp is already over. Starts once the ramp is
+// 20% through (so baseline load is already established) and runs for 60% of
+// the ramp's total duration — reuses lib/duration.js's parser rather than
+// reinventing entry/sweep.js's private copy of the same computation a third
+// time (see that module's own comment).
+const RAMP_TOTAL_MS = stages.reduce((sum, s) => sum + parseDurationMs(s.duration), 0);
+const INGEST_START_MS = Math.round(RAMP_TOTAL_MS * 0.2);
+const INGEST_DURATION_MS = Math.max(5000, Math.round(RAMP_TOTAL_MS * 0.6));
+
 export const options = {
   scenarios: {
     ceiling: {
@@ -83,6 +102,18 @@ export const options = {
       maxVUs: MAX_VUS,
       stages,
     },
+    ...(__ENV.WITH_INGEST ? {
+      ingest: {
+        executor: 'constant-arrival-rate',
+        rate: 1,
+        timeUnit: '5s',
+        duration: msToDuration(INGEST_DURATION_MS),
+        startTime: msToDuration(INGEST_START_MS),
+        preAllocatedVUs: 2,
+        maxVUs: 4,
+        exec: 'ingest',
+      },
+    } : {}),
   },
   thresholds: {
     // Annotations on the report, not a build gate — the run is expected to
@@ -107,6 +138,17 @@ export const options = {
 
 export default function () {
   consultantJourney(__ITER);
+}
+
+// Only scheduled when WITH_INGEST is set (see options.scenarios.ingest
+// above). pushCatalogPage(__ITER) is per-VU: with preAllocatedVUs:2/maxVUs:4
+// and one arrival per 5s, k6's scheduler keeps reusing the same VU for
+// consecutive iterations rather than spreading across VUs, so __ITER counts
+// up steadily (0, 1, 2, ...) and pageIndex stays well inside a realistic
+// range for PRODUCT_COUNT=5000 / PAGE_SIZE=200 (25 pages) for any run short
+// enough to be run against a shared backend.
+export function ingest() {
+  pushCatalogPage(__ITER);
 }
 
 // Distinguishes "the app saturated" from "k6 could not drive the nominal
