@@ -40,6 +40,30 @@ class SeedLoadtestTests(TestCase):
             self.assertTrue(user.warehouses.exists())
         self.assertFalse(AllowedIP.objects.filter(user__in=users).exists())
 
+    def test_reseeding_repairs_tampered_device_lock_and_ip_allowlist(self):
+        """The three device-lock/IP-allowlist assertions above pass vacuously on a
+        fresh database, since they match the User model's own defaults. This test
+        proves the command actively repairs them: it seeds once, deliberately
+        breaks device_lock_enabled, bound_device_id and AllowedIP for the seeded
+        users the way an admin action or a stale prior run might, reseeds with the
+        same arguments, and asserts every seeded user is back to VU-safe.
+        """
+        self._seed()
+
+        users = User.objects.filter(username__startswith="loadtest-user-")
+        self.assertEqual(users.count(), 3)
+        users.update(device_lock_enabled=True, bound_device_id="stale-device")
+        AllowedIP.objects.create(user=users.first(), ip_or_network="10.0.0.1")
+
+        self._seed()
+
+        users = User.objects.filter(username__startswith="loadtest-user-")
+        self.assertEqual(users.count(), 3)
+        for user in users:
+            self.assertFalse(user.device_lock_enabled)
+            self.assertEqual(user.bound_device_id, "")
+        self.assertFalse(AllowedIP.objects.filter(user__in=users).exists())
+
     def test_employees_count_covers_the_seeded_users(self):
         self._seed(users_per_org=3)
         self.assertGreaterEqual(Organization.objects.get(name="loadtest-org-1").employees_count, 3)

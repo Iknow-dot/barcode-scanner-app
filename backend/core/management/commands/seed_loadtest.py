@@ -38,6 +38,7 @@ ORG_PREFIX = "loadtest-org-"
 USER_PREFIX = "loadtest-user-"
 SKU_PREFIX = "LT-SKU-"
 WAREHOUSE_PREFIX = "LT-W"
+ORDER_CUSTOMER_PREFIX = "Loadtest customer "
 
 DEFAULT_PASSWORD = "loadtest-pass-1234"
 DEFAULT_1C_PASSWORD = "loadtest-1c-password"
@@ -213,7 +214,9 @@ class Command(BaseCommand):
         if not count:
             return
         creator = User.objects.filter(organization=org).order_by("id").first()
-        existing = PurchaseOrder.objects.filter(organization=org).count()
+        existing = PurchaseOrder.objects.filter(
+            organization=org, customer_name__startswith=ORDER_CUSTOMER_PREFIX,
+        ).count()
         skus = list(
             Product.objects.filter(organization=org).order_by("id")
             .values_list("sku", "name", "price")[:100]
@@ -224,7 +227,7 @@ class Command(BaseCommand):
             order = PurchaseOrder.objects.create(
                 organization=org,
                 created_by=creator,
-                customer_name=f"Loadtest customer {i}",
+                customer_name=f"{ORDER_CUSTOMER_PREFIX}{i}",
                 customer_phone=f"5{i:08d}",
                 status=PurchaseOrder.Status.DRAFT,
             )
