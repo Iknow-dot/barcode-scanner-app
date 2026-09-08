@@ -150,10 +150,21 @@ numbers.
 ## Reading a run
 
 ```bash
+docker compose -f loadtest/docker-compose.loadtest.yml exec -T db \
+  psql -U postgres -c 'SELECT pg_stat_statements_reset();'
 bash loadtest/scripts/k6.sh entry/sweep.js --out csv=/scripts/run.csv
 python loadtest/report.py loadtest/k6/run.csv --out loadtest/last-run.md
 cat loadtest/last-run.md
 ```
+
+The `pg_stat_statements_reset()` call is not cosmetic — see the cumulative-
+counter note below. Run it right after seeding, immediately before the k6
+invocation whose numbers you actually want the "top queries" table to
+reflect; skip it and that table is dominated by migrations, `collectstatic`
+and `seed_loadtest`'s own `bulk_create`s instead of the run you just made.
+`report.py`'s generated `last-run.md` prints this same caveat inline in its
+"Top queries by total time" section, so a reader who only ever opens the
+generated file (not this README) still sees it.
 
 Run `report.py` from the repo root (not from inside `loadtest/`) — it shells
 out to `docker compose -f loadtest/docker-compose.loadtest.yml`, a path
@@ -205,17 +216,73 @@ top-queries table as "what's expensive over the stack's whole up-time."
 Real numbers from this stack, each with the caveat it needs — do not round
 these into more confidence than they carry.
 
-- **Queueing onset is ~40 req/s.** At that arrival rate, `product_search` p95
-  is already 2899ms (breaching its 1000ms annotation threshold) while
-  `catalog_list` still holds at ~600ms — with **zero dropped iterations and
-  peak VUs (99) far under the cap**. This is the one clean capacity figure in
-  this whole exercise.
-- **60 req/s is NOT a clean figure.** At that arrival rate, 157 iterations
-  were dropped despite peak VUs (255) staying comfortably under the
-  configured cap (4000) — meaning the nominal 60 req/s target was never
-  actually delivered to the app. Reproduced twice. The true boundary between
-  "clearly fine" and "clearly saturated" lies somewhere between 40 and 60
-  req/s and has not been pinned down more precisely than that.
+**The three figures below (queueing onset, the ingest collision, and the
+login storm) were re-measured on 2026-09-08 after fixing N1/N2 (`ingest.js`
+now genuinely writes on every push and never grows the catalog beyond the
+seeded range), N5 (`journey.js`'s traffic mix and SKU choice no longer
+collapse onto every fresh VU's first iteration under a ramp), and N4
+(`failure-modes.js`'s login storm no longer collapses onto one user row).
+All three changed — one dramatically. Reseeded to a known 5000-product,
+50-user, single-org catalog before every run below; each figure states its
+own trustworthiness evidence rather than asking you to take it on faith.**
+
+- **Queueing onset moved UP, not down: at least 50 req/s is now clean, and
+  the old ~40 req/s figure no longer reflects this stack.** A dedicated
+  verification ramp (`-e CEILING_STAGES='[...]'`, stages 5→20→30→40→50 req/s,
+  30s dwell each) came back clean **twice, independently, after a backend
+  restart each time**: peak VUs 18, **zero dropped iterations**,
+  `product_search` p95 41-44ms, `catalog_list` p95 39-41ms — nowhere near the
+  1000ms annotation threshold either run. This is a real, reproducible
+  improvement over the old ~40 req/s / p95=2899ms figure, most plausibly
+  because N5 had been secretly measuring an unrealistically cache-friendly
+  load (every fresh VU hammering SKU 1 and firing all four endpoints at
+  once) rather than the documented scan-dominant mix spread across the full
+  catalog — but the previous number was also from a different session on
+  the same "not a DO droplet" laptop (see "Local numbers are relative"
+  below), so some of the gap cannot be attributed to the fix with certainty.
+  **50 req/s is the new number to quote as clean.**
+- **The boundary above 50 req/s is a cliff, not a slope, and it is close.**
+  A ramp stepping 50→55→60 req/s came back clean once (peak VUs 69, 0
+  dropped, `product_search` p95 586ms, `catalog_list` p95 515ms) and **not
+  clean** on an otherwise-identical repeat (peak VUs 197, 99 dropped
+  iterations, p95 1927ms / 1562ms) — the same configuration landed on both
+  sides of the trustworthiness line across two runs. Pushing one step
+  further, to a fresh stage at 63-70 req/s, reliably collapsed the run
+  **every time it was tried (3 separate attempts)**: peak VUs in the
+  thousands, 1300-2300+ dropped iterations, p95 latencies of 6-23 *seconds*,
+  and in two of the three attempts an outright `login failed ... request
+  timeout` script exception. Each collapse left the backend degraded enough
+  that a plain `docker restart barcode-loadtest-backend-1` was needed before
+  the next measurement would run clean again — this is exactly the
+  documented "a login storm can wedge the backend" Gotcha below, triggered
+  here by the ramp needing a burst of brand-new VUs (each logging in fresh)
+  the moment its target exceeds anything reached so far in that run, not by
+  60-70 req/s of steady-state read traffic being inherently unsustainable.
+  **Conclusion: quote 50 req/s as the clean ceiling; do not quote a number
+  between 55 and 70 as either "fine" or "the breaking point" — this run
+  showed it can be either, unpredictably, and pushing to find out risks
+  taking the stack down for several minutes.**
+- **The catalog-ingest collision is now negligible at the clean 50 req/s
+  level — a very different picture from the old ~60%/~67% figure.** With
+  `-e WITH_INGEST=1` layered onto the same clean 5→50 req/s ramp: `catalog_ingest`
+  itself is confirmed to actually write every push now (`upserted === 200`
+  on repeated pushes of the same page, where before the second push onward
+  silently took the skip branch — see N1 below), yet `product_search` p95
+  was 44ms against a 41-43ms baseline and `catalog_list` p95 was 41ms against
+  a 39-40ms baseline — indistinguishable from run-to-run noise, not a 60%
+  regression. The old figure was most likely measuring an ingest scenario
+  that, after its first push, mostly took the free skip branch (N1) *layered
+  on top of* a baseline that was itself already unhealthy at "~40 req/s"
+  (p95=2899ms, well past its own threshold) — collision math done against an
+  already-struggling baseline naturally reads worse than collision math done
+  against a genuinely healthy one. Separately, layering the same
+  now-fixed ingest scenario onto the marginal 50→55→60 ramp (the cliff
+  described above) reliably tipped it further into an untrustworthy state
+  (peak VUs 913, 815 dropped iterations, p95 3.3-6.5s) in the one attempt
+  made — suggestive that a concurrent ingest does make an *already-marginal*
+  load worse, but this specific comparison is **not** trustworthy on its own
+  terms (the same ramp without ingest was itself inconsistent — see above),
+  so it is reported here as an observation, not a number to quote.
 - **`catalog_list` shows no N+1 at either page size measured** — 6 queries,
   flat, at both `page_size=25` and `page_size=100` (a 4x row-count increase).
   This is the one endpoint with an actual size-scaling probe behind it; the
@@ -223,13 +290,15 @@ these into more confidence than they carry.
   `orders_list`, `analytics_orders`, `product_search`) rest on a code read
   (`select_related`/`prefetch_related` present in the view), not a
   measurement — see "Reading a run" above.
-- **Catalog ingest is expensive: ~1408 DB queries and ~3.1s of DB time for a
-  single 200-product push** — roughly 7 queries per product. A concurrent
-  bulk ingest (`-e WITH_INGEST=1` on `ceiling.js`) measurably degrades live
-  scanning: `product_search` p95 rises ~60% (avg ~67%) under a concurrent
-  push versus the same ramp without one; `catalog_list` degrades more mildly
-  (p95 +12%, avg +24%). The ingest endpoint's own DB cost is the dominant
-  driver of that collision.
+- **Catalog ingest is expensive: ~1408 DB queries and ~2.7-3.1s of DB time
+  for a single 200-product push that genuinely writes** — roughly 7 queries
+  per product, confirmed on both the first push (200/200 upserted) and a
+  repeat push of the identical page (also 200/200 upserted, thanks to N1's
+  per-push cosmetic-field perturbation — before that fix, every push after
+  the first silently took the ~200-query skip branch instead, see N1 below).
+  See the queueing-onset bullet above for how this collides with live
+  scanning at various load levels — the honest picture turned out to be far
+  more nuanced than a flat percentage.
 - **Under `hang_30s`, the backend answers in ~15.0–16.7s** — inside its own
   25000ms budget (15s upstream read timeout + 5s connect + margin), and
   nowhere near the DO router's 60s cutoff. The backend genuinely does not
@@ -242,15 +311,37 @@ these into more confidence than they carry.
   `product_search`, until it drains. `failure.js`'s committed rate
   deliberately stays under that ceiling so it measures the per-request
   budget cleanly instead of reproducing that unbounded queue.)
-- **`failure.js`'s `auth_login`/`auth_refresh` thresholds breach by design**
-  under the login storm (`storm`, rate 10/s combined login+refresh) — observed
-  `auth_login` p95 ~4.7-7.0s against a 5000ms threshold, `auth_refresh` p95
-  ~3.8-6.5s against a 3000ms threshold. **The breach is the finding, not a
-  broken test**: it quantifies what a real shift-change login burst costs
-  (PBKDF2 plus a refresh-blacklist-row insert, both queueing behind the same
-  8 slots), and the thresholds are deliberately left red rather than
-  weakened to force a green exit code. A `failure.js` run reliably exits 99
-  for this reason — see its own threshold comments for the full rationale.
+- **`failure.js`'s `auth_login`/`auth_refresh` thresholds breach by design
+  under the login storm — and re-measuring after fixing the storm's own
+  user-collision bug (N4) made the breach dramatically WORSE, not better.**
+  Before N4, `login(__VU * 1000 + __ITER)` divided out to the exact same
+  seeded user for every VU (`1000 % USER_COUNT(50) === 0`), so the storm was
+  secretly hammering one Postgres row instead of the documented many-account
+  shift change. Confirmed directly (a temporary debug probe) that N4's fix
+  genuinely spreads logins: 30 consecutive storm iterations now land on 30
+  distinct seeded users, not one. Despite that fix, two independent runs of
+  the storm at its committed rate (10 req/s combined login+refresh, same
+  `preAllocatedVUs`/`maxVUs` as before) both measured `auth_login` p95 of
+  **12.7-15.3s** and `auth_refresh` p95 of **12.0-14.8s** — roughly double-to-
+  triple the previously-quoted 4.7-7.0s / 3.8-6.5s range, and both runs also
+  showed 31-34 **dropped iterations** even though peak VUs (130-134) stayed
+  under the scenario's own 220 cap, meaning the storm's committed rate is not
+  even fully deliverable at its current pool size any more. The likely
+  explanation is not row-lock convoying at all: the backend container is
+  capped at `cpus: 1.0` (`docker-compose.loadtest.yml`, matching the DO
+  `basic-xxs` shared vCPU this rig models), and PBKDF2 password hashing is
+  CPU-bound, not I/O-bound — a burst of concurrent logins across many
+  distinct users still serializes on that single shared core. The gap
+  between the application's OWN measured `server_total_ms` (avg 574ms,
+  p95 1189ms — genuinely fast) and the full `http_req_duration` (avg 6.4s,
+  p95 12.4s) is almost entirely **queueing time waiting for a free CPU
+  slot**, not processing time — consistent with CPU contention, not a
+  database lock. **The breach is still the finding, not a broken test** —
+  if anything, this is a more accurate and more concerning measurement of
+  what a real shift-change burst costs than the row-lock story previously
+  told: quote it as p95 ~12.7-15.3s / ~12.0-14.8s with these caveats, not the
+  old 4.7-7.0s / 3.8-6.5s range. `failure.js` reliably exits 99 for this
+  reason — see its own threshold comments for the full rationale.
 
 ## The image proxy cannot be measured locally
 
@@ -340,6 +431,7 @@ that isn't ours to load.
 | `DJANGO_SECRET_KEY` | the compose value | Must match the target's, or every image-proxy request 403s (signatures won't verify). |
 | `PUSH_TOKEN` | `loadtest-push-token-1` | Must match the seeded org's `webhook_token`. |
 | `USER_COUNT` / `PRODUCT_COUNT` | `50` / `5000` | Must match what was actually seeded (`seed.sh`'s `USERS`/`PRODUCTS`) — a mismatch doesn't fail loudly on its own outside of `smoke.js`'s own guard; every later scenario's working set just silently narrows. |
+| `IMAGE_EXPECT_STATUS` | `502` | Status `entry/smoke.js`'s `catalog_image` check and `scenarios/images.js`'s `imageGrid` assert. Locally always `502` (the SSRF guard rejects every seeded `fake-1c` image URL — see "The image proxy cannot be measured locally"). **Phase 2 must set this to `200`**: pointed at a deployment with real public-HTTPS images, the same request legitimately succeeds, and a hard-coded `502` would fail smoke/images (and breach their thresholds) at the exact moment the proxy starts working for real. |
 | `ORG_ID` | `1` | Fallback only — real code paths read the org id from the login response (`session.organizationId`), since Postgres sequences don't reset on delete and a hard-coded id mints signatures for the wrong org after any `--reset` + reseed. |
 | `SWEEP_RATE` / `SWEEP_DURATION` / `GRID_SIZE` | `5` / `40s` / `20` | `entry/sweep.js` per-scenario rate and window length, and the `images` scenario's grid width. **`SWEEP_RATE` does not affect `images`** — that scenario hard-codes `rate: 1` in its own `scenario()` call regardless of `SWEEP_RATE` (`entry/sweep.js`'s `images: scenario('images', 6, { rate: 1 })`); only `GRID_SIZE` changes its load. |
 | `CEILING_STAGES` | unset (uses the built-in ramp) | JSON array of `{"target":N,"duration":"Ns"}` stages overriding `entry/ceiling.js`'s default ramp. |
