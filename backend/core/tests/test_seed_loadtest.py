@@ -45,24 +45,57 @@ class SeedLoadtestTests(TestCase):
         fresh database, since they match the User model's own defaults. This test
         proves the command actively repairs them: it seeds once, deliberately
         breaks device_lock_enabled, bound_device_id and AllowedIP for the seeded
-        users the way an admin action or a stale prior run might, reseeds with the
-        same arguments, and asserts every seeded user is back to VU-safe.
+        users (company users and the per-org company_admin alike) the way an admin
+        action or a stale prior run might, reseeds with the same arguments, and
+        asserts every seeded user is back to VU-safe.
         """
         self._seed()
 
-        users = User.objects.filter(username__startswith="loadtest-user-")
-        self.assertEqual(users.count(), 3)
-        users.update(device_lock_enabled=True, bound_device_id="stale-device")
-        AllowedIP.objects.create(user=users.first(), ip_or_network="10.0.0.1")
+        users = list(User.objects.filter(username__startswith="loadtest-user-")) + [
+            User.objects.get(username="loadtest-admin-1"),
+        ]
+        self.assertEqual(len(users), 4)
+        pks = [u.pk for u in users]
+        User.objects.filter(pk__in=pks).update(
+            device_lock_enabled=True, bound_device_id="stale-device",
+        )
+        AllowedIP.objects.create(user=users[0], ip_or_network="10.0.0.1")
+        AllowedIP.objects.create(user=users[-1], ip_or_network="10.0.0.2")
 
         self._seed()
 
-        users = User.objects.filter(username__startswith="loadtest-user-")
-        self.assertEqual(users.count(), 3)
+        users = User.objects.filter(pk__in=pks)
+        self.assertEqual(users.count(), 4)
         for user in users:
             self.assertFalse(user.device_lock_enabled)
             self.assertEqual(user.bound_device_id, "")
         self.assertFalse(AllowedIP.objects.filter(user__in=users).exists())
+
+    def test_seeds_a_company_admin_per_org(self):
+        """catalog/sync-status/ and analytics/orders/ are IsCompanyAdmin-gated and
+        403 every company_user — a k6 scenario against those needs a real admin
+        account with the same VU-safety guarantees as the company users."""
+        self._seed()
+
+        admin = User.objects.get(username="loadtest-admin-1")
+        self.assertEqual(admin.role, User.Role.COMPANY_ADMIN)
+        self.assertEqual(admin.organization, Organization.objects.get(name="loadtest-org-1"))
+        self.assertFalse(admin.device_lock_enabled)
+        self.assertEqual(admin.bound_device_id, "")
+        self.assertFalse(AllowedIP.objects.filter(user=admin).exists())
+        self.assertTrue(admin.warehouses.exists())
+        self.assertTrue(admin.check_password("loadtest-pass-1234"))
+
+    def test_company_admin_does_not_shift_company_user_numbering(self):
+        """loadtest-admin-<org index> must not consume a slot in the globally
+        sequential loadtest-user-<n> numbering that existing k6 config assumes."""
+        self._seed(users_per_org=3)
+
+        usernames = set(
+            User.objects.filter(username__startswith="loadtest-user-")
+            .values_list("username", flat=True)
+        )
+        self.assertEqual(usernames, {"loadtest-user-1", "loadtest-user-2", "loadtest-user-3"})
 
     def test_employees_count_covers_the_seeded_users(self):
         self._seed(users_per_org=3)
@@ -87,6 +120,7 @@ class SeedLoadtestTests(TestCase):
 
         self.assertFalse(Organization.objects.filter(name__startswith="loadtest-org-").exists())
         self.assertFalse(User.objects.filter(username__startswith="loadtest-user-").exists())
+        self.assertFalse(User.objects.filter(username__startswith="loadtest-admin-").exists())
         self.assertTrue(Organization.objects.filter(pk=keeper.pk).exists())
         self.assertTrue(User.objects.filter(pk=keeper_user.pk).exists())
 

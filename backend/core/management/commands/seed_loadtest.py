@@ -36,6 +36,7 @@ from users.models import User
 
 ORG_PREFIX = "loadtest-org-"
 USER_PREFIX = "loadtest-user-"
+ADMIN_PREFIX = "loadtest-admin-"
 SKU_PREFIX = "LT-SKU-"
 WAREHOUSE_PREFIX = "LT-W"
 ORDER_CUSTOMER_PREFIX = "Loadtest customer "
@@ -80,6 +81,7 @@ class Command(BaseCommand):
         for org_index in range(1, options["orgs"] + 1):
             org = self._organization(org_index, options)
             warehouses = self._warehouses(org, options["warehouses_per_org"])
+            self._company_admin(org, org_index, warehouses, password_hash)
             user_number = self._users(
                 org, warehouses, options["users_per_org"], password_hash, user_number,
             )
@@ -101,6 +103,10 @@ class Command(BaseCommand):
                 "identification_number": f"LT{index:09d}",
                 "web_service_url": options["web_service_url"],
                 "web_service_username": "loadtest",
+                # employees_count only caps company_user accounts
+                # (Organization.non_admin_user_count / has_reached_user_limit) — the
+                # one company_admin seeded per org below never counts against it, so
+                # this headroom does not need to account for the admin.
                 "employees_count": max(options["users_per_org"], 1) * 10,
                 "product_catalog_enabled": True,
                 "gift_marking_enabled": True,
@@ -120,6 +126,28 @@ class Command(BaseCommand):
             )
             warehouses.append(warehouse)
         return warehouses
+
+    def _company_admin(self, org, org_index, warehouses, password_hash):
+        """One company_admin per org, numbered by org index (not the globally
+        sequential company_user numbering below) — endpoints gated by
+        IsCompanyAdmin (e.g. catalog/sync-status/, analytics/orders/) 403 every
+        company_user, so a k6 scenario hitting those needs an admin account."""
+        admin, _ = User.objects.update_or_create(
+            username=f"{ADMIN_PREFIX}{org_index}",
+            defaults={
+                "password": password_hash,
+                "role": User.Role.COMPANY_ADMIN,
+                "organization": org,
+                "device_lock_enabled": False,
+                "bound_device_id": "",
+                "can_apply_discount": True,
+                "max_discount_percent": Decimal("50.00"),
+                "is_active": True,
+            },
+        )
+        admin.allowed_ips.all().delete()
+        admin.warehouses.set(warehouses)
+        return admin
 
     def _users(self, org, warehouses, count, password_hash, start_number):
         number = start_number
