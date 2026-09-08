@@ -141,12 +141,18 @@ export default function () {
 }
 
 // Only scheduled when WITH_INGEST is set (see options.scenarios.ingest
-// above). pushCatalogPage(__ITER) is per-VU: with preAllocatedVUs:2/maxVUs:4
-// and one arrival per 5s, k6's scheduler keeps reusing the same VU for
-// consecutive iterations rather than spreading across VUs, so __ITER counts
-// up steadily (0, 1, 2, ...) and pageIndex stays well inside a realistic
-// range for PRODUCT_COUNT=5000 / PAGE_SIZE=200 (25 pages) for any run short
-// enough to be run against a shared backend.
+// above). pushCatalogPage(__ITER) is per-VU — __ITER is each VU's OWN
+// iteration counter, so if k6 spins up a second/third/fourth VU under
+// contention (it can, up to maxVUs:4, independent of how lightly loaded
+// this scenario is), each new VU's __ITER also starts at 0, meaning several
+// VUs can push the SAME pageIndex (and therefore the same SKU range)
+// concurrently rather than __ITER counting up as one steady global
+// sequence. That is harmless here — the ingest endpoint upserts
+// idempotently by (organization, sku), so a repeated page is a no-op, not a
+// correctness bug — but it does mean pageIndex should not be read as a
+// guaranteed sweep through increasing SKU ranges; it stays well inside a
+// realistic range for PRODUCT_COUNT=5000 / PAGE_SIZE=200 (25 pages)
+// regardless, for any run short enough to be run against a shared backend.
 export function ingest() {
   pushCatalogPage(__ITER);
 }
