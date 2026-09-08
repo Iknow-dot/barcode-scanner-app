@@ -132,32 +132,29 @@ class FakeOneCTests(unittest.TestCase):
 
         When a client disconnects before reading the 204 response,
         _send_no_content must catch the error and not output anything to stderr.
+
+        This test exercises the REAL BaseHTTPRequestHandler.send_response()
+        and end_headers() methods, which interact with wfile and buffers.
         """
-        # Create a mock wfile that raises ConnectionAbortedError on write()
+        # Create a failing wfile that raises ConnectionAbortedError on write()
         class FailingWFile:
             def write(self, data):
                 raise ConnectionAbortedError("simulated client disconnect")
 
-        # Create a mock handler with no real socket
-        class MockHandler:
-            def __init__(self):
-                self.wfile = FailingWFile()
+        # Create a real Handler instance (without calling __init__)
+        handler = Handler.__new__(Handler)
 
-            def send_response(self, status):
-                self._status = status
+        # Set up the attributes that send_response and end_headers actually use
+        handler.wfile = FailingWFile()
+        handler.request_version = "HTTP/1.1"
+        handler.requestline = "GET / HTTP/1.1"  # Required by log_request()
+        handler._headers_buffer = []  # BaseHTTPRequestHandler uses this buffer
+        handler.client_address = ("127.0.0.1", 12345)  # For potential logging
 
-            def send_header(self, key, value):
-                pass
-
-            def end_headers(self):
-                pass
-
-        # Capture stderr while calling the real _send_no_content method
-        handler = MockHandler()
+        # Capture stderr while calling _send_no_content with real stdlib path
         stderr_capture = io.StringIO()
         with contextlib.redirect_stderr(stderr_capture):
-            # Bind the real _send_no_content to the mock handler and call it
-            Handler._send_no_content(handler)
+            handler._send_no_content()
 
         # Assert nothing was written to stderr (the fix suppresses the error)
         stderr_output = stderr_capture.getvalue()
