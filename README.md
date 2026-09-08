@@ -155,6 +155,7 @@ barcode-scanner-app/
 │   ├── package.json
 │   └── Dockerfile
 ├── .do/app.yaml                     # DigitalOcean App Platform spec
+├── loadtest/                        # on-demand k6 stress-test rig — see loadtest/README.md. Not part of CI.
 └── docker-compose.yml
 ```
 
