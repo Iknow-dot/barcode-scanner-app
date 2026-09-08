@@ -13,6 +13,7 @@ from __future__ import annotations
 import itertools
 import json
 import os
+import sys
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -51,19 +52,35 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, *args):
         """Silence per-request logging; a load test would drown the console."""
 
+    def handle(self):
+        """Override handle to suppress connection errors from client disconnects."""
+        try:
+            super().handle()
+        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError, OSError):
+            # Client disconnected before completing request/response cycle
+            pass
+
     # -- wire helpers -----------------------------------------------------
 
     def _send_json(self, status: int, body: object) -> None:
         payload = json.dumps(body).encode()
-        self.send_response(status)
-        self.send_header("Content-Type", "application/json; charset=utf-8")
-        self.send_header("Content-Length", str(len(payload)))
-        self.end_headers()
-        self.wfile.write(payload)
+        try:
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError, OSError):
+            # Client disconnected before receiving response (e.g., timeout, network issue)
+            pass
 
     def _send_no_content(self) -> None:
-        self.send_response(204)
-        self.end_headers()
+        try:
+            self.send_response(204)
+            self.end_headers()
+        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError, OSError):
+            # Client disconnected before receiving response
+            pass
 
     def _read_body(self) -> dict:
         length = int(self.headers.get("Content-Length") or 0)
