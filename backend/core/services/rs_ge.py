@@ -12,6 +12,7 @@ from typing import Any
 
 import httpx
 
+from core.log_redaction import mask_id
 from core.services.timeouts import budget
 
 from core.exceptions import ExternalServiceError
@@ -44,14 +45,14 @@ def lookup_taxpayer(identification_number: str, *, timeout: float | None = None)
             timeout=budget(timeout if timeout is not None else DEFAULT_TIMEOUT),
         )
     except httpx.TimeoutException:
-        logger.error("RS.ge lookup timeout for ID %s", identification_number)
+        logger.error("RS.ge lookup timeout for ID %s", mask_id(identification_number))
         raise RSGeError("RS_GE_TIMEOUT", "Timeout while connecting to RS.ge.", 504)
     except httpx.RequestError as exc:
-        logger.error("RS.ge lookup error for ID %s: %s", identification_number, exc)
+        logger.error("RS.ge lookup error for ID %s: %s", mask_id(identification_number), exc)
         raise RSGeError("RS_GE_ERROR", "Could not connect to RS.ge.", 502)
 
     if rs_response.status_code != 200:
-        logger.warning("RS.ge returned %s for ID %s", rs_response.status_code, identification_number)
+        logger.warning("RS.ge returned %s for ID %s", rs_response.status_code, mask_id(identification_number))
         raise _not_found(rs_response.status_code)
 
     try:

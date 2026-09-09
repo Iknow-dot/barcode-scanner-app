@@ -9,6 +9,7 @@ translates both into the ``{code, detail}`` envelope.
 import logging
 from decimal import Decimal, InvalidOperation
 
+from core.log_redaction import safe_body
 from core.models import ProductBarcode
 from core.services.consult_web_exchange import (
     ConsultWebExchangeClient,
@@ -242,8 +243,8 @@ def push_order_to_consult(order):
     number = body.get("OrderNumber") or ""
     if not number:
         logging.error(
-            "CreateOrder succeeded for order=%s but returned no OrderNumber: %r",
-            order.id, body,
+            "CreateOrder succeeded for order=%s but returned no OrderNumber: %s",
+            order.id, safe_body(body),
         )
         number = "UNKNOWN"
     # Persisted before super().update() saves the status, so a later

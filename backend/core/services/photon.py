@@ -22,6 +22,7 @@ from typing import Any
 
 import httpx
 
+from core.log_redaction import mask_coords, mask_text
 from core.services.timeouts import budget
 from django.conf import settings
 
@@ -141,21 +142,21 @@ def search_addresses(
             timeout=budget(timeout if timeout is not None else DEFAULT_TIMEOUT),
         )
     except httpx.TimeoutException as exc:
-        logger.error("Photon search timeout q=%r: %s", query, exc)
+        logger.error("Photon search timeout q=%s: %s", mask_text(query), exc)
         raise PhotonError(
             code="EXTERNAL_SERVICE_TIMEOUT",
             detail="Timeout while contacting the address search service.",
             http_status=504,
         ) from exc
     except httpx.ConnectError as exc:
-        logger.error("Photon search connect error q=%r: %s", query, exc)
+        logger.error("Photon search connect error q=%s: %s", mask_text(query), exc)
         raise PhotonError(
             code="EXTERNAL_SERVICE_UNAVAILABLE",
             detail="Could not connect to the address search service.",
             http_status=502,
         ) from exc
     except httpx.RequestError as exc:
-        logger.error("Photon search request error q=%r: %s", query, exc)
+        logger.error("Photon search request error q=%s: %s", mask_text(query), exc)
         raise PhotonError(
             code="EXTERNAL_SERVICE_ERROR",
             detail="Communication error with the address search service.",
@@ -164,7 +165,7 @@ def search_addresses(
 
     if response.status_code != 200:
         logger.warning(
-            "Photon search non-200 q=%r status=%s", query, response.status_code
+            "Photon search non-200 q=%s status=%s", mask_text(query), response.status_code
         )
         raise PhotonError(
             code="EXTERNAL_SERVICE_ERROR",
@@ -232,21 +233,21 @@ def reverse_geocode(
             timeout=budget(timeout if timeout is not None else DEFAULT_TIMEOUT),
         )
     except httpx.TimeoutException as exc:
-        logger.error("Photon reverse timeout lat=%s lng=%s: %s", lat, lng, exc)
+        logger.error("Photon reverse timeout at=%s: %s", mask_coords(lat, lng), exc)
         raise PhotonError(
             code="EXTERNAL_SERVICE_TIMEOUT",
             detail="Timeout while contacting the reverse geocoder.",
             http_status=504,
         ) from exc
     except httpx.ConnectError as exc:
-        logger.error("Photon reverse connect error lat=%s lng=%s: %s", lat, lng, exc)
+        logger.error("Photon reverse connect error at=%s: %s", mask_coords(lat, lng), exc)
         raise PhotonError(
             code="EXTERNAL_SERVICE_UNAVAILABLE",
             detail="Could not connect to the reverse geocoder.",
             http_status=502,
         ) from exc
     except httpx.RequestError as exc:
-        logger.error("Photon reverse request error lat=%s lng=%s: %s", lat, lng, exc)
+        logger.error("Photon reverse request error at=%s: %s", mask_coords(lat, lng), exc)
         raise PhotonError(
             code="EXTERNAL_SERVICE_ERROR",
             detail="Communication error with the reverse geocoder.",
@@ -255,8 +256,8 @@ def reverse_geocode(
 
     if response.status_code != 200:
         logger.warning(
-            "Photon reverse non-200 lat=%s lng=%s status=%s",
-            lat, lng, response.status_code,
+            "Photon reverse non-200 at=%s status=%s",
+            mask_coords(lat, lng), response.status_code,
         )
         raise PhotonError(
             code="EXTERNAL_SERVICE_ERROR",

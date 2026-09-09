@@ -30,6 +30,7 @@ from urllib.parse import urljoin
 import httpx
 
 from core.exceptions import ExternalServiceError
+from core.log_redaction import describe_shape, safe_body
 from core.services.timeouts import budget
 
 logger = logging.getLogger(__name__)
@@ -249,8 +250,8 @@ class ConsultWebExchangeClient:
             )
         if response.status_code != 200:
             logger.error(
-                "ConsultWebExchange GetStockAndPrices unexpected org=%s sku=%s status=%s body=%r",
-                self.organization.id, sku, response.status_code, response.text[:500],
+                "ConsultWebExchange GetStockAndPrices unexpected org=%s sku=%s status=%s body=%s",
+                self.organization.id, sku, response.status_code, safe_body(response),
             )
             raise ConsultWebExchangeError(
                 code="EXTERNAL_SERVICE_ERROR",
@@ -295,8 +296,8 @@ class ConsultWebExchangeClient:
             return None
         if response.status_code != 200:
             logger.warning(
-                "ConsultWebExchange CheckClient non-200 org=%s status=%s body=%r",
-                self.organization.id, response.status_code, response.text[:500],
+                "ConsultWebExchange CheckClient non-200 org=%s status=%s body=%s",
+                self.organization.id, response.status_code, safe_body(response),
             )
             raise ConsultWebExchangeError(
                 code="EXTERNAL_SERVICE_ERROR",
@@ -311,8 +312,8 @@ class ConsultWebExchangeClient:
             body = None
 
         logger.info(
-            "ConsultWebExchange CheckClient ok org=%s body=%r",
-            self.organization.id, response.text[:1000],
+            "ConsultWebExchange CheckClient ok org=%s shape=%s",
+            self.organization.id, describe_shape(body),
         )
 
         # Treat empty body / explicit not-found markers / wrapper-with-empty-
@@ -375,8 +376,8 @@ class ConsultWebExchangeClient:
         # consultant the registration failed for a client that now exists.
         if not 200 <= response.status_code < 300:
             logger.warning(
-                "ConsultWebExchange CreateClient non-2xx org=%s status=%s body=%r",
-                self.organization.id, response.status_code, response.text[:500],
+                "ConsultWebExchange CreateClient non-2xx org=%s status=%s body=%s",
+                self.organization.id, response.status_code, safe_body(response),
             )
             raise ConsultWebExchangeError(
                 code="EXTERNAL_SERVICE_ERROR",
@@ -455,8 +456,8 @@ class ConsultWebExchangeClient:
         if rejected:
             message = body.get("message") if isinstance(body, dict) else None
             logger.warning(
-                "ConsultWebExchange CreateOrder rejected org=%s status=%s body=%r",
-                self.organization.id, response.status_code, response.text[:500],
+                "ConsultWebExchange CreateOrder rejected org=%s status=%s body=%s",
+                self.organization.id, response.status_code, safe_body(response),
             )
             raise ConsultWebExchangeError(
                 code="ORDER_CREATE_REJECTED",
@@ -466,8 +467,8 @@ class ConsultWebExchangeClient:
             )
         if response.status_code != 200 or not isinstance(body, dict):
             logger.error(
-                "ConsultWebExchange CreateOrder unexpected org=%s status=%s body=%r",
-                self.organization.id, response.status_code, response.text[:500],
+                "ConsultWebExchange CreateOrder unexpected org=%s status=%s body=%s",
+                self.organization.id, response.status_code, safe_body(response),
             )
             raise ConsultWebExchangeError(
                 code="EXTERNAL_SERVICE_ERROR",

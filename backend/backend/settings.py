@@ -197,6 +197,15 @@ LOGGING = {
         'handlers': ['console'],
         'level': os.environ.get('LOG_LEVEL', 'INFO'),
     },
+    'loggers': {
+        # httpx logs 'HTTP Request: GET <full url>' at INFO. Our outbound
+        # Photon URLs carry the client's typed address in `q=` and their
+        # coordinates in `lat`/`lon`, so that line re-leaks what
+        # core.services.photon deliberately masks. httpcore's DEBUG trace
+        # is muted for the same reason.
+        'httpx': {'level': 'WARNING'},
+        'httpcore': {'level': 'WARNING'},
+    },
 }
 
 # Photon (komoot) geocoder — identifying User-Agent sent on /api and /reverse.
