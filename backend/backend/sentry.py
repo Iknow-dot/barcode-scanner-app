@@ -21,7 +21,7 @@ unscrubbed.
 from __future__ import annotations
 
 import re
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 REDACTED = "[Filtered]"
 
@@ -112,3 +112,74 @@ def scrub_transaction(event: dict, hint: Optional[dict] = None) -> Optional[dict
         return scrub_event(event, hint)
     except Exception:
         return None
+
+
+# Order confirm is PATCH on the order detail route; the pk is numeric.
+_ORDER_DETAIL_RE = re.compile(r"^/api/v1/orders/\d+/$")
+_CLIENT_CREATE_PATH = "/api/v1/clients/create/"
+_UNSAMPLED_PREFIXES = ("/admin", "/static")
+
+
+def make_traces_sampler(base_rate: float) -> Callable[[dict], float]:
+    """Build a `traces_sampler`.
+
+    A flat rate is the wrong tool here: `instance_count: 1` on `basic-xxs`
+    cannot afford to trace everything, but the two paths that can silently
+    corrupt state — the fail-closed 1C order push and the non-idempotent
+    client create — are worth full sampling.
+    """
+
+    def traces_sampler(sampling_context: dict) -> float:
+        environ = (sampling_context or {}).get("wsgi_environ") or {}
+        path = environ.get("PATH_INFO") or ""
+        method = environ.get("REQUEST_METHOD") or ""
+
+        if path.startswith(_UNSAMPLED_PREFIXES):
+            return 0.0
+        if method == "PATCH" and _ORDER_DETAIL_RE.match(path):
+            return 1.0
+        if path == _CLIENT_CREATE_PATH:
+            return 1.0
+        return base_rate
+
+    return traces_sampler
+
+
+def init_sentry(
+    *,
+    dsn: Optional[str],
+    environment: Optional[str] = None,
+    release: Optional[str] = None,
+    traces_sample_rate: float = 0.05,
+) -> bool:
+    """Install the Sentry client. Returns False (installing nothing) with no DSN.
+
+    Configuration arrives as explicit arguments rather than being read from
+    `settings`, so initialization behaviour stays testable: by the time any
+    test runs, `settings.py` has long since been imported.
+
+    Integrations are left to auto-detection — importing `DjangoIntegration`
+    explicitly would pull Django in at settings-import time for no gain.
+    """
+    if not dsn:
+        return False
+
+    import sentry_sdk
+
+    sentry_sdk.init(
+        dsn=dsn,
+        environment=environment or "production",
+        release=release or None,
+        # --- the four options that carry the safety guarantee ---
+        send_default_pii=False,
+        # Load-bearing: suppresses stack-frame locals, which would otherwise
+        # ship decrypted per-org 1C passwords out of ConsultWebExchangeClient.
+        include_local_variables=False,
+        # Request bodies carry customer_identification_number, customer_phone
+        # and names.
+        max_request_body_size="never",
+        before_send=scrub_event,
+        before_send_transaction=scrub_transaction,
+        traces_sampler=make_traces_sampler(traces_sample_rate),
+    )
+    return True

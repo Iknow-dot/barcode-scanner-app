@@ -19,6 +19,7 @@ dependencies = [
     "whitenoise>=6.8.2",
     "bleach[css]>=6.1.0",
     "lxml>=5.0.0",
+    "sentry-sdk[django]>=2.69,<3",
 ]
 
 [tool.uv]

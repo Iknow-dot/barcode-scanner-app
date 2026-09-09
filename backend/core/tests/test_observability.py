@@ -134,3 +134,79 @@ class ScrubTransactionTests(SimpleTestCase):
     def test_tolerates_transaction_without_spans(self):
         self.assertEqual(scrub_transaction({"type": "transaction"}),
                          {"type": "transaction"})
+
+
+class TracesSamplerTests(SimpleTestCase):
+    def setUp(self):
+        from backend.sentry import make_traces_sampler
+        self.sampler = make_traces_sampler(0.05)
+
+    def _ctx(self, path, method="GET"):
+        return {"wsgi_environ": {"PATH_INFO": path, "REQUEST_METHOD": method}}
+
+    def test_order_confirm_is_always_sampled(self):
+        # Fail-closed 1C push on the 60s-budget path.
+        self.assertEqual(self.sampler(self._ctx("/api/v1/orders/42/", "PATCH")), 1.0)
+
+    def test_order_read_uses_base_rate(self):
+        self.assertEqual(self.sampler(self._ctx("/api/v1/orders/42/", "GET")), 0.05)
+
+    def test_client_create_is_always_sampled(self):
+        # Non-idempotent write with no upstream transaction id.
+        self.assertEqual(self.sampler(self._ctx("/api/v1/clients/create/", "POST")), 1.0)
+
+    def test_admin_is_never_sampled(self):
+        self.assertEqual(self.sampler(self._ctx("/admin/core/organization/")), 0.0)
+
+    def test_other_paths_use_base_rate(self):
+        self.assertEqual(self.sampler(self._ctx("/api/v1/warehouses/")), 0.05)
+
+    def test_tolerates_missing_wsgi_environ(self):
+        self.assertEqual(self.sampler({}), 0.05)
+
+
+class InitSentryTests(SimpleTestCase):
+    # A syntactically valid DSN on Sentry's EU ingest host. Never resolved:
+    # no event is captured in these tests.
+    DSN = "https://examplePublicKey@o0.ingest.de.sentry.io/0"
+
+    def tearDown(self):
+        # init() installs a global client. Reset it, or every subsequent test
+        # in the process runs with a live Sentry client attached.
+        import sentry_sdk
+        sentry_sdk.init(dsn=None)
+
+    def test_no_client_installed_without_dsn(self):
+        import sentry_sdk
+        from backend.sentry import init_sentry
+        self.assertFalse(init_sentry(dsn=None))
+        # Ruling 2: sentry-sdk 2.69.1's Client.is_active() is hardcoded to
+        # return True for any installed real Client, regardless of whether a
+        # DSN is set (confirmed by reading sentry_sdk.client.Client.is_active,
+        # and empirically: sentry_sdk.init(dsn=None) leaves
+        # get_client().is_active() == True). Only BaseClient/NonRecordingClient
+        # (the sentinel client before any init() call) reports False. So the
+        # binding assertion here is on `dsn`, which does capture "no client
+        # was actually installed" under this SDK's real behaviour.
+        self.assertIsNone(sentry_sdk.get_client().dsn)
+
+    def test_no_client_installed_for_empty_dsn(self):
+        from backend.sentry import init_sentry
+        self.assertFalse(init_sentry(dsn=""))
+
+    def test_installed_client_carries_the_safety_options(self):
+        # The tripwire. If an SDK upgrade renames any of these keys this test
+        # raises KeyError in CI, rather than silently disabling protection.
+        import sentry_sdk
+        from backend.sentry import init_sentry, scrub_event, scrub_transaction
+
+        self.assertTrue(init_sentry(dsn=self.DSN, environment="test", release="abc123"))
+        options = sentry_sdk.get_client().options
+
+        self.assertFalse(options["send_default_pii"])
+        self.assertFalse(options["include_local_variables"])
+        self.assertEqual(options["max_request_body_size"], "never")
+        self.assertIs(options["before_send"], scrub_event)
+        self.assertIs(options["before_send_transaction"], scrub_transaction)
+        self.assertEqual(options["environment"], "test")
+        self.assertEqual(options["release"], "abc123")

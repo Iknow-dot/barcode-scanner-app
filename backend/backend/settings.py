@@ -80,6 +80,13 @@ if PERF_HEADERS_ENABLED:
 CORS_ALLOWED_ORIGINS = os.environ.get('CORS_ALLOWED_ORIGINS', 'http://localhost:3000').split(',')
 CORS_ALLOW_CREDENTIALS = True
 
+# @sentry/react's browserTracingIntegration adds these to API calls.
+# Production is same-origin so CORS never applies there, but local dev is
+# :3100 -> :8180 and would fail preflight without them.
+from corsheaders.defaults import default_headers  # noqa: E402
+
+CORS_ALLOW_HEADERS = (*default_headers, 'sentry-trace', 'baggage')
+
 ROOT_URLCONF = 'backend.urls'
 
 TEMPLATES = [
@@ -220,6 +227,20 @@ PHOTON_USER_AGENT = (
 # uses settings.* and tests use override_settings().
 FERNET_KEY = os.environ.get('FERNET_KEY')  # Fernet key for Organization.web_service_password
 POSTHOG_DASHBOARD_URL = os.environ.get('POSTHOG_DASHBOARD_URL', '')  # admin /analytics/ embed
+
+# Sentry. Absent DSN means no client is installed at all — no network calls
+# from local development, `manage.py test`, or CI, which run with a bare
+# environment on purpose. `backend.sentry` imports no Django, so calling it
+# here does not touch the app registry mid-import.
+from backend.sentry import init_sentry  # noqa: E402
+
+SENTRY_DSN = os.environ.get('SENTRY_DSN', '')
+init_sentry(
+    dsn=SENTRY_DSN,
+    environment=os.environ.get('SENTRY_ENVIRONMENT', 'production'),
+    release=os.environ.get('SENTRY_RELEASE', ''),
+    traces_sample_rate=float(os.environ.get('SENTRY_TRACES_SAMPLE_RATE', '0.05')),
+)
 
 # Django REST Framework
 REST_FRAMEWORK = {
