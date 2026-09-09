@@ -172,13 +172,22 @@ there is no key to match on. Applied to breadcrumb `message`, `logentry`
 |---|---|
 | `\b\d{11}\b` | Georgian personal identification number |
 | `\b\d{9}\b` | Georgian legal-entity identification number |
-| `\+?995\d{9}\b` | Georgian phone number |
+| `(^\|\D)(\+?995\d{9})\b` | Georgian phone number |
 
-Because these are **word-bounded exact lengths**, an EAN-13 barcode (13
-digits) and an EAN-8 (8 digits) both pass through untouched — the identifier
-most needed for debugging a scanner application survives, while the identifiers
-that must not be transmitted do not. Some over-redaction of 9-digit SKUs is
-accepted; that is the correct side on which to err.
+Because these are **bounded exact lengths**, an EAN-13 barcode (13 digits) and
+an EAN-8 (8 digits) both pass through untouched — the identifier most needed
+for debugging a scanner application survives, while the identifiers that must
+not be transmitted do not. Some over-redaction of 9-digit SKUs is accepted;
+that is the correct side on which to err.
+
+The phone pattern is bounded on the left by `(^|\D)` rather than `\b`, and its
+captured character is restored by the replacement. `\b` cannot be used there:
+before an optional `+` it does not match at the start of `+995…`. An earlier
+draft omitted the left bound entirely, which silently broke the guarantee
+above — the pattern matched the 12-character *tail* of the 13-digit run
+`8995123456789` and rendered it `8[Filtered]`. A lookbehind is the other
+correct form, but it is ES2018 in JavaScript and unsupported before Safari
+16.4, so the capture form is used in both languages to keep them true mirrors.
 
 **Fail-closed.** The entire scrubber body is wrapped. If it raises,
 `before_send` returns `None` and the event is **dropped**. Losing an error

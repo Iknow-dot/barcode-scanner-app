@@ -96,6 +96,17 @@ class ScrubTextTests(SimpleTestCase):
     def test_keeps_ean8_barcode(self):
         self.assertEqual(scrub_text("scanned 48600012"), "scanned 48600012")
 
+    def test_keeps_thirteen_digit_run_containing_995(self):
+        # Regression: a phone pattern bounded only on the right matches the
+        # 12-char tail of this 13-digit run and leaves "8[Filtered]".
+        self.assertEqual(scrub_text("scanned 8995123456789"),
+                         "scanned 8995123456789")
+
+    def test_masks_phone_after_a_non_digit(self):
+        # The left bound is a captured character, not a zero-width assertion:
+        # it must be restored, not eaten.
+        self.assertEqual(scrub_text("tel:+995555123456"), f"tel:{REDACTED}")
+
     def test_passes_non_strings_through(self):
         self.assertEqual(scrub_text(42), 42)
         self.assertIsNone(scrub_text(None))
@@ -221,14 +232,22 @@ from typing import Any, Callable, Optional
 
 REDACTED = "[Filtered]"
 
-# Word-bounded exact lengths, which is what makes this safe to run over free
-# text: an EAN-13 barcode (13 digits) and an EAN-8 (8 digits) match none of
-# them, so the identifier most needed for debugging survives. A 9-digit SKU
-# will be over-redacted; that is the correct side on which to err.
+# Bounded exact lengths, which is what makes this safe to run over free text:
+# an EAN-13 barcode (13 digits) and an EAN-8 (8 digits) match none of them, so
+# the identifier most needed for debugging survives. A 9-digit SKU will be
+# over-redacted; that is the correct side on which to err.
+#
+# The phone entry is bounded on the left by `(^|\D)` rather than `\b`, because
+# `\b` before an optional `+` does not match at the start of "+995...". Without
+# that left bound the pattern matches the *tail* of a longer digit run —
+# "8995123456789" would become "8[Filtered]", corrupting a 13-digit value this
+# module promises to pass through. The captured left char is restored by `\1`.
+# A lookbehind would also work here but not in the JavaScript mirror, where it
+# is ES2018 and absent before Safari 16.4.
 _TEXT_PATTERNS = (
-    re.compile(r"\+?995\d{9}\b"),   # Georgian phone
-    re.compile(r"\b\d{11}\b"),      # Georgian personal identification number
-    re.compile(r"\b\d{9}\b"),       # Georgian legal-entity identification number
+    (re.compile(r"(^|\D)(\+?995\d{9})\b"), r"\1" + REDACTED),  # Georgian phone
+    (re.compile(r"\b\d{11}\b"), REDACTED),  # Georgian personal identification number
+    (re.compile(r"\b\d{9}\b"), REDACTED),   # Georgian legal-entity identification number
 )
 
 # Span data keys under which the httpx integration records a full URL.
@@ -239,8 +258,8 @@ def scrub_text(value: Any) -> Any:
     """Mask identifier-shaped runs in a string. Non-strings pass through."""
     if not isinstance(value, str):
         return value
-    for pattern in _TEXT_PATTERNS:
-        value = pattern.sub(REDACTED, value)
+    for pattern, replacement in _TEXT_PATTERNS:
+        value = pattern.sub(replacement, value)
     return value
 
 
@@ -308,7 +327,7 @@ def scrub_transaction(event: dict, hint: Optional[dict] = None) -> Optional[dict
 cd backend && uv run python manage.py test core.tests.test_observability -v 2
 ```
 
-Expected: PASS, and the summary must name a non-zero count (`Ran 15 tests`). A run reporting `Ran 0 tests` means discovery did not pick the module up — fix the filename before continuing.
+Expected: PASS, and the summary must name a non-zero count (`Ran 18 tests`). A run reporting `Ran 0 tests` means discovery did not pick the module up — fix the filename before continuing.
 
 - [ ] **Step 5: Run the full backend suite to confirm nothing regressed**
 
@@ -607,6 +626,17 @@ describe('scrubText', () => {
     expect(scrubText('scanned 48600012')).toBe('scanned 48600012');
   });
 
+  it('keeps a 13-digit run containing 995', () => {
+    // Regression: a phone pattern bounded only on the right matches the
+    // 12-char tail of this run and leaves "8[Filtered]".
+    expect(scrubText('scanned 8995123456789')).toBe('scanned 8995123456789');
+  });
+
+  it('restores the character before a masked phone', () => {
+    // The left bound is a captured character, not a zero-width assertion.
+    expect(scrubText('tel:+995555123456')).toBe(`tel:${REDACTED}`);
+  });
+
   it('passes non-strings through', () => {
     expect(scrubText(42)).toBe(42);
     expect(scrubText(null)).toBeNull();
@@ -665,12 +695,19 @@ Create `barcode-scanner-frontend/src/observability/scrub.js`:
 
 export const REDACTED = '[Filtered]';
 
-// Word-bounded exact lengths, so an EAN-13 (13 digits) and an EAN-8
-// (8 digits) both pass through untouched.
+// Bounded exact lengths, so an EAN-13 (13 digits) and an EAN-8 (8 digits)
+// both pass through untouched.
+//
+// The phone entry is bounded on the left by `(^|\D)` rather than `\b`, because
+// `\b` before an optional `+` does not match at the start of "+995...". Without
+// that left bound it matches the *tail* of a longer digit run — "8995123456789"
+// would become "8[Filtered]". The captured left char is restored by `$1`.
+// Deliberately not a lookbehind: that is ES2018 and absent before Safari 16.4,
+// and these handsets are not guaranteed current.
 const TEXT_PATTERNS = [
-  /\+?995\d{9}\b/g,   // Georgian phone
-  /\b\d{11}\b/g,      // Georgian personal identification number
-  /\b\d{9}\b/g,       // Georgian legal-entity identification number
+  [/(^|\D)(\+?995\d{9})\b/g, `$1${REDACTED}`],  // Georgian phone
+  [/\b\d{11}\b/g, REDACTED],                    // Georgian personal identification number
+  [/\b\d{9}\b/g, REDACTED],                     // Georgian legal-entity identification number
 ];
 
 // Mirrors core/log_redaction.py SENSITIVE_KEYS. Covers both our field names
@@ -687,7 +724,10 @@ const MAX_DEPTH = 12;
 
 export function scrubText(value) {
   if (typeof value !== 'string') return value;
-  return TEXT_PATTERNS.reduce((acc, pattern) => acc.replace(pattern, REDACTED), value);
+  return TEXT_PATTERNS.reduce(
+    (acc, [pattern, replacement]) => acc.replace(pattern, replacement),
+    value,
+  );
 }
 
 export function scrubValue(value, depth = 0) {
@@ -722,7 +762,7 @@ export function scrubEvent(event) {
 cd barcode-scanner-frontend && npm test -- --watchAll=false src/observability
 ```
 
-Expected: PASS, all 10 tests.
+Expected: PASS, all 12 tests.
 
 - [ ] **Step 5: Commit (stage by path)**
 
