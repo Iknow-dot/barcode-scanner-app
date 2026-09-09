@@ -22,8 +22,14 @@ class PerfHeadersMiddlewareTests(TestCase):
         response = middleware(RequestFactory().get("/"))
 
         self.assertEqual(response["X-Query-Count"], "0")
+        # Both timings assert non-negative, not strictly positive. These are
+        # wall-clock measurements of a view that does no work, and `:.3f`
+        # renders anything under 0.0005 ms as "0.000". A strict `>` on the
+        # total already flaked once (1aac666, fixed by widening the format from
+        # .1f to .3f) and still clears the rounding floor by only ~12x. What
+        # this test pins is the header being present and parseable.
         self.assertGreaterEqual(float(response["X-Db-Ms"]), 0.0)
-        self.assertGreater(float(response["X-Total-Ms"]), 0.0)
+        self.assertGreaterEqual(float(response["X-Total-Ms"]), 0.0)
 
     def test_query_count_matches_the_queries_the_view_actually_runs(self):
         Organization.objects.create(

@@ -18,8 +18,23 @@ const tWithLong = {
 const HOUR = 60 * 60 * 1000;
 const DAY = 24 * HOUR;
 
+// formatRelativeTime reads Date.now() itself, so the reference point has to be
+// pinned rather than sampled. Sampled once here it would drift by however long
+// the file takes to reach each assertion, and the `59 * 1000` case below sits
+// only one second from crossing into '1 min ago'.
+const NOW = new Date('2026-06-15T12:00:00Z').getTime();
+
 describe('formatRelativeTime', () => {
-    const now = Date.now();
+    const now = NOW;
+
+    beforeEach(() => {
+        jest.useFakeTimers();
+        jest.setSystemTime(NOW);
+    });
+
+    afterEach(() => {
+        jest.useRealTimers();
+    });
 
     it('returns justNow for < 60s', () => {
         expect(formatRelativeTime(now - 5000, t)).toBe('just now');
