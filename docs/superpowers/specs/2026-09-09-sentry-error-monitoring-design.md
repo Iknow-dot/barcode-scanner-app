@@ -154,7 +154,13 @@ after app loading is complete.
 Three layers, outermost first.
 
 **Layer 1 — structural, off at the source.** The four options above. This does
-the heavy lifting: there is nothing to scrub because nothing is collected.
+the heavy lifting for stack-frame locals, request bodies, cookies and headers.
+
+It does **not** reach URL metadata, and an earlier draft of this spec wrongly
+claimed "there is nothing to scrub because nothing is collected" without that
+qualification. `max_request_body_size` bounds bodies only; inbound
+`request.query_string` and outbound `http.query` are recorded regardless and
+are covered by Layer 2's key denylist instead (see Section 3).
 
 **Layer 2 — key denylist.** A recursive walk over `extra`, `tags`, `contexts`,
 span data and breadcrumb `data` dicts, redacting values whose key matches
@@ -195,17 +201,56 @@ report is always preferable to transmitting an unscrubbed one.
 
 ### 3. Span and URL scrubbing
 
-Sentry's `HttpxIntegration` records outbound request URLs as span data. Our
-Photon URLs carry the client's typed address in `q=` and their coordinates in
-`lat`/`lon` — which is precisely why the concurrent log-redaction work mutes
-the `httpx` and `httpcore` loggers.
+Sentry records outbound request URLs as span data. Our Photon URLs carry the
+client's typed address in `q=` and their coordinates in `lat`/`lon` — which is
+precisely why the concurrent log-redaction work mutes the `httpx` and
+`httpcore` loggers. Muting a logger does not affect `HttpxIntegration`, which
+patches the client rather than the logger, so a separate mitigation is
+required here.
 
-**Enabling tracing without handling this would re-open that hole through a
-different channel.** `before_send_transaction` therefore strips query strings
-from outbound HTTP span descriptions and `url` span data, retaining scheme,
-host and path. Muting a logger does not affect `HttpxIntegration`, which
-patches the client rather than the logger, so the two mitigations are
-independent and both are required.
+**Redact query strings by key, not by parsing URLs.** An earlier draft of this
+spec asserted the query rides in the span *description* and in `url` span
+data, and specified `strip_query` over those keys. That was wrong, and the
+implementation faithfully reproduced the error:
+`sentry_sdk/integrations/httpx.py` calls `parse_url()`, which has **already
+split the query off** before `span.set_data("url", ...)`. The raw query is set
+separately as `SPANDATA.HTTP_QUERY` — the key `http.query`. Stripping `url`
+was therefore a no-op on data that was already clean, while the actual payload
+travelled untouched.
+
+Two consequences made this worse than a tracing-only bug:
+
+- The same data dict is copied into the **httplib breadcrumb**, and breadcrumbs
+  attach to *error* events. So the leak was live the moment a DSN was set,
+  even at `traces_sample_rate=0`.
+- `max_request_body_size="never"` bounds request **bodies**, not query strings.
+  The WSGI integration records `request.query_string` verbatim, so an inbound
+  `GET /api/v1/orders/?customer_search=<name>` leaked a customer name — a form
+  the Layer 3 regex cannot mask, because a name has no digit shape.
+
+The durable fix is a **key denylist** — `http.query`, `url.query`,
+`http.fragment`, `query_string` — applied in the same recursive walk as
+`SENSITIVE_KEYS`. One rule then covers span data, breadcrumb data and the WSGI
+request interface, and stays correct if the SDK adds a fifth site. This is a
+distinct concern from person-identifying *field names*, so it lives as its own
+constant rather than being added to `core.log_redaction.SENSITIVE_KEYS`.
+`strip_query` is kept over `url`/`url.full`/`http.url` as defence in depth.
+
+### 3a. Log records are not events
+
+`LoggingIntegration` is auto-enabled and defaults to `event_level=ERROR`,
+which would turn each of the 14 `logger.error` calls that narrate *expected*
+1C, Photon and RS.ge failures into a Sentry issue — the dominant term in event
+volume, and pure noise on a bad upstream day. It is therefore configured with
+`event_level=None`: log records become **breadcrumbs only**, never events.
+
+This matches what this design is actually for. The Problem section above
+observes that the backend contains zero `logger.exception` calls: the gap is
+unexpected exceptions, which the Django integration captures regardless. The
+expected-failure narration keeps its diagnostic value as breadcrumbs attached
+to whatever real error follows. If alerting on 1C degradation is wanted later,
+it belongs in an explicit `capture_message` at that site, not in a blanket
+promotion of every ERROR record.
 
 ### 4. Tracing and sampling
 
@@ -238,12 +283,40 @@ PostHog init, gated on `REACT_APP_SENTRY_DSN` so local development and
 
 Version 10 deprecates `sendDefaultPii` in favour of `dataCollection`, so the
 frontend configuration will legitimately *look* different from the backend's
-2.x `send_default_pii`. This asymmetry is a version reality, not an
-inconsistency, and is commented as such so it is not later "fixed":
+2.x `send_default_pii`. That asymmetry is a version reality rather than an
+inconsistency, and is commented as such in the code.
+
+**Every field must be enumerated explicitly.** This is the trap an earlier
+draft of this spec fell into by listing only three. In
+`resolveDataCollectionOptions`, supplying *any* `dataCollection` object swaps
+the base table from the deny-listed "PII off" defaults to the fully permissive
+`DEFAULTS`; only the keys written are then overridden. A partial block
+therefore resolves **more permissively than omitting the option entirely** —
+`urlQueryParams`, `cookies`, `httpHeaders` and `databaseQueryData` all flip to
+collect-everything. That is the exact inverse of this design's headline
+guarantee.
 
 ```js
-dataCollection: { userInfo: false, httpBodies: [], genAI: { inputs: false, outputs: false } }
+dataCollection: {
+    userInfo: false,
+    cookies: false,
+    httpHeaders: {request: false, response: false},
+    httpBodies: [],
+    urlQueryParams: false,
+    genAI: {inputs: false, outputs: false},
+    databaseQueryData: false,
+},
 ```
+
+In the browser build only `userInfo` is currently consumed, so the partial form
+was latent rather than actively leaking — but it was one SDK minor from being
+live, and nothing tested it. Hence the frontend options tripwire below.
+
+The frontend also needs **`beforeSendTransaction`**, not only `beforeSend`.
+`beforeSend` runs on error events alone; without its transaction counterpart
+every browser transaction bypasses scrubbing entirely, and fetch/XHR spans
+carry the full URL — query included — in `url`, `http.url`, `url.full` and
+`http.query`.
 
 - **`Sentry.ErrorBoundary` is new UI.** It is placed *inside* the language
   provider so the fallback can be translated. A crash in the providers
@@ -326,7 +399,18 @@ misnamed module silently never runs. Discovery of the new module is **verified
 by observing the test count change**, not assumed.
 
 **Frontend** — a jest test for the JavaScript scrubber against the same case
-table, run via `npm test`.
+table, run via `npm test`, plus two guards the backend already has:
+
+- **A frontend options tripwire**, mirroring assertion 7: construct a client
+  with the real config and assert the *resolved* `dataCollection` has every
+  category off. The absence of this is why the partial-block defect above
+  shipped — the backend's equivalent assertion would have caught it on day one.
+- **A cross-language drift guard.** Section 5 names "the two `SENSITIVE_KEYS`
+  lists are verified identical" as the mitigation for duplicating the key set
+  across two languages, but nothing enforced it, so the mitigation did not
+  actually exist. A Python test reads `src/observability/scrub.js`, parses its
+  `SENSITIVE_KEYS` literal, and asserts set equality with
+  `core.log_redaction.SENSITIVE_KEYS`.
 
 ## Risks
 
