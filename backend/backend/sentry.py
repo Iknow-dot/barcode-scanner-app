@@ -25,14 +25,22 @@ from typing import Any, Optional
 
 REDACTED = "[Filtered]"
 
-# Word-bounded exact lengths, which is what makes this safe to run over free
-# text: an EAN-13 barcode (13 digits) and an EAN-8 (8 digits) match none of
-# them, so the identifier most needed for debugging survives. A 9-digit SKU
-# will be over-redacted; that is the correct side on which to err.
+# Bounded exact lengths, which is what makes this safe to run over free text:
+# an EAN-13 barcode (13 digits) and an EAN-8 (8 digits) match none of them, so
+# the identifier most needed for debugging survives. A 9-digit SKU will be
+# over-redacted; that is the correct side on which to err.
+#
+# The phone entry is bounded on the left by `(^|\D)` rather than `\b`, because
+# `\b` before an optional `+` does not match at the start of "+995...". Without
+# that left bound the pattern matches the *tail* of a longer digit run —
+# "8995123456789" would become "8[Filtered]", corrupting a 13-digit value this
+# module promises to pass through. The captured left char is restored by `\1`.
+# A lookbehind would also work here but not in the JavaScript mirror, where it
+# is ES2018 and absent before Safari 16.4.
 _TEXT_PATTERNS = (
-    re.compile(r"\+?995\d{9}\b"),   # Georgian phone
-    re.compile(r"\b\d{11}\b"),      # Georgian personal identification number
-    re.compile(r"\b\d{9}\b"),       # Georgian legal-entity identification number
+    (re.compile(r"(^|\D)(\+?995\d{9})\b"), r"\1" + REDACTED),  # Georgian phone
+    (re.compile(r"\b\d{11}\b"), REDACTED),  # Georgian personal identification number
+    (re.compile(r"\b\d{9}\b"), REDACTED),   # Georgian legal-entity identification number
 )
 
 # Span data keys under which the httpx integration records a full URL.
@@ -43,8 +51,8 @@ def scrub_text(value: Any) -> Any:
     """Mask identifier-shaped runs in a string. Non-strings pass through."""
     if not isinstance(value, str):
         return value
-    for pattern in _TEXT_PATTERNS:
-        value = pattern.sub(REDACTED, value)
+    for pattern, replacement in _TEXT_PATTERNS:
+        value = pattern.sub(replacement, value)
     return value
 
 

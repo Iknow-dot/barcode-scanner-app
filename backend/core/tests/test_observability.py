@@ -40,6 +40,17 @@ class ScrubTextTests(SimpleTestCase):
     def test_keeps_ean8_barcode(self):
         self.assertEqual(scrub_text("scanned 48600012"), "scanned 48600012")
 
+    def test_keeps_thirteen_digit_run_containing_995(self):
+        # Regression: a phone pattern bounded only on the right matches the
+        # 12-char tail of this 13-digit run and leaves "8[Filtered]".
+        self.assertEqual(scrub_text("scanned 8995123456789"),
+                         "scanned 8995123456789")
+
+    def test_masks_phone_after_a_non_digit(self):
+        # The left bound is a captured character, not a zero-width assertion:
+        # it must be restored, not eaten.
+        self.assertEqual(scrub_text("tel:+995555123456"), f"tel:{REDACTED}")
+
     def test_passes_non_strings_through(self):
         self.assertEqual(scrub_text(42), 42)
         self.assertIsNone(scrub_text(None))
