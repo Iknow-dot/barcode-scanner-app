@@ -651,6 +651,11 @@ const translations = {
         overridePrice: 'ფასის გადაფარვა',
         removeFromAllWarehouses: 'წაიშალოს პროდუქტი ყველა საწყობიდან?',
         cancel: 'გაუქმება',
+
+        // ===== Error boundary =====
+        errorBoundaryTitle: 'დაფიქსირდა შეცდომა',
+        errorBoundarySubtitle: 'სცადეთ გვერდის განახლება. თუ პრობლემა გრძელდება, დაუკავშირდით ადმინისტრატორს.',
+        errorBoundaryReload: 'გვერდის განახლება',
     },
 
     en: {
@@ -1301,6 +1306,11 @@ const translations = {
         overridePrice: 'Override price',
         removeFromAllWarehouses: 'Remove product from all warehouses?',
         cancel: 'Cancel',
+
+        // ===== Error boundary =====
+        errorBoundaryTitle: 'Something went wrong',
+        errorBoundarySubtitle: 'Try reloading the page. If the problem persists, contact your administrator.',
+        errorBoundaryReload: 'Reload page',
     },
 };
 

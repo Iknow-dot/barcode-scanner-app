@@ -24,6 +24,8 @@ import SubNavContext, {SubNavProvider} from "./contexts/SubNavContext";
 import AdminNavDrawer from './components/Common/AdminNavDrawer';
 import {LanguageProvider, useLanguage} from "./i18n/LanguageContext";
 import "antd/dist/reset.css";
+import * as Sentry from '@sentry/react';
+import AppErrorFallback from './components/AppErrorFallback';
 
 const {useBreakpoint} = Grid;
 
@@ -349,13 +351,15 @@ const AppContent = () => {
 const App = () => {
     return (
         <LanguageProvider>
-            <AuthProvider>
-                <SubNavProvider>
-                    <Router>
-                        <AppContent/>
-                    </Router>
-                </SubNavProvider>
-            </AuthProvider>
+            <Sentry.ErrorBoundary fallback={<AppErrorFallback/>}>
+                <AuthProvider>
+                    <SubNavProvider>
+                        <Router>
+                            <AppContent/>
+                        </Router>
+                    </SubNavProvider>
+                </AuthProvider>
+            </Sentry.ErrorBoundary>
         </LanguageProvider>
     );
 };
