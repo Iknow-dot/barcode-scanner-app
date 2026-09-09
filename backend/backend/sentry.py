@@ -46,6 +46,31 @@ _TEXT_PATTERNS = (
 # Span data keys under which the httpx integration records a full URL.
 _URL_KEYS = ("url", "url.full", "http.url")
 
+# Keys whose value *is* a raw query string or fragment, wherever it appears.
+#
+# This is URL metadata, a distinct concern from the person-identifying field
+# names in `core.log_redaction.SENSITIVE_KEYS` — hence a separate constant here
+# rather than an addition there.
+#
+# Redacting by key rather than by parsing URLs is what makes this durable.
+# `sentry_sdk/integrations/httpx.py` calls `parse_url()`, which has *already*
+# split the query off before `span.set_data("url", ...)`; the raw query is set
+# separately as `SPANDATA.HTTP_QUERY` (key `http.query`), and the same dict is
+# copied into the httplib breadcrumb — which attaches to *error* events, so the
+# leak was live at `traces_sample_rate=0`. Independently, the WSGI integration
+# records `request.query_string` verbatim (`max_request_body_size="never"`
+# bounds bodies, not query strings), which is how
+# `GET /api/v1/orders/?customer_search=<name>` shipped a customer name — a form
+# the Layer 3 regex cannot mask, because a name has no digit shape. One rule in
+# the recursive walk covers span data, breadcrumb data and the request
+# interface, and stays correct if the SDK adds a fifth site.
+_QUERY_KEYS = frozenset({"http.query", "url.query", "http.fragment", "query_string"})
+
+# Sentry protocol metadata, not our data: `sdk.name` ("sentry.python.django")
+# would otherwise be redacted by the `name` key and break SDK attribution in
+# the UI. The subtree is skipped whole rather than descended into.
+_SKIP_KEYS = ("sdk",)
+
 
 def scrub_text(value: Any) -> Any:
     """Mask identifier-shaped runs in a string. Non-strings pass through."""
@@ -56,13 +81,19 @@ def scrub_text(value: Any) -> Any:
     return value
 
 
+def _redacts(key: Any, sensitive_keys: frozenset) -> bool:
+    """True if this key's value must be replaced wholesale."""
+    lowered = str(key).lower()
+    return lowered in sensitive_keys or lowered in _QUERY_KEYS
+
+
 def _scrub_value(value: Any, sensitive_keys: frozenset) -> Any:
     """Walk a nested structure, redacting by key and masking every leaf string."""
     if isinstance(value, dict):
         return {
             key: (
                 REDACTED
-                if str(key).lower() in sensitive_keys
+                if _redacts(key, sensitive_keys)
                 else _scrub_value(item, sensitive_keys)
             )
             for key, item in value.items()
@@ -77,7 +108,14 @@ def scrub_event(event: dict, hint: Optional[dict] = None) -> Optional[dict]:
     try:
         from core.log_redaction import SENSITIVE_KEYS  # lazy: keeps settings import clean
 
-        return _scrub_value(event, SENSITIVE_KEYS)
+        scrubbed = _scrub_value(event, SENSITIVE_KEYS)
+        # Restore the subtrees that are Sentry's own protocol metadata rather
+        # than our data — see `_SKIP_KEYS`.
+        if isinstance(event, dict) and isinstance(scrubbed, dict):
+            for key in _SKIP_KEYS:
+                if key in event:
+                    scrubbed[key] = event[key]
+        return scrubbed
     except Exception:
         return None
 
@@ -114,10 +152,36 @@ def scrub_transaction(event: dict, hint: Optional[dict] = None) -> Optional[dict
         return None
 
 
+DEFAULT_TRACES_SAMPLE_RATE = 0.05
+
+
+def parse_sample_rate(raw: Any, default: float = DEFAULT_TRACES_SAMPLE_RATE) -> float:
+    """Read a sample rate from the environment without ever raising.
+
+    A typo'd `SENTRY_TRACES_SAMPLE_RATE` must not take the application down:
+    `float()` on it would raise `ValueError` during settings import and the
+    container would never boot, for a monitoring knob. Fall back to the
+    default and say so on stderr instead.
+    """
+    if raw is None or raw == "":
+        return default
+    try:
+        return float(raw)
+    except (TypeError, ValueError):
+        import logging
+
+        logging.getLogger(__name__).warning(
+            "Invalid SENTRY_TRACES_SAMPLE_RATE %r; falling back to %s", raw, default
+        )
+        return default
+
+
 # Order confirm is PATCH on the order detail route; the pk is numeric.
 _ORDER_DETAIL_RE = re.compile(r"^/api/v1/orders/\d+/$")
 _CLIENT_CREATE_PATH = "/api/v1/clients/create/"
-_UNSAMPLED_PREFIXES = ("/admin", "/static")
+# Trailing slashes are load-bearing: a bare "/admin" prefix would also swallow
+# a future "/administration/" route.
+_UNSAMPLED_PREFIXES = ("/admin/", "/static/")
 
 
 def make_traces_sampler(base_rate: float) -> Callable[[dict], float]:
@@ -134,12 +198,32 @@ def make_traces_sampler(base_rate: float) -> Callable[[dict], float]:
         path = environ.get("PATH_INFO") or ""
         method = environ.get("REQUEST_METHOD") or ""
 
+        # First, so admin and static stay silent whatever the frontend decided.
         if path.startswith(_UNSAMPLED_PREFIXES):
             return 0.0
+
+        # The two paths the design says are always worth a trace. These sit
+        # ahead of the propagated decision on purpose: both are called from the
+        # browser, so with a frontend baseline of 0.05 a parent-first ordering
+        # would silently demote them from 1.0 to 0.05 and contradict the
+        # sampling table in the design. An unsampled parent here yields an
+        # orphan backend transaction, which is the cheap side of the trade.
         if method == "PATCH" and _ORDER_DETAIL_RE.match(path):
             return 1.0
-        if path == _CLIENT_CREATE_PATH:
+        if method == "POST" and path == _CLIENT_CREATE_PATH:
             return 1.0
+
+        # Otherwise honour a propagated decision. Once a `traces_sampler` is
+        # defined, `sentry_sdk/tracing.py` lets its return value win outright
+        # and the parent's decision is respected only if the sampler consults
+        # it — so without this, a frontend at 0.05 and a backend independently
+        # at 0.05 would produce a complete trace ~0.25% of the time, and the
+        # `CORS_ALLOW_HEADERS` entries that exist solely to propagate
+        # `sentry-trace`/`baggage` would buy nothing.
+        parent = (sampling_context or {}).get("parent_sampled")
+        if parent is not None:
+            return 1.0 if parent else 0.0
+
         return base_rate
 
     return traces_sampler
@@ -150,7 +234,7 @@ def init_sentry(
     dsn: Optional[str],
     environment: Optional[str] = None,
     release: Optional[str] = None,
-    traces_sample_rate: float = 0.05,
+    traces_sample_rate: float = DEFAULT_TRACES_SAMPLE_RATE,
 ) -> bool:
     """Install the Sentry client. Returns False (installing nothing) with no DSN.
 
@@ -158,13 +242,16 @@ def init_sentry(
     `settings`, so initialization behaviour stays testable: by the time any
     test runs, `settings.py` has long since been imported.
 
-    Integrations are left to auto-detection — importing `DjangoIntegration`
-    explicitly would pull Django in at settings-import time for no gain.
+    Integrations are otherwise left to auto-detection — importing
+    `DjangoIntegration` explicitly would pull Django in at settings-import time
+    for no gain. `LoggingIntegration` is the one exception, and it is passed
+    here to *reduce* what is sent, not to add anything: see below.
     """
     if not dsn:
         return False
 
     import sentry_sdk
+    from sentry_sdk.integrations.logging import LoggingIntegration
 
     sentry_sdk.init(
         dsn=dsn,
@@ -181,5 +268,13 @@ def init_sentry(
         before_send=scrub_event,
         before_send_transaction=scrub_transaction,
         traces_sampler=make_traces_sampler(traces_sample_rate),
+        # `LoggingIntegration` is auto-enabled with `event_level=ERROR`, which
+        # would turn each of the 14 `logger.error` calls narrating *expected*
+        # 1C / Photon / RS.ge failures into a Sentry issue — one per failed
+        # request, the dominant term in event volume and pure noise on a bad
+        # upstream day. `event_level=None` makes log records breadcrumbs only.
+        # The gap this design exists to close is unexpected exceptions, which
+        # the Django integration captures regardless.
+        integrations=[LoggingIntegration(event_level=None)],
     )
     return True

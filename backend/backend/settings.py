@@ -232,14 +232,16 @@ POSTHOG_DASHBOARD_URL = os.environ.get('POSTHOG_DASHBOARD_URL', '')  # admin /an
 # from local development, `manage.py test`, or CI, which run with a bare
 # environment on purpose. `backend.sentry` imports no Django, so calling it
 # here does not touch the app registry mid-import.
-from backend.sentry import init_sentry  # noqa: E402
+from backend.sentry import init_sentry, parse_sample_rate  # noqa: E402
 
 SENTRY_DSN = os.environ.get('SENTRY_DSN', '')
 init_sentry(
     dsn=SENTRY_DSN,
     environment=os.environ.get('SENTRY_ENVIRONMENT', 'production'),
     release=os.environ.get('SENTRY_RELEASE', ''),
-    traces_sample_rate=float(os.environ.get('SENTRY_TRACES_SAMPLE_RATE', '0.05')),
+    # Parsed defensively: a typo'd value must not raise mid-settings-import and
+    # stop the container booting over a monitoring knob.
+    traces_sample_rate=parse_sample_rate(os.environ.get('SENTRY_TRACES_SAMPLE_RATE')),
 )
 
 # Django REST Framework
