@@ -38,6 +38,11 @@ services:
       - key: SENTRY_RELEASE
         scope: RUN_TIME
         value: ${_self.COMMIT_HASH}
+      # Declared at its default so the trace baseline can be lowered by editing
+      # a value here. Adding a key that is absent would itself be a deploy.
+      - key: SENTRY_TRACES_SAMPLE_RATE
+        scope: RUN_TIME
+        value: "0.05"
 
   - name: frontend
     dockerfile_path: barcode-scanner-frontend/Dockerfile
@@ -51,6 +56,13 @@ services:
       - key: REACT_APP_API_BASE_URL
         scope: BUILD_TIME
         value: https://${APP_DOMAIN}
+      # RUN_TIME, unlike REACT_APP_API_BASE_URL above, and only because this
+      # container runs the CRA dev server (`npm start`): process.env is read
+      # when the server starts, so a run-time value takes effect on restart
+      # with no rebuild. If the frontend is ever converted to a real production
+      # build these must move to BUILD_TIME — a pre-built bundle has the value
+      # inlined at compile time, so at run time the DSN would be `undefined`
+      # and the frontend would silently stop reporting.
       - key: REACT_APP_SENTRY_DSN
         scope: RUN_TIME
         type: SECRET
