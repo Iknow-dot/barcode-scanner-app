@@ -251,7 +251,19 @@ dataCollection: { userInfo: false, httpBodies: [], genAI: { inputs: false, outpu
   a second, untranslated outer boundary.
 - **The Layer 3 regex net is duplicated in JavaScript.** Unavoidable across two
   languages; the mitigation is that both implementations are tested against the
-  same case table.
+  same case table, and the two `SENSITIVE_KEYS` lists are verified identical.
+- **One known divergence between the two.** Python branches on
+  `isinstance(value, dict)`; the JavaScript branches on `typeof value ===
+  'object'`, which also catches `Date`, `Map`, `Set` and class instances.
+  `Object.entries` returns nothing for those, so JavaScript collapses them to
+  `{}` where Python passes them through. This is accepted rather than fixed:
+  the divergence errs toward **over**-redaction — a `Map` holding a phone
+  becomes `{}` rather than leaking it — which is the side this design says to
+  err on, and both SDKs normalize events to JSON-safe shapes before
+  `before_send`/`beforeSend` runs, so the exotic types do not arrive in
+  practice. Plain-object detection would add its own subtleties (cross-realm
+  objects, `Object.create(null)`) for a case that cannot occur and fails safe
+  if it did. Revisit if either SDK stops normalizing ahead of the hook.
 - `tracePropagationTargets` is scoped to the API origin only, so trace headers
   never reach Photon, RS.ge or any third party.
 
