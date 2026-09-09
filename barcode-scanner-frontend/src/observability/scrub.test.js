@@ -1,4 +1,4 @@
-import {REDACTED, scrubEvent, scrubText, scrubValue} from './scrub';
+import {REDACTED, scrubEvent, scrubText, scrubValue, stripQuery} from './scrub';
 
 describe('scrubText', () => {
   it('masks a Georgian personal id', () => {
@@ -51,6 +51,46 @@ describe('scrubValue', () => {
     const result = scrubValue({clients: [{first_name: 'Nino'}]});
     expect(result.clients[0].first_name).toBe(REDACTED);
   });
+
+  it('redacts query-string keys', () => {
+    const result = scrubValue({
+      'http.query': 'q=Rustaveli+7&lat=41.7151',
+      'url.query': 'q=Rustaveli+7',
+      'http.fragment': 'pin',
+      query_string: 'customer_search=Nino Beridze',
+    });
+    expect(result['http.query']).toBe(REDACTED);
+    expect(result['url.query']).toBe(REDACTED);
+    expect(result['http.fragment']).toBe(REDACTED);
+    expect(result.query_string).toBe(REDACTED);
+  });
+
+  it('strips the query from URL keys, keeping scheme host and path', () => {
+    const result = scrubValue({
+      url: 'https://api.example.com/api/v1/orders/?customer_search=Nino',
+      'url.full': 'https://api.example.com/api/v1/orders/?customer_search=Nino',
+      'http.url': 'https://api.example.com/api/v1/orders/?customer_search=Nino',
+    });
+    expect(result.url).toBe('https://api.example.com/api/v1/orders/');
+    expect(result['url.full']).toBe('https://api.example.com/api/v1/orders/');
+    expect(result['http.url']).toBe('https://api.example.com/api/v1/orders/');
+  });
+});
+
+describe('stripQuery', () => {
+  it('drops the query string', () => {
+    expect(stripQuery('https://photon.komoot.io/api?q=Rustaveli+7'))
+      .toBe('https://photon.komoot.io/api');
+  });
+
+  it('keeps a URL without a query', () => {
+    expect(stripQuery('https://photon.komoot.io/api'))
+      .toBe('https://photon.komoot.io/api');
+  });
+
+  it('passes non-strings through', () => {
+    expect(stripQuery(null)).toBeNull();
+  });
 });
 
 describe('scrubEvent', () => {
@@ -65,5 +105,51 @@ describe('scrubEvent', () => {
     const circular = {};
     circular.self = circular;
     expect(scrubEvent(circular)).toBeNull();
+  });
+
+  it('scrubs a transaction event, the shape beforeSend never sees', () => {
+    // @sentry/core/fetch.js puts the query in four places on every span.
+    const transaction = {
+      type: 'transaction',
+      spans: [{
+        op: 'http.client',
+        description: 'GET https://api.example.com/api/v1/orders/',
+        data: {
+          url: 'https://api.example.com/api/v1/orders/?customer_search=Nino',
+          'http.url': 'https://api.example.com/api/v1/orders/?customer_search=Nino',
+          'url.full': 'https://api.example.com/api/v1/orders/?customer_search=Nino',
+          'http.query': 'customer_search=Nino Beridze',
+        },
+      }],
+    };
+    const {data} = scrubEvent(transaction).spans[0];
+    expect(data['http.query']).toBe(REDACTED);
+    expect(data.url).toBe('https://api.example.com/api/v1/orders/');
+    expect(data['http.url']).toBe('https://api.example.com/api/v1/orders/');
+    expect(data['url.full']).toBe('https://api.example.com/api/v1/orders/');
+    expect(JSON.stringify(scrubEvent(transaction))).not.toContain('Nino');
+  });
+
+  it('strips the query from an XHR breadcrumb URL', () => {
+    // `url` is not a sensitive key and a name has no digit shape, so nothing
+    // but the URL rule reaches this one.
+    const event = {breadcrumbs: {values: [{
+      category: 'xhr',
+      data: {url: 'https://api.example.com/api/v1/orders/?customer_search=Nino'},
+    }]}};
+    expect(scrubEvent(event).breadcrumbs.values[0].data.url)
+      .toBe('https://api.example.com/api/v1/orders/');
+  });
+
+  it('keeps sdk metadata', () => {
+    // `sdk` is Sentry protocol metadata; redacting its `name` breaks SDK
+    // attribution in the UI.
+    const event = {
+      sdk: {name: 'sentry.javascript.react', version: '10.73.0'},
+      extra: {name: 'Nino Beridze'},
+    };
+    const scrubbed = scrubEvent(event);
+    expect(scrubbed.sdk.name).toBe('sentry.javascript.react');
+    expect(scrubbed.extra.name).toBe(REDACTED);
   });
 });
