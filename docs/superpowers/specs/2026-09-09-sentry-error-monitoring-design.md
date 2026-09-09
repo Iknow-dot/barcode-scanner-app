@@ -45,12 +45,22 @@ context."* It never landed.
 ## Decision
 
 Adopt **Sentry** for exception capture and light performance tracing on both
-the Django backend and the React frontend, in a **new EU-region organization**.
-PostHog stays where it is, for product analytics.
+the Django backend and the React frontend. PostHog stays where it is, for
+product analytics.
 
-The EU region is chosen because the app stores Georgian taxpayer
-identification numbers, customer phone numbers, names and addresses. Sentry's
-region is fixed at organization creation and can never be changed afterwards.
+**Data region: US**, in the existing Sentry organization
+(`o4506416216080384`). An earlier revision of this spec called for a new
+EU-region organization, on the grounds that the app stores Georgian taxpayer
+identification numbers, customer phone numbers, names and addresses. That was
+reconsidered and settled the other way: the protection that actually matters
+here is the egress scrubbing below, which is region-independent and has been
+verified end-to-end, and reusing the existing organization avoids running a
+second one for a single application.
+
+Sentry's region is fixed at organization creation and can **never** be changed
+afterwards — there is no relocation path for SaaS organizations. Revisiting
+this means creating a new organization and re-issuing both DSNs, so treat it
+as settled unless a compliance requirement forces it.
 
 Because this data is sensitive, the design is **deny-by-default**: every
 automatic data source Sentry would otherwise collect is switched off, and only
@@ -440,12 +450,26 @@ table, run via `npm test`, plus two guards the backend already has:
 
 ## Rollout
 
-1. Create the EU-region Sentry organization and two projects (Django, React).
-2. Land the backend work behind an unset `SENTRY_DSN` — inert until configured.
-3. Verify locally against a real DSN on a `development` environment: trigger a
-   deliberate exception carrying a taxpayer ID and a Photon URL, and confirm
-   the event arrives **scrubbed**. Configuration correctness is confirmed by
-   observation, not by inspection.
+1. ~~Create the Sentry projects.~~ **Done** — Django and React projects exist in
+   the existing US organization.
+2. ~~Land the backend work behind an unset `SENTRY_DSN`.~~ **Done** — inert
+   until configured.
+3. ~~Verify locally against a real DSN on a `development` environment.~~
+   **Done, 2026-09-09.** Rather than reading the Sentry UI, the outgoing
+   envelope was captured in-process through a stub transport, so the assertion
+   is about the bytes that actually leave. Confirmed: exception value
+   `no client for [Filtered] at [Filtered]`; **stack frames carrying variables:
+   0**, so the decrypted 1C credential held in a local never left; log
+   breadcrumb masked; the httplib breadcrumb's `url` query-free with
+   `http.query` and `http.fragment` both `[Filtered]`; no sensitive string
+   anywhere in the transaction's spans; and the EAN-13 barcode survived
+   unmasked. That covers both halves of the Critical query-string finding, on
+   the breadcrumb path and the span path.
+
+   One incidental discovery worth carrying: the auto-enabled `ArgvIntegration`
+   writes the full command line into `event.extra.sys.argv`. Benign for the
+   production run command, but a management command invoked with a secret as
+   an argument would put that argument in Sentry.
 4. Land the frontend work; verify the build and smoke-test on a real device.
 5. Set the production DSNs and the other variables above in the **live DO App
    Spec** (control panel or `doctl apps update --spec`). Nothing in this repo
