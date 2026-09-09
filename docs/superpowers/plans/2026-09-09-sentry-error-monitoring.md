@@ -228,7 +228,7 @@ unscrubbed.
 from __future__ import annotations
 
 import re
-from typing import Any, Callable, Optional
+from typing import Any, Optional  # Task 2 adds Callable when it adds the code that needs it
 
 REDACTED = "[Filtered]"
 
