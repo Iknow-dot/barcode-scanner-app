@@ -342,32 +342,37 @@ carry the full URL — query included — in `url`, `http.url`, `url.full` and
 
 ## Deploy wiring
 
-In `.do/app.yaml`, on the backend service:
+**These variables are set in the live DigitalOcean App Spec, through the
+control panel or `doctl apps update --spec` — not in this repository.**
 
-```yaml
-- key: SENTRY_DSN
-  scope: RUN_TIME
-  type: SECRET
-- key: SENTRY_ENVIRONMENT
-  scope: RUN_TIME
-  value: production
-- key: SENTRY_RELEASE
-  scope: RUN_TIME
-  value: ${_self.COMMIT_HASH}
-```
+An earlier revision of this spec had them added to a committed `.do/app.yaml`.
+That was wrong and the work built on it had no effect on production: DO reads
+such a file only at app creation, never on push, so the committed copy was
+decorative. It has since been deleted rather than left to mislead. Until these
+are set in the live spec, **Sentry is inert in production** — which is the
+design's intended default, but it is a step someone must actually take.
 
-`${_self.COMMIT_HASH}` is a documented App Platform bindable variable ("git
-commit hash used for this build"), so releases tie to git SHAs with no
-Dockerfile change.
+On the backend component:
 
-The frontend service gets `REACT_APP_SENTRY_DSN` and
-`REACT_APP_SENTRY_ENVIRONMENT` at **`scope: RUN_TIME`** — deliberately unlike
-the existing `REACT_APP_API_BASE_URL`, which is `BUILD_TIME`. Because the
-frontend container runs the CRA dev server rather than serving a pre-built
-bundle, `process.env` is read when the server starts, so a run-time value takes
-effect on container restart with no rebuild. If the frontend is ever converted
-to a real production build, these must move to `BUILD_TIME` or the DSN will
-silently become `undefined` and the frontend will stop reporting.
+| Key | Scope | Value |
+|---|---|---|
+| `SENTRY_DSN` | `RUN_TIME` | secret |
+| `SENTRY_ENVIRONMENT` | `RUN_TIME` | `production` |
+| `SENTRY_RELEASE` | `RUN_TIME` | `${_self.COMMIT_HASH}` |
+
+`${_self.COMMIT_HASH}` is a documented App Platform bindable ("git commit hash
+used for this build"), so releases tie to git SHAs with no build change.
+
+`SENTRY_TRACES_SAMPLE_RATE` is deliberately omitted so the `0.05` code default
+applies; add it only to change the rate.
+
+On the frontend component, `REACT_APP_SENTRY_DSN`, `REACT_APP_SENTRY_ENVIRONMENT`
+and `REACT_APP_SENTRY_RELEASE` go at **`scope: RUN_TIME`**. A `BUILD_TIME`
+variable is never visible to a running container, and the frontend runs the CRA
+dev server, which reads `process.env` at start — so run-time values take effect
+on restart with no rebuild. If the frontend is ever converted to a real
+production build this inverts: they must move to `BUILD_TIME`, or the DSN
+becomes `undefined` and the frontend stops reporting.
 
 ## Testing
 
@@ -442,5 +447,7 @@ table, run via `npm test`, plus two guards the backend already has:
    the event arrives **scrubbed**. Configuration correctness is confirmed by
    observation, not by inspection.
 4. Land the frontend work; verify the build and smoke-test on a real device.
-5. Set the production DSNs in `.do/app.yaml`.
+5. Set the production DSNs and the other variables above in the **live DO App
+   Spec** (control panel or `doctl apps update --spec`). Nothing in this repo
+   configures the deploy.
 6. Configure alert rules in the Sentry UI, routed to Slack.

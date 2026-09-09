@@ -27,7 +27,7 @@ Per-user IP/CIDR allowlists can be configured to restrict where each account is 
 - **Database** — PostgreSQL 17 (SQLite fallback for local development without Docker)
 - **Frontend** — React 18, Ant Design 6, axios, react-router 7, `html5-qrcode` (barcode scanning), TipTap 3 (invoice-template editor), Leaflet (address picker), PostHog (analytics), custom Georgian/English i18n
 - **Packaging** — `uv` for backend (`pyproject.toml` + `uv.lock`), npm for frontend
-- **Deploy** — DigitalOcean App Platform (`.do/app.yaml`)
+- **Deploy** — DigitalOcean App Platform (Python buildpack; the app spec is managed in the DO control panel, not in this repo)
 
 ## Run Locally
 
@@ -154,7 +154,6 @@ barcode-scanner-app/
 │   ├── public/
 │   ├── package.json
 │   └── Dockerfile
-├── .do/app.yaml                     # DigitalOcean App Platform spec
 ├── loadtest/                        # on-demand k6 stress-test rig — see loadtest/README.md. Not part of CI.
 └── docker-compose.yml
 ```
