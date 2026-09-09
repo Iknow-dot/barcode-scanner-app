@@ -22,6 +22,7 @@ from core.views import (
     CatalogProductListAPIView,
     CatalogCategoryTreeAPIView,
     OrderCompleteWebhookAPIView,
+    HealthAPIView,
 )
 
 router = DefaultRouter()
@@ -30,6 +31,10 @@ router.register(r'warehouses', WarehouseViewSet, basename='warehouse')
 router.register(r'orders', PurchaseOrderViewSet, basename='order')
 
 urlpatterns = [
+    # Public, unauthenticated probe for external uptime monitoring. Lives under
+    # /api/ because DigitalOcean routes /api and /admin to this service and
+    # everything else to the frontend — a top-level /healthz/ would hit React.
+    path('health/', HealthAPIView.as_view(), name='health'),
     path('invoice-tokens/', InvoiceTokensAPIView.as_view(), name='invoice-tokens'),
     path('invoice-tokens/sample-values/', InvoiceSampleValuesAPIView.as_view(), name='invoice-token-sample-values'),
     path('clients/check/', CheckClientAPIView.as_view(), name='client-check'),

@@ -292,6 +292,7 @@ SPECTACULAR_SETTINGS = {
         {'name': 'Catalog Ingest'},
         {'name': 'Catalog'},
         {'name': 'Webhooks', 'description': 'Inbound webhooks from the external 1C service (push-token auth)'},
+        {'name': 'Health', 'description': 'Unauthenticated liveness/readiness probe for uptime monitoring'},
     ],
 }
 

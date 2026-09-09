@@ -180,8 +180,10 @@ def parse_sample_rate(raw: Any, default: float = DEFAULT_TRACES_SAMPLE_RATE) -> 
 _ORDER_DETAIL_RE = re.compile(r"^/api/v1/orders/\d+/$")
 _CLIENT_CREATE_PATH = "/api/v1/clients/create/"
 # Trailing slashes are load-bearing: a bare "/admin" prefix would also swallow
-# a future "/administration/" route.
-_UNSAMPLED_PREFIXES = ("/admin/", "/static/")
+# a future "/administration/" route. The health probe is here because uptime
+# monitoring hits it on a fixed schedule forever — tracing those pings buys no
+# signal and consumes quota indefinitely.
+_UNSAMPLED_PREFIXES = ("/admin/", "/static/", "/api/v1/health/")
 
 
 def make_traces_sampler(base_rate: float) -> Callable[[dict], float]:

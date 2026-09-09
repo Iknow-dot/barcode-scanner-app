@@ -25,6 +25,7 @@ from core.views.clients import (
     RSGeLookupAPIView,
     SearchAddressesAPIView,
 )
+from core.views.health import HealthAPIView
 from core.views.invoices import InvoiceSampleValuesAPIView, InvoiceTokensAPIView
 from core.views.orders import PurchaseOrderViewSet
 from core.views.organizations import OrganizationViewSet
@@ -41,6 +42,7 @@ __all__ = [
     'CatalogSyncStatusAPIView',
     'CheckClientAPIView',
     'CreateClientAPIView',
+    'HealthAPIView',
     'InvoiceSampleValuesAPIView',
     'InvoiceTokensAPIView',
     'OrderAnalyticsAPIView',
