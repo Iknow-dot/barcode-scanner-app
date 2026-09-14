@@ -1,7 +1,7 @@
 # Scan count and completed orders in consultant analytics
 
 ClickUp: [86cbewehz](https://app.clickup.com/t/86cbewehz) (sub-task of 86c9yqnuu).
-Status: approved design, not yet implemented.
+Status: implemented (commits 3ba10d5, 4493c42, e507398, ab04f3f).
 
 ## Goal
 

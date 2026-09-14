@@ -37,13 +37,15 @@ class ProductSearchAPIView(APIView):
         warehouses = request.data.get("warehouses")
         serializer = self.serializer_class(data={
             "sku": sku, "warehouses": warehouses, "is_barcode": is_barcode,
-            "record_scan": request.data.get("record_scan", False),
         })
         serializer.is_valid(raise_exception=True)
         user = self.request.user
 
-        if serializer.validated_data["record_scan"] and user.organization_id:
-            self._record_scan(user, sku, bool(is_barcode))
+        # `record_scan` is read leniently here, not through serializer
+        # validation: a malformed value (null, a non-boolean) must never fail
+        # the consultant's lookup. Analytics never blocks a scan.
+        if request.data.get("record_scan") is True and user.organization_id:
+            self._record_scan(user, serializer.validated_data["sku"], bool(is_barcode))
 
         selected = user.warehouses.filter(code__in=warehouses)
         selected_warehouses = ",".join(selected.values_list("code", flat=True)) if selected.exists() else ""

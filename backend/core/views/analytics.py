@@ -1,5 +1,7 @@
 """Per-consultant scan and order statistics."""
 
+from datetime import datetime, time, timedelta
+
 from django.db import models
 from django.utils import timezone
 from django.utils.dateparse import parse_date
@@ -41,6 +43,12 @@ class OrderAnalyticsAPIView(APIView):
         today = timezone.localdate()
         date_from = parse_date(request.query_params.get('date_from') or '') or today.replace(day=1)
         date_to = parse_date(request.query_params.get('date_to') or '') or today
+        # Half-open aware datetime bounds: `created_at__date__gte/lte` compiles
+        # to a cast on the column, which a `(organization, created_at)` index
+        # cannot serve. `timezone.make_aware` uses the current time zone, the
+        # same one `__date` truncates in, so the results are identical.
+        start = timezone.make_aware(datetime.combine(date_from, time.min))
+        end = timezone.make_aware(datetime.combine(date_to + timedelta(days=1), time.min))
 
         if user.role == User.Role.INTERNAL_ADMIN:
             org_id = request.query_params.get('organization')
@@ -51,8 +59,8 @@ class OrderAnalyticsAPIView(APIView):
         order_rows = (
             PurchaseOrder.objects.filter(
                 created_by__isnull=False,
-                created_at__date__gte=date_from,
-                created_at__date__lte=date_to,
+                created_at__gte=start,
+                created_at__lt=end,
                 **org_filter,
             )
             .values('created_by', 'created_by__username')
@@ -67,8 +75,8 @@ class OrderAnalyticsAPIView(APIView):
         scan_rows = (
             ScanEvent.objects.filter(
                 user__isnull=False,
-                created_at__date__gte=date_from,
-                created_at__date__lte=date_to,
+                created_at__gte=start,
+                created_at__lt=end,
                 **org_filter,
             )
             .values('user', 'user__username')
@@ -94,8 +102,7 @@ class OrderAnalyticsAPIView(APIView):
 
         consultants = sorted(
             stats.values(),
-            key=lambda c: (c['orders_created'], c['scans']),
-            reverse=True,
+            key=lambda c: (-c['orders_created'], -c['scans'], c['username']),
         )
         for c in consultants:
             c['conversion_rate'] = _rate(c['orders_confirmed'], c['orders_created'])

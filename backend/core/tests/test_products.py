@@ -607,3 +607,27 @@ class ProductSearchRecordScanTests(TestCase):
                 )
         self.assertEqual(response.status_code, 200, response.data)
         self.assertEqual(response.data['sku_name'], 'Cached')
+
+    def test_null_record_scan_does_not_block_the_lookup(self):
+        # `record_scan` is decided leniently in the view, not validated: a
+        # malformed value must never fail the consultant's lookup.
+        response = self._search({'sku': '4000', 'is_barcode': True, 'warehouses': ['W1'], 'record_scan': None})
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertFalse(ScanEvent.objects.exists())
+
+    def test_non_boolean_record_scan_does_not_block_the_lookup(self):
+        response = self._search({'sku': '4000', 'is_barcode': True, 'warehouses': ['W1'], 'record_scan': 'maybe'})
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertFalse(ScanEvent.objects.exists())
+
+    def test_stores_the_validated_sku_not_the_raw_value(self):
+        # DRF's CharField trims whitespace before checking max_length, so a
+        # padded value that passes validation must not blow past the
+        # ScanEvent.value column with untrimmed padding. The padded value
+        # doesn't match the cached barcode ('4000'), so the lookup itself
+        # 404s (unchanged, out-of-scope behaviour) -- the scan is still
+        # recorded, using the trimmed value.
+        response = self._search({'sku': '  4000  ', 'is_barcode': True, 'warehouses': ['W1'], 'record_scan': True})
+        self.assertEqual(response.status_code, 404, response.data)
+        event = ScanEvent.objects.get()
+        self.assertEqual(event.value, '4000')

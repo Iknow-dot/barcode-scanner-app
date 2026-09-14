@@ -400,4 +400,3 @@ class ScanEvent(models.Model):
 
     def __str__(self):
         return f'{self.value} @ {self.created_at:%Y-%m-%d %H:%M}'
-

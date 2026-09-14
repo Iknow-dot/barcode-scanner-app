@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, time, timedelta
 
 from core.models import PurchaseOrder, ScanEvent
 from django.test import TestCase, override_settings
@@ -204,3 +204,57 @@ class OrderAnalyticsAPITests(TestCase):
         # c1: 2 orders (ranks first). c2 and scanner tie at 1 order each, so the
         # scans tie-break decides: scanner (9 scans) ranks above c2 (1 scan).
         self.assertEqual([c['username'] for c in resp.data['consultants']], ['c1', 'scanner', 'c2'])
+
+    def test_full_tie_breaks_by_username(self):
+        # Two consultants tied on BOTH orders_created and scans must come out
+        # in username order, not database order.
+        zed = User.objects.create_user(
+            username='zed', password='p',
+            role=User.Role.COMPANY_USER, organization=self.org,
+        )
+        alice = User.objects.create_user(
+            username='alice', password='p',
+            role=User.Role.COMPANY_USER, organization=self.org,
+        )
+        for consultant in (zed, alice):
+            PurchaseOrder.objects.create(
+                organization=self.org, created_by=consultant, customer_name='Z', status='draft',
+            )
+            self._scan(consultant, 1)
+        self.api.force_authenticate(self.admin)
+        resp = self.api.get(self.url)
+        names = [c['username'] for c in resp.data['consultants'] if c['username'] in ('zed', 'alice')]
+        self.assertEqual(names, ['alice', 'zed'])
+
+    def test_date_to_is_inclusive_of_the_whole_day(self):
+        # `date_to` must include the entire day (up to 23:59:59), and exclude
+        # the first instant of the following day.
+        boundary_user = User.objects.create_user(
+            username='boundary', password='p',
+            role=User.Role.COMPANY_USER, organization=self.org,
+        )
+        date_to = timezone.localdate()
+        in_range = timezone.make_aware(datetime.combine(date_to, time(23, 59, 59)))
+        out_of_range = timezone.make_aware(datetime.combine(date_to + timedelta(days=1), time(0, 0, 0)))
+
+        order_in = PurchaseOrder.objects.create(
+            organization=self.org, created_by=boundary_user, customer_name='In', status='draft',
+        )
+        PurchaseOrder.objects.filter(pk=order_in.pk).update(created_at=in_range)
+        order_out = PurchaseOrder.objects.create(
+            organization=self.org, created_by=boundary_user, customer_name='Out', status='draft',
+        )
+        PurchaseOrder.objects.filter(pk=order_out.pk).update(created_at=out_of_range)
+
+        scan_in = ScanEvent.objects.create(organization=self.org, user=boundary_user, value='in')
+        ScanEvent.objects.filter(pk=scan_in.pk).update(created_at=in_range)
+        scan_out = ScanEvent.objects.create(organization=self.org, user=boundary_user, value='out')
+        ScanEvent.objects.filter(pk=scan_out.pk).update(created_at=out_of_range)
+
+        self.api.force_authenticate(self.admin)
+        resp = self.api.get(self.url, {
+            'date_from': date_to.isoformat(), 'date_to': date_to.isoformat(),
+        })
+        by_id = {c['user_id']: c for c in resp.data['consultants']}
+        self.assertEqual(by_id[boundary_user.id]['orders_created'], 1)
+        self.assertEqual(by_id[boundary_user.id]['scans'], 1)
