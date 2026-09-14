@@ -60,10 +60,15 @@ const AnalyticsTab = () => {
     const columns = [
         {title: t.consultant, dataIndex: 'username', key: 'username'},
         {
+            title: t.analyticsScans, dataIndex: 'scans', key: 'scans',
+            sorter: (a, b) => a.scans - b.scans,
+        },
+        {
             title: t.ordersCreated, dataIndex: 'orders_created', key: 'orders_created',
             sorter: (a, b) => a.orders_created - b.orders_created, defaultSortOrder: 'descend',
         },
         {title: t.ordersConfirmed, dataIndex: 'orders_confirmed', key: 'orders_confirmed'},
+        {title: t.ordersCompleted, dataIndex: 'orders_completed', key: 'orders_completed'},
         {
             title: t.conversionRate, key: 'conversion_rate',
             render: (_, r) => formatConversionRate(r.conversion_rate),
@@ -98,9 +103,11 @@ const AnalyticsTab = () => {
                 summary={() => totals && (
                     <Table.Summary.Row>
                         <Table.Summary.Cell index={0}><Text strong>{t.analyticsTotals}</Text></Table.Summary.Cell>
-                        <Table.Summary.Cell index={1}><Text strong>{totals.orders_created}</Text></Table.Summary.Cell>
-                        <Table.Summary.Cell index={2}><Text strong>{totals.orders_confirmed}</Text></Table.Summary.Cell>
-                        <Table.Summary.Cell index={3}><Text strong>{formatConversionRate(totals.conversion_rate)}</Text></Table.Summary.Cell>
+                        <Table.Summary.Cell index={1}><Text strong>{totals.scans}</Text></Table.Summary.Cell>
+                        <Table.Summary.Cell index={2}><Text strong>{totals.orders_created}</Text></Table.Summary.Cell>
+                        <Table.Summary.Cell index={3}><Text strong>{totals.orders_confirmed}</Text></Table.Summary.Cell>
+                        <Table.Summary.Cell index={4}><Text strong>{totals.orders_completed}</Text></Table.Summary.Cell>
+                        <Table.Summary.Cell index={5}><Text strong>{formatConversionRate(totals.conversion_rate)}</Text></Table.Summary.Cell>
                     </Table.Summary.Row>
                 )}
             />

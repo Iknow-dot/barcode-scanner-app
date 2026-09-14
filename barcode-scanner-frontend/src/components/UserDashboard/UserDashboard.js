@@ -17,7 +17,10 @@ import {
     playOrderResumedSound,
 } from '../../utils/sound';
 import {printInvoice} from '../../utils/printInvoice';
-import {recordScan} from '../../utils/scanLog';
+// Aliased: `handleSearch` below takes a `recordScan` boolean param (whether to
+// count this lookup in the backend scan analytics) that would otherwise
+// shadow this import for the whole function body.
+import {recordScan as logScanHistory} from '../../utils/scanLog';
 import useDailySnapshot from '../../hooks/useDailySnapshot';
 import DailySnapshot from './DailySnapshot';
 import groupItemsBySku from './groupItemsBySku';
@@ -269,7 +272,7 @@ const UserDashboard = () => {
     // without paying for another round-trip.
     const [othersCollapsed, setOthersCollapsed] = useState(true);
 
-    const handleSearch = useCallback(async ({search, searchType, allWarehouses, fromScan}) => {
+    const handleSearch = useCallback(async ({search, searchType, allWarehouses, fromScan, recordScan}) => {
         if (isOffline() && fromScan && activeOrderRef.current) {
             const orderId = activeOrderRef.current.id;
             const op = {type: 'add_item_barcode', tempId: makeTempId(), barcode: search, quantity: 1};
@@ -296,6 +299,7 @@ const UserDashboard = () => {
                 sku: search,
                 searchType,
                 warehouseCodes,
+                recordScan,
             });
 
             if (result.success && result.data?.stock) {
@@ -310,7 +314,7 @@ const UserDashboard = () => {
                 // resolved (locally or via 1C), so still show it, just flag that
                 // the balance list can't be trusted right now.
                 setStockStatus(result.data.stock_status || '');
-                recordScan({
+                logScanHistory({
                     search,
                     searchType,
                     found: true,
@@ -374,7 +378,7 @@ const UserDashboard = () => {
                 }
 
                 if (!isExternalServiceError) {
-                    recordScan({
+                    logScanHistory({
                         search,
                         searchType,
                         found: false,
@@ -399,9 +403,11 @@ const UserDashboard = () => {
             searchType: 'barcode',
             allWarehouses,
             fromScan: true,
+            recordScan: true,
         });
     }, [handleSearch, allWarehouses]);
 
+    // A re-run of the lookup already counted — deliberately no recordScan.
     const handleShowOtherWarehouses = useCallback(() => {
         if (!lastSearchRef.current) return;
         handleSearch({
@@ -418,6 +424,7 @@ const UserDashboard = () => {
             search: sku,
             searchType: 'article',
             allWarehouses,
+            recordScan: true,
         });
     }, [handleSearch, allWarehouses]);
 
@@ -426,6 +433,7 @@ const UserDashboard = () => {
             search: entry.search,
             searchType: entry.searchType,
             allWarehouses,
+            recordScan: true,
         });
     }, [handleSearch, allWarehouses]);
 
