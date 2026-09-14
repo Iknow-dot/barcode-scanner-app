@@ -47,6 +47,8 @@ Required env vars for the backend: `DJANGO_SECRET_KEY`, `DATABASE_URL` (omit to 
 
 ## Architecture
 
+System-wide UML diagrams (use cases, ER model, order state machine, auth and catalog sequences) live in `docs/architecture/` as Mermaid; per-feature design specs and plans live in `docs/superpowers/specs/` and `docs/superpowers/plans/`. The diagrams are hand-maintained, not generated — when you change a model, an order status rule, the login flow or the catalog push, update the matching page in the same commit.
+
 ### Backend layout
 
 Two Django apps under `backend/`, both registered in `backend/settings.py`:
