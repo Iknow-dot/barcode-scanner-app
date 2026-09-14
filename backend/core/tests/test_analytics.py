@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from core.models import PurchaseOrder
+from datetime import datetime
+
+from core.models import PurchaseOrder, ScanEvent
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
@@ -110,3 +112,91 @@ class OrderAnalyticsAPITests(TestCase):
         self.assertEqual(by_id[self.c1.id]['orders_created'], 3)
         self.assertEqual(by_id[self.c1.id]['orders_confirmed'], 2)
         self.assertEqual(resp.data['totals']['orders_confirmed'], 2)
+
+    def _scan(self, user, count=1):
+        for i in range(count):
+            ScanEvent.objects.create(organization=user.organization, user=user, value=f'v{i}')
+
+    def test_completed_orders_counted_separately(self):
+        PurchaseOrder.objects.create(
+            organization=self.org, created_by=self.c1, customer_name='E', status='completed',
+        )
+        self.api.force_authenticate(self.admin)
+        resp = self.api.get(self.url)
+        by_id = {c['user_id']: c for c in resp.data['consultants']}
+        self.assertEqual(by_id[self.c1.id]['orders_completed'], 1)
+        self.assertEqual(by_id[self.c2.id]['orders_completed'], 0)
+        self.assertEqual(resp.data['totals']['orders_completed'], 1)
+
+    def test_scans_counted_per_consultant(self):
+        self._scan(self.c1, 3)
+        self._scan(self.c2, 1)
+        self.api.force_authenticate(self.admin)
+        resp = self.api.get(self.url)
+        by_id = {c['user_id']: c for c in resp.data['consultants']}
+        self.assertEqual(by_id[self.c1.id]['scans'], 3)
+        self.assertEqual(by_id[self.c2.id]['scans'], 1)
+        self.assertEqual(resp.data['totals']['scans'], 4)
+
+    def test_scans_outside_date_range_excluded(self):
+        self._scan(self.c1, 2)
+        ScanEvent.objects.filter(user=self.c1).update(
+            created_at=timezone.make_aware(datetime(2020, 1, 1, 12, 0)),
+        )
+        self.api.force_authenticate(self.admin)
+        resp = self.api.get(self.url)
+        by_id = {c['user_id']: c for c in resp.data['consultants']}
+        self.assertEqual(by_id[self.c1.id]['scans'], 0)
+
+    def test_consultant_with_scans_but_no_orders_gets_a_row(self):
+        scanner = User.objects.create_user(
+            username='scanner', password='p',
+            role=User.Role.COMPANY_USER, organization=self.org,
+        )
+        self._scan(scanner, 2)
+        self.api.force_authenticate(self.admin)
+        resp = self.api.get(self.url)
+        by_id = {c['user_id']: c for c in resp.data['consultants']}
+        self.assertEqual(by_id[scanner.id], {
+            'user_id': scanner.id, 'username': 'scanner', 'scans': 2,
+            'orders_created': 0, 'orders_confirmed': 0, 'orders_completed': 0,
+            'conversion_rate': 0.0,
+        })
+
+    def test_company_admin_does_not_see_other_org_scans(self):
+        self._scan(self.c3, 5)
+        self.api.force_authenticate(self.admin)
+        resp = self.api.get(self.url)
+        self.assertNotIn(self.c3.id, {c['user_id'] for c in resp.data['consultants']})
+        self.assertEqual(resp.data['totals']['scans'], 0)
+
+    def test_internal_admin_org_filter_applies_to_scans(self):
+        self._scan(self.c1, 4)
+        self._scan(self.c3, 1)
+        internal = User.objects.create_user(
+            username='ia2', password='p', role=User.Role.INTERNAL_ADMIN,
+            is_staff=True, is_superuser=True,
+        )
+        self.api.force_authenticate(internal)
+        resp = self.api.get(self.url, {'organization': self.other_org.id})
+        self.assertEqual([c['username'] for c in resp.data['consultants']], ['c3'])
+        self.assertEqual(resp.data['totals']['scans'], 1)
+
+    def test_scans_from_deleted_users_are_excluded(self):
+        self._scan(self.c2, 2)
+        ScanEvent.objects.filter(user=self.c2).update(user=None)
+        self.api.force_authenticate(self.admin)
+        resp = self.api.get(self.url)
+        self.assertEqual(resp.data['totals']['scans'], 0)
+
+    def test_rows_sorted_by_orders_then_scans(self):
+        scanner = User.objects.create_user(
+            username='scanner', password='p',
+            role=User.Role.COMPANY_USER, organization=self.org,
+        )
+        self._scan(scanner, 9)
+        self._scan(self.c2, 1)
+        self.api.force_authenticate(self.admin)
+        resp = self.api.get(self.url)
+        # c1: 2 orders; c2: 1 order; scanner: 0 orders, 9 scans.
+        self.assertEqual([c['username'] for c in resp.data['consultants']], ['c1', 'c2', 'scanner'])

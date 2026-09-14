@@ -1,4 +1,4 @@
-"""Per-consultant order statistics."""
+"""Per-consultant scan and order statistics."""
 
 from django.db import models
 from django.utils import timezone
@@ -8,10 +8,16 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from core.models import PurchaseOrder
+from core.models import PurchaseOrder, ScanEvent
 from core.permissions import IsCompanyAdminOrInternalAdmin
 from core.serializers import ConsultantOrderStatsSerializer
 from users.models import User
+
+_COUNT_KEYS = ('scans', 'orders_created', 'orders_confirmed', 'orders_completed')
+
+
+def _rate(confirmed: int, created: int) -> float:
+    return round(confirmed / created, 4) if created else 0.0
 
 
 @extend_schema(
@@ -24,7 +30,8 @@ from users.models import User
     responses=ConsultantOrderStatsSerializer(many=True),
 )
 class OrderAnalyticsAPIView(APIView):
-    """Per-consultant order counts for a period: created vs. confirmed (sale)."""
+    """Per-consultant counts for a period: scans, and orders created / confirmed
+    (sale) / completed. Order counts cover orders created in the period."""
 
     permission_classes = [IsCompanyAdminOrInternalAdmin]
     http_method_names = ['get']
@@ -35,48 +42,69 @@ class OrderAnalyticsAPIView(APIView):
         date_from = parse_date(request.query_params.get('date_from') or '') or today.replace(day=1)
         date_to = parse_date(request.query_params.get('date_to') or '') or today
 
-        qs = PurchaseOrder.objects.filter(
-            created_by__isnull=False,
-            created_at__date__gte=date_from,
-            created_at__date__lte=date_to,
-        )
         if user.role == User.Role.INTERNAL_ADMIN:
             org_id = request.query_params.get('organization')
-            if org_id:
-                qs = qs.filter(organization_id=org_id)
+            org_filter = {'organization_id': org_id} if org_id else {}
         else:  # company_admin (company_user is blocked by the permission)
-            qs = qs.filter(organization=user.organization)
+            org_filter = {'organization': user.organization}
 
-        rows = (
-            qs.values('created_by', 'created_by__username')
+        order_rows = (
+            PurchaseOrder.objects.filter(
+                created_by__isnull=False,
+                created_at__date__gte=date_from,
+                created_at__date__lte=date_to,
+                **org_filter,
+            )
+            .values('created_by', 'created_by__username')
             .annotate(
                 orders_created=models.Count('id'),
                 orders_confirmed=models.Count(
                     'id', filter=models.Q(status__in=('confirmed', 'completed')),
                 ),
+                orders_completed=models.Count('id', filter=models.Q(status='completed')),
             )
-            .order_by('-orders_created')
         )
-        consultants = [
-            {
-                'user_id': r['created_by'],
-                'username': r['created_by__username'] or '',
-                'orders_created': r['orders_created'],
-                'orders_confirmed': r['orders_confirmed'],
-                'conversion_rate': round(r['orders_confirmed'] / r['orders_created'], 4)
-                if r['orders_created'] else 0.0,
-            }
-            for r in rows
-        ]
-        total_created = sum(c['orders_created'] for c in consultants)
-        total_confirmed = sum(c['orders_confirmed'] for c in consultants)
+        scan_rows = (
+            ScanEvent.objects.filter(
+                user__isnull=False,
+                created_at__date__gte=date_from,
+                created_at__date__lte=date_to,
+                **org_filter,
+            )
+            .values('user', 'user__username')
+            .annotate(scans=models.Count('id'))
+        )
+
+        stats = {}
+
+        def row(user_id, username):
+            return stats.setdefault(user_id, {
+                'user_id': user_id, 'username': username or '',
+                **{key: 0 for key in _COUNT_KEYS},
+            })
+
+        for r in order_rows:
+            row(r['created_by'], r['created_by__username']).update(
+                orders_created=r['orders_created'],
+                orders_confirmed=r['orders_confirmed'],
+                orders_completed=r['orders_completed'],
+            )
+        for r in scan_rows:
+            row(r['user'], r['user__username'])['scans'] = r['scans']
+
+        consultants = sorted(
+            stats.values(),
+            key=lambda c: (c['orders_created'], c['scans']),
+            reverse=True,
+        )
+        for c in consultants:
+            c['conversion_rate'] = _rate(c['orders_confirmed'], c['orders_created'])
+
+        totals = {key: sum(c[key] for c in consultants) for key in _COUNT_KEYS}
+        totals['conversion_rate'] = _rate(totals['orders_confirmed'], totals['orders_created'])
         return Response({
             'date_from': date_from,
             'date_to': date_to,
             'consultants': consultants,
-            'totals': {
-                'orders_created': total_created,
-                'orders_confirmed': total_confirmed,
-                'conversion_rate': round(total_confirmed / total_created, 4) if total_created else 0.0,
-            },
+            'totals': totals,
         })
