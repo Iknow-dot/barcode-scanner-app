@@ -59,6 +59,9 @@ const AUTO_LOOKUP_DEBOUNCE_MS = 1500;
 const CREATE_RECOVERY_RETRY_MS = 2500;
 const ADDRESS_SEARCH_MIN_CHARS = 3;
 const ADDRESS_SEARCH_DEBOUNCE_MS = 300;
+// Grow/shrink from a 200px basis: two phone fields share a row only when each
+// can keep its label on one line.
+const PHONE_FIELD_FLEX = '1 1 200px';
 
 // Identifier lengths vary — a personal number is 11 digits, a legal entity's
 // tax ID is 9, and upstream accepts other shapes — so the only thing we reject
@@ -653,8 +656,12 @@ const ClientLookupModal = ({open, onSelect, onClose, onRetail}) => {
                     </Form.Item>
                 </Flex>
 
-                <Flex gap={12} align="flex-end">
-                    <Form.Item name="phone" label={t.customerPhone} style={{flex: 1}}>
+                {/* The Georgian secondary-phone label needs ~180px on one line,
+                    more than half a phone-width modal gives it — so the row
+                    wraps and each phone takes a full row on narrow screens.
+                    Column gap only: Form.Item already spaces stacked rows. */}
+                <Flex wrap align="flex-end" style={{columnGap: 12}}>
+                    <Form.Item name="phone" label={t.customerPhone} style={{flex: PHONE_FIELD_FLEX}}>
                         <Input
                             size="large"
                             placeholder={t.customerPhone}
@@ -663,7 +670,7 @@ const ClientLookupModal = ({open, onSelect, onClose, onRetail}) => {
                             type="tel"
                         />
                     </Form.Item>
-                    <Form.Item name="phone_2" label={t.secondaryPhone} style={{flex: 1}}>
+                    <Form.Item name="phone_2" label={t.secondaryPhone} style={{flex: PHONE_FIELD_FLEX}}>
                         <Input
                             size="large"
                             placeholder={t.secondaryPhone}
