@@ -374,3 +374,30 @@ class PurchaseOrderItem(models.Model):
     def line_total(self):
         return self.effective_price * self.quantity
 
+
+class ScanEvent(models.Model):
+    """One product lookup a consultant started (camera scan, catalog pick or
+    history re-run), recorded by ProductSearchAPIView for analytics."""
+
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name='scan_events',
+    )
+    # SET_NULL like PurchaseOrder.created_by: deleting a user keeps the org's history.
+    user = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='scan_events',
+    )
+    value = models.CharField(max_length=255)
+    is_barcode = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [models.Index(fields=['organization', 'created_at'])]
+
+    def __str__(self):
+        return f'{self.value} @ {self.created_at:%Y-%m-%d %H:%M}'
+

@@ -23,6 +23,9 @@ class ProductSearchSerializer(serializers.Serializer):
         )
 
     is_barcode = serializers.BooleanField(write_only=True)
+    # Set by the dashboard only for lookups the consultant started, so cart
+    # stock refreshes and re-runs are not counted as scans.
+    record_scan = serializers.BooleanField(required=False, default=False, write_only=True)
     sku = serializers.CharField(max_length=255)
     warehouses = serializers.ListField(child=serializers.CharField(max_length=255), write_only=True)
     article = serializers.CharField(max_length=255, read_only=True)

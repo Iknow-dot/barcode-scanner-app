@@ -1,5 +1,8 @@
 """Live product lookup against the per-org 1C ConsultWebExchange service."""
 
+import logging
+
+from django.db import DatabaseError, transaction
 from django.utils import timezone
 from drf_spectacular.utils import extend_schema
 from rest_framework import status as http_status
@@ -10,7 +13,7 @@ from rest_framework.views import APIView
 from core.catalog.attributes import project_attributes
 from core.catalog.fingerprint import row_hash
 from core.catalog.image_urls import signed_image_paths
-from core.models import Product, ProductAttribute, ProductBarcode
+from core.models import Product, ProductAttribute, ProductBarcode, ScanEvent
 from core.permissions import IsCompanyUserOrAdmin
 from core.serializers import ProductSearchSerializer
 from core.services.consult_web_exchange import (
@@ -18,6 +21,8 @@ from core.services.consult_web_exchange import (
     ConsultWebExchangeError,
 )
 from core.views.common import external_error_response
+
+logger = logging.getLogger(__name__)
 
 
 @extend_schema(tags=['Products'])
@@ -30,9 +35,15 @@ class ProductSearchAPIView(APIView):
         sku = request.data.get("sku")
         is_barcode = request.data.get("is_barcode")
         warehouses = request.data.get("warehouses")
-        serializer = self.serializer_class(data={"sku": sku, "warehouses": warehouses, "is_barcode": is_barcode})
+        serializer = self.serializer_class(data={
+            "sku": sku, "warehouses": warehouses, "is_barcode": is_barcode,
+            "record_scan": request.data.get("record_scan", False),
+        })
         serializer.is_valid(raise_exception=True)
         user = self.request.user
+
+        if serializer.validated_data["record_scan"] and user.organization_id:
+            self._record_scan(user, sku, bool(is_barcode))
 
         selected = user.warehouses.filter(code__in=warehouses)
         selected_warehouses = ",".join(selected.values_list("code", flat=True)) if selected.exists() else ""
@@ -115,6 +126,22 @@ class ProductSearchAPIView(APIView):
         product_data["category_path"] = []
         product_data["attributes"] = []
         return Response(self.serializer_class(product_data).data)
+
+    @staticmethod
+    def _record_scan(user, value, is_barcode):
+        """Count the lookup before it runs, so not-found and 1C failures count too.
+
+        A failed insert is logged and swallowed: production does not run
+        migrations on deploy, and a missing table must never block a scan.
+        """
+        try:
+            with transaction.atomic():
+                ScanEvent.objects.create(
+                    organization_id=user.organization_id, user=user,
+                    value=value, is_barcode=is_barcode,
+                )
+        except DatabaseError:
+            logger.exception("Could not record a scan event")
 
     @staticmethod
     def _live_lookup_key(product, scanned, scanned_is_barcode):

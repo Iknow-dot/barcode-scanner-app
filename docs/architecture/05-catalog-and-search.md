@@ -57,7 +57,10 @@ sequenceDiagram
     participant OneC as 1C
 
     C->>FE: scan barcode or type SKU
-    FE->>PS: POST /product/search/ {sku, is_barcode}
+    FE->>PS: POST /product/search/ {sku, is_barcode, record_scan}
+    opt record_scan = true (user-started lookup)
+        PS->>DB: insert ScanEvent (failure logged, never blocks)
+    end
     PS->>DB: lookup in org, is_active=true<br/>(barcode → ProductBarcode, else Product.sku)
 
     alt replica hit

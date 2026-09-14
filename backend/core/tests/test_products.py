@@ -4,10 +4,11 @@ import httpx
 
 from core.catalog.category_ingest import CategoryResolver
 from core.catalog.image_urls import signed_image_path
-from core.models import Organization, Product, ProductAttribute, ProductBarcode, Warehouse
+from core.models import Organization, Product, ProductAttribute, ProductBarcode, ScanEvent, Warehouse
 from core.serializers import ProductSearchSerializer
 from core.services.consult_web_exchange import ConsultWebExchangeError
 from decimal import Decimal
+from django.db import DatabaseError
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from rest_framework.test import APIClient
@@ -519,3 +520,90 @@ class StockQuantityPrecisionTests(TestCase):
 
     def test_null_reserve_stays_null(self):
         self.assertIsNone(self._rows(quantity=1, reserve=None)['reserve'])
+
+
+@override_settings(SECURE_SSL_REDIRECT=False, FERNET_KEY=_TEST_FERNET_KEY)
+class ProductSearchRecordScanTests(TestCase):
+    """`record_scan: true` marks a lookup the consultant started; it is counted
+    whatever the outcome, and a failed count never blocks the lookup."""
+
+    def setUp(self):
+        self.org = _make_organization()
+        self.org.encrypt_password('s3cret')
+        self.org.save()
+        self.user = User.objects.create_user(
+            username='scan_user', password='p',
+            role=User.Role.COMPANY_USER, organization=self.org,
+        )
+        warehouse = Warehouse.objects.create(organization=self.org, code='W1', name='Main')
+        warehouse.users.add(self.user)
+        product = Product.objects.create(
+            organization=self.org, sku='CACHED1', name='Cached', article='A1',
+        )
+        ProductBarcode.objects.create(product=product, barcode='4000')
+        self.client_api = APIClient()
+        self.client_api.force_authenticate(self.user)
+        self.url = reverse('product-search')
+
+    def _search(self, body, live=None, live_error=None):
+        with mock.patch('core.views.products.ConsultWebExchangeClient') as cls:
+            if live_error is not None:
+                cls.return_value.get_stock_and_prices.side_effect = live_error
+            else:
+                cls.return_value.get_stock_and_prices.return_value = live or {'stock': []}
+            return self.client_api.post(self.url, body, format='json')
+
+    def test_replica_hit_records_one_scan(self):
+        response = self._search({'sku': '4000', 'is_barcode': True, 'warehouses': ['W1'], 'record_scan': True})
+        self.assertEqual(response.status_code, 200, response.data)
+        event = ScanEvent.objects.get()
+        self.assertEqual(event.organization, self.org)
+        self.assertEqual(event.user, self.user)
+        self.assertEqual(event.value, '4000')
+        self.assertIs(event.is_barcode, True)
+
+    def test_not_found_lookup_is_still_recorded(self):
+        response = self._search({'sku': 'UNKNOWN', 'is_barcode': True, 'warehouses': ['W1'], 'record_scan': True})
+        self.assertEqual(response.status_code, 404, response.data)
+        self.assertEqual(ScanEvent.objects.count(), 1)
+
+    def test_upstream_failure_is_still_recorded(self):
+        error = ConsultWebExchangeError(code='EXTERNAL_SERVICE_TIMEOUT', detail='t', http_status=504)
+        response = self._search(
+            {'sku': 'UNKNOWN', 'is_barcode': False, 'warehouses': ['W1'], 'record_scan': True},
+            live_error=error,
+        )
+        self.assertEqual(response.status_code, 504, response.data)
+        event = ScanEvent.objects.get()
+        self.assertIs(event.is_barcode, False)
+
+    def test_absent_flag_records_nothing(self):
+        response = self._search({'sku': '4000', 'is_barcode': True, 'warehouses': ['W1']})
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertFalse(ScanEvent.objects.exists())
+
+    def test_false_flag_records_nothing(self):
+        response = self._search({'sku': '4000', 'is_barcode': True, 'warehouses': ['W1'], 'record_scan': False})
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertFalse(ScanEvent.objects.exists())
+
+    def test_invalid_request_records_nothing(self):
+        # No `sku`: validation fails before any lookup happens.
+        response = self._search({'is_barcode': True, 'warehouses': ['W1'], 'record_scan': True})
+        self.assertEqual(response.status_code, 400, response.data)
+        self.assertFalse(ScanEvent.objects.exists())
+
+    def test_record_scan_is_not_echoed_in_the_response(self):
+        response = self._search({'sku': '4000', 'is_barcode': True, 'warehouses': ['W1'], 'record_scan': True})
+        self.assertNotIn('record_scan', response.data)
+
+    def test_failed_insert_does_not_block_the_lookup(self):
+        # Production does not run migrations on deploy: a missing table must
+        # cost an analytics count, never a consultant's scan.
+        with mock.patch.object(ScanEvent.objects, 'create', side_effect=DatabaseError('no table')):
+            with self.assertLogs('core.views.products', level='ERROR'):
+                response = self._search(
+                    {'sku': '4000', 'is_barcode': True, 'warehouses': ['W1'], 'record_scan': True},
+                )
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data['sku_name'], 'Cached')

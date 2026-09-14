@@ -14,10 +14,12 @@ erDiagram
     Organization ||--o{ ProductAttribute : "attribute registry"
     Organization ||--o| CatalogIngestState : "sync state"
     Organization ||--o{ OrganizationPushAllowedIP : "push allowlist"
+    Organization ||--o{ ScanEvent : "scan analytics"
 
     User ||--o{ AllowedIP : "login allowlist"
     User }o--o{ Warehouse : "assigned to (same org)"
     User |o--o{ PurchaseOrder : "created_by"
+    User |o--o{ ScanEvent : "scanned by"
 
     PurchaseOrder ||--|{ PurchaseOrderItem : "items"
 
@@ -131,6 +133,12 @@ erDiagram
         int upserted
         int deactivated
     }
+
+    ScanEvent {
+        string value "scanned or typed lookup"
+        bool is_barcode
+        datetime created_at "indexed with organization"
+    }
 ```
 
 ## Invariants the diagram cannot show
@@ -145,6 +153,7 @@ erDiagram
 | Order lines never FK to `Product` | By design — lines snapshot sku/name/price/warehouse so history survives catalog changes and deactivation |
 | A line's effective price = `discounted_price` ?? `price × (1 − discount_percent/100)`; gifts do not change totals | `PurchaseOrderItem.effective_price` |
 | Discount ≤ user's `max_discount_percent`, only if `can_apply_discount` | `_enforce_discount_permission` in `core/views/orders.py` |
+| A `ScanEvent` exists only for lookups the dashboard marked `record_scan` (camera scan, catalog pick, history re-run) — not cart stock refreshes, "other warehouses" re-runs or offline replay | `ProductSearchAPIView._record_scan`; flag set in `UserDashboard.handleSearch` callers |
 
 ## Class view — behaviour on models
 
