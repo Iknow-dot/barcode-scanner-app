@@ -194,9 +194,13 @@ class OrderAnalyticsAPITests(TestCase):
             username='scanner', password='p',
             role=User.Role.COMPANY_USER, organization=self.org,
         )
+        PurchaseOrder.objects.create(
+            organization=self.org, created_by=scanner, customer_name='F', status='draft',
+        )
         self._scan(scanner, 9)
         self._scan(self.c2, 1)
         self.api.force_authenticate(self.admin)
         resp = self.api.get(self.url)
-        # c1: 2 orders; c2: 1 order; scanner: 0 orders, 9 scans.
-        self.assertEqual([c['username'] for c in resp.data['consultants']], ['c1', 'c2', 'scanner'])
+        # c1: 2 orders (ranks first). c2 and scanner tie at 1 order each, so the
+        # scans tie-break decides: scanner (9 scans) ranks above c2 (1 scan).
+        self.assertEqual([c['username'] for c in resp.data['consultants']], ['c1', 'scanner', 'c2'])
