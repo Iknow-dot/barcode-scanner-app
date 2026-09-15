@@ -1,0 +1,254 @@
+name: Load test (DigitalOcean)
+
+# On demand only. Creates a disposable copy of the production shape on
+# DigitalOcean (loadtest/do/), runs k6 against it, and always destroys it.
+# Design: docs/superpowers/specs/2026-09-15-do-loadtest-environment-design.md
+#
+# GitHub shows a Run button only for workflows present on the default branch
+# (main). In "Use workflow from", pick the branch that holds loadtest/do: that
+# branch's copy of this file and of loadtest/ is what actually runs.
+#
+# This repository is public, and so are these logs. Every generated secret is
+# masked before anything can print it.
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Branch App Platform builds the backend and fake 1C from (must be pushed)
+        required: true
+        default: djangoRewrite
+        type: string
+      run_command:
+        description: Backend run command. The default is byte-for-byte the live app's.
+        required: true
+        default: gunicorn --worker-tmp-dir /dev/shm backend.wsgi
+        type: string
+      scenario:
+        description: smoke only; sweep, ceiling or failure after smoke; or cleanup (delete leftovers only)
+        required: true
+        default: ceiling
+        type: choice
+        options:
+          - smoke
+          - sweep
+          - ceiling
+          - failure
+          - cleanup
+      ceiling_stages:
+        description: CEILING_STAGES JSON for the ceiling scenario
+        required: false
+        default: '[{"target":1,"duration":"30s"},{"target":2,"duration":"1m"},{"target":5,"duration":"1m"},{"target":10,"duration":"1m"},{"target":20,"duration":"1m"},{"target":0,"duration":"30s"}]'
+        type: string
+
+# Every run uses the same fixed resource names, so two runs must never overlap.
+concurrency:
+  group: loadtest-do
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  loadtest:
+    name: ${{ inputs.scenario }} on ${{ inputs.ref }}
+    runs-on: ubuntu-latest
+    # Deliberately generous: a job-level timeout can end the job before the
+    # always-run destroy. The step timeouts below end a hung run first.
+    timeout-minutes: 120
+
+    defaults:
+      run:
+        shell: bash
+
+    env:
+      SCENARIO: ${{ inputs.scenario }}
+      OUT_DIR: ${{ github.workspace }}/loadtest-output
+      DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
+      TF_IN_AUTOMATION: "1"
+      TF_INPUT: "0"
+      TF_VAR_ref: ${{ inputs.ref }}
+      TF_VAR_run_command: ${{ inputs.run_command }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prepare the output directory
+        run: mkdir -p "$OUT_DIR"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install doctl
+        uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.DIGITALOCEAN_TOKEN }}
+
+      # The sweeper deletes cloud resources by name. Prove its matching before
+      # it runs with a real token.
+      - name: Test the sweeper
+        run: python -m unittest loadtest.do.test_sweep -v
+
+      - name: Delete leftovers from earlier runs
+        timeout-minutes: 10
+        run: python -m loadtest.do.sweep delete
+
+      - name: Install Terraform
+        if: env.SCENARIO != 'cleanup'
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.16.2
+          terraform_wrapper: false
+
+      - name: Check the Terraform configuration
+        if: env.SCENARIO != 'cleanup'
+        working-directory: loadtest/do
+        run: |
+          terraform fmt -check -recursive
+          terraform init
+          terraform validate
+          terraform test
+
+      - name: Create the environment
+        if: env.SCENARIO != 'cleanup'
+        working-directory: loadtest/do
+        timeout-minutes: 45
+        run: terraform apply -auto-approve
+
+      - name: Export Terraform outputs
+        if: env.SCENARIO != 'cleanup'
+        working-directory: loadtest/do
+        run: |
+          secret_key="$(terraform output -raw django_secret_key)"
+          password="$(terraform output -raw loadtest_password)"
+          echo "::add-mask::$secret_key"
+          echo "::add-mask::$password"
+          {
+            echo "BASE_URL=$(terraform output -raw app_url)"
+            echo "FAKE_1C_CONTROL=$(terraform output -raw fake_1c_control_url)"
+            echo "DJANGO_SECRET_KEY=$secret_key"
+            echo "LOADTEST_PASSWORD=$password"
+          } >> "$GITHUB_ENV"
+
+      - name: Wait for the backend
+        if: env.SCENARIO != 'cleanup'
+        timeout-minutes: 11
+        run: |
+          for _ in $(seq 1 60); do
+            if curl -fsS "$BASE_URL/api/v1/health/"; then
+              echo
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "the backend never answered /api/v1/health/ with 200" >&2
+          exit 1
+
+      - name: Install k6
+        if: env.SCENARIO != 'cleanup'
+        uses: grafana/setup-k6-action@v1
+
+      - name: Smoke
+        if: env.SCENARIO != 'cleanup'
+        working-directory: loadtest/k6
+        timeout-minutes: 10
+        run: k6 run --quiet entry/smoke.js 2>&1 | tee "$OUT_DIR/smoke.txt"
+
+      - name: Run the scenario
+        id: k6
+        if: env.SCENARIO == 'sweep' || env.SCENARIO == 'ceiling' || env.SCENARIO == 'failure'
+        working-directory: loadtest/k6
+        timeout-minutes: 45
+        env:
+          CEILING_STAGES: ${{ inputs.ceiling_stages }}
+          # One sync worker is already past its ceiling at the local rig's
+          # opening rate of 5 req/s.
+          CEILING_START_RATE: "1"
+        run: |
+          set +e
+          k6 run --quiet "entry/$SCENARIO.js" --out "csv=$OUT_DIR/run.csv" 2>&1 | tee "$OUT_DIR/scenario.txt"
+          code="${PIPESTATUS[0]}"
+          set -e
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          # 99 means thresholds were breached: the expected verdict of ceiling
+          # and failure, not a broken environment.
+          if [ "$code" -ne 0 ] && [ "$code" -ne 99 ]; then
+            exit "$code"
+          fi
+
+      - name: Build the report
+        if: always() && hashFiles('loadtest-output/run.csv') != ''
+        run: python loadtest/report.py "$OUT_DIR/run.csv" --out "$OUT_DIR/report.md"
+
+      - name: Collect App Platform logs
+        if: always() && env.SCENARIO != 'cleanup'
+        timeout-minutes: 5
+        run: |
+          app_id="$(python -m loadtest.do.sweep app-id)"
+          if [ -z "$app_id" ]; then
+            echo "no app to collect logs from"
+            exit 0
+          fi
+          mkdir -p "$OUT_DIR/logs"
+          for component in backend seed fake-1c; do
+            for type in build deploy run; do
+              doctl apps logs "$app_id" "$component" --type "$type" \
+                > "$OUT_DIR/logs/$component-$type.log" 2>&1 || true
+            done
+          done
+
+      - name: Write the job summary
+        if: always()
+        env:
+          K6_EXIT: ${{ steps.k6.outputs.exit_code }}
+        run: |
+          {
+            echo "## Load test: $SCENARIO"
+            echo
+            echo "- ref: \`$TF_VAR_ref\`"
+            echo "- run_command: \`$TF_VAR_run_command\`"
+            if [ -n "$K6_EXIT" ]; then
+              echo "- k6 exit code: $K6_EXIT (99 = thresholds breached, expected for ceiling and failure)"
+            fi
+            for name in smoke scenario; do
+              if [ -f "$OUT_DIR/$name.txt" ]; then
+                echo
+                echo "### $name"
+                echo '```'
+                tail -n 80 "$OUT_DIR/$name.txt"
+                echo '```'
+              fi
+            done
+            if [ -f "$OUT_DIR/report.md" ]; then
+              echo
+              cat "$OUT_DIR/report.md"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: loadtest-${{ inputs.scenario }}-${{ github.run_id }}
+          path: loadtest-output/
+          if-no-files-found: ignore
+
+      # continue-on-error so the verification below still runs and is what
+      # turns the job red if anything survived.
+      - name: Destroy the environment
+        if: always() && env.SCENARIO != 'cleanup'
+        continue-on-error: true
+        working-directory: loadtest/do
+        timeout-minutes: 30
+        run: |
+          if terraform destroy -auto-approve; then
+            exit 0
+          fi
+          echo "destroy failed; retrying once in 60 s (it can collide with an in-flight deployment)" >&2
+          sleep 60
+          terraform destroy -auto-approve
+
+      - name: Verify nothing is left behind
+        if: always()
+        timeout-minutes: 10
+        run: python -m loadtest.do.sweep verify
