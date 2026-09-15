@@ -1615,13 +1615,15 @@ Every step here pushes code, spends money or needs credentials only the user has
 
 Ask the user to create a DigitalOcean API token (read/write/delete on apps and databases) **in the team whose App Platform already deploys `Iknow-dot/barcode-scanner-app`**, and to save it as the repository secret `DIGITALOCEAN_TOKEN` (GitHub → Settings → Secrets and variables → Actions → New repository secret). Also ask them to confirm the live app's `DEBUG` value and Postgres major version; if either differs from `True` / `17`, change the default in `loadtest/do/variables.tf` and the matching assertion in `tests/environment.tftest.hcl`, re-run `terraform.sh test`, and commit.
 
-- [ ] **Step 2: Push `djangoRewrite` (user approval required)**
+- [ ] **Step 2: Push this branch (user approval required)**
 
-Warn the user first: **the live app redeploys on every push to `djangoRewrite`** (`deploy_on_push: true`). These commits change no backend code, but App Platform rebuilds and restarts production anyway. Push only once they approve:
+The workflow file and `loadtest/do/` only need to exist *somewhere* on GitHub for "Use workflow from" to find them — not on `djangoRewrite`. `djangoRewrite` on `origin` already contains `loadtest/fake_1c/` and the backend, and the `ref` input controls which branch App Platform builds from independently of which branch the workflow itself runs from. So push this feature branch instead of `djangoRewrite`: it does **not** redeploy production (`deploy_on_push` only fires on a push to `djangoRewrite` itself, which this isn't). Still confirm with the user before pushing — it puts a new branch and workflow file on a public GitHub repo:
 
 ```bash
-git push origin djangoRewrite
+git push origin worktree-do-loadtest-env
 ```
+
+Every dispatch below uses "Use workflow from" = `worktree-do-loadtest-env` and leaves `ref` at its default (`djangoRewrite`), so App Platform keeps building the backend and fake 1C from `djangoRewrite` exactly as before.
 
 - [ ] **Step 3: Put the workflow file on `main` (user approval required)**
 
@@ -1648,21 +1650,21 @@ If `main` is branch-protected, open a PR from a branch off `main` with the same 
 
 - [ ] **Step 4: First dispatch — `smoke`**
 
-The user opens Actions → "Load test (DigitalOcean)" → Run workflow, with "Use workflow from" = `djangoRewrite`, `scenario` = `smoke`, other inputs default.
+The user opens Actions → "Load test (DigitalOcean)" → Run workflow, with "Use workflow from" = `worktree-do-loadtest-env`, `scenario` = `smoke`, other inputs default.
 
 Pass criteria:
 - "Create the environment" succeeds (about 15–20 min).
 - "Wait for the backend" gets `{"status": "ok"}`.
 - "Smoke" exits 0.
-- "Verify nothing is left behind" prints `nothing left behind (loadtest-app, loadtest-db)`.
+- "Clean up and verify nothing is left behind" prints `nothing left behind (loadtest-app, loadtest-db)`.
 
 If it fails, read the uploaded `logs/seed-*.log` and `logs/backend-*.log` first. Known risks to check in this order: the seed job's `run_command` not being run through a shell (`&&` / `$LOADTEST_PASSWORD` unexpanded → wrap it as `bash -c '…'`), `${fake-1c.PRIVATE_URL}` binding empty (fall back to `--web-service-url http://fake-1c:8099`), and the image check returning something other than `502` (set `IMAGE_EXPECT_STATUS` accordingly in the smoke step's env). Fix with a failing `terraform test` assertion first where the change is in Terraform.
 
 - [ ] **Step 5: Second dispatch — prove cleanup on failure**
 
-Dispatch with `ref` = `this-branch-does-not-exist`, `scenario` = `smoke`.
+Dispatch with `run_command` = `false`, `scenario` = `smoke`, `ref` at its default. `false` exits immediately with a non-zero status, so the backend container exits, the deployment fails, `terraform apply` fails, and logs are still collected — this proves cleanup after a failed deployment. (A nonexistent `ref` does not exercise the same path: App Platform likely rejects it before any deployment exists at all, so `apply` fails for a different reason before there's anything to collect logs from.)
 
-Pass criteria: "Create the environment" fails; "Destroy the environment" and "Verify nothing is left behind" both run, and verification prints `nothing left behind`.
+Pass criteria: "Create the environment" fails; "Destroy the environment" and "Clean up and verify nothing is left behind" both run, and the latter prints `nothing left behind`.
 
 - [ ] **Step 6: The measurements**
 

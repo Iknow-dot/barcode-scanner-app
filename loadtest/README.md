@@ -442,11 +442,19 @@ Design: `docs/superpowers/specs/2026-09-15-do-loadtest-environment-design.md`.
 - **Repository secret `DIGITALOCEAN_TOKEN`**, created in the DigitalOcean team
   that already has GitHub access to this repository — App Platform builds the
   source through that access. It needs read, write and delete on apps and
-  databases.
+  databases. It can also delete production — put it in a GitHub Environment
+  with a required reviewer, not a plain repository secret. Actions in the
+  workflow are pinned to commit SHAs (not tags), so a bump is a deliberate,
+  reviewed change rather than something that happens silently on someone
+  else's push.
 - **The workflow file must exist on `main`**, or GitHub shows no Run button.
   The branch picked in "Use workflow from" is the one whose `loadtest/` runs.
 - **Logs are public** (this repository is public). The workflow masks every
   generated secret; do not add steps that print environment variables.
+- **Confirm the live app's `DEBUG` value and Postgres major version** against
+  `loadtest/do/variables.tf`'s `var.debug` / `var.db_version` defaults (`True`
+  / `17` as of 2026-09-15) before the first real run — a drift there means the
+  environment no longer mirrors production, silently.
 
 ### Inputs
 
@@ -454,8 +462,8 @@ Design: `docs/superpowers/specs/2026-09-15-do-loadtest-environment-design.md`.
 | --- | --- | --- |
 | `ref` | `djangoRewrite` | Branch App Platform builds. Must be pushed. |
 | `run_command` | `gunicorn --worker-tmp-dir /dev/shm backend.wsgi` | The live command. Override to compare, e.g. `gunicorn --worker-tmp-dir /dev/shm --worker-class gthread --workers 2 --threads 8 backend.wsgi`. |
-| `scenario` | `ceiling` | `smoke` (smoke only), `sweep` / `ceiling` / `failure` (after smoke), or `cleanup` (delete leftovers, nothing else). |
-| `ceiling_stages` | 1 → 2 → 5 → 10 → 20 req/s | `CEILING_STAGES` JSON. Keep it low: a single sync worker cannot survive the local 5 → 200 ramp, and the resulting login burst measures the wedge, not capacity. |
+| `scenario` | `ceiling` | `smoke` (smoke only), `sweep` (run at `SWEEP_RATE=1`) / `ceiling` / `failure` (after smoke), or `cleanup` (delete leftovers, nothing else). `failure`'s rates are fixed and sized for the 8-slot local stack, so its numbers are only meaningful with a threaded `run_command`. |
+| `ceiling_stages` | 1 → 2 → 5 → 10 → 20 iterations/s | `CEILING_STAGES` JSON. Targets are journey iterations/s (each iteration is ~1.7 requests, plus a login for every new VU), not requests/s. Keep it low: a single sync worker cannot survive the local 5 → 200 ramp, and the resulting login burst measures the wedge, not capacity. |
 
 One run tests one `run_command`. To compare configurations, dispatch twice —
 every run starts from an identically seeded environment.
@@ -467,9 +475,13 @@ every run starts from an identically seeded environment.
   it before quoting anything), the k6 exit code, and `report.py`'s endpoint
   table.
 - **Artifact `loadtest-<scenario>-<run id>`:** `run.csv`, `report.md`, and
-  `logs/<component>-<build|deploy|run>.log` for `backend`, `seed` and
-  `fake-1c`. Search `logs/backend-run.log` for `WORKER TIMEOUT` and repeated
-  `Booting worker` lines (a killed and restarted worker) under load.
+  `logs/<component>-<build|deploy|run|run_restarted>.log` for `backend`,
+  `seed` and `fake-1c`, collected for the newest deployment even if it
+  failed (not just the active one — a failed first deployment is neither).
+  Search `logs/backend-run.log` for `WORKER TIMEOUT` and repeated
+  `Booting worker` lines (a killed and restarted worker) under load; search
+  `logs/backend-run_restarted.log` for an OOM-killed container's own output,
+  which `run` never carries.
 - **Exit 99 is a verdict, not a failure.** The job turns red only when the
   environment itself failed: build, seed, health, destroy or verification.
 - **`report.py`'s "top queries" table shows `psql failed`.** It reads
@@ -484,9 +496,12 @@ every run starts from an identically seeded environment.
 
 ### Leftovers
 
-Every run first deletes `loadtest-app` and `loadtest-db` if they exist, and
-ends by verifying both are gone (`python -m loadtest.do.sweep`; exact names
-only). If "Verify nothing is left behind" is red, dispatch `scenario: cleanup`.
+Every run first deletes `loadtest-app` and `loadtest-db` if they exist
+(leftovers from an earlier run), and ends the same way: "Clean up and verify
+nothing is left behind" deletes anything left with those exact names, waits,
+and fails the job loudly if that does not work — it is not only a check. If
+it's red anyway (the runner itself was lost before that step could run),
+dispatch `scenario: cleanup` to sweep the leftovers on their own.
 
 ### Checking the configuration locally
 
