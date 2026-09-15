@@ -167,6 +167,12 @@ jobs:
         if: env.SCENARIO != 'cleanup'
         working-directory: loadtest/k6
         timeout-minutes: 10
+        env:
+          # DigitalOcean's Cloudflare edge replaces a backend 502 JSON body with
+          # its own HTML 504, so smoke reports those responses instead of failing
+          # on them (loadtest/k6/lib/config.js). Remove once the backend's
+          # upstream-error statuses survive the edge.
+          EDGE_REWRITES_5XX: "1"
         run: k6 run --quiet entry/smoke.js 2>&1 | tee "$OUT_DIR/smoke.txt"
 
       - name: Run the scenario
