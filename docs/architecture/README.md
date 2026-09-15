@@ -15,6 +15,7 @@ these pages are the system-wide picture those specs plug into.
 | [03 — Order lifecycle](03-order-lifecycle.md) | Order states, the confirm checklist, completion |
 | [04 — Authentication](04-authentication.md) | Login (IP allowlist, device lock), token refresh, 401 retry |
 | [05 — Catalog & product search](05-catalog-and-search.md) | 1C catalog push, replica-first scan lookup, image proxy |
+| [06 — Monitoring](06-monitoring.md) | Health probe, Sentry, logs, PostHog: which question each answers, what's live, blind spots |
 
 ## Who uses it
 
@@ -56,8 +57,27 @@ flowchart LR
 
 The same 1C service appears on both sides on purpose: the app **calls** 1C for
 live data, and 1C **calls back** with a per-org push token for catalog updates
-and order completion. PostHog (product analytics) and Sentry (errors, optional)
-receive telemetry only and are left off the diagram.
+and order completion.
+
+## What it reports to
+
+```mermaid
+flowchart LR
+    spa["Web app"]
+    api["API<br/>(Django)"]
+    posthog["PostHog"]
+    sentry["Sentry"]
+    logs["DigitalOcean<br/>logs"]
+
+    spa -- "usage events" --> posthog
+    spa -. "errors" .-> sentry
+    api -. "errors, traces" .-> sentry
+    api -- "log lines" --> logs
+```
+
+Telemetry only: nothing here is on a request's critical path. Sentry (dotted)
+sends nothing until a DSN is configured. How these are used, what's switched on
+and the blind spots: [06 — Monitoring](06-monitoring.md).
 
 ## Key design points
 

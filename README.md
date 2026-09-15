@@ -115,6 +115,7 @@ Authentication is JWT via `rest_framework_simplejwt`. The login endpoint is `POS
   - [Order lifecycle — states, confirm → 1C push, completion webhook](docs/architecture/03-order-lifecycle.md)
   - [Authentication — login, IP allowlist, device lock, token refresh](docs/architecture/04-authentication.md)
   - [Catalog replica & product search](docs/architecture/05-catalog-and-search.md)
+  - [Monitoring — health probe, Sentry, logs, PostHog](docs/architecture/06-monitoring.md)
 - [`docs/superpowers/specs/`](docs/superpowers/specs/) — per-feature design specs (goals, non-goals, chosen approach).
 - [`docs/superpowers/plans/`](docs/superpowers/plans/) — the matching implementation plans.
 
