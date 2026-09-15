@@ -84,7 +84,7 @@ destroys it.
 | Input | Default | Meaning |
 |---|---|---|
 | `ref` | `djangoRewrite` | Branch App Platform builds. Must exist on GitHub. |
-| `run_command` | `gunicorn --worker-tmp-dir /dev/shm backend.wsgi` | Byte-for-byte the live command. Override to test another configuration. |
+| `run_command` | `gunicorn --worker-tmp-dir /dev/shm --worker-class gthread --workers 2 --threads 4 backend.wsgi` | Byte-for-byte the live command (changed on 2026-09-16; it was `gunicorn --worker-tmp-dir /dev/shm backend.wsgi`). Override to test another configuration. |
 | `scenario` | `ceiling` | `smoke` \| `sweep` \| `ceiling` \| `failure` \| `cleanup` |
 | `ceiling_stages` | `1 → 2 → 5 → 10 → 20 req/s` (as `CEILING_STAGES` JSON) | Deliberately far below the local 5 → 200 default: a single sync worker cannot survive that ramp, and the resulting login burst measures the wedge, not capacity. |
 
@@ -419,3 +419,8 @@ Decided from the final whole-branch review's findings (F1–F10;
   (the fake 1C's `/_status/<code>` route) records which statuses the edge
   passes through intact, as input for choosing the backend's new error
   statuses.
+- **Production switched to threaded workers on 2026-09-16**, before any
+  `ceiling` run: `gunicorn --worker-tmp-dir /dev/shm --worker-class gthread --workers 2 --threads 4 backend.wsgi`.
+  The `run_command` default (workflow input and `var.run_command`) follows it,
+  so a default run measures production as it is now. The old single sync
+  worker remains available as an override, for a before/after comparison.

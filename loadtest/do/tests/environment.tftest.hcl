@@ -33,7 +33,7 @@ run "backend_mirrors_the_live_service" {
   }
 
   assert {
-    condition     = one([for s in digitalocean_app.loadtest.spec[0].service : s.run_command if s.name == "backend"]) == "gunicorn --worker-tmp-dir /dev/shm backend.wsgi"
+    condition     = one([for s in digitalocean_app.loadtest.spec[0].service : s.run_command if s.name == "backend"]) == "gunicorn --worker-tmp-dir /dev/shm --worker-class gthread --workers 2 --threads 4 backend.wsgi"
     error_message = "By default the backend must run the live run_command byte for byte."
   }
 
@@ -70,11 +70,11 @@ run "backend_mirrors_the_live_service" {
 
 run "run_command_is_overridable" {
   variables {
-    run_command = "gunicorn --worker-tmp-dir /dev/shm --worker-class gthread --workers 2 --threads 8 backend.wsgi"
+    run_command = "gunicorn --worker-tmp-dir /dev/shm backend.wsgi"
   }
 
   assert {
-    condition     = one([for s in digitalocean_app.loadtest.spec[0].service : s.run_command if s.name == "backend"]) == "gunicorn --worker-tmp-dir /dev/shm --worker-class gthread --workers 2 --threads 8 backend.wsgi"
+    condition     = one([for s in digitalocean_app.loadtest.spec[0].service : s.run_command if s.name == "backend"]) == "gunicorn --worker-tmp-dir /dev/shm backend.wsgi"
     error_message = "var.run_command must reach the backend service."
   }
 }

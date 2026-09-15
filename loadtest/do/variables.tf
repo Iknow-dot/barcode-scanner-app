@@ -7,7 +7,7 @@ variable "ref" {
 variable "run_command" {
   description = "Backend run command. The default is byte-for-byte the live app's."
   type        = string
-  default     = "gunicorn --worker-tmp-dir /dev/shm backend.wsgi"
+  default     = "gunicorn --worker-tmp-dir /dev/shm --worker-class gthread --workers 2 --threads 4 backend.wsgi"
 }
 
 variable "debug" {

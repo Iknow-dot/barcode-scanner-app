@@ -12,11 +12,14 @@ has no worker ceiling and no gunicorn queueing, so any capacity number measured
 against it would be meaningless. This stack runs the image exactly as shipped:
 `gunicorn --workers 2 --threads 4`, i.e. 8 concurrent requests.
 
-**Production does not run that.** The live app is a Python buildpack deploy
-whose run command is `gunicorn --worker-tmp-dir /dev/shm backend.wsgi`: one
-sync worker, one request at a time, on `apps-s-1vcpu-0.5gb` (confirmed from
-`ps` in the DO console, 2026-09-15). Every number measured on this stack
-describes an 8-slot backend. For production-shaped numbers, see "Running on
+**Production runs a different command.** The live app is a Python buildpack
+deploy on `apps-s-1vcpu-0.5gb`. Until 2026-09-15 its run command was
+`gunicorn --worker-tmp-dir /dev/shm backend.wsgi`: one sync worker, one request
+at a time (confirmed from `ps` in the DO console). Since 2026-09-16 it is
+`gunicorn --worker-tmp-dir /dev/shm --worker-class gthread --workers 2 --threads 4 backend.wsgi`,
+which is also 8 concurrent requests, but threaded, without this stack's
+`--timeout 120`, and against a real managed Postgres. Treat local numbers as a
+ranking and a shape. For production-shaped numbers, see "Running on
 DigitalOcean" below.
 
 A toxiproxy sits between the backend and Postgres so managed-Postgres RTT can
@@ -463,7 +466,7 @@ Design: `docs/superpowers/specs/2026-09-15-do-loadtest-environment-design.md`.
 | Input | Default | Meaning |
 | --- | --- | --- |
 | `ref` | `djangoRewrite` | Branch App Platform builds. Must be pushed. |
-| `run_command` | `gunicorn --worker-tmp-dir /dev/shm backend.wsgi` | The live command. Override to compare, e.g. `gunicorn --worker-tmp-dir /dev/shm --worker-class gthread --workers 2 --threads 8 backend.wsgi`. |
+| `run_command` | `gunicorn --worker-tmp-dir /dev/shm --worker-class gthread --workers 2 --threads 4 backend.wsgi` | The live command since 2026-09-16. Override to compare, e.g. the old single sync worker `gunicorn --worker-tmp-dir /dev/shm backend.wsgi`. Keep threads × workers at or under 8: each thread holds its own Postgres connection (`conn_max_age=600`), the `db-s-1vcpu-1gb` cluster allows about 22, and a deploy briefly runs old and new instances side by side. |
 | `scenario` | `ceiling` | `smoke` (smoke only), `sweep` (run at `SWEEP_RATE=1`) / `ceiling` / `failure` (after smoke), or `cleanup` (delete leftovers, nothing else). `failure`'s rates are fixed and sized for the 8-slot local stack, so its numbers are only meaningful with a threaded `run_command`. |
 | `ceiling_stages` | 1 → 2 → 5 → 10 → 20 iterations/s | `CEILING_STAGES` JSON. Targets are journey iterations/s (each iteration is ~1.7 requests, plus a login for every new VU), not requests/s. Keep it low: a single sync worker cannot survive the local 5 → 200 ramp, and the resulting login burst measures the wedge, not capacity. |
 
@@ -548,7 +551,7 @@ bash loadtest/scripts/terraform.sh test          # mocked provider: no token, cr
 | `ORG_ID` | `1` | Fallback only — real code paths read the org id from the login response (`session.organizationId`), since Postgres sequences don't reset on delete and a hard-coded id mints signatures for the wrong org after any `--reset` + reseed. |
 | `SWEEP_RATE` / `SWEEP_DURATION` / `GRID_SIZE` | `5` / `40s` / `20` | `entry/sweep.js` per-scenario rate and window length, and the `images` scenario's grid width. **`SWEEP_RATE` does not affect `images`** — that scenario hard-codes `rate: 1` in its own `scenario()` call regardless of `SWEEP_RATE` (`entry/sweep.js`'s `images: scenario('images', 6, { rate: 1 })`); only `GRID_SIZE` changes its load. |
 | `CEILING_STAGES` | unset (uses the built-in ramp) | JSON array of `{"target":N,"duration":"Ns"}` stages overriding `entry/ceiling.js`'s default ramp. |
-| `CEILING_START_RATE` | `5` | `entry/ceiling.js`'s opening arrival rate, before its first stage. The DigitalOcean workflow sets `1`: a single sync worker is already past its ceiling at 5 req/s. |
+| `CEILING_START_RATE` | `5` | `entry/ceiling.js`'s opening arrival rate, before its first stage. The DigitalOcean workflow sets `1`, so every configuration worth comparing, including the old single sync worker, starts below its ceiling. |
 | `EDGE_REWRITES_5XX` | unset | Set to `1` where a proxy in front of the app replaces backend 5xx responses. `entry/smoke.js` then prints `catalog_image` and the upstream-error probe instead of checking them. The DigitalOcean workflow sets it; leave it unset locally, where those checks must pass. |
 | `WITH_INGEST` | unset | Set to `1` to land `entry/ceiling.js`'s opt-in bulk catalog-ingest scenario mid-ramp. |
 | `INGEST_PAGE_SIZE` | `200` | Products per push in `scenarios/ingest.js` — used by `entry/ceiling.js`'s `WITH_INGEST` scenario and by running `scenarios/ingest.js` directly. |

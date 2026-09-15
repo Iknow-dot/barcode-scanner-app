@@ -76,14 +76,23 @@ on a row.
 
 ## Known blind spots
 
-- **Slow requests die before anything reports them.** The live run command
-  (`gunicorn --worker-tmp-dir /dev/shm backend.wsgi`) sets no `--timeout`, so
-  Gunicorn's default **30 s** applies, unless the live spec sets
-  `GUNICORN_CMD_ARGS`. A request that runs past it has its worker killed, and the
-  buffered Sentry transaction dies with it. The 120 s in `backend/Dockerfile` and
-  in the Sentry design spec only applies to local Docker. Confirm the live value.
-  Production also runs **one sync worker** (seen in the DO console on 2026-09-15),
-  so one slow request makes every other organization's requests queue behind it.
+- **Gunicorn's worker timeout.** Since 2026-09-16 the live run command is
+  `gunicorn --worker-tmp-dir /dev/shm --worker-class gthread --workers 2 --threads 4 backend.wsgi`:
+  8 concurrent requests. It sets no `--timeout`, so Gunicorn's default 30 s
+  applies unless the live spec sets `GUNICORN_CMD_ARGS`. For gthread workers,
+  that timeout only checks that the worker process is still alive, so a single
+  slow request no longer gets its worker killed (and its buffered Sentry
+  transaction with it). Before that date production ran **one sync worker**
+  (seen in the DO console on 2026-09-15): one slow request made every other
+  organization's requests queue behind it, and a request past 30 s killed the
+  worker. The 120 s in `backend/Dockerfile` and in the Sentry design spec only
+  applies to local Docker.
+- **Error codes from 502/503/504 never reach the browser.** DigitalOcean's
+  Cloudflare edge replaces any 502, 503 or 504 the backend sends with its own
+  HTML 504, immediately (proven 2026-09-15 with the load-test copy; 500, 422 and
+  424 pass through intact). Every `EXTERNAL_SERVICE_*` error from 1C, Photon
+  and RS.ge uses 502 or 504, as does the image proxy's `IMAGE_FETCH_FAILED`, so
+  in production the frontend receives none of those codes.
 - **The 60-second router cutoff.** DigitalOcean answers the browser with its own
   502 after 60 s. The browser never sees our error envelope, and nothing on our
   side records that the user got a 502. With a 30 s worker timeout this cutoff is

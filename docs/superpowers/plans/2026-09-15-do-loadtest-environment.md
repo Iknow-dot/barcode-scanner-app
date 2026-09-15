@@ -1668,8 +1668,8 @@ Pass criteria: "Create the environment" fails; "Destroy the environment" and "Cl
 
 - [ ] **Step 6: The measurements**
 
-1. Dispatch `scenario` = `ceiling`, default `run_command` — today's production.
-2. Dispatch `scenario` = `ceiling`, `run_command` = `gunicorn --worker-tmp-dir /dev/shm --worker-class gthread --workers 2 --threads 8 backend.wsgi`.
+1. Dispatch `scenario` = `ceiling`, default `run_command` — today's production (gthread, 2 workers × 4 threads since 2026-09-16).
+2. Optional before/after: dispatch `scenario` = `ceiling`, `run_command` = `gunicorn --worker-tmp-dir /dev/shm backend.wsgi` (the old single sync worker). Do not go above 8 workers × threads: each thread holds a Postgres connection and the cluster allows about 22.
 
 For each, record from the job summary: the trustworthiness line, the highest stage that stayed trustworthy, `product_search` and `catalog_list` p95, and whether `logs/backend-run.log` shows `WORKER TIMEOUT`.
 
