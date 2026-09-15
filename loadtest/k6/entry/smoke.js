@@ -9,7 +9,12 @@ import { PATHS, signedImagePath } from '../lib/endpoints.js';
 import { expectStatus } from '../lib/metrics.js';
 import {
   BASE_URL, FAKE_1C_CONTROL, PUSH_TOKEN, USER_COUNT, PRODUCT_COUNT, IMAGE_EXPECT_STATUS,
+  EDGE_REWRITES_5XX,
 } from '../lib/config.js';
+
+// Statuses the edge probe sends through the fake 1C's /_status/<code> route:
+// the 5xx family the backend uses today, plus 4xx candidates for a fix.
+const EDGE_PROBE_STATUSES = [500, 502, 503, 504, 422, 424];
 
 export const options = {
   vus: 1,
@@ -235,13 +240,18 @@ export default function () {
   // whenever a different status is expected — a real 200 image response
   // isn't JSON at all, and `.json()` on it would throw.
   const imageRes = authGet(session, signedImagePath(orgId, 'LT-SKU-1', 0), 'catalog_image');
-  if (!expectStatus(imageRes, 'catalog_image', IMAGE_EXPECT_STATUS)) {
-    console.error(`catalog_image unexpected response: ${describeResponse(imageRes)}`);
-  }
-  if (IMAGE_EXPECT_STATUS === 502) {
-    check(imageRes, {
-      'catalog_image body code == IMAGE_FETCH_FAILED': (r) => jsonCode(r) === 'IMAGE_FETCH_FAILED',
-    });
+  if (EDGE_REWRITES_5XX && IMAGE_EXPECT_STATUS === 502) {
+    // Reported, not checked: the edge replaces this 502 (config.js).
+    console.log(`catalog_image (not checked, edge rewrites 5xx): ${describeResponse(imageRes)} code=${jsonCode(imageRes) || '-'}`);
+  } else {
+    if (!expectStatus(imageRes, 'catalog_image', IMAGE_EXPECT_STATUS)) {
+      console.error(`catalog_image unexpected response: ${describeResponse(imageRes)}`);
+    }
+    if (IMAGE_EXPECT_STATUS === 502) {
+      check(imageRes, {
+        'catalog_image body code == IMAGE_FETCH_FAILED': (r) => jsonCode(r) === 'IMAGE_FETCH_FAILED',
+      });
+    }
   }
 
   // Upstream-error pass-through probe. 1C mostly answers errors with 500, which
@@ -261,10 +271,24 @@ export default function () {
   setFake1cMode('fast');
   const probeCode = jsonCode(probeRes);
   console.log(`upstream_error_probe: ${describeResponse(probeRes)} code=${probeCode || '-'}`);
-  check(probeRes, {
-    'upstream 1C 500 reaches the client as 502': (r) => r.status === 502,
-    'upstream 1C 500 keeps its JSON code EXTERNAL_SERVICE_ERROR': () => probeCode === 'EXTERNAL_SERVICE_ERROR',
-  });
+  if (!EDGE_REWRITES_5XX) {
+    check(probeRes, {
+      'upstream 1C 500 reaches the client as 502': (r) => r.status === 502,
+      'upstream 1C 500 keeps its JSON code EXTERNAL_SERVICE_ERROR': () => probeCode === 'EXTERNAL_SERVICE_ERROR',
+    });
+  }
+
+  // Edge status probe: which statuses reach the client unchanged. The fake 1C
+  // answers /_status/<code> with that status and {"code": "FAKE_STATUS_<code>"},
+  // through the same public edge as the backend. One line per status, no
+  // checks — this is data for choosing the backend's error statuses.
+  const fake1cBase = FAKE_1C_CONTROL.replace(/\/_control$/, '');
+  for (const sent of EDGE_PROBE_STATUSES) {
+    const res = http.get(`${fake1cBase}/_status/${sent}`, { tags: { endpoint: 'edge_status_probe' } });
+    const code = jsonCode(res);
+    const intact = res.status === sent && code === `FAKE_STATUS_${sent}`;
+    console.log(`edge_status_probe: sent=${sent} ${intact ? 'INTACT' : 'REPLACED'} ${describeResponse(res)} code=${code || '-'}`);
+  }
 
   expectStatus(
     authPost(session, PATHS.refresh, { refresh: session.refresh }, 'auth_refresh'),

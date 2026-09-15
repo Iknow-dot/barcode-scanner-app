@@ -405,3 +405,17 @@ Decided from the final whole-branch review's findings (F1–F10;
   `100.64.0.0/10` shared address space (`is_private` is False there, yet it is
   not routable), and the upstream image fetch used a scalar `timeout=15`
   instead of `core.services.timeouts.budget`. Both fixed with tests.
+- **Root cause of the `catalog_image` failure: DigitalOcean's edge.** A third
+  run (34999982294) with response diagnostics showed the backend answering
+  `502` plus its JSON body, while the client received
+  `504 text/html server=cloudflare` within half a second. A new
+  upstream-error probe proved the same happens to the production 1C error
+  path: the fake 1C returned 500, and the backend's
+  `502 {"code": "EXTERNAL_SERVICE_ERROR"}` also arrived as a Cloudflare 504. In
+  production, 1C error codes therefore never reach the frontend. That fix is
+  separate, planned work.
+- **Smoke no longer fails on the replaced responses** (`EDGE_REWRITES_5XX=1`
+  in the workflow), so capacity runs can proceed. An `edge_status_probe`
+  (the fake 1C's `/_status/<code>` route) records which statuses the edge
+  passes through intact, as input for choosing the backend's new error
+  statuses.

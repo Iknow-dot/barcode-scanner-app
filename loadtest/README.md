@@ -503,6 +503,17 @@ every run starts from an identically seeded environment.
   usual 500 — so anything else on that line means something in front of the
   app replaced it. `catalog_image unexpected response:` prints the same fields
   when the image check fails. Response bodies are never printed.
+- **DigitalOcean's edge replaces backend 5xx responses.** Proven on
+  2026-09-15: the backend logged `502` with its JSON body, and the client got
+  `504 text/html server=cloudflare` with no `code`. The workflow therefore
+  runs smoke with `EDGE_REWRITES_5XX=1`, which reports `catalog_image` and the
+  upstream-error probe instead of failing on them; every other check still
+  gates the scenario.
+- **`edge_status_probe:` lines** — one per status in 500, 502, 503, 504, 422
+  and 424, sent by the fake 1C's `/_status/<code>` route through the same
+  edge. `INTACT` means the status and JSON body reached the client unchanged;
+  `REPLACED` means the edge swapped them. Use these to pick statuses the
+  backend's upstream errors can safely use.
 
 ### Leftovers
 
@@ -538,6 +549,7 @@ bash loadtest/scripts/terraform.sh test          # mocked provider: no token, cr
 | `SWEEP_RATE` / `SWEEP_DURATION` / `GRID_SIZE` | `5` / `40s` / `20` | `entry/sweep.js` per-scenario rate and window length, and the `images` scenario's grid width. **`SWEEP_RATE` does not affect `images`** — that scenario hard-codes `rate: 1` in its own `scenario()` call regardless of `SWEEP_RATE` (`entry/sweep.js`'s `images: scenario('images', 6, { rate: 1 })`); only `GRID_SIZE` changes its load. |
 | `CEILING_STAGES` | unset (uses the built-in ramp) | JSON array of `{"target":N,"duration":"Ns"}` stages overriding `entry/ceiling.js`'s default ramp. |
 | `CEILING_START_RATE` | `5` | `entry/ceiling.js`'s opening arrival rate, before its first stage. The DigitalOcean workflow sets `1`: a single sync worker is already past its ceiling at 5 req/s. |
+| `EDGE_REWRITES_5XX` | unset | Set to `1` where a proxy in front of the app replaces backend 5xx responses. `entry/smoke.js` then prints `catalog_image` and the upstream-error probe instead of checking them. The DigitalOcean workflow sets it; leave it unset locally, where those checks must pass. |
 | `WITH_INGEST` | unset | Set to `1` to land `entry/ceiling.js`'s opt-in bulk catalog-ingest scenario mid-ramp. |
 | `INGEST_PAGE_SIZE` | `200` | Products per push in `scenarios/ingest.js` — used by `entry/ceiling.js`'s `WITH_INGEST` scenario and by running `scenarios/ingest.js` directly. |
 | `FAILURE_WINDOW` | `30s` | `entry/failure.js`'s per-mode window length. |

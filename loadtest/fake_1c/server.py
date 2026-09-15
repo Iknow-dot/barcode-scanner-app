@@ -119,9 +119,25 @@ class Handler(BaseHTTPRequestHandler):
             return True
         return False
 
+    def _echo_status(self, raw: str) -> None:
+        """Answer with the requested status and a small JSON body, ignoring the mode.
+
+        Smoke calls this through the same public edge as the backend to learn
+        which statuses reach the client unchanged — DigitalOcean's edge has
+        been seen replacing a 502 JSON body with its own HTML 504.
+        """
+        status = int(raw) if raw.isdigit() else 0
+        if not 200 <= status <= 599:
+            self._send_json(400, {"error": "status must be 200-599"})
+            return
+        self._send_json(status, {"code": f"FAKE_STATUS_{status}"})
+
     # -- routes -----------------------------------------------------------
 
     def do_GET(self):
+        if self.path.startswith("/_status/"):
+            self._echo_status(self.path[len("/_status/"):].split("?")[0])
+            return
         name = self._endpoint_name()
         if name != "GetStockAndPrices":
             self._send_json(404, {"error": "unknown endpoint"})

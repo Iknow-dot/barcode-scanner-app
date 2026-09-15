@@ -84,6 +84,27 @@ class FakeOneCTests(unittest.TestCase):
             _post(f"{self.base}/_control", {"mode": "nonsense"})
         self.assertEqual(caught.exception.code, 400)
 
+    def test_status_route_echoes_the_requested_status_as_json(self):
+        # Used to learn which statuses a proxy in front of the app passes
+        # through unchanged, so it must answer regardless of the current mode.
+        _post(f"{self.base}/_control", {"mode": "http_500"})
+        for status in (424, 502, 504):
+            with self.subTest(status=status):
+                with self.assertRaises(urllib.error.HTTPError) as caught:
+                    urllib.request.urlopen(f"{self.base}/_status/{status}", timeout=10)
+                self.assertEqual(caught.exception.code, status)
+                self.assertTrue(caught.exception.headers["Content-Type"].startswith("application/json"))
+                self.assertEqual(json.loads(caught.exception.read()), {"code": f"FAKE_STATUS_{status}"})
+
+        ok = urllib.request.urlopen(f"{self.base}/_status/200", timeout=10)
+        self.assertEqual(json.loads(ok.read()), {"code": "FAKE_STATUS_200"})
+
+        for bad in ("99", "600", "abc", ""):
+            with self.subTest(bad=bad):
+                with self.assertRaises(urllib.error.HTTPError) as caught:
+                    urllib.request.urlopen(f"{self.base}/_status/{bad}", timeout=10)
+                self.assertEqual(caught.exception.code, 400)
+
     def test_421_mode_is_the_not_found_signal(self):
         _post(f"{self.base}/_control", {"mode": "421_not_found"})
         req = urllib.request.Request(

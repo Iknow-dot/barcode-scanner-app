@@ -43,3 +43,11 @@ export const FAKE_1C_CONTROL = __ENV.FAKE_1C_CONTROL || 'http://localhost:8099/_
 // there, or both thresholds breach the moment the rig starts working against
 // real infrastructure.
 export const IMAGE_EXPECT_STATUS = Number(__ENV.IMAGE_EXPECT_STATUS || 502);
+
+// Set to 1 where something in front of the app replaces backend 5xx
+// responses. DigitalOcean's Cloudflare edge turns a backend 502 JSON body into
+// its own HTML 504 (proven 2026-09-15; see loadtest/README.md "Running on
+// DigitalOcean"). smoke.js then prints catalog_image and the upstream-error
+// probe instead of failing on them, so smoke still gates the scenario on
+// everything else. Unset locally, where those checks must pass.
+export const EDGE_REWRITES_5XX = __ENV.EDGE_REWRITES_5XX === '1';
