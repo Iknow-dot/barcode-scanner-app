@@ -26,11 +26,18 @@ Runner = Callable[[list[str]], str]
 
 
 def run_doctl(args: list[str]) -> str:
-    return subprocess.run(
-        ["doctl", *args], capture_output=True, text=True, check=True,
-    ).stdout
+    try:
+        return subprocess.run(
+            ["doctl", *args], capture_output=True, text=True, check=True,
+        ).stdout
+    except subprocess.CalledProcessError as exc:
+        # Never include exc.stdout/exc.output: for a list call it can hold
+        # the live app's full spec or the live cluster's credentials (F4).
+        raise SystemExit(f"doctl {' '.join(args)} failed (exit {exc.returncode}): {exc.stderr.strip()}")
 
 
+# These listings contain the live app's full spec (env values included) and
+# the live cluster's connection credentials. Never print or log their output.
 def _list(run: Runner, kind: str) -> list[dict]:
     # doctl prints `null` (or nothing) rather than `[]` for an empty account.
     out = run([kind, "list", "--output", "json"]).strip()

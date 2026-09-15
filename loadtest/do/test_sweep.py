@@ -6,8 +6,10 @@ Stdlib only: no doctl, no network, no DigitalOcean token.
 import io
 import json
 import re
+import subprocess
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from loadtest.do import sweep
 
@@ -50,6 +52,23 @@ class FakeDoctl:
 
     def deletes(self):
         return [call for call in self.calls if call[1] == "delete"]
+
+
+class RunDoctlTests(unittest.TestCase):
+    """A failed doctl call must surface stderr, not just the exit status —
+    and never stdout, which can hold a live app/db listing (F4)."""
+
+    def test_surfaces_stderr_and_never_stdout_on_failure(self):
+        error = subprocess.CalledProcessError(
+            1, ["doctl", "apps", "list"], output="SECRET-LISTING", stderr="Error: unable to authenticate\n",
+        )
+        with patch("loadtest.do.sweep.subprocess.run", side_effect=error):
+            with self.assertRaises(SystemExit) as ctx:
+                sweep.run_doctl(["apps", "list", "--output", "json"])
+        message = str(ctx.exception)
+        self.assertIn("unable to authenticate", message)
+        self.assertIn("exit 1", message)
+        self.assertNotIn("SECRET-LISTING", message)
 
 
 class FindTests(unittest.TestCase):
