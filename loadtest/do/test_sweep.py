@@ -5,7 +5,9 @@ Stdlib only: no doctl, no network, no DigitalOcean token.
 """
 import io
 import json
+import re
 import unittest
+from pathlib import Path
 
 from loadtest.do import sweep
 
@@ -150,6 +152,16 @@ class MainTests(unittest.TestCase):
         code, output = self.run_main(["destroy-everything"], FakeDoctl(apps=["loadtest-app"]))
         self.assertEqual(code, 2)
         self.assertIn("usage", output)
+
+
+class TerraformNamesTests(unittest.TestCase):
+    """The sweeper deletes by name and Terraform creates by name. If the two
+    disagree, leftovers go unswept and verify passes over a leak."""
+
+    def test_terraform_creates_the_names_the_sweeper_matches(self):
+        main_tf = (Path(__file__).parent / "main.tf").read_text(encoding="utf-8")
+        self.assertRegex(main_tf, r'app_name\s*=\s*"%s"' % re.escape(sweep.APP_NAME))
+        self.assertRegex(main_tf, r'db_name\s*=\s*"%s"' % re.escape(sweep.DB_NAME))
 
 
 if __name__ == "__main__":

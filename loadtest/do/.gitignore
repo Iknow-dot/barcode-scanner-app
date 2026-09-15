@@ -1,0 +1,5 @@
+# Provider plugins and state. State only ever lives for one workflow job.
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
