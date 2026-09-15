@@ -5,8 +5,9 @@ name: Load test (DigitalOcean)
 # Design: docs/superpowers/specs/2026-09-15-do-loadtest-environment-design.md
 #
 # GitHub shows a Run button only for workflows present on the default branch
-# (main). In "Use workflow from", pick the branch that holds loadtest/do: that
-# branch's copy of this file and of loadtest/ is what actually runs.
+# (main), so a copy of this file lives there. Whichever copy runs, the job
+# checks out the `ref` input, so loadtest/ always comes from the branch App
+# Platform builds. Keep the copy on main in step with this one.
 #
 # This repository is public, and so are these logs. Every generated secret is
 # masked before anything can print it.
@@ -70,7 +71,12 @@ jobs:
       TF_VAR_run_command: ${{ inputs.run_command }}
 
     steps:
+      # Check out `ref`, not the branch the workflow was started from, so the
+      # Terraform, sweeper and k6 scripts always match the code App Platform
+      # builds — and a run started from main (the Run button's default) works.
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ inputs.ref }}
 
       - name: Prepare the output directory
         run: mkdir -p "$OUT_DIR"
@@ -194,7 +200,7 @@ jobs:
 
       - name: Collect App Platform logs
         if: always() && env.SCENARIO != 'cleanup'
-        timeout-minutes: 5
+        timeout-minutes: 12
         run: |
           app_id="$(python -m loadtest.do.sweep app-id)"
           if [ -z "$app_id" ]; then
@@ -213,11 +219,16 @@ jobs:
             deployment_flag=(--deployment "$deployment_id")
           fi
           mkdir -p "$OUT_DIR/logs"
-          for component in backend seed fake-1c; do
-            # run_restarted: after an OOM kill, the crashed container's own
-            # output shows up only there, not under "run".
-            for type in build deploy run run_restarted; do
-              doctl apps logs "$app_id" "$component" --type "$type" "${deployment_flag[@]}" \
+          # run_restarted: after an OOM kill, the crashed container's own
+          # output shows up only there, not under "run".
+          # `doctl apps logs --type run` can keep the stream open instead of
+          # exiting, which once ate this step's whole timeout and lost every
+          # later file. Each call gets its own 45 s limit (whatever arrived is
+          # already in the file), and build/deploy logs for every component
+          # are collected before any run log is attempted.
+          for type in build deploy run run_restarted; do
+            for component in backend seed fake-1c; do
+              timeout 45 doctl apps logs "$app_id" "$component" --type "$type" "${deployment_flag[@]}" \
                 > "$OUT_DIR/logs/$component-$type.log" 2>&1 || true
             done
           done

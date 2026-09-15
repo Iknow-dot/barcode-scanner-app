@@ -139,8 +139,8 @@ One repository secret: `DIGITALOCEAN_TOKEN`. It must belong to the DO team that
 already has GitHub access to `Iknow-dot/barcode-scanner-app` (the live app
 deploys from it), or App Platform cannot build the source. It can also delete
 production, so it should live in a GitHub Environment with a required
-reviewer. The workflow itself only exposes it, at the job level, to the two
-steps that actually need it (`terraform apply` / `terraform destroy` — the
+reviewer. The workflow itself exposes it only to the two steps that actually
+need it, never at the job level (`terraform apply` / `terraform destroy` — the
 Terraform provider reads it directly); `digitalocean/action-doctl` receives
 it separately via its own `with: token:` and keeps every later `doctl` call
 authenticated for the rest of the job with no env var. Every `uses:` in the
@@ -345,8 +345,9 @@ each verified against Terraform 1.16.2 with a mocked provider:
   static-check step, alongside `fmt` and `validate`.
 - **Terraform 1.16.2**, not the 1.9 line: current at planning time.
 - **The workflow file must also exist on `main`.** GitHub offers
-  `workflow_dispatch` only for workflows on the default branch; the run itself
-  uses the file from the branch picked in "Use workflow from".
+  `workflow_dispatch` only for workflows on the default branch. The job checks
+  out the `ref` input rather than the branch it was started from (see "After
+  the first DigitalOcean run"), so the copy on `main` works too.
 - **The repository is public**, so run logs are world-readable: every
   generated secret is masked with `::add-mask::` before any step can print it.
 
@@ -384,3 +385,23 @@ Decided from the final whole-branch review's findings (F1–F10;
 - **F9:** `loadtest/scripts/terraform.sh` refuses `apply`/`destroy` locally —
   the workflow owns this environment's lifecycle, and the fixed resource
   names collide with whatever CI run is using them.
+
+### After the first DigitalOcean run (2026-09-15)
+
+- **Checkout uses `ref`.** The first dispatch ran the copy on `main` (the Run
+  button's default), which checked out `main` — no `loadtest/do/` — so the
+  sweeper test failed before anything was created. `actions/checkout` now
+  checks out `inputs.ref`.
+- **Log collection is time-limited per call.** `doctl apps logs --type run`
+  kept its stream open and consumed the step's whole 5-minute timeout,
+  losing every later file. Each call now has a 45 s limit, build/deploy logs
+  for all components are collected before any run log, and the step limit is
+  12 minutes.
+- **The second dispatch got past smoke's first ten checks**: the environment
+  built in ~7 minutes, the seed job ran, the health check answered, and login,
+  catalog, orders, ingest and live 1C stock all passed. Only `catalog_image`
+  failed, with a non-502 status and an HTML body. Root cause still open.
+- **Found while investigating it:** the image proxy's SSRF guard did not block
+  `100.64.0.0/10` shared address space (`is_private` is False there, yet it is
+  not routable), and the upstream image fetch used a scalar `timeout=15`
+  instead of `core.services.timeouts.budget`. Both fixed with tests.

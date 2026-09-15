@@ -448,7 +448,9 @@ Design: `docs/superpowers/specs/2026-09-15-do-loadtest-environment-design.md`.
   reviewed change rather than something that happens silently on someone
   else's push.
 - **The workflow file must exist on `main`**, or GitHub shows no Run button.
-  The branch picked in "Use workflow from" is the one whose `loadtest/` runs.
+  Either copy may be started: the job checks out the `ref` input, so
+  `loadtest/` always comes from the branch App Platform builds. When the
+  workflow file changes, update the copy on `main` too.
 - **Logs are public** (this repository is public). The workflow masks every
   generated secret; do not add steps that print environment variables.
 - **Confirm the live app's `DEBUG` value and Postgres major version** against
