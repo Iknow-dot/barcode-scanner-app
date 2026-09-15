@@ -182,7 +182,8 @@ adds the app to the cluster's trusted sources and exposes a bindable
   confirms both).
 - `instance_size_slug = apps-s-1vcpu-0.5gb`, `instance_count = 1`.
 - `run_command = var.run_command`.
-- Health check `/api/v1/health/`. Public route `/`.
+- No HTTP health check (see "Amendments during planning"); App Platform's
+  default TCP check applies. Public route `/`.
 - Environment:
 
 | Variable | Value | Source |
@@ -251,8 +252,8 @@ Estimates — check current pricing.
 - **DigitalOcean:** two `apps-s-1vcpu-0.5gb` components plus a 1 GB managed
   database are roughly $25/month at list price, prorated to the run. **Cents
   per run.**
-- **GitHub Actions:** 30–50 runner minutes per run, from the organization's
-  allowance if the repository is private.
+- **GitHub Actions:** free. The repository is public, and standard runners
+  cost nothing for public repositories.
 
 ## Known limitations
 
@@ -292,3 +293,34 @@ Estimates — check current pricing.
 - Live `DEBUG` value — `var.debug`'s default follows it.
 - Live Postgres major version — `var.db_version`'s default follows it.
 - `DIGITALOCEAN_TOKEN` belongs to the team with GitHub access to the repository.
+
+## Amendments during planning (2026-09-15)
+
+Decided while writing `docs/superpowers/plans/2026-09-15-do-loadtest-environment.md`,
+each verified against Terraform 1.16.2 with a mocked provider:
+
+- **No HTTP health check on `backend`.** App Platform's probe does not send the
+  app domain as `Host`, so with `ALLOWED_HOSTS=${APP_DOMAIN}` Django would
+  answer `400 DisallowedHost` and fail the deploy. The default TCP check
+  applies; the workflow's own `GET /api/v1/health/` over the public URL is the
+  readiness gate.
+- **The seed job passes `--web-service-url "$FAKE_1C_URL"`**, bound to
+  `${fake-1c.PRIVATE_URL}`, rather than relying on `seed_loadtest`'s
+  hard-coded `http://fake-1c:8099` default matching App Platform's internal
+  hostname.
+- **`features = ["buildpack-stack=ubuntu-22"]`**, matching the live spec, so a
+  new app does not silently build on a newer stack.
+- **`CEILING_START_RATE` k6 knob.** `ceiling.js` hard-coded `startRate: 5`,
+  which floods a single sync worker before the first stage begins. Default
+  stays `5`; the workflow sets `1`.
+- **`loadtest/do/sweep.py`** implements steps 1 and 7 (exact-name delete,
+  verify, and app-id lookup for log collection) and is unit-tested offline.
+  The workflow runs those tests before the sweeper touches a real token.
+- **`terraform test`** (mocked DigitalOcean provider) runs in the workflow's
+  static-check step, alongside `fmt` and `validate`.
+- **Terraform 1.16.2**, not the 1.9 line: current at planning time.
+- **The workflow file must also exist on `main`.** GitHub offers
+  `workflow_dispatch` only for workflows on the default branch; the run itself
+  uses the file from the branch picked in "Use workflow from".
+- **The repository is public**, so run logs are world-readable: every
+  generated secret is masked with `::add-mask::` before any step can print it.
