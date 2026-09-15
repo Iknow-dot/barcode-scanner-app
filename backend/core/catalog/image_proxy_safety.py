@@ -30,8 +30,11 @@ def assert_safe_image_url(url: str) -> None:
         raise UnsafeImageURL(f"dns resolution failed: {exc}")
     for info in infos:
         ip = ipaddress.ip_address(info[4][0])
-        if (ip.is_private or ip.is_loopback or ip.is_link_local
-                or ip.is_reserved or ip.is_multicast or ip.is_unspecified):
+        # `not is_global` covers private, loopback, link-local, reserved and
+        # unspecified addresses, and also ranges that are none of those yet
+        # still not routable, such as 100.64.0.0/10 shared address space.
+        # Multicast is listed separately because the stdlib counts it as global.
+        if not ip.is_global or ip.is_multicast:
             raise UnsafeImageURL(f"non-public address: {ip}")
 
 

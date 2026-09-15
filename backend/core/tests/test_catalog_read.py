@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 
+import httpx
 from core.catalog.category_ingest import CategoryResolver
 from core.catalog.image_proxy_safety import UnsafeImageURL, assert_safe_image_url, sanitized_image_content_type
 from core.catalog.image_urls import _sig, signed_image_path, signed_image_paths, verify_image_sig
@@ -47,6 +48,20 @@ class ImageProxyTests(TestCase):
         self.assertEqual(r["X-Content-Type-Options"], "nosniff")
         self.assertIn("inline", r["Content-Disposition"])
         self.assertIn("default-src 'none'", r["Content-Security-Policy"])
+
+    @mock.patch("core.views.catalog_read.httpx.get")
+    def test_upstream_fetch_timeout_is_a_bounded_budget(self, mget):
+        """httpx applies a scalar timeout per phase, so `timeout=15` let one image
+        fetch outlive DigitalOcean's 60s router timeout."""
+        mget.return_value = mock.Mock(status_code=200, content=b"X", headers={"Content-Type": "image/jpeg"})
+        url = "/api/v1/" + signed_image_path(self.org.id, "S1", 0)
+        with mock.patch("core.views.catalog_read.assert_safe_image_url", return_value=None):
+            self.client.get(url)
+        timeout = mget.call_args.kwargs["timeout"]
+        self.assertIsInstance(timeout, httpx.Timeout)
+        phases = [timeout.connect, timeout.read, timeout.write, timeout.pool]
+        self.assertTrue(all(phase is not None for phase in phases), timeout)
+        self.assertLess(sum(phases), 60, "worst case must stay under the 60s router timeout")
 
     def test_out_of_range_idx_404(self):
         url = "/api/v1/" + signed_image_path(self.org.id, "S1", 9)
@@ -125,6 +140,15 @@ class ImageProxySafetyTests(TestCase):
         for ip in ("127.0.0.1", "169.254.169.254"):
             with mock.patch("core.catalog.image_proxy_safety.socket.getaddrinfo", return_value=self._addrinfo(ip)):
                 with self.assertRaises(UnsafeImageURL):
+                    assert_safe_image_url("https://x.example/a.jpg")
+
+    def test_rejects_shared_address_space(self):
+        # 100.64.0.0/10 (carrier-grade NAT, also used by overlay networks) is
+        # neither is_private nor publicly routable, so a private-range blocklist
+        # alone let it through.
+        for ip in ("100.64.0.1", "100.100.100.100", "100.127.255.254"):
+            with mock.patch("core.catalog.image_proxy_safety.socket.getaddrinfo", return_value=self._addrinfo(ip)):
+                with self.assertRaises(UnsafeImageURL, msg=ip):
                     assert_safe_image_url("https://x.example/a.jpg")
 
     def test_allows_public_address(self):

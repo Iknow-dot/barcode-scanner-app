@@ -27,6 +27,7 @@ from core.catalog.image_proxy_safety import (
 from core.catalog.image_urls import signed_image_paths, verify_image_sig
 from core.models import CatalogIngestState, Product, ProductAttribute, ProductCategory
 from core.permissions import IsCompanyAdmin, IsCompanyUserOrAdmin
+from core.services.timeouts import budget
 from core.serializers import (
     CatalogProductSerializer,
     CatalogSyncStatusSerializer,
@@ -124,7 +125,7 @@ class CatalogProductImageAPIView(APIView):
         if org.web_service_username and org.web_service_password and img_host and img_host == ws_host:
             auth = (org.web_service_username, org.decrypt_password())
         try:
-            upstream = httpx.get(url, auth=auth, timeout=15, follow_redirects=False)
+            upstream = httpx.get(url, auth=auth, timeout=budget(15), follow_redirects=False)
         except httpx.HTTPError:
             self._bump_failed(org)
             return Response({"code": "IMAGE_FETCH_FAILED", "detail": "Upstream image error."}, status=502)
