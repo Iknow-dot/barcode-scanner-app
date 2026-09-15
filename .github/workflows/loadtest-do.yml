@@ -20,9 +20,9 @@ on:
         default: djangoRewrite
         type: string
       run_command:
-        description: Backend run command. The default is byte-for-byte the live app's.
+        description: "Backend run command. The default is byte-for-byte the live app's (gthread, 2 workers x 4 threads, since 2026-09-16). For the old single sync worker, use: gunicorn --worker-tmp-dir /dev/shm backend.wsgi"
         required: true
-        default: gunicorn --worker-tmp-dir /dev/shm backend.wsgi
+        default: gunicorn --worker-tmp-dir /dev/shm --worker-class gthread --workers 2 --threads 4 backend.wsgi
         type: string
       scenario:
         description: smoke only; sweep, ceiling or failure after smoke (failure's rates are fixed, sized for the 8-slot local stack, and only meaningful with a threaded run_command); or cleanup (delete leftovers only)
@@ -182,8 +182,9 @@ jobs:
         timeout-minutes: 45
         env:
           CEILING_STAGES: ${{ inputs.ceiling_stages }}
-          # A single sync worker cannot absorb the local rig's opening rate
-          # of 5 iterations/s.
+          # Open below capacity for every configuration worth comparing,
+          # including the old single sync worker, which cannot absorb the
+          # local rig's opening rate of 5 iterations/s.
           CEILING_START_RATE: "1"
           # entry/sweep.js opens every window at SWEEP_RATE (default 5), and
           # each new VU logs in — default is sized for the 8-slot local stack.
