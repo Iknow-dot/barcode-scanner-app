@@ -110,6 +110,23 @@ run "backend_settings" {
     )))
     error_message = "FERNET_KEY must be 32 bytes of URL-safe base64, or cryptography.Fernet rejects it."
   }
+
+  assert {
+    condition = nonsensitive(
+      { for e in one([for s in digitalocean_app.loadtest.spec[0].service : s if s.name == "backend"]).env : e.key => e.scope }
+      == {
+        DJANGO_SECRET_KEY    = "RUN_AND_BUILD_TIME"
+        FERNET_KEY           = "RUN_AND_BUILD_TIME"
+        DATABASE_URL         = "RUN_TIME"
+        ALLOWED_HOSTS        = "RUN_AND_BUILD_TIME"
+        DEBUG                = "RUN_AND_BUILD_TIME"
+        DATABASE_SSL_REQUIRE = "RUN_AND_BUILD_TIME"
+        PERF_HEADERS_ENABLED = "RUN_AND_BUILD_TIME"
+        LOG_LEVEL            = "RUN_AND_BUILD_TIME"
+      }
+    )
+    error_message = "DATABASE_URL must be RUN_TIME: unresolved at build time, the buildpack's automatic collectstatic imports settings and dj_database_url raises on the literal '$${db.DATABASE_URL}'. Every other backend env var must stay RUN_AND_BUILD_TIME."
+  }
 }
 
 run "database_matches_live" {
@@ -160,6 +177,11 @@ run "seed_job_migrates_then_seeds_against_the_fake" {
     condition     = nonsensitive(one([for e in digitalocean_app.loadtest.spec[0].job[0].env : e.value if e.key == "FAKE_1C_URL"])) == "$${fake-1c.PRIVATE_URL}"
     error_message = "The seeded org must call the fake 1C over the app's private network."
   }
+
+  assert {
+    condition     = nonsensitive(one([for e in digitalocean_app.loadtest.spec[0].job[0].env : e.scope if e.key == "DATABASE_URL"])) == "RUN_TIME"
+    error_message = "The seed job's DATABASE_URL must also be RUN_TIME, for the same reason as the backend service's."
+  }
 }
 
 run "fake_1c_is_built_and_routed" {
@@ -190,5 +212,10 @@ run "outputs" {
   assert {
     condition     = length(nonsensitive(output.django_secret_key)) == 50
     error_message = "DJANGO_SECRET_KEY must be 50 characters."
+  }
+
+  assert {
+    condition     = length(nonsensitive(output.database_password)) > 0
+    error_message = "database_password must be a non-empty sensitive output: the workflow masks it with ::add-mask:: before ever printing it."
   }
 }

@@ -11,20 +11,28 @@ locals {
 
   # The seed job gets the same settings the backend serves with, plus what
   # only seeding needs.
+  #
+  # scope: DATABASE_URL must be RUN_TIME. The default env scope is
+  # RUN_AND_BUILD_TIME, and the buildpack's automatic collectstatic imports
+  # settings at build time; if "$${db.DATABASE_URL}" were resolved then, it
+  # is still the literal placeholder string (App Platform only binds it at
+  # run time), and dj_database_url raises on the literal rather than falling
+  # back to SQLite. Everything else stays RUN_AND_BUILD_TIME because
+  # collectstatic needs those settings importable too.
   backend_env = [
-    { key = "DJANGO_SECRET_KEY", value = random_password.django_secret_key.result, type = "SECRET" },
-    { key = "FERNET_KEY", value = local.fernet_key, type = "SECRET" },
-    { key = "DATABASE_URL", value = "$${db.DATABASE_URL}", type = "GENERAL" },
-    { key = "ALLOWED_HOSTS", value = "$${APP_DOMAIN}", type = "GENERAL" },
-    { key = "DEBUG", value = var.debug, type = "GENERAL" },
-    { key = "DATABASE_SSL_REQUIRE", value = "True", type = "GENERAL" },
-    { key = "PERF_HEADERS_ENABLED", value = "True", type = "GENERAL" },
-    { key = "LOG_LEVEL", value = "WARNING", type = "GENERAL" },
+    { key = "DJANGO_SECRET_KEY", value = random_password.django_secret_key.result, type = "SECRET", scope = "RUN_AND_BUILD_TIME" },
+    { key = "FERNET_KEY", value = local.fernet_key, type = "SECRET", scope = "RUN_AND_BUILD_TIME" },
+    { key = "DATABASE_URL", value = "$${db.DATABASE_URL}", type = "GENERAL", scope = "RUN_TIME" },
+    { key = "ALLOWED_HOSTS", value = "$${APP_DOMAIN}", type = "GENERAL", scope = "RUN_AND_BUILD_TIME" },
+    { key = "DEBUG", value = var.debug, type = "GENERAL", scope = "RUN_AND_BUILD_TIME" },
+    { key = "DATABASE_SSL_REQUIRE", value = "True", type = "GENERAL", scope = "RUN_AND_BUILD_TIME" },
+    { key = "PERF_HEADERS_ENABLED", value = "True", type = "GENERAL", scope = "RUN_AND_BUILD_TIME" },
+    { key = "LOG_LEVEL", value = "WARNING", type = "GENERAL", scope = "RUN_AND_BUILD_TIME" },
   ]
 
   seed_env = concat(local.backend_env, [
-    { key = "LOADTEST_PASSWORD", value = random_password.loadtest_password.result, type = "SECRET" },
-    { key = "FAKE_1C_URL", value = "$${fake-1c.PRIVATE_URL}", type = "GENERAL" },
+    { key = "LOADTEST_PASSWORD", value = random_password.loadtest_password.result, type = "SECRET", scope = "RUN_AND_BUILD_TIME" },
+    { key = "FAKE_1C_URL", value = "$${fake-1c.PRIVATE_URL}", type = "GENERAL", scope = "RUN_AND_BUILD_TIME" },
   ])
 }
 
@@ -94,6 +102,7 @@ resource "digitalocean_app" "loadtest" {
           key   = env.value.key
           value = env.value.value
           type  = env.value.type
+          scope = env.value.scope
         }
       }
     }
@@ -135,6 +144,7 @@ resource "digitalocean_app" "loadtest" {
           key   = env.value.key
           value = env.value.value
           type  = env.value.type
+          scope = env.value.scope
         }
       }
     }

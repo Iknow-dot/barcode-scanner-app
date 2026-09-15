@@ -15,3 +15,8 @@ output "loadtest_password" {
   value     = random_password.loadtest_password.result
   sensitive = true
 }
+
+output "database_password" {
+  value     = digitalocean_database_cluster.loadtest.password
+  sensitive = true
+}
