@@ -1,114 +1,94 @@
 # 01 — Use cases
 
-Mermaid has no native UML use-case diagram, so actors are drawn as stadium
-nodes and use cases as rounded nodes grouped by system boundary.
+One diagram per actor, so no lines cross. Mermaid has no UML use-case type:
+actors are rounded pills, use cases are boxes. Dependencies between use cases
+("include" / "extend") are listed in a table instead of drawn.
 
-## Actors
+## Consultant (`company_user`)
 
-| Actor | Identity | Scope |
-|-------|----------|-------|
-| **Consultant** (`company_user`) | JWT | Own organization; warehouses they are assigned to. Counts against `Organization.employees_count`. |
-| **Company admin** (`company_admin`) | JWT | Own organization — users, warehouses, org settings, analytics. Can also sell. |
-| **Internal admin** (`internal_admin`) | JWT, `is_staff`/`is_superuser`, no org | All organizations. Also uses Django admin. |
-| **1C system** | Per-org push token (+ optional IP allowlist) | Exactly the organization the token belongs to. |
-| **Anonymous** | none | Health probe, RS.ge lookup, signed image URLs. |
-
-## Selling (consultant & company admin)
+Sells from the `/dashboard` page, scoped to their organization and the
+warehouses they are assigned to.
 
 ```mermaid
 flowchart LR
     consultant(["Consultant"])
-    companyAdmin(["Company admin"])
-    onec(["1C"])
-    rsge(["RS.ge"])
 
-    subgraph dashboard["Sales dashboard — /dashboard"]
-        login(Log in on a bound device)
-        scan(Scan barcode / search product)
-        browse(Browse catalog by category and attributes)
-        stock(See live stock and price per warehouse)
-        lookup(Look up client by ID, phone or name)
-        createClient(Create client in 1C)
-        address(Pick delivery address on map)
-        cart(Build order: add / edit / remove lines)
-        discount(Apply discount within personal cap)
-        gift(Mark line as gift)
-        retail(Start retail order without client)
-        confirm(Confirm order)
-        invoice(Print invoice)
-        history(Search order history)
-        offline(Keep editing offline, sync later)
-    end
-
-    consultant --- login & scan & browse & lookup & cart & confirm & invoice & history & offline & retail
-    companyAdmin --- scan & cart & confirm
-
-    scan -. include .-> stock
-    lookup -. extend: CLIENT_NOT_FOUND .-> createClient
-    createClient -. include: ID → name autofill .-> rsge
-    createClient -. include .-> address
-    cart -. extend: can_apply_discount .-> discount
-    cart -. extend: gift_marking_enabled .-> gift
-    browse -. requires product_catalog_enabled .-> scan
-
-    stock --- onec
-    lookup --- onec
-    createClient --- onec
-    confirm -- "CreateOrder" --- onec
+    consultant --> scan["Scan or search a product"]
+    consultant --> browse["Browse the catalog"]
+    consultant --> client["Find or create a client"]
+    consultant --> retail["Start a retail sale<br/>(no client)"]
+    consultant --> cart["Build the order"]
+    consultant --> confirm["Confirm the order"]
+    consultant --> invoice["Print the invoice"]
+    consultant --> history["Search past orders"]
 ```
 
-## Administration
+## Company admin (`company_admin`)
+
+Everything a consultant can do, plus running their organization from
+`/system-admin-dashboard`.
 
 ```mermaid
 flowchart LR
-    companyAdmin(["Company admin"])
-    internalAdmin(["Internal admin"])
+    admin(["Company admin"])
 
-    subgraph adminUI["Admin UI — /system-admin-dashboard, /organizations, /warehouses"]
-        manageOrgs(Create / edit organizations)
-        manageUsers(Manage users and roles)
-        userLimit(Enforce employee limit)
-        resetDevice(Reset a user device binding)
-        ipAllow(Manage per-user IP allowlist)
-        manageWh(Manage warehouses and assign users)
-        extService(Configure 1C URL, credentials, retail counterparty)
-        rotateToken(Rotate 1C push token)
-        pushIps(Restrict push token by IP)
-        invoiceTpl(Edit invoice template)
-        security(Set session timeout)
-        catalogStatus(View catalog sync status)
-        analytics(View order analytics)
-        orders(Review all org orders)
-    end
-
-    internalAdmin --- manageOrgs & manageUsers & manageWh & analytics & resetDevice & ipAllow
-    companyAdmin --- manageUsers & manageWh & extService & rotateToken & invoiceTpl & security & catalogStatus & analytics & orders & resetDevice & ipAllow
-
-    manageUsers -. include .-> userLimit
-    extService -. include .-> pushIps
+    admin --> sell["Sell<br/>(all consultant use cases)"]
+    admin --> users["Manage consultants"]
+    admin --> warehouses["Manage warehouses"]
+    admin --> onec["Connect 1C"]
+    admin --> invoiceTpl["Design the invoice"]
+    admin --> security["Set security rules"]
+    admin --> catalog["Watch catalog sync"]
+    admin --> analytics["See sales and scan analytics"]
 ```
+
+## Internal admin (`internal_admin`)
+
+Runs the platform across organizations; has no organization of its own.
+
+```mermaid
+flowchart LR
+    internal(["Internal admin"])
+
+    internal --> orgs["Create organizations"]
+    internal --> users["Manage users in any org"]
+    internal --> warehouses["Manage warehouses in any org"]
+    internal --> analytics["See analytics across orgs"]
+    internal --> backoffice["Use Django admin"]
+```
+
+## 1C (machine actor)
+
+```mermaid
+flowchart LR
+    onec(["1C"])
+
+    onec --> push["Push products<br/>(full or delta)"]
+    onec --> deactivate["Retire products"]
+    onec --> complete["Mark an order completed"]
+```
+
+Authenticated by the organization's push token, never by a user login.
+
+## What each use case involves
+
+| Use case | Includes | Only when |
+|----------|----------|-----------|
+| Scan or search a product | Live stock and price per warehouse from 1C | — |
+| Browse the catalog | Categories, attribute filters | Org has `product_catalog_enabled` |
+| Find or create a client | Lookup in 1C by ID, phone or name → create on `CLIENT_NOT_FOUND`; RS.ge fills the name from a tax ID; map picker for the address | — |
+| Build the order | Add / edit / remove lines, pick warehouse | — |
+| ↳ apply a discount | Capped at the user's `max_discount_percent` | User has `can_apply_discount` |
+| ↳ mark a line as a gift | Informational, never changes the total | Org has `gift_marking_enabled` |
+| ↳ keep working offline | Edits queue on the device and sync later | Connection lost |
+| Confirm the order | Stock check, then creates the order in 1C — see [03](03-order-lifecycle.md) | — |
+| Manage consultants | Employee limit, reset device binding, IP allowlist | — |
+| Connect 1C | URL, credentials, retail counterparty, rotate push token, push IP allowlist | — |
+| Set security rules | Session timeout | — |
 
 Company-admin-only org actions (`external_service`, `rotate_external_service_token`,
 `invoice_template`, `security_settings`) are closed to internal admins on purpose —
 they have no organization of their own (`core/permissions.py`).
-
-## Integration (1C → app)
-
-```mermaid
-flowchart LR
-    onec(["1C system"])
-    monitor(["Uptime monitor"])
-
-    subgraph api["Push-token API — /api/integration/redoc/"]
-        push(Push products: full or delta)
-        deactivate(Deactivate SKUs)
-        complete(Mark order completed)
-    end
-    health(Health probe)
-
-    onec --- push & deactivate & complete
-    monitor --- health
-```
 
 ## Route access (frontend)
 
@@ -133,4 +113,4 @@ independently via `core/permissions.py`; the route guard is UX only.
 | Warehouses | full | CRUD in own org | read (assigned only) |
 | Orders, product search, catalog read, clients | — | own org | own org |
 | Catalog sync status | — | own org | — |
-| Order analytics | all | own org | — |
+| Order and scan analytics | all | own org | — |

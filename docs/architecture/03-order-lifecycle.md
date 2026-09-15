@@ -3,165 +3,100 @@
 Source: `backend/core/views/orders.py`, `backend/core/services/order_push.py`,
 `backend/core/views/catalog_ingest.py` (`OrderCompleteWebhookAPIView`).
 
-## State machine
+## The normal path
 
 ```mermaid
 stateDiagram-v2
-    [*] --> draft : POST /orders/<br/>(or existing draft for same client returned)
-
-    draft --> confirmed : PATCH status=confirmed<br/>[stock ok AND pushed to 1C]
-    draft --> cancelled : PATCH status=cancelled
-    confirmed --> draft : PATCH status=draft
-    confirmed --> cancelled : PATCH status=cancelled
-    cancelled --> draft : PATCH status=draft
-    cancelled --> confirmed : PATCH status=confirmed<br/>[same guards]
-
-    confirmed --> completed : 1C webhook<br/>POST /webhooks/orders/complete/
-
-    completed --> [*]
-
-    note right of completed
-        Locked: status cannot change
-        (ORDER_COMPLETED_LOCKED) and the
-        order cannot be deleted.
-        Only the webhook can set it
-        (STATUS_NOT_SETTABLE for users).
-    end note
-
-    note left of confirmed
-        external_order_number is written on the
-        first successful push. Later re-confirms
-        skip the push — 1C has no UpdateOrder, so
-        edits after a push do not reach 1C.
-    end note
+    direction LR
+    [*] --> Draft : consultant starts an order
+    Draft --> Confirmed : consultant confirms<br/>(checks pass, sent to 1C)
+    Confirmed --> Completed : 1C reports it fulfilled
+    Draft --> Cancelled : consultant cancels
+    Confirmed --> Cancelled : consultant cancels
+    Completed --> [*]
 ```
 
-The API does not restrict transitions among `draft`, `confirmed` and `cancelled`
-beyond the confirm guards; every non-completed order can be deleted.
+- **Completed is final.** Only 1C can set it, and afterwards the order can't be
+  changed or deleted (`ORDER_COMPLETED_LOCKED`; users get `STATUS_NOT_SETTABLE`).
+- **Starting an order for a client who already has a draft reopens that draft**
+  instead of creating a second one. Retail orders (no client) always start fresh.
 
-## Building the order (draft)
+### Less common transitions the API also allows
+
+| From | To | Notes |
+|------|----|-------|
+| Confirmed | Draft | Allowed. If the order was already sent to 1C, 1C keeps the original — there is no update call. |
+| Cancelled | Draft | Allowed. |
+| Cancelled | Confirmed | Allowed; runs the same confirm checks. |
+| any except Completed | deleted | Allowed. |
+
+## What happens on Confirm
+
+Checks run top to bottom; the first failure stops the confirm and returns its code.
 
 ```mermaid
-sequenceDiagram
-    autonumber
-    actor C as Consultant
-    participant FE as React SPA
-    participant API as PurchaseOrderViewSet
-    participant DB as PostgreSQL
+flowchart TD
+    start(["Consultant presses Confirm"])
+    stock{"Enough free stock<br/>in 1C?"}
+    sent{"Already sent<br/>to 1C?"}
+    valid{"Order is<br/>sendable?"}
+    create{"1C accepts<br/>CreateOrder?"}
+    done(["Order is Confirmed"])
 
-    C->>FE: Select client (or "retail")
-    FE->>API: POST /orders/ {external_client_id, customer_*, is_retail}
-    alt draft exists for this client
-        API->>DB: find draft by external_client_id, then identification_number
-        API-->>FE: 200 existing draft
-    else no draft / retail
-        API->>DB: insert PurchaseOrder(status=draft)
-        API-->>FE: 201 new draft
-    end
+    shortErr["INSUFFICIENT_STOCK<br/>lists short lines"]
+    validErr["Order error<br/>(see table)"]
+    extErr["EXTERNAL_SERVICE_*"]
 
-    loop each scanned product
-        C->>FE: Add to cart (warehouse, qty, discount, gift)
-        FE->>API: POST /orders/{id}/items/
-        API->>API: discount ≤ max_discount_percent?<br/>gift marking enabled?
-        alt not permitted
-            API-->>FE: 403 {code}
-        else ok
-            API->>DB: insert PurchaseOrderItem
-            API-->>FE: 201 order with items
-        end
-    end
-
-    Note over FE: Offline: edits queue in localStorage<br/>(utils/offlineOrderQueue.js) and replay<br/>when connectivity returns (offlineOrderSync.js)
+    start --> stock
+    stock -- "yes, or 1C can't answer" --> sent
+    stock -- "no" --> shortErr
+    sent -- "yes: skip sending" --> done
+    sent -- "no" --> valid
+    valid -- "yes" --> create
+    valid -- "no" --> validErr
+    create -- "yes: store 1C order number" --> done
+    create -- "no / unreachable" --> extErr
 ```
 
-## Confirm → push to 1C
+The two 1C steps fail in opposite directions on purpose:
 
-Two guards with deliberately opposite failure modes: the stock check **fails open**
-(a 1C outage must not freeze the sales floor), the CreateOrder push **fails closed**
-(a confirmed order missing from 1C could never be completed).
+- **Stock check lets the order through when 1C can't answer** (outage, no lookup
+  key, no warehouse). A 1C hiccup must not stop the sales floor; 1C is still the
+  final authority when the order lands there.
+- **CreateOrder blocks the confirm when it fails.** A confirmed order that doesn't
+  exist in 1C could never be completed.
 
-```mermaid
-sequenceDiagram
-    autonumber
-    actor C as Consultant
-    participant API as PurchaseOrderViewSet.update
-    participant Push as order_push.py
-    participant DB as PostgreSQL
-    participant OneC as 1C ConsultWebExchange
+| "Order is sendable?" failure | Meaning |
+|------------------------------|---------|
+| `EMPTY_ORDER` | No lines |
+| `MISSING_CLIENT` | Not retail, and no client ID, phone or org retail counterparty to send |
+| `MULTIPLE_WAREHOUSES` | 1C takes one warehouse per order |
+| `MISSING_WAREHOUSE` | Lines have no warehouse |
+| `ITEM_LOOKUP_KEY_MISSING` | A line has neither an article nor a known barcode 1C can resolve |
 
-    C->>API: PATCH /orders/{id}/ {status: confirmed}
-
-    rect rgba(127,127,127,0.08)
-    Note over API,OneC: Guard 1 — insufficient_stock_lines (fails OPEN)
-    API->>Push: insufficient_stock_lines(order)
-    loop per (article or barcode) key
-        Push->>OneC: get_stock_and_prices(key, warehouses)
-        alt 1C error / no lookup key / no warehouse
-            Push-->>Push: log + skip line
-        else answered
-            OneC-->>Push: free stock per warehouse
-        end
-    end
-    Push-->>API: shortages[]
-    opt shortages not empty
-        API-->>C: 400 INSUFFICIENT_STOCK {items}
-    end
-    end
-
-    rect rgba(127,127,127,0.08)
-    Note over API,OneC: Guard 2 — push_order_to_consult (fails CLOSED)
-    API->>Push: push_order_to_consult(order)
-    alt external_order_number already set
-        Push-->>API: skip (already pushed)
-    else
-        Push->>Push: EMPTY_ORDER?<br/>ClientIDPhone = ID ▸ phone ▸ org retail counterparty<br/>MISSING_CLIENT if none and not retail<br/>MULTIPLE_WAREHOUSES / MISSING_WAREHOUSE<br/>ITEM_LOOKUP_KEY_MISSING
-        alt guard failed
-            Push-->>API: OrderPushError
-            API-->>C: 400 {code, detail}
-        else
-            Push->>OneC: CreateOrder(stock_id, items, comment = Web order + local id)
-            alt 1C rejects / unreachable
-                OneC-->>Push: error
-                API-->>C: EXTERNAL_SERVICE_* envelope
-            else created
-                OneC-->>Push: OrderNumber
-                Push->>DB: save external_order_number
-            end
-        end
-    end
-    end
-
-    API->>DB: save status=confirmed
-    API-->>C: 200 order
-```
+The client sent to 1C is the first non-blank of: client ID number → client phone →
+the org's retail counterparty. A retail order with none of them is sent without a
+client. The comment sent to 1C carries `Web order #<id>`, which is how 1C knows
+which order to complete later.
 
 ## Completion (1C → app)
 
 ```mermaid
 sequenceDiagram
-    autonumber
     participant OneC as 1C
-    participant WH as OrderCompleteWebhookAPIView
-    participant Auth as ingest_auth.organization_from_push
-    participant DB as PostgreSQL
+    participant App as App API
 
-    OneC->>WH: POST /webhooks/orders/complete/ {order_id}<br/>X-Webhook-Token
-    WH->>Auth: resolve org from token (+ IP allowlist)
-    alt bad token / IP not allowed
-        Auth-->>OneC: 401 / 403
-    end
-    WH->>DB: order in this org?
-    alt not found
-        WH-->>OneC: 404 ORDER_NOT_FOUND
-    else already completed
-        WH-->>OneC: 200 (idempotent)
-    else not confirmed
-        WH-->>OneC: 409 INVALID_STATUS_TRANSITION
-    else confirmed
-        WH->>DB: status = completed
-        WH-->>OneC: 200 {order_id, status}
+    OneC->>App: order 123 is complete (push token)
+    alt order is Confirmed
+        App-->>OneC: 200, now Completed
+    else already Completed
+        App-->>OneC: 200, no change
+    else Draft or Cancelled
+        App-->>OneC: 409 INVALID_STATUS_TRANSITION
+    else not in this organization
+        App-->>OneC: 404 ORDER_NOT_FOUND
     end
 ```
 
-The org always comes from the token, never the body — a token for org A cannot
-complete an order in org B.
+The organization comes from the token, never the request body, so one org's token
+can't complete another org's order.
