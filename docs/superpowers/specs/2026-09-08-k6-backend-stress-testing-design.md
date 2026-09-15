@@ -171,6 +171,13 @@ fail-closed confirm stay fail-closed.
 
 ## Phase 2 — the staging run
 
+> **Superseded on 2026-09-15** by `2026-09-15-do-loadtest-environment-design.md`.
+> Two premises below no longer hold. The deployed app is the only environment,
+> not disposable staging, so it is never loaded. And production does not cap
+> at 8 concurrent requests: it runs one sync gunicorn worker. The
+> `.do/app.yaml` this section read was never the deploy mechanism and has been
+> deleted.
+
 The deployed `barcode-scanner-app` is staging. `.do/app.yaml` defines it as a
 single app on `basic-xxs` with a `production: false` database; CI has no deploy
 job, so there is one deployed environment and this is it. Phase 2 therefore

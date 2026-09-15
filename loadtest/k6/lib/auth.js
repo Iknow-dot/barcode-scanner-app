@@ -12,7 +12,7 @@ function _login(username) {
     { headers: JSON_HEADERS, tags: { endpoint: 'auth_login' } },
   );
   if (!expectStatus(res, 'auth_login')) {
-    throw new Error(`login failed for ${username}: ${res.status} ${res.body}`);
+    throw new Error(`login failed for ${username}: ${res.status} ${String(res.body).slice(0, 200)}`);
   }
   const body = res.json();
   return {
@@ -69,7 +69,7 @@ export function authPost(session, path, body, endpoint) {
 export function loadWarehouseCodes(session) {
   const res = authGet(session, PATHS.warehouses, 'warehouses_list');
   if (!expectStatus(res, 'warehouses_list')) {
-    throw new Error(`warehouses list failed for ${session.username}: ${res.status} ${res.body}`);
+    throw new Error(`warehouses list failed for ${session.username}: ${res.status} ${String(res.body).slice(0, 200)}`);
   }
   return res.json().map((w) => w.code);
 }

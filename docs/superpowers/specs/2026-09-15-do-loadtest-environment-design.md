@@ -1,7 +1,7 @@
 # Ephemeral DigitalOcean load-test environment — design
 
 **Date:** 2026-09-15
-**Status:** Approved design, awaiting implementation plan
+**Status:** Implemented on branch worktree-do-loadtest-env (2026-09-15); first DigitalOcean run pending
 **Implements:** Phase 2 of `2026-09-08-k6-backend-stress-testing-design.md`
 
 ## Problem
@@ -115,12 +115,20 @@ smoke first and stop if it fails. `cleanup` runs only the leftover sweep
    line are written to the job summary.
 6. **Publish.** k6's end-of-run summary to `$GITHUB_STEP_SUMMARY`. Upload as
    artifacts: the k6 CSV, `report.py`'s markdown, and `doctl apps logs` for
-   build, deploy and run — so `WORKER TIMEOUT`s and OOM kills remain readable
-   after the environment is gone.
+   build, deploy, run and run_restarted — so `WORKER TIMEOUT`s and OOM kills
+   remain readable after the environment is gone. Logs are collected for the
+   newest deployment, found via `doctl apps list-deployments`, not just the
+   active one — a failed first deployment is neither active nor in progress,
+   so the plain (no `--deployment`) form would come back empty exactly when
+   it matters most.
 7. **Destroy, always.** `if: always()`. `terraform destroy`; on failure wait and
-   retry once (a destroy can collide with an in-flight deployment). Then verify
-   with `doctl` that neither `loadtest-app` nor `loadtest-db` exists; if either
-   does, fail the job loudly so leftovers are noticed before they cost money.
+   retry once (a destroy can collide with an in-flight deployment). Then the
+   final step **deletes, then verifies, by exact name** (`loadtest-app`,
+   `loadtest-db`) with `doctl` — not only verification: a cancel or timeout
+   during `terraform apply` can leave a resource Terraform state does not
+   know about, so `destroy` alone would miss it. If either name still exists
+   after that, fail the job loudly so leftovers are noticed before they cost
+   money.
 
 The job is red only for environment failures (build, seed, health, destroy,
 verification) — never for a k6 threshold verdict.
@@ -129,11 +137,22 @@ verification) — never for a k6 threshold verdict.
 
 One repository secret: `DIGITALOCEAN_TOKEN`. It must belong to the DO team that
 already has GitHub access to `Iknow-dot/barcode-scanner-app` (the live app
-deploys from it), or App Platform cannot build the source.
+deploys from it), or App Platform cannot build the source. It can also delete
+production, so it should live in a GitHub Environment with a required
+reviewer. The workflow itself only exposes it, at the job level, to the two
+steps that actually need it (`terraform apply` / `terraform destroy` — the
+Terraform provider reads it directly); `digitalocean/action-doctl` receives
+it separately via its own `with: token:` and keeps every later `doctl` call
+authenticated for the rest of the job with no env var. Every `uses:` in the
+workflow is pinned to a full commit SHA, not a tag, so an action update is a
+deliberate, reviewed change.
 
 Everything else is generated per run by Terraform's `random` provider and never
 stored: `DJANGO_SECRET_KEY`, `FERNET_KEY`, and the seeded users' password.
-Sensitive outputs are masked (`::add-mask::`) before any step echoes them.
+Sensitive outputs — including the managed database's own password, output as
+`database_password` — are masked (`::add-mask::`) before any step echoes
+them; `database_password` is masked but never written to `$GITHUB_ENV` or
+printed, since nothing in the workflow needs it directly.
 
 ### Load generator
 
@@ -182,7 +201,8 @@ adds the app to the cluster's trusted sources and exposes a bindable
   confirms both).
 - `instance_size_slug = apps-s-1vcpu-0.5gb`, `instance_count = 1`.
 - `run_command = var.run_command`.
-- Health check `/api/v1/health/`. Public route `/`.
+- No HTTP health check (see "Amendments during planning"); App Platform's
+  default TCP check applies. Public route `/`.
 - Environment:
 
 | Variable | Value | Source |
@@ -199,19 +219,24 @@ adds the app to the cluster's trusted sources and exposes a bindable
 **`seed` — pre-deploy job**
 
 Same source and environment as `backend`. Runs
-`python manage.py migrate --noinput && python manage.py seed_loadtest --password "$LOADTEST_PASSWORD"`
-with `seed_loadtest`'s defaults (1 org, 50 users, 5000 products, 200 orders).
-Pre-deploy means the backend never serves a request against an unmigrated or
-unseeded database. `seed_loadtest` already sets `device_lock_enabled=False`,
-writes no `AllowedIP` rows, and points the org's `web_service_url` at
-`http://fake-1c:8099` by default.
+`python manage.py migrate --noinput && python manage.py seed_loadtest --password "$LOADTEST_PASSWORD" --web-service-url "$FAKE_1C_URL"`
+with `seed_loadtest`'s other defaults (1 org, 50 users, 5000 products, 200
+orders). Pre-deploy means the backend never serves a request against an
+unmigrated or unseeded database. `seed_loadtest` already sets
+`device_lock_enabled=False` and writes no `AllowedIP` rows.
+`--web-service-url` is passed explicitly, bound to `${fake-1c.PRIVATE_URL}`
+(see "Amendments during planning"), rather than relying on
+`seed_loadtest`'s hard-coded `http://fake-1c:8099` default matching App
+Platform's internal hostname.
 
 **`fake-1c` — service**
 
 - Built from `loadtest/fake_1c/Dockerfile`, `http_port = 8099`
   (the server honours `PORT`).
-- Reachable inside the app as `http://fake-1c:8099`, which is already
-  `seed_loadtest`'s `DEFAULT_WEB_SERVICE_URL`, so no code changes.
+- Reachable inside the app over the private network at `${fake-1c.PRIVATE_URL}`,
+  which the seed job passes explicitly as `--web-service-url` (see above) —
+  it happens to equal `seed_loadtest`'s `DEFAULT_WEB_SERVICE_URL`
+  (`http://fake-1c:8099`), but nothing here relies on that coincidence.
 - Public route `/fake-1c`, so the runner can reach `/fake-1c/_control` to switch
   modes during `failure`.
 - `apps-s-1vcpu-0.5gb`. One backend worker never sends it more than a handful
@@ -220,7 +245,8 @@ writes no `AllowedIP` rows, and points the org's `web_service_url` at
 ### Outputs
 
 `app_url`, `fake_1c_control_url`, `django_secret_key` (sensitive),
-`loadtest_password` (sensitive).
+`loadtest_password` (sensitive), `database_password` (sensitive — masked by
+the workflow before anything else is echoed; see "Secrets").
 
 ### Accepted risks
 
@@ -238,9 +264,9 @@ writes no `AllowedIP` rows, and points the org's `web_service_url` at
 | Health check never goes green | Step 4 times out → run logs uploaded → destroy runs. |
 | k6 exits 99 | Recorded in the summary; job continues and stays green. |
 | Backend wedges (login burst) | Nothing to recover — logs uploaded, destroy runs. |
-| Run cancelled | Destroy still runs (`if: always()`). |
-| Runner lost mid-job | Resources leak until the next run's step 1, or a `cleanup` dispatch. |
-| Destroy fails twice | Verification fails the job loudly; run `cleanup`. |
+| Run cancelled | Destroy still runs (`if: always()`), then the final step deletes-then-verifies by exact name. |
+| Runner lost mid-job | The runner itself is gone, so nothing in this job can clean up — resources leak until the next run's step 1, or a `cleanup` dispatch. |
+| Destroy fails twice | The final step's own delete-then-verify still runs and is what fails the job loudly if anything remains; run `cleanup` to retry the sweep on its own. |
 
 ## Cost and duration
 
@@ -251,8 +277,8 @@ Estimates — check current pricing.
 - **DigitalOcean:** two `apps-s-1vcpu-0.5gb` components plus a 1 GB managed
   database are roughly $25/month at list price, prorated to the run. **Cents
   per run.**
-- **GitHub Actions:** 30–50 runner minutes per run, from the organization's
-  allowance if the repository is private.
+- **GitHub Actions:** free. The repository is public, and standard runners
+  cost nothing for public repositories.
 
 ## Known limitations
 
@@ -292,3 +318,69 @@ Estimates — check current pricing.
 - Live `DEBUG` value — `var.debug`'s default follows it.
 - Live Postgres major version — `var.db_version`'s default follows it.
 - `DIGITALOCEAN_TOKEN` belongs to the team with GitHub access to the repository.
+
+## Amendments during planning (2026-09-15)
+
+Decided while writing `docs/superpowers/plans/2026-09-15-do-loadtest-environment.md`,
+each verified against Terraform 1.16.2 with a mocked provider:
+
+- **No HTTP health check on `backend`.** App Platform's probe does not send the
+  app domain as `Host`, so with `ALLOWED_HOSTS=${APP_DOMAIN}` Django would
+  answer `400 DisallowedHost` and fail the deploy. The default TCP check
+  applies; the workflow's own `GET /api/v1/health/` over the public URL is the
+  readiness gate.
+- **The seed job passes `--web-service-url "$FAKE_1C_URL"`**, bound to
+  `${fake-1c.PRIVATE_URL}`, rather than relying on `seed_loadtest`'s
+  hard-coded `http://fake-1c:8099` default matching App Platform's internal
+  hostname.
+- **`features = ["buildpack-stack=ubuntu-22"]`**, matching the live spec, so a
+  new app does not silently build on a newer stack.
+- **`CEILING_START_RATE` k6 knob.** `ceiling.js` hard-coded `startRate: 5`,
+  which floods a single sync worker before the first stage begins. Default
+  stays `5`; the workflow sets `1`.
+- **`loadtest/do/sweep.py`** implements steps 1 and 7 (exact-name delete,
+  verify, and app-id lookup for log collection) and is unit-tested offline.
+  The workflow runs those tests before the sweeper touches a real token.
+- **`terraform test`** (mocked DigitalOcean provider) runs in the workflow's
+  static-check step, alongside `fmt` and `validate`.
+- **Terraform 1.16.2**, not the 1.9 line: current at planning time.
+- **The workflow file must also exist on `main`.** GitHub offers
+  `workflow_dispatch` only for workflows on the default branch; the run itself
+  uses the file from the branch picked in "Use workflow from".
+- **The repository is public**, so run logs are world-readable: every
+  generated secret is masked with `::add-mask::` before any step can print it.
+
+### Final-review amendments (2026-09-15)
+
+Decided from the final whole-branch review's findings (F1–F10;
+`.superpowers/sdd/2026-09-15-do-loadtest-environment/final-fix-brief.md`):
+
+- **F1:** The final step now deletes, not only verifies — a cancelled or
+  timed-out `apply` can leave a resource Terraform state never learns about,
+  so `destroy` alone would miss it.
+- **F2:** Log collection targets the newest deployment (via `doctl apps
+  list-deployments`), not just the active one, and adds `run_restarted` —
+  a failed first deployment is neither active nor in progress, and an
+  OOM-killed container's own output only appears under `run_restarted`.
+- **F3:** `entry/sweep.js` now runs at `SWEEP_RATE=1` in the workflow, sized
+  for a single sync worker rather than the local 8-slot stack's default of 5.
+- **F4:** `DIGITALOCEAN_TOKEN` is scoped to the two steps that actually read
+  it (`apply`/`destroy`), not the whole job; every `uses:` is pinned to a
+  commit SHA; the sweeper's listings are commented as never to be printed.
+- **F5:** k6's login/warehouse error messages are truncated to 200 characters
+  (a `DEBUG=True` 500 page can otherwise leak `DATABASE_URL`); the managed
+  database's password is a new masked, sensitive Terraform output.
+- **F6:** `sweep.run_doctl` surfaces doctl's stderr (never stdout, which can
+  hold a live listing) on failure instead of a bare exit-status message.
+- **F7:** Every backend/seed env var now carries an explicit `scope` —
+  `DATABASE_URL` is `RUN_TIME`, everything else `RUN_AND_BUILD_TIME` — so the
+  buildpack's automatic `collectstatic` never imports settings against the
+  unresolved `${db.DATABASE_URL}` placeholder at build time.
+- **F8:** Job timeout raised to 180 minutes (step timeouts already summed
+  past 120); the health-check `curl` gets `--max-time 15`; an empty
+  `terraform output app_url` fails the step instead of writing garbage to
+  `$GITHUB_ENV`; `ceiling_stages` and `CEILING_START_RATE` docs now say
+  iterations/s, not requests/s.
+- **F9:** `loadtest/scripts/terraform.sh` refuses `apply`/`destroy` locally —
+  the workflow owns this environment's lifecycle, and the fixed resource
+  names collide with whatever CI run is using them.

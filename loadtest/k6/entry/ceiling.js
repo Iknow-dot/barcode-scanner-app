@@ -89,11 +89,16 @@ const RAMP_TOTAL_MS = stages.reduce((sum, s) => sum + parseDurationMs(s.duration
 const INGEST_START_MS = Math.round(RAMP_TOTAL_MS * 0.2);
 const INGEST_DURATION_MS = Math.max(5000, Math.round(RAMP_TOTAL_MS * 0.6));
 
+// The ramp's opening arrival rate, before its first stage. The local 8-slot
+// stack opens at 5 req/s; production runs one sync gunicorn worker, which is
+// already past its ceiling there, so the DigitalOcean workflow opens at 1.
+const START_RATE = Number(__ENV.CEILING_START_RATE || 5);
+
 export const options = {
   scenarios: {
     ceiling: {
       executor: 'ramping-arrival-rate',
-      startRate: 5,
+      startRate: START_RATE,
       timeUnit: '1s',
       // k6 grows the VU pool from here up to maxVUs only as needed, so
       // keeping preAllocatedVUs modest while MAX_VUS is generous (see the

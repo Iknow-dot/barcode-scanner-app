@@ -10,8 +10,14 @@ Implements Phase 1 of
 The dev `docker-compose.yml` replaces the image `CMD` with `runserver`, which
 has no worker ceiling and no gunicorn queueing, so any capacity number measured
 against it would be meaningless. This stack runs the image exactly as shipped:
-`gunicorn --workers 2 --threads 4`, i.e. 8 concurrent requests, the same as
-production (`basic-xxs`, `instance_count: 1`, per the root CLAUDE.md).
+`gunicorn --workers 2 --threads 4`, i.e. 8 concurrent requests.
+
+**Production does not run that.** The live app is a Python buildpack deploy
+whose run command is `gunicorn --worker-tmp-dir /dev/shm backend.wsgi`: one
+sync worker, one request at a time, on `apps-s-1vcpu-0.5gb` (confirmed from
+`ps` in the DO console, 2026-09-15). Every number measured on this stack
+describes an 8-slot backend. For production-shaped numbers, see "Running on
+DigitalOcean" below.
 
 A toxiproxy sits between the backend and Postgres so managed-Postgres RTT can
 be injected — without it an N+1 costs ~0.1 ms/query locally instead of the
@@ -422,6 +428,92 @@ that isn't ours to load.
   table. Safe to run against a database holding real data, which matters in
   Phase 2.
 
+## Running on DigitalOcean
+
+`.github/workflows/loadtest-do.yml` ("Load test (DigitalOcean)") runs these
+same scripts against a disposable copy of the production shape: the backend on
+the Python buildpack with the live run command, the fake 1C, and a managed
+Postgres the size of live's. `loadtest/do/` (Terraform) creates all of it at
+the start of a run and destroys it at the end. It never touches the live app.
+Design: `docs/superpowers/specs/2026-09-15-do-loadtest-environment-design.md`.
+
+### Before the first run
+
+- **Repository secret `DIGITALOCEAN_TOKEN`**, created in the DigitalOcean team
+  that already has GitHub access to this repository — App Platform builds the
+  source through that access. It needs read, write and delete on apps and
+  databases. It can also delete production — put it in a GitHub Environment
+  with a required reviewer, not a plain repository secret. Actions in the
+  workflow are pinned to commit SHAs (not tags), so a bump is a deliberate,
+  reviewed change rather than something that happens silently on someone
+  else's push.
+- **The workflow file must exist on `main`**, or GitHub shows no Run button.
+  The branch picked in "Use workflow from" is the one whose `loadtest/` runs.
+- **Logs are public** (this repository is public). The workflow masks every
+  generated secret; do not add steps that print environment variables.
+- **Confirm the live app's `DEBUG` value and Postgres major version** against
+  `loadtest/do/variables.tf`'s `var.debug` / `var.db_version` defaults (`True`
+  / `17` as of 2026-09-15) before the first real run — a drift there means the
+  environment no longer mirrors production, silently.
+
+### Inputs
+
+| Input | Default | Meaning |
+| --- | --- | --- |
+| `ref` | `djangoRewrite` | Branch App Platform builds. Must be pushed. |
+| `run_command` | `gunicorn --worker-tmp-dir /dev/shm backend.wsgi` | The live command. Override to compare, e.g. `gunicorn --worker-tmp-dir /dev/shm --worker-class gthread --workers 2 --threads 8 backend.wsgi`. |
+| `scenario` | `ceiling` | `smoke` (smoke only), `sweep` (run at `SWEEP_RATE=1`) / `ceiling` / `failure` (after smoke), or `cleanup` (delete leftovers, nothing else). `failure`'s rates are fixed and sized for the 8-slot local stack, so its numbers are only meaningful with a threaded `run_command`. |
+| `ceiling_stages` | 1 → 2 → 5 → 10 → 20 iterations/s | `CEILING_STAGES` JSON. Targets are journey iterations/s (each iteration is ~1.7 requests, plus a login for every new VU), not requests/s. Keep it low: a single sync worker cannot survive the local 5 → 200 ramp, and the resulting login burst measures the wedge, not capacity. |
+
+One run tests one `run_command`. To compare configurations, dispatch twice —
+every run starts from an identically seeded environment.
+
+### Reading a run
+
+- **Job summary:** smoke output, the tail of the scenario output (including
+  `ceiling.js`'s and `failure.js`'s "load was actually delivered" line — read
+  it before quoting anything), the k6 exit code, and `report.py`'s endpoint
+  table.
+- **Artifact `loadtest-<scenario>-<run id>`:** `run.csv`, `report.md`, and
+  `logs/<component>-<build|deploy|run|run_restarted>.log` for `backend`,
+  `seed` and `fake-1c`, collected for the newest deployment even if it
+  failed (not just the active one — a failed first deployment is neither).
+  Search `logs/backend-run.log` for `WORKER TIMEOUT` and repeated
+  `Booting worker` lines (a killed and restarted worker) under load; search
+  `logs/backend-run_restarted.log` for an OOM-killed container's own output,
+  which `run` never carries.
+- **Exit 99 is a verdict, not a failure.** The job turns red only when the
+  environment itself failed: build, seed, health, destroy or verification.
+- **`report.py`'s "top queries" table shows `psql failed`.** It reads
+  `pg_stat_statements` through the local compose stack, which the runner does
+  not have. The endpoint table (query counts and DB time from the perf
+  headers) is unaffected.
+- **`http_req_duration` includes a roughly constant ~100 ms round trip** from
+  GitHub's runner to Frankfurt. The perf-header metrics (`server_total_ms`,
+  `server_db_ms`) exclude it.
+- **Images still answer `502`** — seeded image URLs point at the private
+  `fake-1c` host, which the SSRF guard rejects, exactly as locally.
+
+### Leftovers
+
+Every run first deletes `loadtest-app` and `loadtest-db` if they exist
+(leftovers from an earlier run), and ends the same way: "Clean up and verify
+nothing is left behind" deletes anything left with those exact names, waits,
+and fails the job loudly if that does not work — it is not only a check. If
+it's red anyway (the runner itself was lost before that step could run),
+dispatch `scenario: cleanup` to sweep the leftovers on their own.
+
+### Checking the configuration locally
+
+```bash
+python -m unittest loadtest.do.test_sweep -v    # the sweeper, offline
+bash loadtest/scripts/terraform.sh init
+bash loadtest/scripts/terraform.sh test          # mocked provider: no token, creates nothing
+```
+
+`terraform.sh` runs the `hashicorp/terraform:1.16.2` image; set
+`TERRAFORM_BIN=/path/to/terraform` to use a standalone binary instead.
+
 ## Knobs
 
 | Variable | Default | Meaning |
@@ -435,6 +527,7 @@ that isn't ours to load.
 | `ORG_ID` | `1` | Fallback only — real code paths read the org id from the login response (`session.organizationId`), since Postgres sequences don't reset on delete and a hard-coded id mints signatures for the wrong org after any `--reset` + reseed. |
 | `SWEEP_RATE` / `SWEEP_DURATION` / `GRID_SIZE` | `5` / `40s` / `20` | `entry/sweep.js` per-scenario rate and window length, and the `images` scenario's grid width. **`SWEEP_RATE` does not affect `images`** — that scenario hard-codes `rate: 1` in its own `scenario()` call regardless of `SWEEP_RATE` (`entry/sweep.js`'s `images: scenario('images', 6, { rate: 1 })`); only `GRID_SIZE` changes its load. |
 | `CEILING_STAGES` | unset (uses the built-in ramp) | JSON array of `{"target":N,"duration":"Ns"}` stages overriding `entry/ceiling.js`'s default ramp. |
+| `CEILING_START_RATE` | `5` | `entry/ceiling.js`'s opening arrival rate, before its first stage. The DigitalOcean workflow sets `1`: a single sync worker is already past its ceiling at 5 req/s. |
 | `WITH_INGEST` | unset | Set to `1` to land `entry/ceiling.js`'s opt-in bulk catalog-ingest scenario mid-ramp. |
 | `INGEST_PAGE_SIZE` | `200` | Products per push in `scenarios/ingest.js` — used by `entry/ceiling.js`'s `WITH_INGEST` scenario and by running `scenarios/ingest.js` directly. |
 | `FAILURE_WINDOW` | `30s` | `entry/failure.js`'s per-mode window length. |
