@@ -495,6 +495,14 @@ every run starts from an identically seeded environment.
   `server_db_ms`) exclude it.
 - **Images still answer `502`** — seeded image URLs point at the private
   `fake-1c` host, which the SSRF guard rejects, exactly as locally.
+- **`upstream_error_probe:` line in the smoke output.** Smoke switches the fake
+  1C to `http_500`, searches a SKU that was never seeded (forcing the live 1C
+  path), and prints what reached the client: status, content type, `Server`
+  header, HTML `<title>` and JSON `code`. The backend answers
+  `502 {"code": "EXTERNAL_SERVICE_ERROR"}` — the production response to 1C's
+  usual 500 — so anything else on that line means something in front of the
+  app replaced it. `catalog_image unexpected response:` prints the same fields
+  when the image check fails. Response bodies are never printed.
 
 ### Leftovers
 

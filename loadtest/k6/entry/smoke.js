@@ -33,6 +33,37 @@ export const options = {
   },
 };
 
+// One line saying what actually arrived, for responses that failed a check.
+// DigitalOcean's edge has been seen replacing a backend 502 JSON body with its
+// own HTML page, which a status or JSON check alone cannot tell apart from a
+// backend bug. Only the <title> is printed, never the body: a DEBUG=True
+// error page carries settings and stack-frame locals.
+function describeResponse(res) {
+  const title = (String(res.body || '').match(/<title>([^<]{0,120})<\/title>/i) || [])[1];
+  return `status=${res.status} content-type=${res.headers['Content-Type'] || '-'} ` +
+    `server=${res.headers['Server'] || '-'} title=${title ? JSON.stringify(title.trim()) : '-'}`;
+}
+
+// The `code` of a JSON error envelope, or undefined for anything else (an HTML
+// page, an empty body) — never throws, so one odd response cannot abort the
+// rest of the iteration the way a bare `r.json()` inside a check does.
+function jsonCode(res) {
+  try {
+    return res.json().code;
+  } catch (e) {
+    return undefined;
+  }
+}
+
+function setFake1cMode(mode) {
+  const res = http.post(
+    FAKE_1C_CONTROL,
+    JSON.stringify({ mode }),
+    { headers: { 'Content-Type': 'application/json' }, tags: { endpoint: 'fake1c_control' } },
+  );
+  expectStatus(res, 'fake1c_control');
+}
+
 export default function () {
   // USER_COUNT / PRODUCT_COUNT (config.js) MUST be kept in step with what
   // seed_loadtest.py actually seeded (--users-per-org / --products) — this
@@ -204,12 +235,36 @@ export default function () {
   // whenever a different status is expected — a real 200 image response
   // isn't JSON at all, and `.json()` on it would throw.
   const imageRes = authGet(session, signedImagePath(orgId, 'LT-SKU-1', 0), 'catalog_image');
-  expectStatus(imageRes, 'catalog_image', IMAGE_EXPECT_STATUS);
+  if (!expectStatus(imageRes, 'catalog_image', IMAGE_EXPECT_STATUS)) {
+    console.error(`catalog_image unexpected response: ${describeResponse(imageRes)}`);
+  }
   if (IMAGE_EXPECT_STATUS === 502) {
     check(imageRes, {
-      'catalog_image body code == IMAGE_FETCH_FAILED': (r) => r.json().code === 'IMAGE_FETCH_FAILED',
+      'catalog_image body code == IMAGE_FETCH_FAILED': (r) => jsonCode(r) === 'IMAGE_FETCH_FAILED',
     });
   }
+
+  // Upstream-error pass-through probe. 1C mostly answers errors with 500, which
+  // the backend turns into its own 502 {"code": "EXTERNAL_SERVICE_ERROR"}, and
+  // the frontend translates errors by that code. A SKU that was never seeded
+  // misses the replica and takes the live 1C path, so with the fake in
+  // http_500 mode this reproduces that production case exactly, and shows
+  // whether the 502 and its JSON body reach the client or something in front
+  // of the app replaces them. Plain check()s, not expectStatus: the probe is
+  // not an endpoint being measured.
+  setFake1cMode('http_500');
+  const probeRes = authPost(
+    session, PATHS.productSearch,
+    { sku: 'LT-EDGE-PROBE', is_barcode: false, warehouses: session.warehouseCodes },
+    'upstream_error_probe',
+  );
+  setFake1cMode('fast');
+  const probeCode = jsonCode(probeRes);
+  console.log(`upstream_error_probe: ${describeResponse(probeRes)} code=${probeCode || '-'}`);
+  check(probeRes, {
+    'upstream 1C 500 reaches the client as 502': (r) => r.status === 502,
+    'upstream 1C 500 keeps its JSON code EXTERNAL_SERVICE_ERROR': () => probeCode === 'EXTERNAL_SERVICE_ERROR',
+  });
 
   expectStatus(
     authPost(session, PATHS.refresh, { refresh: session.refresh }, 'auth_refresh'),
@@ -227,10 +282,5 @@ export default function () {
   // Direct call to the fake-1C control plane (not through the backend at
   // all) — resets it to its default mode so a smoke run never inherits a
   // "slow"/"refuse"/etc. mode left behind by an earlier fault-injection run.
-  const controlRes = http.post(
-    FAKE_1C_CONTROL,
-    JSON.stringify({ mode: 'fast' }),
-    { headers: { 'Content-Type': 'application/json' }, tags: { endpoint: 'fake1c_control' } },
-  );
-  expectStatus(controlRes, 'fake1c_control');
+  setFake1cMode('fast');
 }
