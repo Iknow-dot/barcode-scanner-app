@@ -24,7 +24,7 @@ on:
         default: gunicorn --worker-tmp-dir /dev/shm backend.wsgi
         type: string
       scenario:
-        description: smoke only; sweep, ceiling or failure after smoke; or cleanup (delete leftovers only)
+        description: smoke only; sweep, ceiling or failure after smoke (failure's rates are fixed, sized for the 8-slot local stack, and only meaningful with a threaded run_command); or cleanup (delete leftovers only)
         required: true
         default: ceiling
         type: choice
@@ -35,7 +35,7 @@ on:
           - failure
           - cleanup
       ceiling_stages:
-        description: CEILING_STAGES JSON for the ceiling scenario
+        description: CEILING_STAGES JSON for the ceiling scenario. Targets are journey iterations/s (each iteration is ~1.7 requests, plus a login for every new VU) — not requests/s.
         required: false
         default: '[{"target":1,"duration":"30s"},{"target":2,"duration":"1m"},{"target":5,"duration":"1m"},{"target":10,"duration":"1m"},{"target":20,"duration":"1m"},{"target":0,"duration":"30s"}]'
         type: string
@@ -53,8 +53,9 @@ jobs:
     name: ${{ inputs.scenario }} on ${{ inputs.ref }}
     runs-on: ubuntu-latest
     # Deliberately generous: a job-level timeout can end the job before the
-    # always-run destroy. The step timeouts below end a hung run first.
-    timeout-minutes: 120
+    # always-run cleanup step. The step timeouts below sum past 120 minutes
+    # on their own, so 180 keeps this the backstop, not the usual trigger.
+    timeout-minutes: 180
 
     defaults:
       run:
@@ -63,24 +64,23 @@ jobs:
     env:
       SCENARIO: ${{ inputs.scenario }}
       OUT_DIR: ${{ github.workspace }}/loadtest-output
-      DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
       TF_IN_AUTOMATION: "1"
       TF_INPUT: "0"
       TF_VAR_ref: ${{ inputs.ref }}
       TF_VAR_run_command: ${{ inputs.run_command }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Prepare the output directory
         run: mkdir -p "$OUT_DIR"
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: "3.13"
 
       - name: Install doctl
-        uses: digitalocean/action-doctl@v2
+        uses: digitalocean/action-doctl@3cb3953159719656269e044e0e24ca16dd2a690f # v2.5.2
         with:
           token: ${{ secrets.DIGITALOCEAN_TOKEN }}
 
@@ -95,7 +95,7 @@ jobs:
 
       - name: Install Terraform
         if: env.SCENARIO != 'cleanup'
-        uses: hashicorp/setup-terraform@v3
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
         with:
           terraform_version: 1.16.2
           terraform_wrapper: false
@@ -113,6 +113,8 @@ jobs:
         if: env.SCENARIO != 'cleanup'
         working-directory: loadtest/do
         timeout-minutes: 45
+        env:
+          DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
         run: terraform apply -auto-approve
 
       - name: Export Terraform outputs
@@ -121,10 +123,17 @@ jobs:
         run: |
           secret_key="$(terraform output -raw django_secret_key)"
           password="$(terraform output -raw loadtest_password)"
+          db_password="$(terraform output -raw database_password)"
           echo "::add-mask::$secret_key"
           echo "::add-mask::$password"
+          echo "::add-mask::$db_password"
+          app_url="$(terraform output -raw app_url)"
+          if [ -z "$app_url" ]; then
+            echo "terraform output app_url returned nothing" >&2
+            exit 1
+          fi
           {
-            echo "BASE_URL=$(terraform output -raw app_url)"
+            echo "BASE_URL=$app_url"
             echo "FAKE_1C_CONTROL=$(terraform output -raw fake_1c_control_url)"
             echo "DJANGO_SECRET_KEY=$secret_key"
             echo "LOADTEST_PASSWORD=$password"
@@ -135,7 +144,7 @@ jobs:
         timeout-minutes: 11
         run: |
           for _ in $(seq 1 60); do
-            if curl -fsS "$BASE_URL/api/v1/health/"; then
+            if curl -fsS --max-time 15 "$BASE_URL/api/v1/health/"; then
               echo
               exit 0
             fi
@@ -146,7 +155,7 @@ jobs:
 
       - name: Install k6
         if: env.SCENARIO != 'cleanup'
-        uses: grafana/setup-k6-action@v1
+        uses: grafana/setup-k6-action@db07bd9765aac508ef18982e52ab937fe633a065 # v1.2.1
 
       - name: Smoke
         if: env.SCENARIO != 'cleanup'
@@ -161,9 +170,12 @@ jobs:
         timeout-minutes: 45
         env:
           CEILING_STAGES: ${{ inputs.ceiling_stages }}
-          # One sync worker is already past its ceiling at the local rig's
-          # opening rate of 5 req/s.
+          # A single sync worker cannot absorb the local rig's opening rate
+          # of 5 iterations/s.
           CEILING_START_RATE: "1"
+          # entry/sweep.js opens every window at SWEEP_RATE (default 5), and
+          # each new VU logs in — default is sized for the 8-slot local stack.
+          SWEEP_RATE: "1"
         run: |
           set +e
           k6 run --quiet "entry/$SCENARIO.js" --out "csv=$OUT_DIR/run.csv" 2>&1 | tee "$OUT_DIR/scenario.txt"
@@ -189,10 +201,23 @@ jobs:
             echo "no app to collect logs from"
             exit 0
           fi
+          # Without --deployment, `doctl apps logs` targets the active/
+          # in-progress deployment; a failed first deployment is neither, so
+          # build/deploy logs come back empty exactly when needed. Look up
+          # the newest deployment id instead. `|| true` guards against
+          # pipefail/SIGPIPE from `head` closing the pipe early — this step
+          # must not fail here.
+          deployment_id="$(doctl apps list-deployments "$app_id" --format ID --no-header 2>/dev/null | head -n1 || true)"
+          deployment_flag=()
+          if [ -n "$deployment_id" ]; then
+            deployment_flag=(--deployment "$deployment_id")
+          fi
           mkdir -p "$OUT_DIR/logs"
           for component in backend seed fake-1c; do
-            for type in build deploy run; do
-              doctl apps logs "$app_id" "$component" --type "$type" \
+            # run_restarted: after an OOM kill, the crashed container's own
+            # output shows up only there, not under "run".
+            for type in build deploy run run_restarted; do
+              doctl apps logs "$app_id" "$component" --type "$type" "${deployment_flag[@]}" \
                 > "$OUT_DIR/logs/$component-$type.log" 2>&1 || true
             done
           done
@@ -227,19 +252,21 @@ jobs:
 
       - name: Upload results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: loadtest-${{ inputs.scenario }}-${{ github.run_id }}
           path: loadtest-output/
           if-no-files-found: ignore
 
-      # continue-on-error so the verification below still runs and is what
-      # turns the job red if anything survived.
+      # continue-on-error so "Clean up and verify nothing is left behind"
+      # below still runs and is what turns the job red if anything survived.
       - name: Destroy the environment
         if: always() && env.SCENARIO != 'cleanup'
         continue-on-error: true
         working-directory: loadtest/do
         timeout-minutes: 30
+        env:
+          DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
         run: |
           if terraform destroy -auto-approve; then
             exit 0
@@ -248,7 +275,11 @@ jobs:
           sleep 60
           terraform destroy -auto-approve
 
-      - name: Verify nothing is left behind
+      # A cancel or timeout during "Create the environment" can leave an
+      # app/cluster that Terraform state does not know about, so the destroy
+      # step above misses it and it keeps billing. Delete (not only verify)
+      # by exact name, then fail loudly if anything remains.
+      - name: Clean up and verify nothing is left behind
         if: always()
-        timeout-minutes: 10
-        run: python -m loadtest.do.sweep verify
+        timeout-minutes: 15
+        run: python -m loadtest.do.sweep delete
