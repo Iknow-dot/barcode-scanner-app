@@ -538,6 +538,61 @@ bash loadtest/scripts/terraform.sh test          # mocked provider: no token, cr
 `terraform.sh` runs the `hashicorp/terraform:1.16.2` image; set
 `TERRAFORM_BIN=/path/to/terraform` to use a standalone binary instead.
 
+### Measured on DigitalOcean
+
+Real numbers from the disposable copy, with the caveats they need. Don't
+round these into more confidence than they carry.
+
+**Capacity ceiling of production's current setup**
+(run [35020221693](https://github.com/Iknow-dot/barcode-scanner-app/actions/runs/35020221693), 2026-09-15).
+- **Setup:** `ceiling` with the default `run_command`: gthread, 2 workers × 4
+  threads, on `apps-s-1vcpu-0.5gb` and a `db-s-1vcpu-1gb` cluster. The fake 1C
+  answered instantly.
+- **How the numbers were read:** the run's own verdict was untrustworthy (300
+  dropped iterations once the app fell behind), so the table comes from the
+  raw `run.csv`, bucketed per 15 s. It shows what was actually delivered, not
+  the nominal ramp.
+
+| Delivered load | Median | p95 | |
+| ---: | ---: | ---: | --- |
+| 3–5 req/s | ~230 ms | ~0.9 s | fine |
+| 9–13 req/s | ~220 ms | ~0.41 s | fine |
+| **~19 req/s** | **225 ms** | **0.43 s** | **last clean window** |
+| ramping past ~20 req/s | 1.1 s → 4.2 s → 11 s → 22 s | 2.9 s → 60 s | collapse within ~90 s |
+
+- **The ceiling is about 19 req/s**, roughly 11 product lookups per second in
+  the consultant journey (about 1.7 requests per iteration). Latency is flat
+  up to that point and then climbs steeply to the 60 s router cutoff. There is
+  no graceful degradation and no throttling.
+- **The backend never failed.** `backend-run.log` shows 2,503 × `200`, 2 ×
+  `502` (the expected image/probe responses) and 1 × `403`, with no
+  `WORKER TIMEOUT`, no worker restarts and no database errors. It queued.
+- **Login bursts are the weak spot.** Early in the ramp, while k6 added VUs
+  (each logs in), p95 briefly reached ~9 s and then recovered. A shift change
+  is the realistic trigger.
+- **In consultants:** one scan every 10 s is ~110 consultants scanning at once,
+  every 20 s is ~220, every 30 s is ~330.
+- **Real 1C lowers this.** Each scan waits on 1C for live stock while holding
+  one of the 8 slots, so at ~1 s of 1C latency the ceiling is about 8 scans/s
+  whatever our own speed. Expect roughly 8–11 scans/s in production, with 1C
+  deciding where in that range.
+- **Not measured yet:** the old single sync worker for a before/after, and a
+  `ceiling` run with a slow fake 1C (`slow_5s`).
+
+**Single-user response times**
+(`smoke`, run [35018034413](https://github.com/Iknow-dot/barcode-scanner-app/actions/runs/35018034413)).
+- **In-app time** (`server_total_ms`): average 169 ms, p95 680 ms.
+- **Database:** average 40 ms per request and 6 queries per request, 16 at most.
+- **Measured by k6:** add roughly 160 ms of round trip from GitHub's US runner
+  to Frankfurt.
+
+**What DigitalOcean's edge does to error responses**
+(run [35018034413](https://github.com/Iknow-dot/barcode-scanner-app/actions/runs/35018034413)).
+- **Replaced by Cloudflare's HTML `504`:** 502, 503 and 504.
+- **Pass through intact with their JSON body:** 500, 422 and 424.
+- **Consequence:** every `EXTERNAL_SERVICE_*` error the backend sends as 502 or
+  504 reaches the browser without its `code`.
+
 ## Knobs
 
 | Variable | Default | Meaning |

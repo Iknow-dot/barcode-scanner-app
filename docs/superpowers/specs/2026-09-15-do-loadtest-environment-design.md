@@ -1,7 +1,7 @@
 # Ephemeral DigitalOcean load-test environment — design
 
 **Date:** 2026-09-15
-**Status:** Implemented on branch worktree-do-loadtest-env (2026-09-15); first DigitalOcean run pending
+**Status:** Implemented and run on DigitalOcean (2026-09-15); results in `loadtest/README.md` → "Measured on DigitalOcean"
 **Implements:** Phase 2 of `2026-09-08-k6-backend-stress-testing-design.md`
 
 ## Problem
@@ -424,3 +424,10 @@ Decided from the final whole-branch review's findings (F1–F10;
   The `run_command` default (workflow input and `var.run_command`) follows it,
   so a default run measures production as it is now. The old single sync
   worker remains available as an override, for a before/after comparison.
+- **First capacity result** (`ceiling`, run 35020221693, production's gthread
+  2×4 command): clean up to about 19 req/s delivered (median ~225 ms, p95
+  ~0.43 s), then collapse to the 60 s router cutoff within about 90 s. The
+  backend itself returned 200s throughout, with no worker restarts or database
+  errors. Details and caveats (instant fake 1C, login bursts) are in
+  `loadtest/README.md` → "Measured on DigitalOcean". Status: implemented and
+  measured.
