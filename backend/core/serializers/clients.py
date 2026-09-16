@@ -7,8 +7,8 @@ from rest_framework import serializers
 class CheckClientRequestSerializer(serializers.Serializer):
     """User must provide identification_number, phone OR name (or several).
 
-    Upstream matches all three against its single `IDPhone` field; the client
-    layer picks which one to send.
+    Upstream takes an identification number or phone in `IDPhone` and a name
+    in a separate `Name` field; the client layer picks which one to send.
     """
 
     identification_number = serializers.CharField(

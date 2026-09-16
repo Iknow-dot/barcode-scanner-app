@@ -497,7 +497,7 @@ class CheckClientAPIViewTests(TestCase):
             )
 
         self.assertEqual(response.status_code, 200, response.data)
-        self.assertEqual(captured['json'], {'IDPhone': 'Giorgi Beridze'})
+        self.assertEqual(captured['json'], {'Name': 'Giorgi Beridze'})
         self.assertEqual(response.data['clients'][0]['name'], 'Giorgi Beridze')
 
     def test_name_lookup_returns_every_match(self):

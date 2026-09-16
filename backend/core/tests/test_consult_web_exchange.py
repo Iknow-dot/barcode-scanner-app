@@ -242,16 +242,17 @@ class CheckClientResultTests(TestCase):
         with self.assertRaises(ValueError):
             client.check_client()
 
-    def test_check_client_sends_a_name_as_idphone(self):
+    def test_check_client_sends_a_name_in_its_own_field(self):
         client = ConsultWebExchangeClient(self.org)
         captured = self._capture_request()
 
         with mock.patch('httpx.request', side_effect=captured['fake']):
             client.check_client(name='Giorgi Beridze')
 
-        # Upstream matches the same single `IDPhone` field against the client
-        # name, so a name search needs no new request key.
-        self.assertEqual(captured['json'], {'IDPhone': 'Giorgi Beridze'})
+        # Upstream searches names through a separate `Name` field (a LIKE
+        # match, so it may return several clients); `IDPhone` is for exact
+        # identifiers only.
+        self.assertEqual(captured['json'], {'Name': 'Giorgi Beridze'})
 
     def test_check_client_prefers_an_identifier_over_a_name(self):
         client = ConsultWebExchangeClient(self.org)

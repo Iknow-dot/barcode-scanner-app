@@ -15,7 +15,7 @@ Wraps per-organization calls to four endpoints under
 existing `web_service_username` + Fernet-encrypted `web_service_password`.
 
 Request payloads are built inline: `check_client` posts a single
-`{"IDPhone": ...}` and `create_client` a flat dict. The only field map is
+`{"IDPhone": ...}` or `{"Name": ...}` and `create_client` a flat dict. The only field map is
 CHECK_CLIENT_RESPONSE_FIELDS, applied by `_normalize_client_response` to both
 CheckClient and CreateClient responses; every normalized response also echoes
 `raw` so the frontend can recover an unmapped field without a code change.
@@ -39,7 +39,8 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # 1C ConsultWebExchange field mapping — confirmed with API owner
 # ---------------------------------------------------------------------------
-# - CheckClient request is a single `{"IDPhone": <personal number, phone or name>}`.
+# - CheckClient request is `{"IDPhone": <personal number or phone>}` or, for a
+#       name search, `{"Name": <name>}` (LIKE match — often several clients).
 # - Lookup response is a list of customers (one or more matches), possibly
 #       wrapped in keys like `clients` / `customers` / `data` / `result`.
 # - Create response is a single customer (possibly wrapped under a
@@ -270,9 +271,11 @@ class ConsultWebExchangeClient:
     ) -> list[dict[str, Any]] | None:
         """POST /CheckClient.
 
-        Looks up by identification number, phone or name — upstream matches all
-        three against the same single `IDPhone` field, so only one value is sent
-        and an exact identifier wins over a name when both are given.
+        Looks up by identification number, phone or name. An identification
+        number or phone goes in `IDPhone` (exact match); a name goes in its own
+        `Name` field, which upstream matches with LIKE and so may return several
+        clients. Only one criterion is sent, and an exact identifier wins over a
+        name when both are given.
 
         Returns a list of normalized dicts on a hit, or `None` if upstream signals
         "not found" (HTTP 404). Raises `ConsultWebExchangeError` on any other
@@ -281,9 +284,10 @@ class ConsultWebExchangeClient:
         if not identification_number and not phone and not name:
             raise ValueError("identification_number, phone or name is required")
 
-        payload: dict[str, Any] = {
-            "IDPhone": identification_number or phone or name
-        }
+        if identification_number or phone:
+            payload: dict[str, Any] = {"IDPhone": identification_number or phone}
+        else:
+            payload = {"Name": name}
 
         response = self._request("POST", "CheckClient", json=payload)
         self._check_auth(response, "CheckClient")
