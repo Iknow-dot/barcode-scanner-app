@@ -101,4 +101,74 @@ describe('useDebouncedField', () => {
         expect(onSave).toHaveBeenCalledTimes(1);
         expect(onSave).toHaveBeenCalledWith('typed then blurred');
     });
+
+    describe('syncing from a refreshed initialValue prop', () => {
+        // F1: DeliveryStep renders six of these hooks off the same order. A
+        // blur on one field PATCHes immediately; while that request is in
+        // flight the consultant may already be typing in another field. The
+        // response's order re-render must not clobber what they are typing.
+        const renderField = (initialValue, onSave = jest.fn()) => {
+            const utils = renderHook(
+                ({value}) => useDebouncedField(value, onSave, 600),
+                {initialProps: {value: initialValue}},
+            );
+            return {onSave, ...utils};
+        };
+
+        it('keeps a pending edit when the prop refreshes to a different value mid-debounce', () => {
+            const {result, rerender, onSave} = renderField('');
+
+            act(() => {
+                result.current[1]('typed last name');
+            });
+            // A sibling field's save lands and DeliveryStep re-renders with
+            // the order it got back, carrying a different value for THIS
+            // field (e.g. a stale snapshot from before the current edit).
+            rerender({value: 'stale server value'});
+
+            expect(result.current[0]).toBe('typed last name');
+
+            act(() => {
+                jest.advanceTimersByTime(600);
+            });
+            expect(onSave).toHaveBeenCalledWith('typed last name');
+        });
+
+        it('does not reset or resave once the prop catches up to the value just flushed', () => {
+            const {result, rerender, onSave} = renderField('');
+
+            act(() => {
+                result.current[1]('saved on blur');
+            });
+            act(() => {
+                result.current[2](); // flush(), as onBlur does
+            });
+            expect(onSave).toHaveBeenCalledTimes(1);
+
+            rerender({value: 'saved on blur'});
+
+            expect(result.current[0]).toBe('saved on blur');
+            expect(onSave).toHaveBeenCalledTimes(1);
+        });
+
+        it('adopts a later, genuinely different prop value once the flushed save is confirmed', () => {
+            const {result, rerender} = renderField('');
+
+            act(() => {
+                result.current[1]('mine');
+            });
+            act(() => {
+                result.current[2](); // flush() -> saves 'mine'
+            });
+
+            // The order carrying our own save's result lands first...
+            rerender({value: 'mine'});
+            // ...then a later, unrelated external edit changes the field
+            // again (another user, or a value the server itself computed).
+            // This is the legitimate syncing the fix must not break.
+            rerender({value: 'someone else changed it'});
+
+            expect(result.current[0]).toBe('someone else changed it');
+        });
+    });
 });

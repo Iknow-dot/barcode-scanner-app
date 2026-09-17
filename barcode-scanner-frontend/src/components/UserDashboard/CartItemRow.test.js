@@ -122,14 +122,15 @@ describe('CartItemRow', () => {
         expect(screen.queryByRole('button', {name: en.giftLabel})).toBeNull();
     });
 
-    it('deletes both lines of the row after confirming', async () => {
-        const row = rowFor([line({quantity: '1', line_total: '89.90'}), line({id: 12, quantity: '1', is_gift: true, line_total: '0.00'})]);
-        const {onOrderUpdate} = renderRow({row});
+    it('deletes the row after confirming, once it is down to its single unit', async () => {
+        // F4: delete only ever shows at totalQty === 1, so a row that still
+        // pairs a paid and a gift line (totalQty >= 2, see below) can no
+        // longer reach it — this exercises the one id it removes here.
+        const {onOrderUpdate} = renderRow({row: rowFor([line({quantity: '1', line_total: '89.90'})])});
         fireEvent.click(screen.getByRole('button', {name: en.delete}));
         fireEvent.click(await screen.findByRole('button', {name: en.yes}));
         await waitFor(() => expect(onOrderUpdate).toHaveBeenCalledWith(UPDATED));
         expect(orderService.removeOrderItem).toHaveBeenCalledWith(7, 11);
-        expect(orderService.removeOrderItem).toHaveBeenCalledWith(7, 12);
     });
 
     it('offers no price editor to a user who may not discount', () => {
@@ -176,5 +177,46 @@ describe('CartItemRow', () => {
         fireEvent.click(screen.getByRole('button', {name: en.increaseQuantity}));
         await waitFor(() => expect(notify.error).toHaveBeenCalledWith(en.orderError, 'nope'));
         expect(onOrderUpdate).not.toHaveBeenCalled();
+    });
+
+    it('disables the stepper while a quantity change is in flight, and re-enables after', async () => {
+        let resolveUpdate;
+        orderService.updateOrderItem.mockReturnValue(new Promise((resolve) => { resolveUpdate = resolve; }));
+        const {onOrderUpdate} = renderRow();
+        const plus = screen.getByRole('button', {name: en.increaseQuantity});
+
+        fireEvent.click(plus);
+        expect(plus).toBeDisabled();
+        // A disabled button does not receive a second click; this only
+        // proves the guard exists rather than relying on it.
+        fireEvent.click(plus);
+        expect(orderService.updateOrderItem).toHaveBeenCalledTimes(1);
+
+        resolveUpdate({success: true, data: UPDATED});
+        await waitFor(() => expect(onOrderUpdate).toHaveBeenCalledWith(UPDATED));
+        expect(plus).not.toBeDisabled();
+    });
+
+    it('disables the gift pill while a gift change is in flight, and re-enables after', async () => {
+        let resolveUpdate;
+        orderService.updateOrderItem.mockReturnValue(new Promise((resolve) => { resolveUpdate = resolve; }));
+        renderRow({row: rowFor([line({quantity: '1', line_total: '89.90'})])});
+        const gift = screen.getByRole('button', {name: en.giftLabel});
+
+        fireEvent.click(gift);
+        expect(gift).toBeDisabled();
+
+        resolveUpdate({success: true, data: UPDATED});
+        await waitFor(() => expect(gift).not.toBeDisabled());
+    });
+
+    it('shows a disabled minus, not delete, when the minimum still holds a gift unit', () => {
+        const row = rowFor([
+            line({quantity: '1', line_total: '89.90'}),
+            line({id: 12, quantity: '1', is_gift: true, line_total: '0.00'}),
+        ]);
+        renderRow({row});
+        expect(screen.queryByRole('button', {name: en.delete})).toBeNull();
+        expect(screen.getByRole('button', {name: en.decreaseQuantity})).toBeDisabled();
     });
 });

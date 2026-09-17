@@ -20,10 +20,15 @@ describe('GiftCounter', () => {
   it('active pill clears all gifts and shows the split', () => {
     const onChange = jest.fn();
     render(<GiftCounter enabled totalQty={3} giftQty={1} onChange={onChange} label="Gift"/>);
-    const pill = screen.getByRole('button', {name: 'Gift'});
+    const pill = screen.getByRole('button', {name: '1/3 Gift'});
     expect(pill).toHaveTextContent('1/3');
     fireEvent.click(pill);
     expect(onChange).toHaveBeenCalledWith(0);
+  });
+
+  it('names the split in the accessible label, not just the visible text', () => {
+    render(<GiftCounter enabled totalQty={3} giftQty={2} onChange={() => {}} label="საჩუქარი"/>);
+    expect(screen.getByRole('button', {name: '2/3 საჩუქარი'})).toBeInTheDocument();
   });
 
   it('mini stepper steps the gift count both ways', () => {

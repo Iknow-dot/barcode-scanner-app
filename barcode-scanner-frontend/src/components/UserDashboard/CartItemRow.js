@@ -34,6 +34,10 @@ const CartItemRow = ({
 }) => {
     const {t} = useLanguage();
     const [editing, setEditing] = useState(false);
+    // Guards the quantity stepper, the gift pill and delete against a second
+    // tap while one of their requests is in flight — two quick taps would
+    // otherwise both compute their target from the same stale prop (F3).
+    const [busy, setBusy] = useState(false);
     const view = cartRowView(row);
     const unit = unitLabel(view.anchor.unit, t);
 
@@ -42,19 +46,32 @@ const CartItemRow = ({
         else notify.error(t.orderError, result.error);
     }, [onOrderUpdate, notify, t]);
 
-    const handleQuantityChange = async (newTotal) => {
+    const runBusy = useCallback(async (action) => {
+        setBusy(true);
+        try {
+            await action();
+        } finally {
+            setBusy(false);
+        }
+    }, []);
+
+    const handleQuantityChange = (newTotal) => {
         const plan = planQuantityChange(row, newTotal);
         if (!plan) return;
-        report(await orderService.updateOrderItem(orderId, plan.itemId, plan.data));
+        runBusy(async () => {
+            report(await orderService.updateOrderItem(orderId, plan.itemId, plan.data));
+        });
     };
 
-    const handleGiftChange = async (targetGift) => {
+    const handleGiftChange = (targetGift) => {
         const ops = planGiftChange(row, targetGift);
         if (ops.length === 0) return;
-        report(await applyGiftOps(orderId, ops));
+        runBusy(async () => {
+            report(await applyGiftOps(orderId, ops));
+        });
     };
 
-    const handleRemove = async () => {
+    const handleRemove = () => runBusy(async () => {
         // Remove BOTH physical lines behind this visual row.
         const ids = [row.paid?.id, row.gift?.id].filter(Boolean);
         let last = null;
@@ -67,7 +84,7 @@ const CartItemRow = ({
             last = result;
         }
         if (last) onOrderUpdate(last.data);
-    };
+    });
 
     const savePrice = async (event) => {
         const value = parseFloat(event.target.value);
@@ -177,26 +194,35 @@ const CartItemRow = ({
                         value={row.totalQty}
                         min={view.minQuantity}
                         onChange={handleQuantityChange}
+                        disabled={busy}
                         label={t.quantity}
                         decrementLabel={t.decreaseQuantity}
                         incrementLabel={t.increaseQuantity}
                         iconSize={18}
-                        minSlot={(
-                            // At the minimum, minus becomes delete (with
+                        minSlot={row.totalQty === 1 ? (
+                            // At exactly one unit, minus becomes delete (with
                             // today's confirmation): the row cannot shrink
                             // further, and there is no room for a separate
-                            // delete button beside the gift pill.
+                            // delete button beside the gift pill. A row whose
+                            // minimum instead reflects a gift unit that must
+                            // stay (totalQty > 1) keeps a plain, disabled
+                            // minus — there's nothing left to delete yet.
                             <Popconfirm
                                 title={t.confirmDelete}
                                 onConfirm={handleRemove}
                                 okText={t.yes}
                                 cancelText={t.no}
                             >
-                                <button type="button" className="if-stepper-btn m-cart-item-delete" aria-label={t.delete}>
+                                <button
+                                    type="button"
+                                    className="if-stepper-btn m-cart-item-delete"
+                                    aria-label={t.delete}
+                                    disabled={busy}
+                                >
                                     <IosIcon name="trash" size={18}/>
                                 </button>
                             </Popconfirm>
-                        )}
+                        ) : undefined}
                     />
                     <GiftCounter
                         enabled={giftEnabled}
@@ -204,6 +230,7 @@ const CartItemRow = ({
                         giftQty={row.giftQty}
                         label={t.giftLabel}
                         onChange={handleGiftChange}
+                        disabled={busy}
                     />
                 </div>
             </div>

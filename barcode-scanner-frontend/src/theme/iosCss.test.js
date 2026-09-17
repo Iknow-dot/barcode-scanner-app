@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import {TOKENS} from './palette';
-import {ANTD_OVERLAY_BASE, LAYER_BARS, LAYER_SHEET} from './layers';
+import {ANTD_OVERLAY_BASE, LAYER_BARS, LAYER_SHEET, LAYER_SHEET_MAX, LAYER_SHEET_STEP, sheetZIndex} from './layers';
 
 // ios.css holds the iOS primitives every later redesign phase builds on, so it
 // must stay on the palette. Allowed literals: #fff (text or icon on a tint
@@ -44,6 +44,17 @@ test('the floating bars sit under the sheets, and the sheets under antd overlays
     expect(zIndexOf('.if-edge-bottom')).toBe(LAYER_BARS - 1);
     expect(LAYER_BARS).toBeLessThan(LAYER_SHEET);
     expect(LAYER_SHEET).toBeLessThan(ANTD_OVERLAY_BASE);
+});
+
+// F2: phase 4 stacks a sheet over a sheet (IosSheet's `level` prop).
+test('stacked sheet levels stay in the sheet band, strictly below every antd overlay', () => {
+    expect(sheetZIndex(0)).toBe(LAYER_SHEET);
+    expect(sheetZIndex(1)).toBe(LAYER_SHEET + LAYER_SHEET_STEP);
+    expect(sheetZIndex(1)).toBeGreaterThan(sheetZIndex(0));
+    expect(sheetZIndex(1)).toBeLessThan(ANTD_OVERLAY_BASE);
+    // Clamped: an unreasonably deep stack never reaches antd's own band.
+    expect(sheetZIndex(50)).toBe(LAYER_SHEET_MAX);
+    expect(sheetZIndex(50)).toBeLessThan(ANTD_OVERLAY_BASE);
 });
 
 test('the layout column is set on :root, where sheets portaled into body can read it', () => {

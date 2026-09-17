@@ -3,7 +3,7 @@ import {render, screen, fireEvent, waitFor} from '@testing-library/react';
 import IosSheet from './IosSheet';
 import {LanguageProvider} from '../../i18n/LanguageContext';
 import translations from '../../i18n/translations';
-import {LAYER_SHEET} from '../../theme/layers';
+import {LAYER_SHEET, LAYER_SHEET_STEP} from '../../theme/layers';
 
 const en = translations.en;
 
@@ -53,6 +53,12 @@ describe('IosSheet', () => {
     it('sits on the sheet layer', () => {
         renderSheet();
         expect(document.querySelector('.if-sheet.ant-drawer').style.zIndex).toBe(String(LAYER_SHEET));
+    });
+
+    it('moves up a level so a sheet opened over this one still stacks above it', () => {
+        renderSheet({level: 1});
+        expect(document.querySelector('.if-sheet.ant-drawer').style.zIndex)
+            .toBe(String(LAYER_SHEET + LAYER_SHEET_STEP));
     });
 
     it('closes from the round close button', () => {

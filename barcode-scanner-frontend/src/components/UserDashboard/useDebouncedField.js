@@ -13,6 +13,15 @@ import {useCallback, useEffect, useRef, useState} from 'react';
  * runs once, on mount) never calls a stale onSave closure. flush() and the
  * cleanup share the same "is a save still pending" check (timerRef), so a
  * normal blur-then-unmount only saves once.
+ *
+ * The prop-sync effect below must never overwrite text the user is still
+ * typing (DeliveryStep renders six of these off the same order, so a blur
+ * on one field's immediate PATCH landing can re-render this one mid-edit).
+ * Two guards: skip entirely while a debounce timer is pending, and — for the
+ * narrow window after a save is sent but before its own response has been
+ * seen — accept only a prop value that matches what was just saved. Once
+ * that echo is observed the gate clears, so any later, genuinely different
+ * prop value (a real external change) syncs normally again.
  */
 const useDebouncedField = (initialValue, onSave, delay = 600) => {
     const [localValue, setLocalValue] = useState(initialValue);
@@ -20,8 +29,17 @@ const useDebouncedField = (initialValue, onSave, delay = 600) => {
     const latestValueRef = useRef(localValue);
     const onSaveRef = useRef(onSave);
     onSaveRef.current = onSave;
+    // The value most recently handed to onSave, while its echo hasn't been
+    // seen back through `initialValue` yet; undefined once confirmed (or
+    // before anything has ever been saved).
+    const lastSavedRef = useRef(undefined);
 
     useEffect(() => {
+        if (timerRef.current) return; // actively editing; never clobber
+        if (lastSavedRef.current !== undefined) {
+            if (initialValue !== lastSavedRef.current) return; // stale echo of a save still in flight
+            lastSavedRef.current = undefined; // confirmed — resume normal syncing
+        }
         if (initialValue !== latestValueRef.current) {
             setLocalValue(initialValue);
             latestValueRef.current = initialValue;
@@ -34,6 +52,7 @@ const useDebouncedField = (initialValue, onSave, delay = 600) => {
         if (timerRef.current) clearTimeout(timerRef.current);
         timerRef.current = setTimeout(() => {
             timerRef.current = null;
+            lastSavedRef.current = value;
             onSaveRef.current(value);
         }, delay);
     }, [delay]);
@@ -42,6 +61,7 @@ const useDebouncedField = (initialValue, onSave, delay = 600) => {
         if (timerRef.current) {
             clearTimeout(timerRef.current);
             timerRef.current = null;
+            lastSavedRef.current = latestValueRef.current;
             onSaveRef.current(latestValueRef.current);
         }
     }, []);

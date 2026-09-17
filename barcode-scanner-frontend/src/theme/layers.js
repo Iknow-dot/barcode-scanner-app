@@ -9,5 +9,13 @@
 // overlay. So a client lookup, a confirm or a date picker opened from a sheet
 // always lands on top, whichever portal was appended to <body> first.
 export const LAYER_BARS = 100; // .if-bottom-stack; the scroll-edge fade is one below
-export const LAYER_SHEET = 900; // IosSheet
+export const LAYER_SHEET = 900; // IosSheet, level 0
+export const LAYER_SHEET_STEP = 10; // gap between stacked sheet levels (phase 4 opens a sheet over a sheet)
 export const ANTD_OVERLAY_BASE = 1000; // antd zIndexPopupBase
+// Ceiling for a stacked sheet: must stay strictly below antd's own overlay
+// band, so a popup, confirm or picker opened from the top sheet still lands
+// above every sheet, however many are stacked.
+export const LAYER_SHEET_MAX = ANTD_OVERLAY_BASE - LAYER_SHEET_STEP;
+
+/** IosSheet's Drawer z-index for a given stacking level (0 = the base sheet). */
+export const sheetZIndex = (level = 0) => Math.min(LAYER_SHEET + level * LAYER_SHEET_STEP, LAYER_SHEET_MAX);

@@ -1,7 +1,7 @@
 import React, {useId, useRef} from 'react';
 import {Drawer} from 'antd';
 import {useLanguage} from '../../i18n/LanguageContext';
-import {LAYER_SHEET} from '../../theme/layers';
+import {sheetZIndex} from '../../theme/layers';
 import IosIcon from './IosIcon';
 import {swipeClosesSheet} from './sheetSwipe';
 
@@ -19,6 +19,11 @@ export const SHEET_HEIGHT = 'calc(100% - max(24px, env(safe-area-inset-top, 0px)
  *
  * The sheet is layer 900 (src/theme/layers.js): above the floating bars,
  * below every antd overlay, so a modal or confirm opened from it lands on top.
+ *
+ * `level` (default 0) stacks a sheet opened from inside another sheet above
+ * it — each level adds LAYER_SHEET_STEP, clamped below every antd overlay
+ * (src/theme/layers.js::sheetZIndex). `push={false}` on the Drawer keeps a
+ * lower sheet from being shoved sideways when a higher one opens on top.
  */
 const IosSheet = ({
     open,
@@ -32,6 +37,7 @@ const IosSheet = ({
     bottomBar,
     bottomBarLayout = 'column',
     swipeToClose = true,
+    level = 0,
     children,
 }) => {
     const {t} = useLanguage();
@@ -67,7 +73,8 @@ const IosSheet = ({
             }}
             placement="bottom"
             size={SHEET_HEIGHT}
-            zIndex={LAYER_SHEET}
+            zIndex={sheetZIndex(level)}
+            push={false}
             closable={false}
             destroyOnHidden
             rootClassName="if-sheet"
