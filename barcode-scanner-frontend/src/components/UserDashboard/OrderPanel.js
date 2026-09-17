@@ -193,7 +193,7 @@ const CartTableRow = memo(({
     return (
         <div className={`m-cart-row${giftStateClass}`} style={{opacity: isPending ? 0.6 : 1}}>
             <div className="m-cart-cell m-cart-cell-warehouse" data-label={t.warehouse}>
-                <Tag color={assigned ? 'green' : 'blue'} style={{fontSize: 11, margin: 0}}>
+                <Tag className={assigned ? 'if-tag-tint' : undefined} style={{fontSize: 11, margin: 0}}>
                     {row.warehouse_name}
                     {assigned && <span style={{marginLeft: 4}}>✓</span>}
                 </Tag>
@@ -547,7 +547,7 @@ const OrderItemGroupCard = memo(({
                     </Button>
                     {showOtherWarehouses && otherWarehouses.map((row) => (
                         <Flex key={row.key} align="center" gap={8} style={{marginTop: 4, opacity: 0.6}}>
-                            <Tag color={row.assigned ? 'green' : 'blue'} style={{fontSize: 10}}>
+                            <Tag className={row.assigned ? 'if-tag-tint' : undefined} style={{fontSize: 10}}>
                                 {row.stockEntry.warehouse_name}
                                 {row.assigned && <span style={{marginLeft: 4}}>✓</span>}
                             </Tag>

@@ -189,7 +189,7 @@ const OrdersTab = () => {
             key: 'delivery_type',
             width: 120,
             render: (type) => (
-                <Tag icon={DELIVERY_TYPE_ICON[type]} color={type === 'delivery' ? 'blue' : 'default'}>
+                <Tag icon={DELIVERY_TYPE_ICON[type]} className={type === 'delivery' ? 'if-tag-tint' : undefined}>
                     {getDeliveryLabel(type)}
                 </Tag>
             ),
@@ -536,7 +536,7 @@ const OrdersTab = () => {
                                 <Flex align="center" gap={6}>
                                     {selectedOrder.delivery_type === 'delivery' ? <CarOutlined style={{color: 'var(--if-tint)'}}/> : <ShopOutlined style={{color: 'var(--if-tint)'}}/>}
                                     <Text strong>{t.deliveryInfo}</Text>
-                                    <Tag color={selectedOrder.delivery_type === 'delivery' ? 'blue' : 'default'}>
+                                    <Tag className={selectedOrder.delivery_type === 'delivery' ? 'if-tag-tint' : undefined}>
                                         {getDeliveryLabel(selectedOrder.delivery_type)}
                                     </Tag>
                                 </Flex>

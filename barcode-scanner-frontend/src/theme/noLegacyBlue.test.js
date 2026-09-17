@@ -5,6 +5,7 @@ import path from 'path';
 // the iknow green in src/theme/tokens.css; none of these should come back.
 const LEGACY_BLUE = /#(1677ff|4096ff|0958d9|69b1ff|91caff|bae0ff|e6f4ff|e6f7ff|0765c2)\b|rgba?\(\s*(22,\s*119,\s*255|24,\s*144,\s*255|64,\s*150,\s*255|7,\s*101,\s*194)\s*,/i;
 const BLUE_TAG = /<Tag\b[^>]*\bcolor=["']blue["']/;
+const BLUE_TAG_EXPRESSION = /<Tag\b[^>]*\bcolor=\{[^}]*['"]blue['"]/;
 
 const SRC = path.join(__dirname, '..');
 
@@ -25,4 +26,8 @@ test('no JS file hard-codes antd blue', () => {
 
 test('no Tag uses the blue preset (use className="if-tag-tint")', () => {
     expect(offenders('.js', BLUE_TAG)).toEqual([]);
+});
+
+test('no Tag picks the blue preset in a color expression (use className="if-tag-tint")', () => {
+    expect(offenders('.js', BLUE_TAG_EXPRESSION)).toEqual([]);
 });
