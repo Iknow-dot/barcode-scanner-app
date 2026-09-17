@@ -62,3 +62,17 @@ test('the layout column is set on :root, where sheets portaled into body can rea
     const indexCss = fs.readFileSync(path.join(__dirname, '..', 'index.css'), 'utf8');
     expect(indexCss).not.toMatch(/--layout-column\s*:/);
 });
+
+// F4 task 1: the client-lookup search field and its info banner.
+test('the search field and info banner primitives exist with no literal colours', () => {
+    const searchStart = css.indexOf('.if-search {');
+    const bannerTextIndex = css.indexOf('.if-banner-text');
+    expect(searchStart).toBeGreaterThan(-1);
+    expect(bannerTextIndex).toBeGreaterThan(searchStart);
+    const block = css.slice(searchStart, css.indexOf('}', bannerTextIndex) + 1);
+
+    ['.if-search', '.if-search-input', '.if-search-trail', '.if-banner'].forEach((selector) => {
+        expect(block).toContain(selector);
+    });
+    expect(block.match(/#[0-9a-f]{3,8}\b/gi)).toBeNull();
+});

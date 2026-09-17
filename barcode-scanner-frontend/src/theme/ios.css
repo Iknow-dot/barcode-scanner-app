@@ -1099,3 +1099,51 @@ button.if-row:disabled .if-check {
     font-size: 17px;
     line-height: 22px;
 }
+
+/* Search field in a sheet header. The accent ring marks focus rather than
+   a border colour change, so the field reads as active at a glance. */
+.if-search {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 44px;
+    padding: 0 12px;
+    border-radius: 12px;
+    background: var(--if-bg);
+    color: var(--if-label-3);
+}
+.if-search:focus-within { box-shadow: 0 0 0 2px var(--if-tint); }
+.if-search-input.ant-input {
+    border: none;
+    background: transparent;
+    padding: 0;
+    font-size: 17px;
+    color: var(--if-label);
+    box-shadow: none;
+}
+.if-search-trail {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 44px;
+    height: 44px;
+    margin-right: -12px;
+    border: none;
+    background: transparent;
+    color: var(--if-label-3);
+    cursor: pointer;
+}
+.if-search-trail.is-action { color: var(--if-tint-text); font-weight: 600; }
+
+/* Informational banner inside a sheet (the not-found notice). */
+.if-banner {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 4px 16px 0;
+    padding: 10px 14px;
+    border-radius: 14px;
+    background: var(--if-tint-soft);
+    color: var(--if-tint-text);
+}
+.if-banner-text { color: var(--if-label); font-size: 15px; }
