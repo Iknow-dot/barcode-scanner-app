@@ -1,5 +1,6 @@
 import 'antd/dist/reset.css';
 import 'leaflet/dist/leaflet.css';
+import './theme/tokens.css';
 import './index.css';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
@@ -36,6 +37,11 @@ posthog.init(process.env.REACT_APP_PUBLIC_POSTHOG_KEY, {
   defaults: '2025-12-24',
 });
 
+// Apply the saved theme before the first render so a dark-mode user never
+// sees a light frame; App keeps the class in sync after that.
+if (localStorage.getItem('theme') === 'dark') {
+    document.body.classList.add('dark-theme');
+}
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(
