@@ -1,4 +1,10 @@
 /* ===== Base Typography & Inputs ===== */
+/* The page behind the app (and iOS overscroll bounce) should follow the
+   theme rather than staying white in dark mode. */
+body {
+  background: var(--if-bg-grouped);
+}
+
 .ant-input {
   font-size: 16px !important;
 }
@@ -1431,12 +1437,12 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(0, 0, 0, 0.15);
+  background: var(--if-sep);
   border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(0, 0, 0, 0.25);
+  background: var(--if-label-3);
 }
 
 /* ===== Ant Design Overrides for Polish ===== */

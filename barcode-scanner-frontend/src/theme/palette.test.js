@@ -59,6 +59,7 @@ describe.each([
 
     test.each([
         ['white bold label on tint', () => contrast(WHITE, token('tint')), 3],
+        ['white bold label on tint-hover', () => contrast(WHITE, token('tint-hover')), 3],
         ['tint-text on bg', () => contrast(token('tint-text'), token('bg')), 4.5],
         ['tint-text on bg-grouped', () => contrast(token('tint-text'), token('bg-grouped')), 4.5],
         ['tint-text on tint-soft', () => contrast(token('tint-text'), over(token('tint-soft'), token('bg'))), 4.5],

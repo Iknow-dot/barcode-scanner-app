@@ -11,9 +11,10 @@ import {antdTheme} from '../theme/antdTheme';
  * catch a crash in the provider tree itself), so by the time this renders
  * there is no theme context left and antd falls back to its own default
  * (blue) palette. Re-wrap a themed ConfigProvider here. `index.js` sets the
- * `dark-theme` body class before the first render and keeps it in sync with
- * the real toggle, so it's the one signal that still reflects the user's
- * mode after everything above this component has unmounted.
+ * `dark-theme` body class before the first render; App.js's effect is what
+ * keeps it in sync with the real toggle afterwards, so together they make it
+ * the one signal that still reflects the user's mode after everything above
+ * this component has unmounted.
  */
 const AppErrorFallback = () => {
     const {t} = useLanguage();

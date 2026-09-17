@@ -53,7 +53,7 @@ already toggles). Prefix `--if-`.
 |---|---|---|---|
 | `--if-brand` | `#42ae75` | `#42ae75` | Decorative only (scan line). 2.8:1 with white, never behind text |
 | `--if-tint` | `#3a9866` | `#3a9866` | Fills, primary buttons, selected states. White bold 3.6:1 |
-| `--if-tint-hover` | `#338a5b` | `#48a974` | Hover/pressed fill |
+| `--if-tint-hover` | `#338a5b` | `#3fa06d` | Hover/pressed fill |
 | `--if-tint-text` | `#296e49` | `#5cc08a` | Links, small green text |
 | `--if-tint-soft` | `rgba(58, 152, 102, 0.14)` | `rgba(58, 152, 102, 0.22)` | Tinted backgrounds (tags, selected rows) |
 | `--if-tint-border` | `rgba(58, 152, 102, 0.35)` | `rgba(92, 192, 138, 0.4)` | Borders of tinted surfaces |
@@ -66,6 +66,7 @@ already toggles). Prefix `--if-`.
 | `--if-label-2` | `#54595f` | `#a9afbc` | Secondary text |
 | `--if-label-3` | `#8890a4` | `#7c8394` | Placeholders, disabled |
 | `--if-sep` | `#e0e0e0` | `rgba(255, 255, 255, 0.12)` | Borders, separators |
+| `--if-border` | `#d9d9d9` | `#555a63` | antd control outlines (Input/Select/DatePicker/Button) via `colorBorder` |
 | `--if-green` / `--if-green-text` | `#34c759` / `#217f38` | `#30d158` / `#30d158` | Success fills / text |
 | `--if-orange` / `--if-orange-text` | `#ff8d28` / `#b35300` | `#ff9f0a` / `#ff9f0a` | Warning fills / text |
 | `--if-red` / `--if-red-text` | `#ff383c` / `#d70015` | `#ff453a` / `#ff6961` | Error fills / text |
@@ -85,9 +86,16 @@ mode: `colorPrimary` (tint), `colorLink` (tint-text), `colorInfo` (tint),
 alert text and icons stay readable), `colorText`, `colorTextSecondary`,
 `colorTextTertiary`, `colorBgLayout` (bg-grouped), `colorBgContainer` (bg),
 `colorBgElevated`, `colorBorderSecondary` (sep), `colorBgBase` for the dark
-algorithm. `colorBorder` (input outlines) stays derived by antd, which keeps
-form fields more visible than the lighter separator would. Font and 8 px radius unchanged. Component tokens:
-`Segmented` selected item filled with tint and white text.
+algorithm. `colorBorder` (input outlines) is set from the dedicated
+`--if-border` token rather than left to antd's own derivation, which in dark
+mode produced a slate-blue border unrelated to the palette (see "Final fix
+wave" below). `colorPrimary`/`colorInfo`/`colorLink`/`colorSuccess`/
+`colorWarning`/`colorError` are re-applied by an appended algorithm step
+(`antdTheme.js`'s `keepPalette`) after antd's own algorithm runs, because
+antd's dark algorithm otherwise re-derives these seed colours to different
+hexes rather than passing through the seed unchanged. Font and 8 px radius
+unchanged. Component tokens: `Segmented` selected item filled with tint and
+white text.
 
 `App.js:70` and `Login.js:20` detect dark mode with `colorBgBase === "#000"`;
 the dark palette changes that base, so both read the real `isDarkMode`
@@ -116,8 +124,9 @@ first render, so a dark user no longer sees a light flash.
 - **Login** background: neutral grays (light) and slate (dark) from tokens.
 - **Browser chrome**: `theme-color` in `public/index.html` and `manifest.json`
   → `#3a9866`.
-- **Left as is**: the six category tile colours (content, one per category)
-  and the gift pinks (the gift feature's own colour).
+- **Left as is**: the six category tile colours (content, one per category),
+  the gift pinks (the gift feature's own colour), and the user-role avatar
+  colours in `UsersTab.js`.
 
 ## Tests
 

@@ -41,12 +41,16 @@
     line-height: 1.2;
     pointer-events: none;
 }
+/* These tiles sit on fixed pastel content colours (categoryTileStyle.js),
+   not on the theme's surface colours, so their text uses fixed dark ink in
+   both themes rather than a theme token that would go near-invisible on the
+   pastel background in dark mode. */
 .fpd-tile-name {
     font-weight: 650;
     font-size: 13.5px;
     line-height: 1.25;
     position: relative;
-    color: var(--if-label);
+    color: #232323;
     display: -webkit-box;
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
@@ -54,7 +58,7 @@
 }
 .fpd-tile-count {
     font-size: 11.5px;
-    color: var(--if-label-2);
+    color: #54595f;
     position: relative;
 }
 

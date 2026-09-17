@@ -9,8 +9,28 @@ describe.each([
     const config = antdTheme(isDark);
     const t = TOKENS[mode];
 
-    test('uses the matching antd algorithm', () => {
-        expect(config.algorithm).toBe(isDark ? theme.darkAlgorithm : theme.defaultAlgorithm);
+    test('uses the matching antd algorithm as the first step', () => {
+        expect(config.algorithm[0]).toBe(isDark ? theme.darkAlgorithm : theme.defaultAlgorithm);
+    });
+
+    test('restores the palette values antd\'s algorithm would otherwise replace', () => {
+        const rendered = theme.getDesignToken(config);
+        const expected = {
+            colorPrimary: t['--if-tint'],
+            colorInfo: t['--if-tint'],
+            colorLink: t['--if-tint-text'],
+            colorSuccess: t['--if-green-text'],
+            colorWarning: t['--if-orange-text'],
+            colorError: t['--if-red-text'],
+            colorSuccessText: t['--if-green-text'],
+            colorWarningText: t['--if-orange-text'],
+            colorErrorText: t['--if-red-text'],
+            colorPrimaryHover: t['--if-tint-hover'],
+            colorBorder: t['--if-border'],
+        };
+        for (const [key, value] of Object.entries(expected)) {
+            expect(String(rendered[key]).toLowerCase()).toBe(String(value).toLowerCase());
+        }
     });
 
     test('takes accent, text and surfaces from the palette', () => {
