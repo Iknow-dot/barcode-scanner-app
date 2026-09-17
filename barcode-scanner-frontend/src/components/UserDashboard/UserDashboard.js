@@ -1,11 +1,11 @@
-import React, {useState, useEffect, useContext, useCallback, useRef} from 'react';
+import React, {useState, useEffect, useContext, useCallback, useMemo, useRef} from 'react';
 import {warehouseService, productService, orderService, catalogService} from '../../api';
 import BarcodeScanner from './BarcodeScanner';
 import ClientLookupModal from './ClientLookupModal';
 import OrderPanel from './OrderPanel';
-import AddToCartSheet from './AddToCartSheet';
+import ProductSheet from './ProductSheet';
+import EmptyCartSheet from './EmptyCartSheet';
 import FindProductDrawer from './FindProductDrawer';
-import ProductImage from '../Common/ProductImage';
 import subNavContext from "../../contexts/SubNavContext";
 import AuthContext from "../Auth/AuthContext";
 import useAppNotification from "../../hooks/useAppNotification";
@@ -28,12 +28,14 @@ import ActiveOrderBar, {ACTIVE_ORDER_ICON_SELECTOR} from './ActiveOrderBar';
 import {nextTabAction} from './tabSelection';
 import IosIcon from '../Common/IosIcon';
 import groupItemsBySku from './groupItemsBySku';
-import {hasProductResult, isStockBlocked, stockStatusMessageKey} from './stockStatus';
+import {hasProductResult} from './stockStatus';
 import inheritFromGroup from './inheritFromGroup';
 import formatInsufficientStock from './insufficientStock';
 import formatConfirmError from './confirmError';
 import activeOrderBarView from './activeOrderBarView';
-import {warehouseRowView, pickUnit} from './warehouseRowView';
+import {pickUnit} from './warehouseRowView';
+import {unitLabel} from './productSheetView';
+import {ADD_FLOW_IDLE, lookupClosed, orderStartFailed, orderStarted, startAdd} from './addFlow';
 import {catalogFeatureEnabled} from '../../utils/features';
 import {orderStatusColor} from '../../utils/orderStatusColor';
 import displayCustomerName from '../../utils/orderDisplay';
@@ -50,7 +52,6 @@ import {
 } from '../../utils/offlineOrderQueue';
 import {isOffline} from '../../utils/connectivity';
 import {
-    Alert,
     Badge,
     Button,
     Collapse,
@@ -71,21 +72,15 @@ import {
     ShoppingOutlined,
     ShoppingCartOutlined,
     InboxOutlined,
-    PlusCircleOutlined,
     PrinterOutlined,
     DeleteOutlined,
     UserOutlined,
     CalendarOutlined,
     RightOutlined,
-    LeftOutlined,
-    AppstoreOutlined,
     CheckCircleFilled,
 } from "@ant-design/icons";
 
 const {Text} = Typography;
-
-const LOW_STOCK_THRESHOLD = 5;
-const MAX_STOCK_FOR_FULL_BAR = 15;
 
 const UserDashboard = ({isDark = false, onToggleTheme}) => {
     const [drawerVisible, setDrawerVisible] = useState(false);
@@ -105,7 +100,6 @@ const UserDashboard = ({isDark = false, onToggleTheme}) => {
     // can resolve (see stockStatus.js). We still show the product, just without
     // a balance list, instead of treating it as a not-found error.
     const [stockStatus, setStockStatus] = useState('');
-    const stockUnavailable = isStockBlocked(stockStatus);
     const {t} = useLanguage();
 
     // Purchase Order state
@@ -133,11 +127,15 @@ const UserDashboard = ({isDark = false, onToggleTheme}) => {
     const [orderDrawerVisible, setOrderDrawerVisible] = useState(false);
     const orderDrawerSwipeRef = useRef({startY: 0, fired: false});
 
-    // Add-to-cart sheet (quantity + warehouse picker)
-    const [addToCartOpen, setAddToCartOpen] = useState(false);
-    const [addToCartInitialWh, setAddToCartInitialWh] = useState(null);
-    const [addToCartConfirming, setAddToCartConfirming] = useState(false);
-    const addToCartSourceRef = useRef(null);
+    // Product sheet (opened by every successful lookup) and the empty cart
+    // sheet (the idle active-order bar). addFlowRef holds a pick while the
+    // new-order client lookup is open — see addFlow.js.
+    const [productSheetOpen, setProductSheetOpen] = useState(false);
+    const productSheetOpenRef = useRef(productSheetOpen);
+    productSheetOpenRef.current = productSheetOpen;
+    const [emptyCartOpen, setEmptyCartOpen] = useState(false);
+    const [addingToOrder, setAddingToOrder] = useState(false);
+    const addFlowRef = useRef(ADD_FLOW_IDLE);
 
     // Ref to track activeOrder without causing callback recreation
     const activeOrderRef = useRef(null);
@@ -177,6 +175,8 @@ const UserDashboard = ({isDark = false, onToggleTheme}) => {
 
     const userWarehousesRef = useRef(userWarehouses);
     userWarehousesRef.current = userWarehouses;
+    // The product sheet matches "my warehouses" by name, as the result page did.
+    const userWarehouseNames = useMemo(() => userWarehouses.map((w) => w.name), [userWarehouses]);
 
     useEffect(() => {
         const stop = startSyncLoop(() => ({
@@ -328,26 +328,22 @@ const UserDashboard = ({isDark = false, onToggleTheme}) => {
                     // Per-lookup-key unit from 1C (a package barcode and the
                     // article can report different units for one product).
                     unit: result.data.unit || '',
-                    images: result.data.images || []
+                    images: result.data.images || [],
+                    // Shown after the article on the product sheet.
+                    barcode: searchType === 'barcode' ? search : '',
                 });
                 lastSearchRef.current = {search, searchType};
                 setSearchedAllWarehouses(!!allWarehouses);
                 setOthersCollapsed(!allWarehouses);
                 setDrawerVisible(false);
-                // Switch to scan tab to show results
+                // Show the product sheet over Home on the scan tab.
                 setActiveTab('scan');
-                // Single-step add: when scanning inside an active order, open
-                // the quantity sheet immediately so the user can confirm a
-                // qty without a separate tap. Skip if nothing is sellable —
-                // sheet would have no warehouse to default to.
-                const sellable = visibleStock.filter((b) => (Number(b.quantity) || 0) > 0);
-                if (fromScan && activeOrderRef.current && sellable.length > 0) {
-                    addToCartSourceRef.current = null;
-                    setAddToCartInitialWh(null);
-                    setAddToCartOpen(true);
-                }
+                setProductSheetOpen(true);
             } else {
                 playNotFoundSound();
+                // A failed re-run (other warehouses) must not leave an empty
+                // sheet open.
+                setProductSheetOpen(false);
                 setBalances([]);
                 setProductInfo({sku_name: '', article: '', price: '', images: []});
                 setSearchedAllWarehouses(false);
@@ -431,7 +427,10 @@ const UserDashboard = ({isDark = false, onToggleTheme}) => {
         });
     }, [handleSearch, allWarehouses]);
 
+    // Clears the product result. Runs once the product sheet has finished
+    // closing, and on the pop-to-Home tab re-tap.
     const handleBackToDashboard = useCallback(() => {
+        setProductSheetOpen(false);
         setBalances([]);
         setProductInfo({sku_name: '', article: '', price: '', images: []});
         setSearchedAllWarehouses(false);
@@ -449,112 +448,6 @@ const UserDashboard = ({isDark = false, onToggleTheme}) => {
             setOthersCollapsed((prev) => !prev);
         }
     }, [othersCollapsed, searchedAllWarehouses, handleShowOtherWarehouses]);
-
-    const renderWarehouseRow = (item, isMine) => {
-        const view = warehouseRowView(item);
-        const isEmpty = view.qty === 0;
-        const isLow = view.qty > 0 && view.qty <= LOW_STOCK_THRESHOLD;
-        const fillPct = Math.min(100, (view.qty / MAX_STOCK_FOR_FULL_BAR) * 100);
-        const qtyClass = isEmpty ? 'empty' : isLow ? 'low' : '';
-        const fillClass = isEmpty ? 'empty' : isLow ? 'low' : '';
-        const unitLabel = productInfo.unit
-            ? (t.unitOptions?.find((opt) => opt.value === productInfo.unit)?.label || productInfo.unit)
-            : null;
-
-        return (
-            <div
-                key={`${item.warehouse}-${item.warehouse_name}`}
-                className={`m-balance-card ${isMine ? 'm-balance-card-highlight' : ''}`}
-            >
-                <Flex justify="space-between" align="flex-start" gap={12}>
-                    <div style={{flex: 1, minWidth: 0}}>
-                        <Text
-                            strong={isMine}
-                            className="m-balance-warehouse"
-                            ellipsis
-                        >
-                            {item.warehouse_name}
-                        </Text>
-                        {view.hasDiscount ? (
-                            <Text type="secondary" style={{fontSize: 12, display: 'block', marginTop: 2}}>
-                                <Text delete type="secondary" style={{fontSize: 12}}>{item.price} ₾</Text>
-                                {' '}
-                                <Text strong style={{fontSize: 12, color: 'var(--if-red-text)'}}>
-                                    {view.discountedPrice.toFixed(2)} ₾
-                                </Text>
-                                {view.discountPercent > 0 && (
-                                    <Tag color="red" style={{marginLeft: 6, fontSize: 11, lineHeight: '16px'}}>
-                                        -{view.discountPercent}%
-                                    </Tag>
-                                )}
-                            </Text>
-                        ) : (
-                            <Text type="secondary" style={{fontSize: 12, display: 'block', marginTop: 2}}>
-                                {item.price} ₾
-                            </Text>
-                        )}
-                        {view.hasReserve && (
-                            <Tag style={{marginTop: 4, fontSize: 11}}>
-                                {t.reserveLabel}: {view.reserve}
-                            </Tag>
-                        )}
-                    </div>
-                    <Flex align="center" gap={8}>
-                        <div style={{textAlign: 'right'}}>
-                            <span className={`m-balance-qty-num ${qtyClass}`}>{view.qty}</span>
-                            {unitLabel && (
-                                <Text type="secondary" style={{fontSize: 11, marginLeft: 4}}>
-                                    {unitLabel}
-                                </Text>
-                            )}
-                            {view.hasReserve && (
-                                <Text type="secondary" style={{fontSize: 11, display: 'block'}}>
-                                    {t.freeStockLabel}
-                                </Text>
-                            )}
-                        </div>
-                        {showOrderPanel && (
-                            <Button
-                                type="primary"
-                                size="middle"
-                                icon={<PlusCircleOutlined/>}
-                                onClick={(e) => handleAddToOrderFromWarehouse(item, e)}
-                                disabled={view.qty <= 0}
-                                className="m-add-to-order-btn"
-                            />
-                        )}
-                    </Flex>
-                </Flex>
-                <div className="m-stock-meter">
-                    <div
-                        className={`fill ${fillClass}`}
-                        style={isEmpty ? undefined : {width: `${fillPct}%`}}
-                    />
-                </div>
-                {isLow && (
-                    <div className="m-low-stock-label">{t.lowStock}</div>
-                )}
-            </div>
-        );
-    };
-
-    const renderWarehouseSection = (items, isMine) => {
-        if (items.length === 0) return null;
-        return (
-            <>
-                <div className={`m-warehouse-section-header ${isMine ? 'mine' : ''}`}>
-                    {isMine ? '⭐ ' : '🏬 '}
-                    <Text strong style={{fontSize: 13, color: 'inherit'}}>
-                        {isMine ? t.myWarehouses : t.otherWarehouses}
-                    </Text>
-                    <Tag style={{marginLeft: 4}}>{items.length}</Tag>
-                </div>
-                <div className="m-balance-list">
-                    {items.map((item) => renderWarehouseRow(item, isMine))}
-                </div>
-            </>
-        );
-    };
 
     const handleOpenScanner = () => {
         setDrawerVisible(false);
@@ -633,7 +526,9 @@ const UserDashboard = ({isDark = false, onToggleTheme}) => {
             } else {
                 playOrderCreatedSound();
             }
+            runPendingAdd(result.data);
         } else {
+            addFlowRef.current = orderStartFailed().flow;
             notify.error(t.orderError, result.error);
         }
     };
@@ -650,7 +545,9 @@ const UserDashboard = ({isDark = false, onToggleTheme}) => {
             setOrderMode(true);
             setActiveTab('scan');
             playOrderCreatedSound();
+            runPendingAdd(result.data);
         } else {
+            addFlowRef.current = orderStartFailed().flow;
             notify.error(t.orderError, result.error);
         }
     };
@@ -833,22 +730,18 @@ const UserDashboard = ({isDark = false, onToggleTheme}) => {
         return inheritFromGroup(group, !!authData?.user?.can_apply_discount);
     };
 
-    const handleAddToOrderFromWarehouse = (warehouseRecord, e) => {
-        if (!activeOrder) return;
-        addToCartSourceRef.current = e?.currentTarget || null;
-        setAddToCartInitialWh(warehouseRecord?.warehouse || null);
-        setAddToCartOpen(true);
-    };
-
-    const handleConfirmAddToCart = async ({quantity, warehouse_code, warehouse_name, price}) => {
-        if (!activeOrder) return;
-        setAddToCartConfirming(true);
+    // Adds the product sheet's pick to `order`: the same request, offline
+    // fallback and fly-to-cart animation as the old quantity sheet, then the
+    // sheet closes so the next scan is one tap away. `order` is passed in
+    // because right after the add flow creates an order, state lags behind.
+    const addItemToOrder = async (order, {sourceEl, quantity, warehouse_code, warehouse_name, price}) => {
+        setAddingToOrder(true);
         try {
-            if (addToCartSourceRef.current) {
-                animateAddToCart(addToCartSourceRef.current);
+            if (sourceEl) {
+                animateAddToCart(sourceEl);
             }
             const inherited = inheritFromExistingGroup(productInfo.sku);
-            const addResult = await orderService.addOrderItem(activeOrder.id, {
+            const addResult = await orderService.addOrderItem(order.id, {
                 sku: productInfo.sku,
                 sku_name: productInfo.sku_name || '',
                 article: productInfo.article || '',
@@ -862,19 +755,43 @@ const UserDashboard = ({isDark = false, onToggleTheme}) => {
             if (addResult.success) {
                 activeOrderRef.current = addResult.data;
                 setActiveOrder(addResult.data);
-                setAddToCartOpen(false);
-                addToCartSourceRef.current = null;
+                setProductSheetOpen(false);
             } else {
                 notify.error(t.orderError, addResult.error);
             }
         } finally {
-            setAddToCartConfirming(false);
+            setAddingToOrder(false);
         }
     };
 
-    const handleCancelAddToCart = () => {
-        setAddToCartOpen(false);
-        addToCartSourceRef.current = null;
+    // "Add to order" on the product sheet. Without an active order the pick
+    // waits in addFlowRef while the new-order client lookup is open.
+    const handleProductSheetAdd = (pick, sourceEl) => {
+        const item = {...pick, sourceEl};
+        const {flow, effect} = startAdd(addFlowRef.current, item, !!showOrderPanel);
+        addFlowRef.current = flow;
+        if (effect.type === 'add') {
+            addItemToOrder(activeOrder, effect.item);
+        } else {
+            setCustomerModalOpen(true);
+        }
+    };
+
+    // An order was just created or resumed from the lookup: add the pick
+    // that was waiting for it, if any.
+    const runPendingAdd = (order) => {
+        const {flow, effect} = orderStarted(addFlowRef.current);
+        addFlowRef.current = flow;
+        if (effect) {
+            addItemToOrder(order, effect.item);
+        }
+    };
+
+    // Closing the new-order lookup without an order drops a waiting pick;
+    // the product sheet stays open.
+    const handleCloseClientLookup = () => {
+        setCustomerModalOpen(false);
+        addFlowRef.current = lookupClosed().flow;
     };
 
     // Scan/name-search responses now return `images`/`image` as proxy PATH
@@ -895,7 +812,8 @@ const UserDashboard = ({isDark = false, onToggleTheme}) => {
     // A resolved product is a result even with no stock anywhere — see
     // hasProductResult in stockStatus.js.
     const hasResults = hasProductResult(productInfo, balances);
-    const showEmptyProductState = !hasResults && !scannerOpen;
+    // Home stays under the sheets; only the full-screen scanner replaces it.
+    const showHome = !scannerOpen;
     const showOrderPanel = orderMode && activeOrder;
     // Passing null unless order mode is on keeps the active-order bar idle for
     // a paused order — if a real pause feature ever keeps activeOrder set with
@@ -903,13 +821,31 @@ const UserDashboard = ({isDark = false, onToggleTheme}) => {
     const orderBarView = activeOrderBarView(showOrderPanel ? activeOrder : null, t);
 
     // The active-order bar: with an order it opens the order drawer; idle, it
-    // starts an order through the client lookup, as the dock's cart slot did.
-    // Phase 3 swaps only the idle branch for the empty-cart sheet.
+    // opens the empty cart sheet. (The Orders tab's "+" still starts an order
+    // through the client lookup.)
     const handleOpenCart = () => {
         if (orderBarView.active) {
             setOrderDrawerVisible(true);
         } else {
-            setCustomerModalOpen(true);
+            setEmptyCartOpen(true);
+        }
+    };
+
+    const handleEmptyCartScan = () => {
+        setEmptyCartOpen(false);
+        handleOpenScanner();
+    };
+
+    const handleEmptyCartSearch = () => {
+        setEmptyCartOpen(false);
+        handleOpenSearch();
+    };
+
+    // Closing the product sheet clears the result once the sheet is gone —
+    // unless a new lookup already reopened it during the close animation.
+    const handleProductSheetAfterClose = () => {
+        if (!productSheetOpenRef.current) {
+            handleBackToDashboard();
         }
     };
 
@@ -926,16 +862,15 @@ const UserDashboard = ({isDark = false, onToggleTheme}) => {
     };
 
     // ===== Scan/Product Tab Content =====
-    // The offline banner moves depending on what's showing: on Home it
-    // renders below the large header (passed in as HomeView's `banner`
-    // slot); on the product result it stays at the top of the content, as
-    // before.
+    // Home is the whole scan tab; the product result is a sheet over it. The
+    // offline banner renders below Home's large header (HomeView's `banner`
+    // slot).
     const offlineBanner = showOrderPanel ? <OfflineBanner orderId={activeOrder.id}/> : null;
 
     const renderScanTab = () => (
         <div className="m-tab-content">
-            {/* Home — the scan tab with no product result */}
-            {showEmptyProductState && (
+            {/* Home — the scan tab; the product result is a sheet over it */}
+            {showHome && (
                 <HomeView
                     isDark={isDark}
                     username={authData?.user?.username}
@@ -952,107 +887,6 @@ const UserDashboard = ({isDark = false, onToggleTheme}) => {
                     onLogout={logout}
                     banner={offlineBanner}
                 />
-            )}
-
-            {/* Product Results */}
-            {!scannerOpen && hasResults && (
-                <Spin spinning={loading} tip={t.searchingProduct} size="large">
-                    <div className="m-product-results">
-                        {offlineBanner}
-                        <Button
-                            type="text"
-                            icon={<LeftOutlined/>}
-                            onClick={handleBackToDashboard}
-                            className="m-back-to-dashboard-btn"
-                        >
-                            {t.back}
-                        </Button>
-                        {/* Product Hero */}
-                        <div className="m-product-hero">
-                            {productInfo.images && productInfo.images.length > 0 && (
-                                <ProductImage
-                                    src={getImageSrc(productInfo.images[0])}
-                                    alt={productInfo.sku_name || ''}
-                                    className="m-product-hero-img"
-                                />
-                            )}
-                            <div className="m-product-hero-body">
-                                <div style={{flex: 1, minWidth: 0}}>
-                                    <div className="m-product-hero-title">
-                                        {productInfo.sku_name}
-                                    </div>
-                                    <div className="m-product-hero-article">
-                                        {t.article}: {productInfo.article}
-                                    </div>
-                                </div>
-                                {productInfo.price && (
-                                    <div className="m-product-hero-price">
-                                        {productInfo.price} ₾
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-
-                        {/* Stock unavailable — live 1C lookup failed; product info is
-                            still shown above, but there's no balance to render. */}
-                        {stockUnavailable && (
-                            <Alert
-                                type="warning"
-                                showIcon
-                                message={t[stockStatusMessageKey(stockStatus)]}
-                                style={{margin: '12px 0'}}
-                            />
-                        )}
-
-                        {!stockUnavailable && balances.length === 0 && (
-                            <Alert
-                                type="info"
-                                showIcon
-                                message={t.outOfStock}
-                                style={{margin: '12px 0'}}
-                            />
-                        )}
-
-                        {/* Warehouse Sections */}
-                        {!stockUnavailable && (() => {
-                            const userWarehouseNames = userWarehouses.map((w) => w.name);
-                            const hasUserWarehouses = userWarehouseNames.length > 0;
-                            if (!hasUserWarehouses) {
-                                return (
-                                    <div className="m-balance-section">
-                                        <div className="m-balance-list">
-                                            {balances.map((item) => renderWarehouseRow(item, false))}
-                                        </div>
-                                    </div>
-                                );
-                            }
-                            const mine = balances.filter((b) => userWarehouseNames.includes(b.warehouse_name));
-                            const others = balances.filter((b) => !userWarehouseNames.includes(b.warehouse_name));
-                            return (
-                                <div className="m-balance-section">
-                                    {renderWarehouseSection(mine, true)}
-                                    {!othersCollapsed && renderWarehouseSection(others, false)}
-                                </div>
-                            );
-                        })()}
-
-                        {!stockUnavailable && userWarehouses.length > 0 && lastSearchRef.current && (
-                            (!searchedAllWarehouses || balances.some((b) => !userWarehouses.map((w) => w.name).includes(b.warehouse_name))) && (
-                                <Button
-                                    type="default"
-                                    size="large"
-                                    icon={<AppstoreOutlined/>}
-                                    onClick={handleToggleOthers}
-                                    loading={loading}
-                                    block
-                                    className="m-show-other-warehouses-btn"
-                                >
-                                    {othersCollapsed ? t.seeAllWarehouses : t.hideOtherWarehouses}
-                                </Button>
-                            )
-                        )}
-                    </div>
-                </Spin>
             )}
         </div>
     );
@@ -1217,7 +1051,7 @@ const UserDashboard = ({isDark = false, onToggleTheme}) => {
                 open={customerModalOpen}
                 onSelect={handleClientSelected}
                 onRetail={handleStartRetailOrder}
-                onClose={() => setCustomerModalOpen(false)}
+                onClose={handleCloseClientLookup}
             />
 
             {/* Barcode Scanner (fullscreen overlay) */}
@@ -1288,15 +1122,35 @@ const UserDashboard = ({isDark = false, onToggleTheme}) => {
                 )}
             </Drawer>
 
-            <AddToCartSheet
-                open={addToCartOpen}
-                productInfo={productInfo}
+            {/* Product sheet: every successful lookup (scan, catalog pick,
+                recent-scan re-run) opens it over Home. Its data is cleared
+                only once it has finished closing. */}
+            <ProductSheet
+                open={productSheetOpen}
+                onClose={() => setProductSheetOpen(false)}
+                afterClose={handleProductSheetAfterClose}
+                product={productInfo}
+                imageSrc={productInfo.images && productInfo.images.length > 0 ? getImageSrc(productInfo.images[0]) : ''}
+                unitLabel={unitLabel(pickUnit(inheritFromExistingGroup(productInfo.sku)?.unit, productInfo.unit), t)}
                 balances={balances}
-                initialWarehouseCode={addToCartInitialWh}
-                unit={pickUnit(inheritFromExistingGroup(productInfo.sku)?.unit, productInfo.unit)}
-                confirming={addToCartConfirming}
-                onConfirm={handleConfirmAddToCart}
-                onClose={handleCancelAddToCart}
+                userWarehouseNames={userWarehouseNames}
+                stockStatus={stockStatus}
+                searchedAllWarehouses={searchedAllWarehouses}
+                hasLastSearch={!!lastSearchRef.current}
+                othersExpanded={!othersCollapsed}
+                othersLoading={loading}
+                onToggleOthers={handleToggleOthers}
+                adding={addingToOrder}
+                onAdd={handleProductSheetAdd}
+            />
+
+            {/* Empty cart: the idle active-order bar */}
+            <EmptyCartSheet
+                open={emptyCartOpen}
+                onClose={() => setEmptyCartOpen(false)}
+                canSearchManually={catalogEnabled}
+                onScan={handleEmptyCartScan}
+                onManualSearch={handleEmptyCartSearch}
             />
 
             {/* ===== Mobile-First Layout ===== */}
