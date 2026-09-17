@@ -7,7 +7,7 @@ import {Drawer, Menu} from 'antd';
  * button and closes itself as soon as a destination is chosen (each item's
  * own onClick still fires through the Menu).
  */
-const AdminNavDrawer = ({open, onClose, items, isDarkMode, selectedKeys, title}) => (
+const AdminNavDrawer = ({open, onClose, items, selectedKeys, title}) => (
     <Drawer
         placement="left"
         open={open}
@@ -18,7 +18,6 @@ const AdminNavDrawer = ({open, onClose, items, isDarkMode, selectedKeys, title})
         styles={{body: {padding: 0}}}
     >
         <Menu
-            theme={isDarkMode ? 'dark' : 'light'}
             mode="inline"
             items={items}
             selectedKeys={selectedKeys}

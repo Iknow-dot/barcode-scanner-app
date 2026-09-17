@@ -26,4 +26,14 @@ describe('AdminNavDrawer', () => {
         expect(onClose).toHaveBeenCalledTimes(1);
         expect(items[1].onClick).toHaveBeenCalled();
     });
+
+    // antd's `theme="dark"` on Menu pulls in its own hardcoded dark-navy
+    // component palette, independent of the app's ConfigProvider tokens —
+    // the sidebar must stay on the default (light) component theme so the
+    // ConfigProvider dark algorithm + slate tokens colour it instead.
+    it('never forces antd\'s built-in dark menu theme', () => {
+        render(<AdminNavDrawer open items={items} onClose={() => {}} isDarkMode/>);
+        expect(document.querySelector('.ant-menu')).not.toBeNull();
+        expect(document.querySelector('.ant-menu-dark')).toBeNull();
+    });
 });

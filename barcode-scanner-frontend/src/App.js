@@ -126,7 +126,14 @@ const MainContentView = ({children, isDark, toggleTheme}) => {
             {screens.lg && subNav?.length > 0 && (
                 <Sider
                     breakpoint="lg"
-                    theme={isDarkMode ? "dark" : "light"}
+                    /* antd defaults Sider's own `theme` prop to "dark" (its
+                       own hardcoded navy, independent of ConfigProvider)
+                       when the prop is omitted — unlike Menu, which defaults
+                       to "light". Force "light" explicitly so it stays on
+                       the neutral component chrome that colorBgContainer /
+                       colorBgElevated (from ConfigProvider's algorithm +
+                       our tokens) actually colours, in both modes. */
+                    theme="light"
                     collapsible={!!subNav}
                     collapsed={siderCollapsed}
                     onCollapse={(collapsed) => setSiderCollapsed(collapsed)}
@@ -145,8 +152,7 @@ const MainContentView = ({children, isDark, toggleTheme}) => {
                             className="sidebar-logo"
                         />
                     </a>
-                    <Menu theme={isDarkMode ? "dark" : "light"}
-                          mode="inline"
+                    <Menu mode="inline"
                           defaultSelectedKeys={authData?.role === "internal_admin" ? ['1'] : ['2']}
                           items={subNav}
                           style={{
@@ -220,7 +226,6 @@ const MainContentView = ({children, isDark, toggleTheme}) => {
                         open={mobileNavOpen}
                         onClose={() => setMobileNavOpen(false)}
                         items={subNav}
-                        isDarkMode={isDarkMode}
                         title={authData?.organization_name || ''}
                     />
                 )}
