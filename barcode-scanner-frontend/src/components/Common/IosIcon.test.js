@@ -20,6 +20,17 @@ describe('IosIcon', () => {
         expect(svg).not.toHaveAttribute('stroke');
     });
 
+    it('draws the order-sheet glyphs', () => {
+        const stroked = ['back', 'calendar', 'clock', 'close', 'cloud', 'gift', 'info', 'minus', 'person', 'pin', 'trash'];
+        stroked.forEach((name) => {
+            const {container, unmount} = render(<IosIcon name={name}/>);
+            expect(container.querySelector(`svg[data-icon="${name}"]`)).toHaveAttribute('stroke', 'currentColor');
+            unmount();
+        });
+        const {container} = render(<IosIcon name="more"/>);
+        expect(container.querySelector('svg[data-icon="more"]')).toHaveAttribute('fill', 'currentColor');
+    });
+
     it('renders nothing for an unknown name', () => {
         const {container} = render(<IosIcon name="nope"/>);
         expect(container).toBeEmptyDOMElement();
