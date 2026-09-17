@@ -10,6 +10,7 @@ import {
     clientRow,
     countLabel,
     createSeed,
+    searchHint,
 } from './clientLookupView';
 
 describe('constants', () => {
@@ -97,5 +98,30 @@ describe('countLabel', () => {
     it('reads "3 კლიენტი"', () => {
         const t = {clientsFoundCount: 'კლიენტი'};
         expect(countLabel(3, t)).toBe('3 კლიენტი');
+    });
+});
+
+describe('searchHint', () => {
+    it('is null for an empty value', () => {
+        expect(searchHint('id', '')).toBeNull();
+        expect(searchHint('id', '   ')).toBeNull();
+    });
+
+    it('is null once the value is searchable', () => {
+        expect(searchHint('id', '123456789')).toBeNull();
+        expect(searchHint('phone', '599451230')).toBeNull();
+        expect(searchHint('name', 'ბერ')).toBeNull();
+    });
+
+    it('names the digit floor on the id tab', () => {
+        expect(searchHint('id', '12345678')).toBe('lookupIdHint');
+    });
+
+    it('names the mobile-number rule on the phone tab', () => {
+        expect(searchHint('phone', '499')).toBe('lookupPhoneHint');
+    });
+
+    it('names the character floor on the name tab', () => {
+        expect(searchHint('name', 'ბე')).toBe('lookupNameHint');
     });
 });

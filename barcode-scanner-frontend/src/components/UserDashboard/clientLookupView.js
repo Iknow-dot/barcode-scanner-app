@@ -3,9 +3,8 @@
 // transform so it can be unit-tested without rendering anything.
 //
 // The behaviour ported below (normalizePhone, the digit/mobile rules, the
-// name split) matches ClientLookupModal.js exactly; do not invent new rules
-// here, and keep this module and that one in sync until Task 5 removes the
-// modal.
+// name split) matches the pre-redesign client-lookup flow exactly; do not
+// invent new rules here.
 
 export const LOOKUP_TABS = ['id', 'phone', 'name'];
 
@@ -116,17 +115,28 @@ export const createSeed = (tab, value) => {
 
 // Upstream returns {name, address, phone}; project it into the sheet row
 // shape. The identifier and phone share one meta line, joined by a middot,
-// and either half is dropped rather than leaving a dangling separator.
-export const clientRow = (client, key) => {
-    const meta = [client.identification_number, client.phone]
-        .filter(Boolean)
-        .join(' · ');
-    return {
-        key: key !== undefined ? key : (client.identification_number || client.phone || client.name || ''),
-        title: client.name || '',
-        meta,
-        address: client.address || '',
-    };
-};
+// and either half is dropped rather than leaving a dangling separator. The
+// caller (ClientLookupSheet's results list) always supplies the row's index
+// as `key`, since 1C sends no id of its own and two results can share every
+// other field.
+export const clientRow = (client, key) => ({
+    key,
+    title: client.name || '',
+    meta: [client.identification_number, client.phone].filter(Boolean).join(' · '),
+    address: client.address || '',
+});
 
 export const countLabel = (count, t) => `${count} ${t.clientsFoundCount}`;
+
+// A short inline hint for a value that is non-empty but not yet searchable —
+// the ID/phone tabs auto-search on a debounce with no submit step, so this is
+// the only feedback a consultant gets before it silently does nothing (or,
+// on the name tab, before the submit affordance appears). Returns an i18n
+// key, or null when there's nothing to say (empty field, or already
+// searchable).
+export const searchHint = (tab, value) => {
+    if (!(value || '').trim() || isSearchable(tab, value)) return null;
+    if (tab === 'id') return 'lookupIdHint';
+    if (tab === 'phone') return 'lookupPhoneHint';
+    return 'lookupNameHint';
+};
