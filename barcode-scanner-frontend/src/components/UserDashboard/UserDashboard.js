@@ -1,7 +1,7 @@
 import React, {useState, useEffect, useContext, useCallback, useMemo, useRef} from 'react';
 import {warehouseService, productService, orderService, catalogService} from '../../api';
 import BarcodeScanner from './BarcodeScanner';
-import ClientLookupModal from './ClientLookupModal';
+import ClientLookupSheet from './ClientLookupSheet';
 import OrderSheet from './OrderSheet';
 import ProductSheet from './ProductSheet';
 import EmptyCartSheet from './EmptyCartSheet';
@@ -1015,17 +1015,17 @@ const UserDashboard = ({isDark = false, onToggleTheme}) => {
         <>
             {contextHolder}
 
-            {/* Change-customer modal — reuses ClientLookupModal but PATCHes the
+            {/* Change-customer sheet — reuses ClientLookupSheet but PATCHes the
                 active order's denormalized customer fields instead of creating
                 a new order. */}
-            <ClientLookupModal
+            <ClientLookupSheet
                 open={changeCustomerOpen}
                 onSelect={handleChangeCustomerSelected}
                 onClose={() => setChangeCustomerOpen(false)}
             />
 
-            {/* Client Lookup Modal — CheckClient → CreateClient via 1C ConsultWebExchange */}
-            <ClientLookupModal
+            {/* Client Lookup Sheet — CheckClient → CreateClient via 1C ConsultWebExchange */}
+            <ClientLookupSheet
                 open={customerModalOpen}
                 onSelect={handleClientSelected}
                 onRetail={handleStartRetailOrder}
