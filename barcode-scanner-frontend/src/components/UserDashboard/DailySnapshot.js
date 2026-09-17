@@ -58,7 +58,7 @@ const DailySnapshot = ({username, scansSummary, recentScans, ordersSummary, onRe
             </div>
 
             <Flex align="center" gap={6} className="m-warehouse-section-header">
-                <ClockCircleOutlined style={{color: '#1677ff'}}/>
+                <ClockCircleOutlined style={{color: 'var(--if-tint)'}}/>
                 <Text strong style={{fontSize: 13}}>{t.recentScans}</Text>
                 <Tag style={{marginLeft: 4}}>{t.today}</Tag>
             </Flex>

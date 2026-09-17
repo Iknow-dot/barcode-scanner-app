@@ -3,6 +3,7 @@ import {orderService} from '../../api';
 import {useLanguage} from '../../i18n/LanguageContext';
 import useAppNotification from '../../hooks/useAppNotification';
 import {printInvoice} from '../../utils/printInvoice';
+import {orderStatusColor} from '../../utils/orderStatusColor';
 import displayCustomerName from '../../utils/orderDisplay';
 import {
     Table,
@@ -40,13 +41,6 @@ import {
 
 const {Text, Title} = Typography;
 const {RangePicker} = DatePicker;
-
-const STATUS_COLOR_MAP = {
-    draft: 'orange',
-    confirmed: 'green',
-    completed: 'cyan',
-    cancelled: 'red',
-};
 
 const DELIVERY_TYPE_ICON = {
     pickup: <ShopOutlined/>,
@@ -184,7 +178,7 @@ const OrdersTab = () => {
             ],
             onFilter: (value, record) => record.status === value,
             render: (status) => (
-                <Tag color={STATUS_COLOR_MAP[status] || 'default'}>
+                <Tag color={orderStatusColor(status)}>
                     {getStatusLabel(status)}
                 </Tag>
             ),
@@ -222,7 +216,7 @@ const OrdersTab = () => {
             align: 'right',
             sorter: (a, b) => parseFloat(a.total || 0) - parseFloat(b.total || 0),
             render: (total) => (
-                <Text strong style={{color: '#52c41a'}}>
+                <Text strong style={{color: 'var(--if-label)'}}>
                     {total} ₾
                 </Text>
             ),
@@ -316,7 +310,7 @@ const OrdersTab = () => {
             dataIndex: 'warehouse_name',
             key: 'warehouse_name',
             width: 120,
-            render: (name) => name ? <Tag color="blue">{name}</Tag> : <Text type="secondary">—</Text>,
+            render: (name) => name ? <Tag className="if-tag-tint">{name}</Tag> : <Text type="secondary">—</Text>,
         },
         {
             title: t.unitOfMeasure,
@@ -354,7 +348,7 @@ const OrdersTab = () => {
             render: (price, record) => {
                 const hasDiscount = parseFloat(record.effective_price) !== parseFloat(record.price);
                 return hasDiscount
-                    ? <Text strong style={{color: '#52c41a'}}>{price} ₾</Text>
+                    ? <Text strong style={{color: 'var(--if-label)'}}>{price} ₾</Text>
                     : <Text>{price} ₾</Text>;
             },
         },
@@ -371,7 +365,7 @@ const OrdersTab = () => {
             key: 'line_total',
             align: 'right',
             width: 100,
-            render: (total) => <Text strong style={{color: '#52c41a'}}>{total} ₾</Text>,
+            render: (total) => <Text strong style={{color: 'var(--if-label)'}}>{total} ₾</Text>,
         },
     ];
 
@@ -382,7 +376,7 @@ const OrdersTab = () => {
             {/* Search / Filter Toolbar */}
             <Card size="small" style={{marginBottom: 16}}>
                 <Flex align="center" gap={8} style={{marginBottom: 8}}>
-                    <FilterOutlined style={{color: '#1677ff'}}/>
+                    <FilterOutlined style={{color: 'var(--if-tint)'}}/>
                     <Text strong>{t.searchOrders}</Text>
                 </Flex>
                 <Flex wrap="wrap" gap={12} align="end">
@@ -482,12 +476,12 @@ const OrdersTab = () => {
             <Modal
                 title={
                     <Flex align="center" gap={8}>
-                        <ShoppingCartOutlined style={{fontSize: 18, color: '#1677ff'}}/>
+                        <ShoppingCartOutlined style={{fontSize: 18, color: 'var(--if-tint)'}}/>
                         <span style={{fontWeight: 600}}>
                             {t.orderDetails} {selectedOrder ? `#${selectedOrder.id}` : ''}
                         </span>
                         {selectedOrder && (
-                            <Tag color={STATUS_COLOR_MAP[selectedOrder.status] || 'default'}>
+                            <Tag color={orderStatusColor(selectedOrder.status)}>
                                 {getStatusLabel(selectedOrder.status)}
                             </Tag>
                         )}
@@ -529,7 +523,7 @@ const OrdersTab = () => {
                                 </Flex>
                             </Descriptions.Item>
                             <Descriptions.Item label={t.orderTotal}>
-                                <Title level={5} style={{margin: 0, color: '#52c41a'}}>
+                                <Title level={5} style={{margin: 0}}>
                                     {selectedOrder.total} ₾
                                 </Title>
                             </Descriptions.Item>
@@ -540,7 +534,7 @@ const OrdersTab = () => {
                             size="small"
                             title={
                                 <Flex align="center" gap={6}>
-                                    {selectedOrder.delivery_type === 'delivery' ? <CarOutlined style={{color: '#1677ff'}}/> : <ShopOutlined style={{color: '#1677ff'}}/>}
+                                    {selectedOrder.delivery_type === 'delivery' ? <CarOutlined style={{color: 'var(--if-tint)'}}/> : <ShopOutlined style={{color: 'var(--if-tint)'}}/>}
                                     <Text strong>{t.deliveryInfo}</Text>
                                     <Tag color={selectedOrder.delivery_type === 'delivery' ? 'blue' : 'default'}>
                                         {getDeliveryLabel(selectedOrder.delivery_type)}
@@ -586,7 +580,7 @@ const OrdersTab = () => {
                                 size="small"
                                 title={
                                     <Flex align="center" gap={6}>
-                                        <CommentOutlined style={{color: '#1677ff'}}/>
+                                        <CommentOutlined style={{color: 'var(--if-tint)'}}/>
                                         <Text strong>{t.orderNotes}</Text>
                                     </Flex>
                                 }
@@ -599,7 +593,7 @@ const OrdersTab = () => {
                         {/* Items Table */}
                         <Divider style={{margin: '8px 0'}}/>
                         <Flex align="center" gap={8} style={{marginBottom: 8}}>
-                            <ShoppingCartOutlined style={{color: '#1677ff'}}/>
+                            <ShoppingCartOutlined style={{color: 'var(--if-tint)'}}/>
                             <Text strong>{t.orderItems}</Text>
                             <Tag>{selectedOrder.items?.length || 0}</Tag>
                         </Flex>
@@ -613,7 +607,7 @@ const OrdersTab = () => {
                         <Flex justify="end" style={{padding: '12px 0'}}>
                             <Space size={8}>
                                 <Text style={{fontSize: 16}}>{t.orderTotal}:</Text>
-                                <Title level={4} style={{margin: 0, color: '#52c41a'}}>
+                                <Title level={4} style={{margin: 0}}>
                                     {selectedOrder.total} ₾
                                 </Title>
                             </Space>

@@ -7,6 +7,7 @@ import GiftCounter from './GiftCounter';
 import {pairGiftLines, planGiftChange, applyGiftOps} from './giftSplit';
 import groupItemsBySku from './groupItemsBySku';
 import displayCustomerName from '../../utils/orderDisplay';
+import {orderStatusColor} from '../../utils/orderStatusColor';
 import {
     Card,
     Steps,
@@ -197,7 +198,7 @@ const CartTableRow = memo(({
                     {assigned && <span style={{marginLeft: 4}}>✓</span>}
                 </Tag>
                 {isPending && (
-                    <CloudSyncOutlined style={{marginLeft: 6, color: '#faad14'}} title={t.offlineItemPending}/>
+                    <CloudSyncOutlined style={{marginLeft: 6, color: 'var(--if-orange-text)'}} title={t.offlineItemPending}/>
                 )}
                 {Number.isFinite(stockNumber) && (
                     <Text type={exceedsLocal ? 'warning' : 'secondary'} style={{fontSize: 11, marginLeft: 6}}>
@@ -310,7 +311,7 @@ const CartTableRow = memo(({
             </div>
 
             <div className="m-cart-cell m-cart-cell-total" data-label={t.total}>
-                <Text strong style={{fontSize: 14, color: '#52c41a'}}>
+                <Text strong style={{fontSize: 14, color: 'var(--if-label)'}}>
                     {rowLineTotal} ₾
                 </Text>
             </div>
@@ -518,7 +519,7 @@ const OrderItemGroupCard = memo(({
 
             {cardExceeds && (
                 <Flex align="center" gap={4} className="m-cart-card-warning">
-                    <WarningOutlined style={{color: '#faad14', fontSize: 12}}/>
+                    <WarningOutlined style={{color: 'var(--if-orange-text)', fontSize: 12}}/>
                     <Text type="warning" style={{fontSize: 11}}>
                         {t.exceedsStock(totalStock)}
                     </Text>
@@ -527,7 +528,7 @@ const OrderItemGroupCard = memo(({
 
             <div className="m-cart-card-footer">
                 <Text type="secondary" style={{fontSize: 12}}>{t.total}:</Text>
-                <Text strong style={{color: '#52c41a', fontSize: 16, marginLeft: 8}}>
+                <Text strong style={{color: 'var(--if-label)', fontSize: 16, marginLeft: 8}}>
                     {group.groupLineTotal} ₾
                 </Text>
             </div>
@@ -672,7 +673,7 @@ const DeliverySection = memo(({order, onLocalOrderUpdate, notify, t, deliveryExp
     return (
         <div style={{marginBottom: 12}}>
             <Flex align="center" gap={8} style={{marginBottom: 8}}>
-                <UserOutlined style={{color: '#1677ff'}}/>
+                <UserOutlined style={{color: 'var(--if-tint)'}}/>
                 <Text strong>{t.recipient}</Text>
             </Flex>
             <Segmented
@@ -721,7 +722,7 @@ const DeliverySection = memo(({order, onLocalOrderUpdate, notify, t, deliveryExp
             ) : (
                 <div style={{
                     padding: '8px 12px',
-                    background: 'rgba(0,0,0,0.03)',
+                    background: 'var(--if-fill)',
                     borderRadius: 8,
                     marginBottom: 12,
                 }}>
@@ -737,7 +738,7 @@ const DeliverySection = memo(({order, onLocalOrderUpdate, notify, t, deliveryExp
             )}
 
             <Flex align="center" gap={8} style={{marginBottom: 8}}>
-                <CarOutlined style={{color: '#1677ff'}}/>
+                <CarOutlined style={{color: 'var(--if-tint)'}}/>
                 <Text strong>{t.deliveryType}</Text>
             </Flex>
             <Radio.Group
@@ -765,7 +766,7 @@ const DeliverySection = memo(({order, onLocalOrderUpdate, notify, t, deliveryExp
                         key: 'delivery',
                         label: (
                             <Flex align="center" gap={6}>
-                                <EnvironmentOutlined style={{color: '#faad14'}}/>
+                                <EnvironmentOutlined style={{color: 'var(--if-orange-text)'}}/>
                                 <Text type="secondary" style={{fontSize: 12}}>{t.deliveryInfo}</Text>
                             </Flex>
                         ),
@@ -847,10 +848,10 @@ const NotesSection = memo(({order, onLocalOrderUpdate, notify, t}) => {
                 key: 'notes',
                 label: (
                     <Flex align="center" gap={6}>
-                        <CommentOutlined style={{color: '#1677ff'}}/>
+                        <CommentOutlined style={{color: 'var(--if-tint)'}}/>
                         <Text type="secondary" style={{fontSize: 12}}>
                             {t.orderNotes}
-                            {order.notes && <Tag style={{marginLeft: 6, fontSize: 10}} color="blue">✓</Tag>}
+                            {order.notes && <Tag className="if-tag-tint" style={{marginLeft: 6, fontSize: 10}}>✓</Tag>}
                         </Text>
                     </Flex>
                 ),
@@ -1026,17 +1027,17 @@ const OrderPanel = ({order: initialOrder, onSaveForLater, onProceedToPayment, on
                     title={
                         <Flex align="center" gap={12} style={{paddingTop: 4, paddingBottom: 4}}>
                             <Badge count={localOrder.items?.length || 0} size="small" overflowCount={99}>
-                                <ShoppingCartOutlined style={{fontSize: 18, color: '#1677ff'}}/>
+                                <ShoppingCartOutlined style={{fontSize: 18, color: 'var(--if-tint)'}}/>
                             </Badge>
                             <span style={{fontWeight: 600}}>{t.activeOrder} #{localOrder.id}</span>
-                            <Tag color="blue">{t.orderDraft}</Tag>
+                            <Tag color={orderStatusColor('draft')}>{t.orderDraft}</Tag>
                         </Flex>
                     }
                     extra={actionsTrigger}
                 >
                     {/* Customer info */}
                     <Flex align="center" gap={8} className="m-customer-bar">
-                        <UserOutlined style={{color: '#1677ff'}}/>
+                        <UserOutlined style={{color: 'var(--if-tint)'}}/>
                         <Text strong>{displayCustomerName(localOrder, t)}</Text>
                     </Flex>
                 </Card>
@@ -1045,7 +1046,7 @@ const OrderPanel = ({order: initialOrder, onSaveForLater, onProceedToPayment, on
             {/* Customer info (in drawer mode) */}
             {isMobileDrawer && (
                 <Flex align="center" gap={8} className="m-customer-bar">
-                    <UserOutlined style={{color: '#1677ff'}}/>
+                    <UserOutlined style={{color: 'var(--if-tint)'}}/>
                     <Text strong>{displayCustomerName(localOrder, t)}</Text>
                 </Flex>
             )}
@@ -1094,7 +1095,7 @@ const OrderPanel = ({order: initialOrder, onSaveForLater, onProceedToPayment, on
                                     <Text className="m-gift-sum"> · {orderGiftQty} {t.giftLabel}</Text>
                                 )}
                             </Text>
-                            <Title level={4} style={{margin: 0, color: '#52c41a'}}>
+                            <Title level={4} style={{margin: 0}}>
                                 {localOrder.total} ₾
                             </Title>
                         </div>

@@ -14,13 +14,13 @@ const QuotaCell = ({org}) => {
     const limit = org.employees_count || 0;
     const pct = limit > 0 ? Math.min(100, Math.round((used / limit) * 100)) : 0;
     const full = limit > 0 && used >= limit;
-    const stroke = full ? '#ff4d4f' : (pct >= 80 ? '#faad14' : '#52c41a');
+    const stroke = full ? 'var(--if-red)' : (pct >= 80 ? 'var(--if-orange)' : 'var(--if-green)');
     return (
         <div style={{minWidth: 140}}>
             <Flex align="center" justify="space-between" gap={8} style={{marginBottom: 4}}>
                 <span style={{
                     fontSize: 12,
-                    color: full ? '#ff4d4f' : token.colorTextSecondary,
+                    color: full ? 'var(--if-red-text)' : token.colorTextSecondary,
                     fontWeight: 500,
                     fontVariantNumeric: 'tabular-nums',
                 }}>

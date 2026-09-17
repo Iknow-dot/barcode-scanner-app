@@ -81,8 +81,8 @@ const MainContentView = ({children, isDark, toggleTheme}) => {
         <Avatar
             style={{
                 cursor: "pointer",
-                backgroundColor: "#0765c2",
-                boxShadow: '0 2px 8px rgba(7, 101, 194, 0.3)',
+                backgroundColor: 'var(--if-tint)',
+                boxShadow: '0 2px 8px rgba(58, 152, 102, 0.3)',
                 transition: 'all 0.2s ease',
             }}
             size="large"
@@ -95,7 +95,7 @@ const MainContentView = ({children, isDark, toggleTheme}) => {
         {
             key: '0',
             icon: (
-                <Avatar style={{backgroundColor: "#0765c2"}} size="large">
+                <Avatar style={{backgroundColor: 'var(--if-tint)'}} size="large">
                     {username.charAt(0).toUpperCase()}
                 </Avatar>
             ),

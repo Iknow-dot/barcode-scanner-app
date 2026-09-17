@@ -55,7 +55,7 @@ const LockedFeature = ({title, description, unlockLabel, unlockHint, children}) 
                 }}
             >
                 <Card style={{maxWidth: 420, textAlign: 'center', boxShadow: '0 8px 24px rgba(0,0,0,0.12)'}}>
-                    <LockOutlined style={{fontSize: 40, color: '#1677ff', marginBottom: 12}}/>
+                    <LockOutlined style={{fontSize: 40, color: 'var(--if-tint)', marginBottom: 12}}/>
                     <Title level={4} style={{marginTop: 0}}>{title}</Title>
                     <Paragraph type="secondary">{description}</Paragraph>
                     <Button type="primary" size="large" icon={<UnlockOutlined/>} onClick={showUnlockHint}>

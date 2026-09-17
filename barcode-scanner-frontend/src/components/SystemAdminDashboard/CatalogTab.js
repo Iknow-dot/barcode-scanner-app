@@ -210,7 +210,7 @@ const CatalogTab = () => {
             render: (_, r) => (r.images && r.images[0]
                 ? <Image src={catalogService.imageUrl(r.images[0])} width={40} height={40}
                          style={{objectFit: 'cover', borderRadius: 6}} preview={false}/>
-                : <div style={{width: 40, height: 40, borderRadius: 6, background: 'rgba(0,0,0,0.05)'}}/>),
+                : <div style={{width: 40, height: 40, borderRadius: 6, background: 'var(--if-fill)'}}/>),
         },
         {title: t.name, dataIndex: 'name', key: 'name', render: (v) => <Text strong>{v}</Text>},
         {title: t.colSku, dataIndex: 'sku', key: 'sku', render: (v) => <Text type="secondary">{v}</Text>},
@@ -240,7 +240,7 @@ const CatalogTab = () => {
             <Card size="small" style={{marginBottom: 16}}>
                 <Flex justify="space-between" align="center" wrap="wrap" gap={12}>
                     <Space size={12} align="center">
-                        <DatabaseOutlined style={{fontSize: 20, color: '#1677ff'}}/>
+                        <DatabaseOutlined style={{fontSize: 20, color: 'var(--if-tint)'}}/>
                         <Title level={5} style={{margin: 0}}>{t.syncStatusTitle}</Title>
                         <Tag color={tag.color}>{tag.label}</Tag>
                         <Text type="secondary">{t.lastPush}: {fmtTime(lastPushIso, t)}</Text>

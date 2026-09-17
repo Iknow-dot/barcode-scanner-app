@@ -31,6 +31,7 @@ import formatConfirmError from './confirmError';
 import dockCartView from './dockCartView';
 import {warehouseRowView, pickUnit} from './warehouseRowView';
 import {catalogFeatureEnabled} from '../../utils/features';
+import {orderStatusColor} from '../../utils/orderStatusColor';
 import displayCustomerName from '../../utils/orderDisplay';
 import OfflineBanner, {useOfflineStatus} from './OfflineBanner';
 import {startSyncLoop} from '../../utils/offlineOrderSync';
@@ -82,13 +83,6 @@ import {
 } from "@ant-design/icons";
 
 const {Text} = Typography;
-
-const ORDER_STATUS_COLOR = {
-    draft: 'blue',
-    confirmed: 'green',
-    completed: 'cyan',
-    cancelled: 'red',
-};
 
 const LOW_STOCK_THRESHOLD = 5;
 const MAX_STOCK_FOR_FULL_BAR = 15;
@@ -485,7 +479,7 @@ const UserDashboard = () => {
                             <Text type="secondary" style={{fontSize: 12, display: 'block', marginTop: 2}}>
                                 <Text delete type="secondary" style={{fontSize: 12}}>{item.price} ₾</Text>
                                 {' '}
-                                <Text strong style={{fontSize: 12, color: '#cf1322'}}>
+                                <Text strong style={{fontSize: 12, color: 'var(--if-red-text)'}}>
                                     {view.discountedPrice.toFixed(2)} ₾
                                 </Text>
                                 {view.discountPercent > 0 && (
@@ -718,7 +712,7 @@ const UserDashboard = () => {
         Modal.confirm({
             title: t.orderConfirmedSuccess,
             content: t.orderConfirmedPrintPrompt(orderId),
-            icon: <CheckCircleFilled style={{color: '#52c41a'}}/>,
+            icon: <CheckCircleFilled style={{color: 'var(--if-green-text)'}}/>,
             okText: t.printInvoice,
             cancelText: t.done,
             okType: 'primary',
@@ -1050,7 +1044,7 @@ const UserDashboard = () => {
                             <Text strong style={{fontSize: 14}}>
                                 #{order.id}
                             </Text>
-                            <Tag color={ORDER_STATUS_COLOR[order.status] || 'default'} style={{fontSize: 11}}>
+                            <Tag color={orderStatusColor(order.status)} style={{fontSize: 11}}>
                                 {statusLabelMap[order.status] || order.status}
                             </Tag>
                         </Flex>
@@ -1075,7 +1069,7 @@ const UserDashboard = () => {
                                 )}
                             </Flex>
                             {order.total != null && (
-                                <Text strong style={{fontSize: 13, color: '#52c41a'}}>
+                                <Text strong style={{fontSize: 13, color: 'var(--if-label)'}}>
                                     {t.orderTotal}: {order.total} ₾
                                 </Text>
                             )}
@@ -1214,7 +1208,7 @@ const UserDashboard = () => {
                 title={
                     <Flex align="center" gap={8}>
                         <Badge count={activeOrder?.items?.length || 0} size="small" overflowCount={99}>
-                            <ShoppingCartOutlined style={{fontSize: 18, color: '#1677ff'}}/>
+                            <ShoppingCartOutlined style={{fontSize: 18, color: 'var(--if-tint)'}}/>
                         </Badge>
                         <span style={{fontWeight: 600}}>{t.activeOrder} #{activeOrder?.id}</span>
                     </Flex>
@@ -1326,7 +1320,7 @@ const UserDashboard = () => {
                                 }
                             }}
                         >
-                            <Badge count={cartView.badgeCount} size="small" offset={[2, -2]} color="#ff4d4f">
+                            <Badge count={cartView.badgeCount} size="small" offset={[2, -2]} color="var(--if-red)">
                                 <ShoppingCartOutlined/>
                             </Badge>
                             <span className={cartView.totalLabel ? 'm-dock-total' : ''}>

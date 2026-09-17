@@ -77,7 +77,7 @@ const AddressMapPicker = ({
     };
 
     return (
-        <div style={{height, borderRadius: 8, overflow: 'hidden', border: '1px solid #d9d9d9'}}>
+        <div style={{height, borderRadius: 8, overflow: 'hidden', border: '1px solid var(--if-sep)'}}>
             <MapContainer
                 center={TBILISI_CENTER}
                 zoom={DEFAULT_ZOOM}

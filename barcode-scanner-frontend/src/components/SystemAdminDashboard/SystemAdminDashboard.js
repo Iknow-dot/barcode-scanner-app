@@ -21,21 +21,21 @@ import {Typography} from "antd";
 const {Title, Text} = Typography;
 
 const tabMeta = (t, role) => ({
-    1: {title: t.organizations, subtitle: t.orgTabSubtitle || '', icon: <BankOutlined style={{color: '#1677ff', fontSize: 22}}/>},
-    2: {title: t.warehouses, subtitle: t.warehouseTabSubtitle || '', icon: <AppstoreOutlined style={{color: '#1677ff', fontSize: 22}}/>},
+    1: {title: t.organizations, subtitle: t.orgTabSubtitle || '', icon: <BankOutlined style={{color: 'var(--if-tint)', fontSize: 22}}/>},
+    2: {title: t.warehouses, subtitle: t.warehouseTabSubtitle || '', icon: <AppstoreOutlined style={{color: 'var(--if-tint)', fontSize: 22}}/>},
     3: {
         title: role === userRoles.company_admin ? t.employees : t.users,
         subtitle: role === userRoles.company_admin ? t.employeesTabSubtitle : (t.userTabSubtitle || ''),
         icon: role === userRoles.company_admin
-            ? <TeamOutlined style={{color: '#1677ff', fontSize: 22}}/>
-            : <UserOutlined style={{color: '#1677ff', fontSize: 22}}/>,
+            ? <TeamOutlined style={{color: 'var(--if-tint)', fontSize: 22}}/>
+            : <UserOutlined style={{color: 'var(--if-tint)', fontSize: 22}}/>,
     },
-    4: {title: t.externalServiceSettings, subtitle: t.externalServiceSubtitle || '', icon: <GlobalOutlined style={{color: '#1677ff', fontSize: 22}}/>},
-    5: {title: t.purchaseOrders, subtitle: t.ordersTabSubtitle || '', icon: <ShoppingOutlined style={{color: '#1677ff', fontSize: 22}}/>},
-    6: {title: t.invoiceTemplateSettings, subtitle: t.invoiceTemplateSubtitle || '', icon: <FileImageOutlined style={{color: '#1677ff', fontSize: 22}}/>},
-    7: {title: t.analytics, subtitle: t.analyticsSubtitle || '', icon: <BarChartOutlined style={{color: '#1677ff', fontSize: 22}}/>},
-    8: {title: t.catalog, subtitle: t.catalogSubtitle || '', icon: <DatabaseOutlined style={{color: '#1677ff', fontSize: 22}}/>},
-    9: {title: t.securitySettings, subtitle: t.securitySubtitle || '', icon: <SafetyOutlined style={{color: '#1677ff', fontSize: 22}}/>},
+    4: {title: t.externalServiceSettings, subtitle: t.externalServiceSubtitle || '', icon: <GlobalOutlined style={{color: 'var(--if-tint)', fontSize: 22}}/>},
+    5: {title: t.purchaseOrders, subtitle: t.ordersTabSubtitle || '', icon: <ShoppingOutlined style={{color: 'var(--if-tint)', fontSize: 22}}/>},
+    6: {title: t.invoiceTemplateSettings, subtitle: t.invoiceTemplateSubtitle || '', icon: <FileImageOutlined style={{color: 'var(--if-tint)', fontSize: 22}}/>},
+    7: {title: t.analytics, subtitle: t.analyticsSubtitle || '', icon: <BarChartOutlined style={{color: 'var(--if-tint)', fontSize: 22}}/>},
+    8: {title: t.catalog, subtitle: t.catalogSubtitle || '', icon: <DatabaseOutlined style={{color: 'var(--if-tint)', fontSize: 22}}/>},
+    9: {title: t.securitySettings, subtitle: t.securitySubtitle || '', icon: <SafetyOutlined style={{color: 'var(--if-tint)', fontSize: 22}}/>},
 });
 
 const SystemAdminDashboard = () => {

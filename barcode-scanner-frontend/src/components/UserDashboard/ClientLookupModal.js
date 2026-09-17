@@ -547,7 +547,7 @@ const ClientLookupModal = ({open, onSelect, onClose, onRetail}) => {
                                     size="small"
                                     hoverable
                                     onClick={() => onSelect(client)}
-                                    style={{borderColor: '#52c41a', borderRadius: 12}}
+                                    style={{borderColor: 'var(--if-tint-border)', borderRadius: 12}}
                                     styles={{body: {padding: 16}}}
                                 >
                                     <Descriptions
@@ -768,7 +768,7 @@ const ClientLookupModal = ({open, onSelect, onClose, onRetail}) => {
         <Modal
             title={
                 <Flex align="center" gap={8}>
-                    <UserOutlined style={{fontSize: 18, color: '#1677ff'}}/>
+                    <UserOutlined style={{fontSize: 18, color: 'var(--if-tint)'}}/>
                     <span style={{fontWeight: 600}}>
                         {step === STEP_LOOKUP ? t.lookupClient : t.createCustomer}
                     </span>

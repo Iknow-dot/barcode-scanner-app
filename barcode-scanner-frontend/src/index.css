@@ -1688,3 +1688,10 @@
 .m-cart-fly .anticon {
   font-size: 14px;
 }
+
+/* Accent-tinted tag; replaces antd's color="blue" preset */
+.ant-tag.if-tag-tint {
+    color: var(--if-tint-text);
+    background: var(--if-tint-soft);
+    border-color: var(--if-tint-border);
+}

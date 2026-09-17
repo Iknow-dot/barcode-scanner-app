@@ -481,7 +481,7 @@ const InvoiceTemplateEditor = () => {
         <Flex gap={4} align="center">
           <ColorPicker
             size="small"
-            presets={[{label: 'Common', colors: ['#000000', '#1677ff', '#722ed1', '#52c41a', '#fa541c', '#fadb14', '#ffffff']}]}
+            presets={[{label: 'Common', colors: ['#000000', '#1d4ed8', '#722ed1', '#52c41a', '#fa541c', '#fadb14', '#ffffff']}]}
             value={currentColor}
             onChangeComplete={(c) => editor.chain().focus().setColor(c.toHexString()).run()}
           >

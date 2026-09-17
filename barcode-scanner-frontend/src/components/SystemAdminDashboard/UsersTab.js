@@ -320,7 +320,7 @@ const UsersTab = ({initialUsers, initialLoading = false, addModalExtraProps, han
     const showLimit = isCompanyAdmin && employeesLimit != null;
     const limitReached = showLimit && companyUserCount >= employeesLimit;
     const limitPercent = showLimit ? Math.min(100, Math.round((companyUserCount / employeesLimit) * 100)) : 0;
-    const limitStrokeColor = limitReached ? '#ff4d4f' : (limitPercent >= 80 ? '#faad14' : '#52c41a');
+    const limitStrokeColor = limitReached ? 'var(--if-red)' : (limitPercent >= 80 ? 'var(--if-orange)' : 'var(--if-green)');
 
     // Per-company quota cards for the internal admin — sorted by % usage desc
     // so high-pressure orgs surface first.
@@ -386,7 +386,7 @@ const UsersTab = ({initialUsers, initialLoading = false, addModalExtraProps, han
                             const limit = org.employees_count || 0;
                             const pct = limit > 0 ? Math.min(100, Math.round((used / limit) * 100)) : 0;
                             const full = limit > 0 && used >= limit;
-                            const stroke = full ? '#ff4d4f' : (pct >= 80 ? '#faad14' : '#52c41a');
+                            const stroke = full ? 'var(--if-red)' : (pct >= 80 ? 'var(--if-orange)' : 'var(--if-green)');
                             const active = selectedOrg === org.id;
                             return (
                                 <Col xs={24} sm={12} md={8} lg={6} key={org.id}>
@@ -395,8 +395,8 @@ const UsersTab = ({initialUsers, initialLoading = false, addModalExtraProps, han
                                         onClick={() => handleOrgChange(active ? null : org.id)}
                                         style={{
                                             width: '100%',
-                                            background: active ? 'rgba(22, 119, 255, 0.06)' : token.colorBgContainer,
-                                            border: `1px solid ${active ? '#1677ff' : token.colorBorder}`,
+                                            background: active ? 'var(--if-tint-soft)' : token.colorBgContainer,
+                                            border: `1px solid ${active ? 'var(--if-tint)' : token.colorBorder}`,
                                             borderRadius: 6,
                                             padding: '8px 10px',
                                             textAlign: 'left',
@@ -416,7 +416,7 @@ const UsersTab = ({initialUsers, initialLoading = false, addModalExtraProps, han
                                             }}>{org.name}</span>
                                             <span style={{
                                                 fontSize: 12,
-                                                color: full ? '#ff4d4f' : token.colorTextSecondary,
+                                                color: full ? 'var(--if-red-text)' : token.colorTextSecondary,
                                                 fontWeight: 500,
                                                 fontVariantNumeric: 'tabular-nums',
                                                 flexShrink: 0,
@@ -512,8 +512,8 @@ const UsersTab = ({initialUsers, initialLoading = false, addModalExtraProps, han
                     style={{
                         padding: '10px 14px',
                         marginBottom: 12,
-                        background: limitReached ? 'rgba(255, 77, 79, 0.06)' : 'rgba(0, 0, 0, 0.02)',
-                        border: `1px solid ${limitReached ? 'rgba(255, 77, 79, 0.25)' : 'rgba(0, 0, 0, 0.06)'}`,
+                        background: limitReached ? 'var(--if-red-soft)' : 'var(--if-fill)',
+                        border: `1px solid ${limitReached ? 'var(--if-red)' : 'var(--if-sep)'}`,
                         borderRadius: 8,
                     }}
                 >
@@ -660,8 +660,8 @@ const UsersTab = ({initialUsers, initialLoading = false, addModalExtraProps, han
                     dataIndex: 'allowed_ips',
                     align: 'center',
                     render: allowed_ips => (allowed_ips && allowed_ips.length > 0)
-                        ? <CheckOutlined style={{color: '#52c41a', fontSize: 16}}/>
-                        : <CloseOutlined style={{color: '#ff4d4f', fontSize: 14, opacity: 0.5}}/>
+                        ? <CheckOutlined style={{color: 'var(--if-green-text)', fontSize: 16}}/>
+                        : <CloseOutlined style={{color: 'var(--if-red-text)', fontSize: 14, opacity: 0.5}}/>
                 }
             ]} AddModal={AddUserModal} handleAdd={handleAdd} addModalExtraProps={addModalExtraProps}
                      EditModal={EditUserModal} handleEdit={handleEdit} handleDelete={handleDelete}

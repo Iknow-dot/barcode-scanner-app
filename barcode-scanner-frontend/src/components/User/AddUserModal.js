@@ -235,7 +235,7 @@ const AddUserForm = ({organization = null}) => {
                         disabled={isInternalAdmin && !selectedOrg}
                         optionRender={RenderOption}
                         tagRender={(props) => (
-                            <Tag color='blue'>{props.label}</Tag>
+                            <Tag className="if-tag-tint">{props.label}</Tag>
                         )}
                         filterOption={(input, option) =>
                             option?.label.toLowerCase().includes(input.toLowerCase())
@@ -248,7 +248,7 @@ const AddUserForm = ({organization = null}) => {
 
             <Flex align="center" justify="space-between" style={{marginBottom: restrictByIp ? 12 : 0}}>
                 <Space>
-                    <SafetyCertificateOutlined style={{color: '#1677ff', fontSize: 16}}/>
+                    <SafetyCertificateOutlined style={{color: 'var(--if-tint)', fontSize: 16}}/>
                     <span style={{fontWeight: 500}}>{t.restrictByIp}</span>
                     <Tooltip title={t.restrictByIpHint}>
                         <span style={{fontSize: 12, color: token.colorTextTertiary, cursor: 'help'}}>?</span>
@@ -293,7 +293,7 @@ const AddUserForm = ({organization = null}) => {
 
             <Flex align="center" justify="space-between">
                 <Space>
-                    <MobileOutlined style={{color: '#1677ff', fontSize: 16}}/>
+                    <MobileOutlined style={{color: 'var(--if-tint)', fontSize: 16}}/>
                     <span style={{fontWeight: 500}}>{t.deviceLock}</span>
                     <Tooltip title={t.deviceLockHint}>
                         <span style={{fontSize: 12, color: token.colorTextTertiary, cursor: 'help'}}>?</span>
@@ -313,7 +313,7 @@ const AddUserForm = ({organization = null}) => {
 
             <Flex align="center" justify="space-between" style={{marginBottom: canApplyDiscount ? 12 : 0}}>
                 <Space>
-                    <PercentageOutlined style={{color: '#1677ff', fontSize: 16}}/>
+                    <PercentageOutlined style={{color: 'var(--if-tint)', fontSize: 16}}/>
                     <span style={{fontWeight: 500}}>{t.canApplyDiscount}</span>
                     <Tooltip title={t.canApplyDiscountHint}>
                         <span style={{fontSize: 12, color: token.colorTextTertiary, cursor: 'help'}}>?</span>

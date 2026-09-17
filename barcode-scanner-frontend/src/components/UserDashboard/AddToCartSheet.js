@@ -122,7 +122,7 @@ const AddToCartSheet = ({
                     </Form.Item>
                 ) : selected ? (
                     <div style={{marginBottom: 12}}>
-                        <Tag color="blue">{selected.warehouse_name}</Tag>
+                        <Tag className="if-tag-tint">{selected.warehouse_name}</Tag>
                     </div>
                 ) : null}
 

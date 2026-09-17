@@ -132,7 +132,7 @@ const EditUserForm = ({object, hasExistingIps, onDeviceReset}) => {
     return (
         <>
             {isInternalAdmin && (
-                <Tag color='blue' style={{marginBottom: 16, padding: '4px 12px', fontSize: 13}}>
+                <Tag className="if-tag-tint" style={{marginBottom: 16, padding: '4px 12px', fontSize: 13}}>
                     🏢 {organizations.find(org => org.id === object.organization)?.name || 'N/A'}
                 </Tag>
             )}
@@ -217,7 +217,7 @@ const EditUserForm = ({object, hasExistingIps, onDeviceReset}) => {
                         placeholder={t.selectWarehouses}
                         optionRender={RenderOption}
                         tagRender={(props) => (
-                            <Tag color='blue'>{props.label}</Tag>
+                            <Tag className="if-tag-tint">{props.label}</Tag>
                         )}
                         filterOption={(input, option) =>
                             option?.label.toLowerCase().includes(input.toLowerCase())
@@ -239,7 +239,7 @@ const EditUserForm = ({object, hasExistingIps, onDeviceReset}) => {
 
             <Flex align="center" justify="space-between" style={{marginBottom: restrictByIp ? 12 : 0}}>
                 <Space>
-                    <SafetyCertificateOutlined style={{color: '#1677ff', fontSize: 16}}/>
+                    <SafetyCertificateOutlined style={{color: 'var(--if-tint)', fontSize: 16}}/>
                     <span style={{fontWeight: 500}}>{t.restrictByIp}</span>
                     <Tooltip title={t.restrictByIpHint}>
                         <span style={{fontSize: 12, color: token.colorTextTertiary, cursor: 'help'}}>?</span>
@@ -284,7 +284,7 @@ const EditUserForm = ({object, hasExistingIps, onDeviceReset}) => {
 
             <Flex align="center" justify="space-between" style={{marginBottom: 8}}>
                 <Space>
-                    <MobileOutlined style={{color: '#1677ff', fontSize: 16}}/>
+                    <MobileOutlined style={{color: 'var(--if-tint)', fontSize: 16}}/>
                     <span style={{fontWeight: 500}}>{t.deviceLock}</span>
                     <Tooltip title={t.deviceLockHint}>
                         <span style={{fontSize: 12, color: token.colorTextTertiary, cursor: 'help'}}>?</span>
@@ -325,7 +325,7 @@ const EditUserForm = ({object, hasExistingIps, onDeviceReset}) => {
 
             <Flex align="center" justify="space-between" style={{marginBottom: canApplyDiscount ? 12 : 0}}>
                 <Space>
-                    <PercentageOutlined style={{color: '#1677ff', fontSize: 16}}/>
+                    <PercentageOutlined style={{color: 'var(--if-tint)', fontSize: 16}}/>
                     <span style={{fontWeight: 500}}>{t.canApplyDiscount}</span>
                     <Tooltip title={t.canApplyDiscountHint}>
                         <span style={{fontSize: 12, color: token.colorTextTertiary, cursor: 'help'}}>?</span>

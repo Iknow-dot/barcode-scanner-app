@@ -178,10 +178,10 @@ const FindProductDrawer = ({
         <Drawer
             title={
                 <Flex align="center" gap={8}>
-                    <SearchOutlined style={{fontSize: 18, color: '#1677ff'}}/>
+                    <SearchOutlined style={{fontSize: 18, color: 'var(--if-tint)'}}/>
                     <span style={{fontWeight: 600}}>{t.productSearch}</span>
                     {orderMode && (
-                        <Tag color="blue" style={{marginLeft: 8}}>
+                        <Tag className="if-tag-tint" style={{marginLeft: 8}}>
                             <ShoppingCartOutlined/> {t.orderMode}
                         </Tag>
                     )}

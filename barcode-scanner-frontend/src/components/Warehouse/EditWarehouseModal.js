@@ -124,7 +124,7 @@ const EditWarehouseForm = ({object}) => {
                     placeholder={t.selectUsers}
                     optionRender={RenderOption}
                     tagRender={(props) => (
-                        <Tag color='blue'>{props.label}</Tag>
+                        <Tag className="if-tag-tint">{props.label}</Tag>
                     )}
                     filterOption={(input, option) =>
                         option?.label.toLowerCase().includes(input.toLowerCase())

@@ -102,7 +102,7 @@ export const DataTab = ({
                               setEditModalVisible(true);
                             }}
                             className="action-btn"
-                            style={{color: '#1677ff'}}
+                            style={{color: 'var(--if-tint)'}}
                         />
                       </Tooltip>
                       <Popconfirm

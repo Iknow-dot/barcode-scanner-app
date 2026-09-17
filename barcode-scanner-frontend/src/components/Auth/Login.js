@@ -78,9 +78,7 @@ const Login = ({isDark = false}) => {
 
     return (
         <Layout className="login-page" style={{
-            background: isDarkMode
-                ? 'linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 50%, #0a0a0a 100%)'
-                : 'linear-gradient(135deg, #f0f5ff 0%, #e6f0ff 50%, #f5f5f5 100%)',
+            background: 'var(--if-bg-grouped)',
         }}>
             <Flex justify="flex-end" style={{padding: '16px 24px 0'}}>
                 <Dropdown menu={{items: langItems, selectedKeys: [language]}}>

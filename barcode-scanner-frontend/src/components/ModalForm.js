@@ -31,7 +31,7 @@ export const ModalForm = ({visible, setVisible, onFinish, title, name, object = 
           styles={{
             header: {
               paddingBottom: 12,
-              borderBottom: '1px solid rgba(0, 0, 0, 0.06)',
+              borderBottom: '1px solid var(--if-sep)',
               marginBottom: 0,
             },
             body: {
