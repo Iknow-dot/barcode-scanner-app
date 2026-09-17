@@ -31,3 +31,7 @@ test('no Tag uses the blue preset (use className="if-tag-tint")', () => {
 test('no Tag picks the blue preset in a color expression (use className="if-tag-tint")', () => {
     expect(offenders('.js', BLUE_TAG_EXPRESSION)).toEqual([]);
 });
+
+test('no stylesheet hard-codes antd blue', () => {
+    expect(offenders('.css', LEGACY_BLUE)).toEqual([]);
+});

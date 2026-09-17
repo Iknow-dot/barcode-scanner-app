@@ -122,7 +122,7 @@
     position: absolute;
     width: 28px;
     height: 28px;
-    border-color: #1677ff;
+    border-color: var(--if-brand);
     border-style: solid;
     border-width: 0;
 }
@@ -165,8 +165,8 @@
     left: 10%;
     right: 10%;
     height: 2px;
-    background: linear-gradient(90deg, transparent, #1677ff 20%, #1677ff 80%, transparent);
-    box-shadow: 0 0 8px rgba(22, 119, 255, 0.6);
+    background: linear-gradient(90deg, transparent, var(--if-brand) 20%, var(--if-brand) 80%, transparent);
+    box-shadow: 0 0 8px rgba(66, 174, 117, 0.6);
     animation: scanLineMove 2.5s ease-in-out infinite;
     border-radius: 1px;
 }
