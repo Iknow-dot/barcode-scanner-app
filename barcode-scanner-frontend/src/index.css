@@ -296,6 +296,201 @@ body {
   transform: rotate(-90deg);
 }
 
+/* ===== Order sheet (OrderSheet.js, CartItemRow.js, DeliveryStep.js) =====
+   theme/ios.css loads after this file, so rules that adjust an .if-*
+   primitive carry both classes. */
+.m-client-avatar {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--if-fill);
+  color: var(--if-label-2);
+  font-size: 15px;
+  line-height: 20px;
+  font-weight: 600;
+}
+
+.if-group.m-cart-empty {
+  margin-top: 16px;
+}
+
+.if-row.m-cart-item {
+  align-items: flex-start;
+  padding-top: 12px;
+  padding-bottom: 12px;
+}
+
+.if-row.m-cart-item.is-pending {
+  opacity: 0.6;
+}
+
+.m-cart-item-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.m-cart-item-head .if-row-title {
+  flex: 1;
+  min-width: 0;
+}
+
+.m-cart-item-total {
+  flex: none;
+  font-size: 15px;
+  line-height: 20px;
+  font-weight: 600;
+  color: var(--if-label);
+  font-variant-numeric: tabular-nums;
+}
+
+.m-cart-item-price {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--if-label-2);
+  text-align: left;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Editable for users who may discount: link colour, and a 44 px target that
+   overlaps its neighbours instead of spreading the row. */
+.m-cart-item-price.is-editable {
+  min-height: 44px;
+  margin: -13px 0;
+  color: var(--if-tint-text);
+  cursor: pointer;
+}
+
+.m-cart-item-was {
+  margin-right: 4px;
+  color: var(--if-label-3);
+}
+
+.m-cart-item-editor {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.m-cart-item-field .ant-input-number {
+  width: 100%;
+  margin-top: 2px;
+}
+
+.m-cart-item-captions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin-top: 2px;
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--if-label-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.m-cart-item-warning,
+.m-cart-item-pending {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--if-orange-text);
+}
+
+.m-cart-item-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-top: 8px;
+}
+
+.m-cart-item-controls .if-stepper-btn.m-cart-item-delete {
+  color: var(--if-red-text);
+}
+
+.m-gift {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.m-gift-count {
+  min-width: 44px;
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 600;
+  text-align: center;
+  color: var(--if-label);
+  font-variant-numeric: tabular-nums;
+}
+
+.if-group.m-delivery-group {
+  margin-top: 16px;
+}
+
+.if-row.m-field-row {
+  align-items: flex-start;
+}
+
+.m-field-row .if-row-icon {
+  margin-top: 9px;
+}
+
+.m-field-label-line {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.if-seg.ant-segmented.m-recipient-seg {
+  flex: none;
+  width: 132px;
+}
+
+.if-row.m-recipient-fields {
+  padding-left: 52px;
+}
+
+.m-recipient-names {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.m-field-error {
+  margin-top: 4px;
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--if-red-text);
+}
+
+.m-time-range {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--if-label-2);
+}
+
+.m-time-range .if-field-input.ant-picker {
+  flex: 1;
+  min-width: 0;
+}
+
 /* ===== Order Panel (Mobile) ===== */
 .m-order-panel {
   padding: 0;
