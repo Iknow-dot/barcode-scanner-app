@@ -1,6 +1,6 @@
 # iOS redesign — phase 1: theme foundation
 
-Date: 2026-09-17 · Status: approved in conversation, implementing
+Date: 2026-09-17 · Status: implemented
 
 ## Context
 
