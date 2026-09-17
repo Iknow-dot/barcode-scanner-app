@@ -1,6 +1,7 @@
 import {useCallback, useEffect, useState} from 'react';
 import {orderService} from '../api';
 import {getTodayScans, getTodaySummary} from '../utils/scanLog';
+import {EMPTY_ORDERS_SUMMARY, summarizeTodayOrders} from '../utils/todayOrdersSummary';
 
 const RECENT_SCANS_LIMIT = 3;
 
@@ -34,7 +35,7 @@ const useDailySnapshot = (currentUserId) => {
     const [refreshTick, setRefreshTick] = useState(0);
     const [scansSummary, setScansSummary] = useState({count: 0, foundCount: 0, notFoundCount: 0});
     const [recentScans, setRecentScans] = useState([]);
-    const [ordersSummary, setOrdersSummary] = useState({count: 0, total: 0});
+    const [ordersSummary, setOrdersSummary] = useState(EMPTY_ORDERS_SUMMARY);
 
     useEffect(() => {
         setScansSummary(getTodaySummary());
@@ -54,10 +55,7 @@ const useDailySnapshot = (currentUserId) => {
                 const orders = Array.isArray(result.data)
                     ? result.data
                     : (result.data?.results || []);
-                const total = orders
-                    .filter((o) => o.status === 'confirmed' || o.status === 'completed')
-                    .reduce((sum, o) => sum + (parseFloat(o.total) || 0), 0);
-                setOrdersSummary({count: orders.length, total});
+                setOrdersSummary(summarizeTodayOrders(orders));
             }
         };
         fetchToday();
