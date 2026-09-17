@@ -445,8 +445,8 @@
 }
 
 .m-recent-thumb-notfound {
-  background: linear-gradient(135deg, #fff2f0 0%, #ffccc7 100%);
-  color: #cf1322;
+  background: var(--if-red-soft);
+  color: var(--if-red-text);
 }
 
 .m-recent-info {
@@ -531,7 +531,7 @@
 .m-product-hero-price {
   font-size: 18px;
   font-weight: 700;
-  color: var(--if-tint-text);
+  color: var(--if-label);
   white-space: nowrap;
 }
 
