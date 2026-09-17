@@ -57,6 +57,11 @@ const OrderSheet = ({
 
     const [localOrder, setLocalOrder] = useState(order);
     const [step, setStep] = useState(1);
+    // Loaded by DeliveryStep with a function that flushes its pending
+    // debounced fields; called before confirming so a comment typed just
+    // before the tap reaches the order ahead of the confirm PATCH, instead
+    // of racing the unmount flush against an order already confirmed.
+    const deliveryFlushRef = useRef(null);
 
     const onOrderUpdateRef = useRef(onOrderUpdate);
     onOrderUpdateRef.current = onOrderUpdate;
@@ -115,6 +120,11 @@ const OrderSheet = ({
     const header = orderStepHeader(step, t);
     const giftCount = cartGiftCount(items);
 
+    const handleConfirm = async () => {
+        if (deliveryFlushRef.current) await deliveryFlushRef.current();
+        onProceedToPayment();
+    };
+
     const handleDeleteClick = () => {
         modal.confirm({
             title: t.confirmDeleteOrder,
@@ -172,7 +182,7 @@ const OrderSheet = ({
             </div>
             <Popconfirm
                 title={t.confirmProceedToPayment}
-                onConfirm={onProceedToPayment}
+                onConfirm={handleConfirm}
                 okText={t.yes}
                 cancelText={t.no}
                 disabled={!hasItems || confirmDisabled}
@@ -250,7 +260,12 @@ const OrderSheet = ({
                     ))}
                 </>
             ) : (
-                <DeliveryStep order={localOrder} onOrderUpdate={handleLocalOrderUpdate} notify={notify}/>
+                <DeliveryStep
+                    order={localOrder}
+                    onOrderUpdate={handleLocalOrderUpdate}
+                    notify={notify}
+                    flushRef={deliveryFlushRef}
+                />
             )}
         </IosSheet>
         </>

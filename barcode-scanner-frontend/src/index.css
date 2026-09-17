@@ -465,6 +465,26 @@ body {
   padding-left: 52px;
 }
 
+/* .m-recipient-contact wraps two plain rows inside the is-lead-inset group.
+   They aren't direct children of .if-group, so its `> * + *::before`
+   separator never reaches between them — restore the same hairline here,
+   inset to match the rest of the group's rows (left: 52px). */
+.m-recipient-contact > * {
+  position: relative;
+}
+
+.m-recipient-contact > * + *::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 52px;
+  height: 1px;
+  background: var(--if-sep);
+  z-index: 1;
+  pointer-events: none;
+}
+
 .m-recipient-names {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

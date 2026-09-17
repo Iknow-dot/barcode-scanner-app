@@ -30,7 +30,7 @@ const GiftCounter = ({enabled, totalQty, giftQty, onChange, label, disabled = fa
                 title={pillLabel}
             >
                 <IosIcon name={gifted ? 'check' : 'gift'} size={16} stroke={gifted ? 2.6 : 2}/>
-                <span>{showSplit ? `${giftQty}/${totalQty} ${label}` : label}</span>
+                <span>{pillLabel}</span>
             </button>
             {showSplit && (
                 <span className="if-stepper">

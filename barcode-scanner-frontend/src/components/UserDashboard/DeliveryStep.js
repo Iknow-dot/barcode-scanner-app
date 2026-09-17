@@ -1,4 +1,4 @@
-import React, {useCallback, useId} from 'react';
+import React, {useCallback, useEffect, useId} from 'react';
 import dayjs from 'dayjs';
 import {DatePicker, Input, Segmented, TimePicker} from 'antd';
 import {orderService} from '../../api';
@@ -22,8 +22,14 @@ const {TextArea} = Input;
  * address, date and time window and notes, the order comment, and a summary.
  * Every field saves to the order as OrderPanel's delivery and notes sections
  * did — the same fields, debounce, and phone rule.
+ *
+ * `flushRef`, when given, is loaded with a function that flushes every
+ * pending debounced field and resolves once their saves land — OrderSheet
+ * calls it before confirming, so a comment typed just before tapping Confirm
+ * reaches the order (and 1C) instead of racing the unmount flush against an
+ * order that PATCHes back "already confirmed".
  */
-const DeliveryStep = ({order, onOrderUpdate, notify}) => {
+const DeliveryStep = ({order, onOrderUpdate, notify, flushRef}) => {
     const {t} = useLanguage();
     const recipientLabelId = useId();
 
@@ -57,6 +63,19 @@ const DeliveryStep = ({order, onOrderUpdate, notify}) => {
         order.recipient_phone || '',
         useCallback((value) => save({recipient_phone: value || ''}), [save]),
     );
+
+    const flushAll = useCallback(() => Promise.all([
+        flushAddress(),
+        flushDeliveryNotes(),
+        flushNotes(),
+        flushRecipientFirst(),
+        flushRecipientLast(),
+        flushRecipientPhone(),
+    ]), [flushAddress, flushDeliveryNotes, flushNotes, flushRecipientFirst, flushRecipientLast, flushRecipientPhone]);
+
+    useEffect(() => {
+        if (flushRef) flushRef.current = flushAll;
+    }, [flushRef, flushAll]);
 
     const delivery = isDeliveryOrder(order);
     const recipientIsDifferent = !!order.recipient_is_different;

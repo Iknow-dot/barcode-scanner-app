@@ -3,6 +3,7 @@ import {render, screen, fireEvent, within} from '@testing-library/react';
 import ProductSheet from './ProductSheet';
 import {LanguageProvider} from '../../i18n/LanguageContext';
 import translations from '../../i18n/translations';
+import {markOffline, markOnline} from '../../utils/connectivity';
 
 const en = translations.en;
 
@@ -70,6 +71,13 @@ describe('ProductSheet', () => {
 
     afterEach(() => {
         localStorage.removeItem('language');
+        markOnline();
+    });
+
+    it('shows the offline banner while offline, so adding is not silent', () => {
+        markOffline();
+        renderSheet();
+        expect(screen.getByText(en.offlineBanner)).toBeInTheDocument();
     });
 
     it('shows the product name, codes, price per unit and my warehouses', () => {
@@ -198,6 +206,41 @@ describe('ProductSheet', () => {
         }));
 
         expect(radio('Vake')).toHaveAttribute('aria-checked', 'true');
+        expect(screen.getByRole('textbox', {name: en.quantity})).toHaveValue('1');
+    });
+
+    it('resets the pick and quantity when a lookup for a different product lands while still open', () => {
+        // F6: reconcileSelection only checks the WAREHOUSE code is still
+        // selectable, so if the new product also has stock at the same
+        // code, the old pick (and its quantity) would otherwise survive.
+        const {rerender} = renderSheet();
+        fireEvent.click(radio('Central'));
+        fireEvent.click(plus());
+        expect(radio('Central')).toHaveAttribute('aria-checked', 'true');
+        expect(screen.getByRole('textbox', {name: en.quantity})).toHaveValue('2');
+
+        rerender(
+            <LanguageProvider>
+                <ProductSheet
+                    open
+                    onClose={() => {}}
+                    onToggleOthers={() => {}}
+                    onAdd={() => {}}
+                    product={{...PRODUCT, sku: 'OTHER-SKU', article: 'OTHER-ART', sku_name: 'Different product'}}
+                    imageSrc=""
+                    unitLabel="Piece"
+                    balances={[VAKE, CENTRAL]}
+                    userWarehouseNames={['Vake', 'Central', 'Saburtalo']}
+                    stockStatus=""
+                    searchedAllWarehouses={false}
+                    hasLastSearch
+                    othersExpanded={false}
+                    othersLoading={false}
+                    adding={false}
+                />
+            </LanguageProvider>
+        );
+
         expect(screen.getByRole('textbox', {name: en.quantity})).toHaveValue('1');
     });
 });

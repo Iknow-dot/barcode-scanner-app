@@ -4,6 +4,7 @@ import IosIcon from '../Common/IosIcon';
 import IosSheet from '../Common/IosSheet';
 import ProductImage from '../Common/ProductImage';
 import QuantityStepper from '../Common/QuantityStepper';
+import OfflineBanner from './OfflineBanner';
 import {isStockBlocked, stockStatusMessageKey} from './stockStatus';
 import {
     canAddToOrder,
@@ -104,15 +105,19 @@ const ProductSheet = ({
         setSelectedCode((code) => reconcileSelection(code, view));
     }, [view]);
 
-    // Every opening starts from the default pick and one unit. Declared after
-    // the effect above so it wins when a new product opens the sheet.
+    // Every opening starts from the default pick and one unit — keyed on the
+    // product too, not just `open`: reconcileSelection above only checks
+    // that the WAREHOUSE code is still selectable, so a lookup landing for a
+    // different product while the sheet stays open would otherwise keep the
+    // previous product's pick and quantity whenever the codes happen to
+    // overlap. Declared after the effect above so it wins in that case.
     useEffect(() => {
         if (open) {
             setSelectedCode(defaultSelection(view));
             setQuantity(1);
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [open]);
+    }, [open, product?.sku]);
 
     const selected = findOption(view, selectedCode);
     const max = maxQuantity(selected);
@@ -176,6 +181,7 @@ const ProductSheet = ({
             bottomBar={bottomBar}
             bottomBarLayout="row"
         >
+            <OfflineBanner/>
             <div className="m-product-sheet-media">
                 <IosIcon name="package" size={56} stroke={1.4}/>
                 {imageSrc && (

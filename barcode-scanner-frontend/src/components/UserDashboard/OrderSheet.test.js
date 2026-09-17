@@ -2,7 +2,7 @@ import React from 'react';
 import {render, screen, fireEvent, waitFor, within} from '@testing-library/react';
 import OrderSheet from './OrderSheet';
 import AuthContext from '../Auth/AuthContext';
-import {productService} from '../../api';
+import {orderService, productService} from '../../api';
 import {LanguageProvider} from '../../i18n/LanguageContext';
 import translations from '../../i18n/translations';
 
@@ -155,6 +155,28 @@ describe('OrderSheet', () => {
         fireEvent.click(screen.getByRole('button', {name: en.confirmOrder}));
         expect(await screen.findByText(en.confirmProceedToPayment)).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', {name: en.yes}));
+        await waitFor(() => expect(onProceedToPayment).toHaveBeenCalledTimes(1));
+    });
+
+    it('flushes a pending delivery edit before confirming, and waits for it to land', async () => {
+        // F6: confirming used to unmount DeliveryStep immediately, whose own
+        // unmount-flush then PATCHed an order already marked confirmed.
+        let resolveUpdate;
+        orderService.updateOrder.mockReturnValue(new Promise((resolve) => { resolveUpdate = resolve; }));
+        const {onProceedToPayment} = renderSheet();
+        fireEvent.click(screen.getByRole('button', {name: en.nextStep}));
+
+        const comment = screen.getByRole('textbox', {name: en.orderNotes});
+        fireEvent.change(comment, {target: {value: 'Call first'}});
+        // No blur: the debounce timer is still pending when Confirm is tapped.
+
+        fireEvent.click(screen.getByRole('button', {name: en.confirmOrder}));
+        fireEvent.click(await screen.findByRole('button', {name: en.yes}));
+
+        expect(orderService.updateOrder).toHaveBeenCalledWith(42, {notes: 'Call first'});
+        expect(onProceedToPayment).not.toHaveBeenCalled();
+
+        resolveUpdate({success: true, data: {...ORDER, notes: 'Call first'}});
         await waitFor(() => expect(onProceedToPayment).toHaveBeenCalledTimes(1));
     });
 

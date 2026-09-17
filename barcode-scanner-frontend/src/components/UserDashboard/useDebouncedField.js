@@ -57,13 +57,17 @@ const useDebouncedField = (initialValue, onSave, delay = 600) => {
         }, delay);
     }, [delay]);
 
+    // Returns the pending save's promise (or undefined when nothing was
+    // pending) so a caller that needs the save to land first — OrderSheet's
+    // confirm path — can await it.
     const flush = useCallback(() => {
         if (timerRef.current) {
             clearTimeout(timerRef.current);
             timerRef.current = null;
             lastSavedRef.current = latestValueRef.current;
-            onSaveRef.current(latestValueRef.current);
+            return onSaveRef.current(latestValueRef.current);
         }
+        return undefined;
     }, []);
 
     useEffect(() => {
