@@ -1036,3 +1036,66 @@ button.if-row:disabled .if-check {
 .if-sheet-total-value.is-muted {
     color: var(--if-label-3);
 }
+
+/* ---------- Pill toggle (the gift marker on a cart row) ---------- */
+.if-pill {
+    flex: none;
+    height: 44px;
+    padding: 0 14px;
+    border: 0;
+    border-radius: 22px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--if-fill);
+    color: var(--if-label-2);
+    font-family: inherit;
+    font-size: 13px;
+    line-height: 16px;
+    font-weight: 600;
+    white-space: nowrap;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.if-pill.is-on {
+    background: var(--if-tint-soft);
+    color: var(--if-tint-text);
+}
+
+.if-pill:focus-visible {
+    outline: 2px solid var(--if-tint);
+    outline-offset: 2px;
+}
+
+/* ---------- Form rows (label above an inline, borderless field) ---------- */
+.if-field-label {
+    display: block;
+    font-size: 13px;
+    line-height: 18px;
+    color: var(--if-label-2);
+}
+
+.if-field-hint {
+    font-size: 13px;
+    line-height: 18px;
+    color: var(--if-label-3);
+}
+
+.if-field-input.ant-input,
+.if-field-input.ant-picker {
+    width: 100%;
+    margin-top: 2px;
+    padding: 0;
+    border-radius: 0;
+    font-size: 17px;
+    line-height: 22px;
+    color: var(--if-label);
+    background: transparent;
+    box-shadow: none;
+}
+
+.if-field-input.ant-picker .ant-picker-input > input {
+    font-size: 17px;
+    line-height: 22px;
+}
