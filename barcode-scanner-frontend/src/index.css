@@ -456,6 +456,21 @@ body {
   align-items: flex-start;
 }
 
+/* ClientCreateForm: the is_phys toggle is self-explanatory from its own two
+   option labels, so it gets no separate field label — just its own full-width
+   row instead of sharing one with cramped inline text (see m-recipient-seg,
+   which narrows the segment for the opposite reason). */
+.if-row.m-isphys-row .if-seg.ant-segmented {
+  flex: 1;
+}
+
+/* Required-field marker next to a .if-field-label (ClientCreateForm's name
+   fields) — aria-hidden in the markup since the field's required-ness is
+   conveyed to assistive tech via the validation message, not this glyph. */
+.m-required {
+  color: var(--if-red-text);
+}
+
 .m-field-row .if-row-icon {
   margin-top: 9px;
 }

@@ -3,24 +3,12 @@ import {AutoComplete, Input, Segmented, message} from 'antd';
 import {clientService} from '../../api';
 import {useLanguage} from '../../i18n/LanguageContext';
 import {isIndeterminateFailure, recoverCreatedClient} from './clientCreateRecovery';
+import {ERROR_CODE_MESSAGES} from './clientErrorMessages';
 import AddressMapPicker from './AddressMapPicker';
 import IosIcon from '../Common/IosIcon';
 
-// Ported verbatim from ClientLookupModal.js (and duplicated in
-// ClientLookupSheet.js for the lookup step's own errors) — keep the three
-// lists in sync until Task 5 removes the modal.
-const ERROR_CODE_MESSAGES = {
-    CLIENT_CREATE_UNVERIFIED: 'clientCreateUnverified',
-    EXTERNAL_SERVICE_TIMEOUT: 'externalServiceTimeout',
-    EXTERNAL_SERVICE_UNAVAILABLE: 'externalServiceUnavailable',
-    EXTERNAL_SERVICE_UNAUTHORIZED: 'externalServiceUnauthorized',
-    EXTERNAL_SERVICE_ERROR: 'externalServiceError',
-    CLIENT_ALREADY_EXISTS: 'clientAlreadyExists',
-};
-
 // The upstream write may still be in flight when we gave up on the request,
 // so a first "not found" is not proof the client was never created.
-// (ClientLookupModal.js CREATE_RECOVERY_RETRY_MS.)
 const CREATE_RECOVERY_RETRY_MS = 2500;
 const ADDRESS_SEARCH_MIN_CHARS = 3;
 const ADDRESS_SEARCH_DEBOUNCE_MS = 300;
@@ -28,25 +16,36 @@ const ADDRESS_SEARCH_DEBOUNCE_MS = 300;
 /**
  * The create-client step of ClientLookupSheet: identification, person type,
  * name, phones, email and address, all as iOS list rows with the label
- * above the field. ClientLookupSheet renders the not-found banner (task 3);
- * `showNotFoundBanner` is accepted here only so the caller can tell us it
- * was shown — this component never renders a second one.
+ * above the field. ClientLookupSheet owns the not-found banner; this
+ * component never renders one of its own.
  *
  * `registerSubmit(fn, busy)` hands the sheet a submit function for its
  * navbar `შენახვა` action (re-registered every render, so the sheet always
  * calls the freshest closure) plus whether a create is currently in
  * flight, so the sheet can render the action disabled/busy rather than let
  * a double tap fire two concurrent, non-idempotent CreateClient calls;
- * `onCreated` is called with the created client on success, folded the
- * same way ClientLookupModal.js's handleCreate did.
+ * `onCreated` is called with the created client on success, with the
+ * upstream response folded over the typed values so a field upstream
+ * omitted still carries what the consultant typed.
  *
- * The three behaviours below are ported verbatim from ClientLookupModal.js:
- * RS.ge lookup (~291-321), create + recovery (~323-376) and the address
- * search including its addressSearchSeq guard (~394-441).
+ * The three behaviours below are ported verbatim from the pre-redesign
+ * client-lookup modal: the RS.ge lookup, create-with-recovery, and the
+ * address search including its addressSearchSeq guard.
  */
-const ClientCreateForm = ({seed, showNotFoundBanner, onCreated, registerSubmit}) => {
+const ClientCreateForm = ({seed, onCreated, registerSubmit}) => {
     const {t} = useLanguage();
-    const isPhysLabelId = useId();
+    // Real <label for>/id pairs so tapping a label focuses its field and a
+    // screen reader announces the two as one control, rather than relying on
+    // a duplicate aria-label with no programmatic link to the input.
+    const idNumberFieldId = useId();
+    const firstNameFieldId = useId();
+    const firstNameErrorId = useId();
+    const lastNameFieldId = useId();
+    const lastNameErrorId = useId();
+    const phoneFieldId = useId();
+    const phone2FieldId = useId();
+    const emailFieldId = useId();
+    const addressFieldId = useId();
 
     const [idNumber, setIdNumber] = useState(seed?.identification_number || '');
     const [isPhys, setIsPhys] = useState(true);
@@ -75,13 +74,12 @@ const ClientCreateForm = ({seed, showNotFoundBanner, onCreated, registerSubmit})
 
     useEffect(() => () => {
         if (addressSearchTimer.current) clearTimeout(addressSearchTimer.current);
-        // ClientLookupSheet only renders ClientCreateForm while
-        // step === STEP_CREATE, so tapping back during a slow address
-        // search unmounts this component — unlike ClientLookupModal.js,
-        // which only toggled the Modal's visibility and never unmounted.
-        // Invalidate any in-flight searchAddresses response the same way a
-        // newer search already invalidates an older one, so a late reply
-        // can't run against a torn-down instance.
+        // This component can genuinely unmount — the sheet closing, or a
+        // fresh search landing on a different seed and remounting a clean
+        // instance (see ClientLookupSheet.js's `createFormKey`). Invalidate
+        // any in-flight searchAddresses response the same way a newer
+        // search already invalidates an older one, so a late reply can't
+        // run against a torn-down instance.
         addressSearchSeq.current += 1;
     }, []);
 
@@ -90,7 +88,7 @@ const ClientCreateForm = ({seed, showNotFoundBanner, onCreated, registerSubmit})
         message.error((key && t[key]) || detail || t.clientCreateError);
     };
 
-    // ClientLookupModal.js handleRsGeLookup (~291-321), verbatim.
+    // The RS.ge lookup below is ported verbatim from the pre-redesign modal.
     const handleRsGeLookup = async () => {
         const trimmedId = (idNumber || '').trim();
         if (!trimmedId) {
@@ -120,12 +118,13 @@ const ClientCreateForm = ({seed, showNotFoundBanner, onCreated, registerSubmit})
         }
     };
 
-    // ClientLookupModal.js handleCreate (~323-376), verbatim: the payload
-    // shape, the isIndeterminateFailure -> recoverCreatedClient wiring, and
-    // the upstream-wins fold on success. Guarded against a double tap of
-    // the navbar save button — CreateClient is a non-idempotent write with
-    // no upstream transaction id, so two concurrent calls can create two
-    // separate client records for the same person.
+    // Create-with-recovery, ported verbatim from the pre-redesign modal: the
+    // payload shape, the isIndeterminateFailure -> recoverCreatedClient
+    // wiring, and the upstream-wins fold on success. Guarded against a
+    // double tap of the navbar save button — CreateClient is a
+    // non-idempotent write with no upstream transaction id, so two
+    // concurrent calls can create two separate client records for the same
+    // person.
     const handleSubmit = async () => {
         if (submittingRef.current) return;
 
@@ -203,8 +202,8 @@ const ClientCreateForm = ({seed, showNotFoundBanner, onCreated, registerSubmit})
         setAddressLine(address);
     };
 
-    // ClientLookupModal.js runAddressSearch / handleAddressSearch (~394-441),
-    // verbatim including the addressSearchSeq guard against a stale response.
+    // The address search, ported verbatim from the pre-redesign modal,
+    // including the addressSearchSeq guard against a stale response.
     const runAddressSearch = useCallback(async (query) => {
         const trimmed = (query || '').trim();
         if (trimmed.length < ADDRESS_SEARCH_MIN_CHARS) {
@@ -250,16 +249,28 @@ const ClientCreateForm = ({seed, showNotFoundBanner, onCreated, registerSubmit})
         }, ADDRESS_SEARCH_DEBOUNCE_MS);
     };
 
+    // Wraps handleSubmit for the native <form>: the keyboard's return/Go key
+    // submits a text input inside a <form> by default, which the modal this
+    // replaces relied on (an antd Form with htmlType="submit"). noValidate
+    // keeps the browser's own required/pattern UI out of the way — field
+    // validation is handleSubmit's job, same as before.
+    const handleFormSubmit = (event) => {
+        event.preventDefault();
+        handleSubmit();
+    };
+
+    const addressBusy = addressSearching || resolvingAddress;
+
     return (
-        <>
+        <form onSubmit={handleFormSubmit} noValidate>
             <div className="if-group">
                 <div className="if-row">
                     <div className="if-row-main">
-                        <span className="if-field-label">{t.customerIdNumber}</span>
+                        <label className="if-field-label" htmlFor={idNumberFieldId}>{t.customerIdNumber}</label>
                         <Input
+                            id={idNumberFieldId}
                             variant="borderless"
                             className="if-field-input"
-                            aria-label={t.customerIdNumber}
                             placeholder={t.customerIdNumber}
                             inputMode="numeric"
                             pattern="[0-9]*"
@@ -278,11 +289,11 @@ const ClientCreateForm = ({seed, showNotFoundBanner, onCreated, registerSubmit})
                     </button>
                 </div>
 
-                <div className="if-row">
-                    <span className="if-row-label" id={isPhysLabelId}>{t.isPhys}</span>
+                <div className="if-row m-isphys-row">
                     <Segmented
                         className="if-seg is-inset"
-                        aria-labelledby={isPhysLabelId}
+                        block
+                        aria-label={t.isPhys}
                         value={isPhys}
                         onChange={setIsPhys}
                         options={[
@@ -294,36 +305,48 @@ const ClientCreateForm = ({seed, showNotFoundBanner, onCreated, registerSubmit})
 
                 <div className="if-row">
                     <div className="if-row-main">
-                        <span className="if-field-label">{t.firstName}</span>
+                        <label className="if-field-label" htmlFor={firstNameFieldId}>
+                            {t.firstName} <span className="m-required" aria-hidden="true">*</span>
+                        </label>
                         <Input
+                            id={firstNameFieldId}
                             variant="borderless"
                             className="if-field-input"
-                            aria-label={t.firstName}
                             placeholder={t.firstName}
                             status={fieldErrors.first_name ? 'error' : ''}
+                            aria-invalid={fieldErrors.first_name ? 'true' : undefined}
+                            aria-describedby={fieldErrors.first_name ? firstNameErrorId : undefined}
                             value={firstName}
                             onChange={(event) => setFirstName(event.target.value)}
                         />
                         {fieldErrors.first_name && (
-                            <div className="m-field-error" role="alert">{fieldErrors.first_name}</div>
+                            <div id={firstNameErrorId} className="m-field-error" role="alert">
+                                {fieldErrors.first_name}
+                            </div>
                         )}
                     </div>
                 </div>
 
                 <div className="if-row">
                     <div className="if-row-main">
-                        <span className="if-field-label">{t.lastName}</span>
+                        <label className="if-field-label" htmlFor={lastNameFieldId}>
+                            {t.lastName} <span className="m-required" aria-hidden="true">*</span>
+                        </label>
                         <Input
+                            id={lastNameFieldId}
                             variant="borderless"
                             className="if-field-input"
-                            aria-label={t.lastName}
                             placeholder={t.lastName}
                             status={fieldErrors.last_name ? 'error' : ''}
+                            aria-invalid={fieldErrors.last_name ? 'true' : undefined}
+                            aria-describedby={fieldErrors.last_name ? lastNameErrorId : undefined}
                             value={lastName}
                             onChange={(event) => setLastName(event.target.value)}
                         />
                         {fieldErrors.last_name && (
-                            <div className="m-field-error" role="alert">{fieldErrors.last_name}</div>
+                            <div id={lastNameErrorId} className="m-field-error" role="alert">
+                                {fieldErrors.last_name}
+                            </div>
                         )}
                     </div>
                 </div>
@@ -332,11 +355,11 @@ const ClientCreateForm = ({seed, showNotFoundBanner, onCreated, registerSubmit})
             <div className="if-group m-create-gap">
                 <div className="if-row">
                     <div className="if-row-main">
-                        <span className="if-field-label">{t.customerPhone}</span>
+                        <label className="if-field-label" htmlFor={phoneFieldId}>{t.customerPhone}</label>
                         <Input
+                            id={phoneFieldId}
                             variant="borderless"
                             className="if-field-input"
-                            aria-label={t.customerPhone}
                             placeholder={t.customerPhone}
                             inputMode="tel"
                             type="tel"
@@ -348,11 +371,11 @@ const ClientCreateForm = ({seed, showNotFoundBanner, onCreated, registerSubmit})
 
                 <div className="if-row">
                     <div className="if-row-main">
-                        <span className="if-field-label">{t.secondaryPhone}</span>
+                        <label className="if-field-label" htmlFor={phone2FieldId}>{t.secondaryPhone}</label>
                         <Input
+                            id={phone2FieldId}
                             variant="borderless"
                             className="if-field-input"
-                            aria-label={t.secondaryPhone}
                             placeholder={t.secondaryPhone}
                             inputMode="tel"
                             type="tel"
@@ -364,11 +387,11 @@ const ClientCreateForm = ({seed, showNotFoundBanner, onCreated, registerSubmit})
 
                 <div className="if-row">
                     <div className="if-row-main">
-                        <span className="if-field-label">{t.customerEmail}</span>
+                        <label className="if-field-label" htmlFor={emailFieldId}>{t.customerEmail}</label>
                         <Input
+                            id={emailFieldId}
                             variant="borderless"
                             className="if-field-input"
-                            aria-label={t.customerEmail}
                             placeholder={t.customerEmail}
                             value={email}
                             onChange={(event) => setEmail(event.target.value)}
@@ -379,9 +402,9 @@ const ClientCreateForm = ({seed, showNotFoundBanner, onCreated, registerSubmit})
 
             <h4 className="if-section-header">{t.customerAddress}</h4>
             <div className="if-group">
-                <div className="if-row" aria-busy={(addressSearching || resolvingAddress) || undefined}>
+                <div className="if-row" aria-busy={addressBusy || undefined}>
                     <div className="if-row-main">
-                        <span className="if-field-label">{t.addressLine}</span>
+                        <label className="if-field-label" htmlFor={addressFieldId}>{t.addressLine}</label>
                         <AutoComplete
                             className="if-field-input"
                             value={addressLine}
@@ -396,13 +419,16 @@ const ClientCreateForm = ({seed, showNotFoundBanner, onCreated, registerSubmit})
                             filterOption={false}
                         >
                             <Input
+                                id={addressFieldId}
                                 variant="borderless"
                                 className="if-field-input"
-                                aria-label={t.addressLine}
                                 placeholder={t.addressLine}
+                                suffix={addressBusy ? <span className="if-spinner" aria-hidden="true"/> : null}
                             />
                         </AutoComplete>
-                        <span className="if-field-hint">{t.addressSearchHint}</span>
+                        <span className="if-field-hint">
+                            {addressSearching ? t.addressSearching : t.addressSearchHint}
+                        </span>
                     </div>
                 </div>
             </div>
@@ -415,7 +441,12 @@ const ClientCreateForm = ({seed, showNotFoundBanner, onCreated, registerSubmit})
                     onResolvingChange={setResolvingAddress}
                 />
             </div>
-        </>
+
+            {/* With several text fields and no visible submit control, most
+                browsers won't implicitly submit the form on Enter — a real
+                (if invisible) submit button restores that keyboard behaviour. */}
+            <button type="submit" hidden aria-hidden="true" tabIndex={-1}/>
+        </form>
     );
 };
 

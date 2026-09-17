@@ -347,6 +347,108 @@ describe('ClientCreateForm', () => {
 
             expect(latestBusy(registerSubmit)).toBe(false);
         });
+
+        // B1: the assertion above only pins the React `submitting` state, not
+        // `submittingRef` — the ref read synchronously inside handleSubmit
+        // that actually gates a second concurrent, non-idempotent
+        // createClient call. Prove the ref itself cleared, by submitting
+        // again and checking a second call actually goes out.
+        it('does not wedge shut after a failed create — a second submit fires a second call', async () => {
+            clientService.createClient.mockResolvedValue({success: false, code: 'CLIENT_ALREADY_EXISTS'});
+            const {registerSubmit} = renderForm();
+            fillNames();
+
+            await submit(registerSubmit);
+            expect(clientService.createClient).toHaveBeenCalledTimes(1);
+
+            await submit(registerSubmit);
+            expect(clientService.createClient).toHaveBeenCalledTimes(2);
+        });
+    });
+
+    describe('B3: field labels are programmatically associated', () => {
+        it('pairs each label with its field via for/id', () => {
+            renderForm();
+
+            const firstNameInput = screen.getByRole('textbox', {name: en.firstName});
+            const label = screen.getByText(en.firstName);
+            expect(label.tagName).toBe('LABEL');
+            expect(label).toHaveAttribute('for', firstNameInput.id);
+            expect(firstNameInput.id).toBeTruthy();
+        });
+
+        it('marks an invalid field with aria-invalid and ties it to the error via aria-describedby', async () => {
+            const {registerSubmit} = renderForm();
+
+            await submit(registerSubmit);
+
+            const firstNameInput = screen.getByRole('textbox', {name: en.firstName});
+            expect(firstNameInput).toHaveAttribute('aria-invalid', 'true');
+            const describedBy = firstNameInput.getAttribute('aria-describedby');
+            expect(describedBy).toBeTruthy();
+            expect(document.getElementById(describedBy)).toHaveTextContent(en.firstNameRequired);
+        });
+    });
+
+    describe('B2: the keyboard return/Go key saves', () => {
+        it('wraps the fields in a form wired to the submit handler, with a real submit control for the browser\'s implicit-submit-on-Enter behaviour', async () => {
+            clientService.createClient.mockResolvedValue({success: true, data: {name: 'Giorgi Beridze'}});
+            const {container, onCreated} = renderForm();
+
+            fireEvent.change(screen.getByRole('textbox', {name: en.firstName}), {target: {value: 'Giorgi'}});
+            fireEvent.change(screen.getByRole('textbox', {name: en.lastName}), {target: {value: 'Beridze'}});
+
+            const form = container.querySelector('form');
+            expect(form).toBeTruthy();
+            // A real (if invisible) submit control — with several text
+            // fields and none, most browsers won't implicitly submit on
+            // Enter at all.
+            expect(form.querySelector('button[type="submit"]')).toBeTruthy();
+
+            // jsdom does not replicate the browser's native
+            // Enter-submits-a-form behaviour for synthetic key events, so
+            // the wiring itself is what's under test here: the same 'submit'
+            // event a real Enter keypress fires against the form the fields
+            // and the hidden button both live in.
+            await act(async () => {
+                fireEvent.submit(form);
+                await Promise.resolve();
+                await Promise.resolve();
+            });
+
+            expect(clientService.createClient).toHaveBeenCalledWith(expect.objectContaining({
+                first_name: 'Giorgi',
+                last_name: 'Beridze',
+            }));
+            expect(onCreated).toHaveBeenCalled();
+        });
+
+        it('restores the addressSearching spinner suffix and hint text once the debounced search fires', async () => {
+            jest.useFakeTimers();
+            let resolveSearch;
+            clientService.searchAddresses.mockReturnValue(new Promise((resolve) => { resolveSearch = resolve; }));
+            const {container} = renderForm();
+
+            fireEvent.change(screen.getByPlaceholderText(en.addressLine), {target: {value: 'Vake'}});
+            await act(async () => {
+                jest.advanceTimersByTime(300);
+            });
+
+            // The modal's LoadingOutlined suffix and notFoundContent text
+            // were both dropped in the port (B2) — both are back, driven by
+            // the same addressSearching flag.
+            expect(container.querySelector('.if-spinner')).toBeInTheDocument();
+            expect(screen.getByText(en.addressSearching)).toBeInTheDocument();
+
+            await act(async () => {
+                resolveSearch({success: true, data: {suggestions: []}});
+                await Promise.resolve();
+                await Promise.resolve();
+            });
+
+            expect(container.querySelector('.if-spinner')).toBeNull();
+            jest.useRealTimers();
+        });
     });
 
     describe('address search after unmount', () => {
@@ -378,10 +480,9 @@ describe('ClientCreateForm', () => {
             });
             expect(clientService.searchAddresses).toHaveBeenCalledWith('Vake');
 
-            // ClientLookupSheet only renders ClientCreateForm while
-            // step === STEP_CREATE, so a back-tap during a slow search
-            // unmounts it — unlike ClientLookupModal.js, which only toggled
-            // the Modal's visibility and never unmounted.
+            // This component can genuinely unmount mid-search — the sheet
+            // closing, or a fresh search landing on a different seed and
+            // remounting a clean instance.
             unmount();
 
             await act(async () => {
