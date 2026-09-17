@@ -17,11 +17,15 @@ import {useCallback, useEffect, useRef, useState} from 'react';
  * The prop-sync effect below must never overwrite text the user is still
  * typing (DeliveryStep renders six of these off the same order, so a blur
  * on one field's immediate PATCH landing can re-render this one mid-edit).
- * Two guards: skip entirely while a debounce timer is pending, and — for the
- * narrow window after a save is sent but before its own response has been
- * seen — accept only a prop value that matches what was just saved. Once
- * that echo is observed the gate clears, so any later, genuinely different
- * prop value (a real external change) syncs normally again.
+ * Two guards: skip entirely while a debounce timer is pending, and while a
+ * save this hook sent is still in flight. The in-flight marker is a plain
+ * boolean cleared when that save's promise SETTLES — resolved or rejected —
+ * not when some later prop happens to match what was sent: DeliveryStep's
+ * own save() resolves (it never rejects) even when the PATCH is refused
+ * server-side, simply skipping the order update, so `initialValue` would
+ * never reach a value to match against and a match-based gate would wedge
+ * shut for the rest of the field's life. Once the marker clears, any later,
+ * genuinely different prop value (a real external change) syncs normally.
  */
 const useDebouncedField = (initialValue, onSave, delay = 600) => {
     const [localValue, setLocalValue] = useState(initialValue);
@@ -29,17 +33,30 @@ const useDebouncedField = (initialValue, onSave, delay = 600) => {
     const latestValueRef = useRef(localValue);
     const onSaveRef = useRef(onSave);
     onSaveRef.current = onSave;
-    // The value most recently handed to onSave, while its echo hasn't been
-    // seen back through `initialValue` yet; undefined once confirmed (or
-    // before anything has ever been saved).
-    const lastSavedRef = useRef(undefined);
+    // True from the moment a save is sent until its promise settles.
+    const savingRef = useRef(false);
+
+    // Calls onSave and tracks the result. A non-promise return (a test's
+    // plain jest.fn(), or any synchronous onSave) clears the marker at
+    // once, so no caller shape can leave it wedged. The `.catch(() => {})`
+    // is on OUR OWN derived chain only — used solely to flip the marker back
+    // — so it cannot swallow a rejection from the promise this function
+    // returns to the caller, which callers (OrderSheet's confirm flush)
+    // still see and can await/catch untouched.
+    const trackSave = useCallback((result) => {
+        if (result && typeof result.finally === 'function') {
+            savingRef.current = true;
+            result.finally(() => {
+                savingRef.current = false;
+            }).catch(() => {});
+        } else {
+            savingRef.current = false;
+        }
+        return result;
+    }, []);
 
     useEffect(() => {
-        if (timerRef.current) return; // actively editing; never clobber
-        if (lastSavedRef.current !== undefined) {
-            if (initialValue !== lastSavedRef.current) return; // stale echo of a save still in flight
-            lastSavedRef.current = undefined; // confirmed — resume normal syncing
-        }
+        if (timerRef.current || savingRef.current) return; // editing, or a save not yet settled; never clobber
         if (initialValue !== latestValueRef.current) {
             setLocalValue(initialValue);
             latestValueRef.current = initialValue;
@@ -52,10 +69,9 @@ const useDebouncedField = (initialValue, onSave, delay = 600) => {
         if (timerRef.current) clearTimeout(timerRef.current);
         timerRef.current = setTimeout(() => {
             timerRef.current = null;
-            lastSavedRef.current = value;
-            onSaveRef.current(value);
+            trackSave(onSaveRef.current(value));
         }, delay);
-    }, [delay]);
+    }, [delay, trackSave]);
 
     // Returns the pending save's promise (or undefined when nothing was
     // pending) so a caller that needs the save to land first — OrderSheet's
@@ -64,11 +80,10 @@ const useDebouncedField = (initialValue, onSave, delay = 600) => {
         if (timerRef.current) {
             clearTimeout(timerRef.current);
             timerRef.current = null;
-            lastSavedRef.current = latestValueRef.current;
-            return onSaveRef.current(latestValueRef.current);
+            return trackSave(onSaveRef.current(latestValueRef.current));
         }
         return undefined;
-    }, []);
+    }, [trackSave]);
 
     useEffect(() => {
         return () => {

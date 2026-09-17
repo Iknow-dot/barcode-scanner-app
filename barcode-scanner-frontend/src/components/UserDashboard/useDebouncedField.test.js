@@ -170,5 +170,37 @@ describe('useDebouncedField', () => {
 
             expect(result.current[0]).toBe('someone else changed it');
         });
+
+        it('adopts a later, different prop value after a save settles without ever changing the field (a failed save)', async () => {
+            // F1 follow-up: DeliveryStep's real save() resolves (never
+            // rejects) even when the PATCH is rejected server-side — it just
+            // skips calling onOrderUpdate, so initialValue never catches up
+            // to what was typed. A gate that only clears on a matching echo
+            // wedges shut forever in exactly this case.
+            let resolveSave;
+            const onSave = jest.fn(() => new Promise((resolve) => {
+                resolveSave = resolve;
+            }));
+            const {result, rerender} = renderField('', onSave);
+
+            act(() => {
+                result.current[1]('typed value');
+            });
+            act(() => {
+                jest.advanceTimersByTime(600); // debounce fires; save() called, still pending
+            });
+            expect(onSave).toHaveBeenCalledWith('typed value');
+
+            await act(async () => {
+                resolveSave(); // the save "fails" the DeliveryStep way: resolves, order unchanged
+                await Promise.resolve();
+                await Promise.resolve();
+            });
+
+            // A later, genuinely different external change must still land.
+            rerender({value: 'someone else changed it'});
+
+            expect(result.current[0]).toBe('someone else changed it');
+        });
     });
 });
