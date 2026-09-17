@@ -111,7 +111,7 @@ const DeliveryStep = ({order, onOrderUpdate, notify}) => {
                     />
                 </div>
 
-                {recipientIsDifferent && (
+                {recipientIsDifferent ? (
                     <div className="if-row m-field-row m-recipient-fields">
                         <div className="if-row-main">
                             <div className="m-recipient-names">
@@ -143,6 +143,21 @@ const DeliveryStep = ({order, onOrderUpdate, notify}) => {
                                 inputMode="tel"
                             />
                             {!phoneValid && <div className="m-field-error" role="alert">{t.phoneInvalid}</div>}
+                        </div>
+                    </div>
+                ) : (
+                    // Same recipient: show the order's own customer as a
+                    // read-only contact, the way OrderPanel's DeliverySection
+                    // did (customer name + phone), so the delivery contact
+                    // stays visible even when it's not typed in here.
+                    <div className="m-recipient-contact">
+                        <div className="if-row">
+                            <span className="if-row-label">{t.client}</span>
+                            <span className="if-row-value">{displayCustomerName(order, t) || '—'}</span>
+                        </div>
+                        <div className="if-row">
+                            <span className="if-row-label">{t.phone}</span>
+                            <span className="if-row-value">{order.customer_phone || t.notSet}</span>
                         </div>
                     </div>
                 )}

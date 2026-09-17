@@ -42,12 +42,12 @@ const UPDATED = {...ORDER, notes: 'x'};
 
 const renderStep = (order = ORDER) => {
     const handlers = {onOrderUpdate: jest.fn(), notify: {error: jest.fn()}};
-    render(
+    const {container} = render(
         <LanguageProvider>
             <DeliveryStep order={order} {...handlers}/>
         </LanguageProvider>
     );
-    return handlers;
+    return {...handlers, container};
 };
 
 describe('DeliveryStep', () => {
@@ -71,6 +71,10 @@ describe('DeliveryStep', () => {
     it('asks for address, date, time and delivery notes only for a delivery', () => {
         renderStep();
         expect(screen.queryByRole('textbox', {name: en.deliveryAddress})).toBeNull();
+        expect(screen.queryByRole('textbox', {name: en.deliveryDate})).toBeNull();
+        expect(screen.queryByRole('textbox', {name: en.deliveryTimeFrom})).toBeNull();
+        expect(screen.queryByRole('textbox', {name: en.deliveryTimeTo})).toBeNull();
+        expect(screen.queryByRole('textbox', {name: en.deliveryNotes})).toBeNull();
         expect(screen.getByRole('textbox', {name: en.orderNotes})).toBeInTheDocument();
     });
 
@@ -109,6 +113,13 @@ describe('DeliveryStep', () => {
             recipient_last_name: '',
             recipient_phone: '',
         }));
+    });
+
+    it('shows the customer as the contact when the recipient is the same', () => {
+        const {container} = renderStep({...ORDER, customer_phone: '555123456'});
+        const contact = container.querySelector('.m-recipient-contact');
+        expect(within(contact).getByText('Giorgi Beridze')).toBeInTheDocument();
+        expect(within(contact).getByText('555123456')).toBeInTheDocument();
     });
 
     it('flags an invalid recipient phone in words', () => {
