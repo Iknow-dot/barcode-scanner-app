@@ -9,15 +9,16 @@ import {useLanguage} from '../../i18n/LanguageContext';
 
 const {Title, Text} = Typography;
 
-const Login = () => {
+const Login = ({isDark = false}) => {
     const [loading, setLoading] = useState(false);
     const {login, authData} = useContext(AuthContext);
     const navigate = useNavigate();
     const {t, language, switchLanguage} = useLanguage();
     const {
-        token: {colorBgContainer, borderRadiusLG, colorBgBase, colorBgElevated, colorBorderSecondary},
+        token: {colorBorderSecondary},
     } = theme.useToken();
-    const isDarkMode = colorBgBase === "#000";
+    // The dark palette's base is slate, not #000, so read the real setting.
+    const isDarkMode = isDark;
     const [error, setError] = React.useState(null);
 
     useEffect(() => {

@@ -26,6 +26,7 @@ import {LanguageProvider, useLanguage} from "./i18n/LanguageContext";
 import "antd/dist/reset.css";
 import * as Sentry from '@sentry/react';
 import AppErrorFallback from './components/AppErrorFallback';
+import {antdTheme} from './theme/antdTheme';
 
 const {useBreakpoint} = Grid;
 
@@ -65,9 +66,10 @@ const MainContentView = ({children, isDark, toggleTheme}) => {
     const [mobileNavOpen, setMobileNavOpen] = useState(false);
     const {t} = useLanguage();
     const {
-        token: {colorBgContainer, borderRadiusLG, colorText, colorBgBase, colorBorderSecondary},
+        token: {colorBgContainer, colorText, colorBorderSecondary},
     } = theme.useToken();
-    const isDarkMode = colorBgBase === "#000";
+    // The dark palette's base is slate, not #000, so read the real setting.
+    const isDarkMode = isDark;
     const {logout} = useContext(AuthContext);
 
     // Sync collapsed state when subNav changes (e.g. navigating between pages)
@@ -267,28 +269,11 @@ const AppContent = () => {
         }, 1000);
     };
     return (
-        <ConfigProvider theme={{
-            algorithm: isDark ? theme.darkAlgorithm : theme.defaultAlgorithm,
-            token: {
-                borderRadius: 8,
-                fontFamily: '"Noto Sans Georgian", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
-            },
-            components: {
-                Table: {
-                    headerBorderRadius: 10,
-                },
-                Card: {
-                    borderRadiusLG: 12,
-                },
-                Modal: {
-                    borderRadiusLG: 16,
-                },
-            }
-        }}>
+        <ConfigProvider theme={antdTheme(isDark)}>
             <AntdApp>
                 <Routes>
                     {/* Public route */}
-                    <Route path="/login" element={<Login/>}/>
+                    <Route path="/login" element={<Login isDark={isDark}/>}/>
 
                     {/* Private routes for different roles */}
                     <Route
