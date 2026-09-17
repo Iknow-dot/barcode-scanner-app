@@ -442,6 +442,16 @@ body {
   margin-top: 16px;
 }
 
+/* ClientCreateForm: the phone/email group has no section header of its own,
+   so it needs its own top gap the way m-delivery-group does. */
+.if-group.m-create-gap {
+  margin-top: 16px;
+}
+
+.m-address-map {
+  margin-top: 12px;
+}
+
 .if-row.m-field-row {
   align-items: flex-start;
 }

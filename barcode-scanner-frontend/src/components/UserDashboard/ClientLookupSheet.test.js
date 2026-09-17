@@ -13,6 +13,15 @@ jest.mock('../../api', () => ({
     },
 }));
 
+// ClientCreateForm (the create step) pulls in AddressMapPicker, which pulls
+// in react-leaflet — an ESM-only package nothing in this suite exercises and
+// that CRA's jest transform can't parse. Stub the map picker so requiring
+// ClientLookupSheet doesn't require react-leaflet; ClientCreateForm.test.js
+// covers the create step's own behaviour.
+jest.mock('./AddressMapPicker', () => function AddressMapPickerStub() {
+    return null;
+});
+
 // jsdom lacks these browser APIs that antd's Drawer/Segmented touch.
 beforeAll(() => {
     window.matchMedia = window.matchMedia || ((query) => ({

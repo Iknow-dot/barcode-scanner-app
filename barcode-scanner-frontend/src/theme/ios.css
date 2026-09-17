@@ -125,6 +125,13 @@
     box-shadow: 0 4px 14px rgba(58, 152, 102, 0.32);
 }
 
+/* Text variant for a navbar action that reads as words ("Save") rather than
+   an icon — auto width instead of the round button's fixed 44px. */
+.if-glass-btn.is-text {
+    width: auto;
+    padding: 0 18px;
+}
+
 /* ---------- Inset grouped list ---------- */
 .if-section-header {
     margin: 0;

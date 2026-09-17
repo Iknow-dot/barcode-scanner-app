@@ -4,6 +4,7 @@ import {clientService} from '../../api';
 import {useLanguage} from '../../i18n/LanguageContext';
 import IosIcon from '../Common/IosIcon';
 import IosSheet from '../Common/IosSheet';
+import ClientCreateForm from './ClientCreateForm';
 import {
     LOOKUP_TABS,
     AUTO_LOOKUP_DEBOUNCE_MS,
@@ -45,8 +46,10 @@ export const STEP_CREATE = 'create';
  * Opens over the order sheet (level 1) when the consultant changes the
  * customer on an active order, or standalone when starting one.
  *
- * The create step is a shell in this task — navbar back button, title and
- * the not-found banner only. Task 4 fills in ClientCreateForm's fields.
+ * The create step is navbar back button, title, the not-found banner (owned
+ * here, not by ClientCreateForm) and ClientCreateForm's fields. The form
+ * hands us its submit function via registerSubmit so the navbar's შენახვა
+ * action can trigger it.
  */
 const ClientLookupSheet = ({open, onSelect, onClose, onRetail}) => {
     const {t} = useLanguage();
@@ -54,12 +57,15 @@ const ClientLookupSheet = ({open, onSelect, onClose, onRetail}) => {
     const [tab, setTab] = useState(LOOKUP_TABS[0]);
     const [value, setValue] = useState('');
     const [results, setResults] = useState([]);
-    // eslint-disable-next-line no-unused-vars
     const [seed, setSeed] = useState(EMPTY_SEED);
     const [notFound, setNotFound] = useState(false);
     // The last {tab, value} pair a search actually ran for, so re-rendering
     // with the same value (no real edit) does not re-fire the debounce.
     const lastSearched = useRef({tab: '', value: ''});
+    // ClientCreateForm hands us its submit function (registerSubmit) so the
+    // navbar's შენახვა action can trigger it without the form needing to
+    // know about the sheet's navbar.
+    const createSubmitRef = useRef(null);
 
     useEffect(() => {
         if (open) {
@@ -70,6 +76,7 @@ const ClientLookupSheet = ({open, onSelect, onClose, onRetail}) => {
             setSeed(EMPTY_SEED);
             setNotFound(false);
             lastSearched.current = {tab: '', value: ''};
+            createSubmitRef.current = null;
         }
     }, [open]);
 
@@ -174,6 +181,16 @@ const ClientLookupSheet = ({open, onSelect, onClose, onRetail}) => {
         </button>
     );
 
+    const saveButton = step === STEP_CREATE && (
+        <button
+            type="button"
+            className="if-glass-btn is-prominent is-text"
+            onClick={() => createSubmitRef.current && createSubmitRef.current()}
+        >
+            {t.save}
+        </button>
+    );
+
     return (
         <IosSheet
             open={open}
@@ -182,6 +199,7 @@ const ClientLookupSheet = ({open, onSelect, onClose, onRetail}) => {
             title={step === STEP_CREATE ? t.createCustomer : t.lookupClient}
             leading={step === STEP_CREATE ? 'back' : 'close'}
             onBack={step === STEP_CREATE ? () => setStep(STEP_LOOKUP) : undefined}
+            trailing={saveButton || undefined}
             bottomBar={step === STEP_LOOKUP ? retailButton : undefined}
         >
             {step === STEP_LOOKUP ? (
@@ -243,12 +261,22 @@ const ClientLookupSheet = ({open, onSelect, onClose, onRetail}) => {
                     </div>
                 </>
             ) : (
-                notFound && (
-                    <div className="if-banner">
-                        <IosIcon name="info" size={20} stroke={2.2}/>
-                        <span className="if-banner-text">{t.clientNotFoundCreate}</span>
-                    </div>
-                )
+                <>
+                    {notFound && (
+                        <div className="if-banner">
+                            <IosIcon name="info" size={20} stroke={2.2}/>
+                            <span className="if-banner-text">{t.clientNotFoundCreate}</span>
+                        </div>
+                    )}
+                    <ClientCreateForm
+                        seed={seed}
+                        showNotFoundBanner={notFound}
+                        onCreated={onSelect}
+                        registerSubmit={(fn) => {
+                            createSubmitRef.current = fn;
+                        }}
+                    />
+                </>
             )}
         </IosSheet>
     );
