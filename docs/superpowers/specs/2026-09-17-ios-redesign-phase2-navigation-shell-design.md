@@ -1,6 +1,6 @@
 # iOS redesign — phase 2: navigation shell and Home
 
-Date: 2026-09-17 · Status: approved in conversation, not yet implemented
+Date: 2026-09-17 · Status: implemented
 
 ## Context
 
