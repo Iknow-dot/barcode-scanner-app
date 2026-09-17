@@ -242,6 +242,85 @@ body {
   padding-top: 16px;
 }
 
+/* ===== Product sheet (ProductSheet.js) ===== */
+.m-product-sheet-media {
+  position: relative;
+  height: 150px;
+  border-radius: 14px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--if-bg);
+  color: var(--if-label-3);
+}
+
+.m-product-sheet-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: var(--if-bg);
+}
+
+.m-product-sheet-head {
+  padding-top: 14px;
+}
+
+.m-product-sheet-head .if-footnote {
+  margin-top: 4px;
+}
+
+.m-product-sheet-price {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.m-product-sheet-unit {
+  font-size: 15px;
+  line-height: 20px;
+  color: var(--if-label-2);
+}
+
+.m-stock-line {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--if-label-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.m-stock-glyph.is-in {
+  color: var(--if-green-text);
+}
+
+.m-stock-glyph.is-low {
+  color: var(--if-orange-text);
+}
+
+.m-stock-glyph.is-out {
+  color: var(--if-label-3);
+}
+
+.m-price-discounted {
+  color: var(--if-red-text);
+  font-weight: 600;
+}
+
+.m-others-chev {
+  transform: rotate(90deg);
+  transition: transform 0.2s ease;
+}
+
+.m-others-chev.is-open {
+  transform: rotate(-90deg);
+}
+
 /* ===== Product hero (replaces .m-product-card structural use) ===== */
 .m-product-hero {
   background: var(--if-bg);
