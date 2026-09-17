@@ -11,6 +11,11 @@
  */
 export const ADD_FLOW_IDLE = Object.freeze({pending: null});
 
+// If a pick is already held, starting another replaces it — last pick wins,
+// with no drop effect for the one it replaces. This is safe because the
+// lookup is modal over the product sheet: the only way to reach a second
+// startAdd while `flow.pending` is set is through the same held pick's own
+// lookup, and closing that lookup (lookupClosed) already drops it first.
 export const startAdd = (flow, item, hasActiveOrder) => (
     hasActiveOrder
         ? {flow: ADD_FLOW_IDLE, effect: {type: 'add', item}}

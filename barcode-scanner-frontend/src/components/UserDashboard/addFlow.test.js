@@ -17,6 +17,15 @@ describe('addFlow', () => {
         });
     });
 
+    it('replaces an already-held pick with the new one (last pick wins)', () => {
+        const {flow} = startAdd(ADD_FLOW_IDLE, ITEM, false);
+        const OTHER_ITEM = {quantity: 1, warehouse_code: 'W2', warehouse_name: 'Saburtalo', price: '15.00'};
+        expect(startAdd(flow, OTHER_ITEM, false)).toEqual({
+            flow: {pending: OTHER_ITEM},
+            effect: {type: 'lookup-client'},
+        });
+    });
+
     it('adds the held pick once the order exists', () => {
         const {flow} = startAdd(ADD_FLOW_IDLE, ITEM, false);
         expect(orderStarted(flow)).toEqual({flow: ADD_FLOW_IDLE, effect: {type: 'add', item: ITEM}});
