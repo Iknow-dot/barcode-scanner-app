@@ -30,6 +30,7 @@ export const TOKENS = {
         '--if-glass': 'rgba(255, 255, 255, 0.6)',
         '--if-glass-rim': 'rgba(255, 255, 255, 0.85)',
         '--if-glass-shadow': '0 10px 32px rgba(28, 36, 48, 0.18)',
+        '--if-glass-shadow-sm': '0 2px 10px rgba(28, 36, 48, 0.1)',
     },
     dark: {
         '--if-brand': '#42ae75',
@@ -59,5 +60,6 @@ export const TOKENS = {
         '--if-glass': 'rgba(38, 43, 53, 0.6)',
         '--if-glass-rim': 'rgba(255, 255, 255, 0.14)',
         '--if-glass-shadow': '0 10px 32px rgba(0, 0, 0, 0.45)',
+        '--if-glass-shadow-sm': '0 2px 10px rgba(0, 0, 0, 0.35)',
     },
 };

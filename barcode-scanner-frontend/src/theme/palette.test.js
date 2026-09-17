@@ -63,6 +63,8 @@ describe.each([
         ['tint-text on bg', () => contrast(token('tint-text'), token('bg')), 4.5],
         ['tint-text on bg-grouped', () => contrast(token('tint-text'), token('bg-grouped')), 4.5],
         ['tint-text on tint-soft', () => contrast(token('tint-text'), over(token('tint-soft'), token('bg'))), 4.5],
+        ['tint-text on fill over bg-grouped (gray button)', () => contrast(token('tint-text'), over(token('fill'), token('bg-grouped'))), 4.5],
+        ['tint-text on tint-soft over bg-grouped (selected tab)', () => contrast(token('tint-text'), over(token('tint-soft'), token('bg-grouped'))), 4.5],
         ['label on bg', () => contrast(token('label'), token('bg')), 4.5],
         ['label on bg-grouped', () => contrast(token('label'), token('bg-grouped')), 4.5],
         ['label-2 on bg', () => contrast(token('label-2'), token('bg')), 4.5],

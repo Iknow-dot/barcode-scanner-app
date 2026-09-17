@@ -24,6 +24,7 @@ import SubNavContext, {SubNavProvider} from "./contexts/SubNavContext";
 import AdminNavDrawer from './components/Common/AdminNavDrawer';
 import {LanguageProvider, useLanguage} from "./i18n/LanguageContext";
 import "antd/dist/reset.css";
+import './theme/ios.css';
 import * as Sentry from '@sentry/react';
 import AppErrorFallback from './components/AppErrorFallback';
 import {antdTheme} from './theme/antdTheme';
