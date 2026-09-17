@@ -2,7 +2,7 @@ import React, {useState, useEffect, useContext, useCallback, useMemo, useRef} fr
 import {warehouseService, productService, orderService, catalogService} from '../../api';
 import BarcodeScanner from './BarcodeScanner';
 import ClientLookupModal from './ClientLookupModal';
-import OrderPanel from './OrderPanel';
+import OrderSheet from './OrderSheet';
 import ProductSheet from './ProductSheet';
 import EmptyCartSheet from './EmptyCartSheet';
 import FindProductDrawer from './FindProductDrawer';
@@ -52,10 +52,8 @@ import {
 } from '../../utils/offlineOrderQueue';
 import {isOffline} from '../../utils/connectivity';
 import {
-    Badge,
     Button,
     Collapse,
-    Drawer,
     Empty,
     Flex,
     Input,
@@ -70,7 +68,6 @@ import {
 } from "antd";
 import {
     ShoppingOutlined,
-    ShoppingCartOutlined,
     InboxOutlined,
     PrinterOutlined,
     DeleteOutlined,
@@ -123,9 +120,8 @@ const UserDashboard = ({isDark = false, onToggleTheme}) => {
     // or 'orders' (incomplete / draft orders).
     const [activeTab, setActiveTab] = useState('scan');
 
-    // Order drawer for mobile (shows active order)
+    // Order sheet (the active order's cart and delivery steps)
     const [orderDrawerVisible, setOrderDrawerVisible] = useState(false);
-    const orderDrawerSwipeRef = useRef({startY: 0, fired: false});
 
     // Product sheet (opened by every successful lookup) and the empty cart
     // sheet (the idle active-order bar). addFlowRef holds a pick while the
@@ -632,10 +628,10 @@ const UserDashboard = ({isDark = false, onToggleTheme}) => {
         }
     };
 
-    // Called by OrderPanel when order details change (quantity, discount, delivery, etc.)
+    // Called by OrderSheet when order details change (quantity, discount, delivery, etc.)
     // Only update the ref — do NOT call setActiveOrder here, as that would re-render
-    // the parent and cause the Drawer to re-animate (slide down and back up).
-    // The OrderPanel manages its own local state for display.
+    // the dashboard on every edit. The sheet keeps its own local copy for
+    // display; closeOrderDrawer copies the ref back into state.
     const handleOrderUpdate = useCallback((updatedOrder) => {
         activeOrderRef.current = updatedOrder;
     }, []);
@@ -668,32 +664,14 @@ const UserDashboard = ({isDark = false, onToggleTheme}) => {
         }
     };
 
-    // Swipe-down-to-dismiss for the order drawer. Triggers only when the
-    // content is already scrolled to the top, so vertical scrolling within
-    // the drawer is unaffected.
-    const SWIPE_CLOSE_THRESHOLD = 80;
-
+    // Closing the order sheet (button, mask, Escape or the swipe-down that
+    // IosSheet handles) publishes the sheet's edits to the active-order bar.
     const closeOrderDrawer = useCallback(() => {
         setOrderDrawerVisible(false);
         if (activeOrderRef.current) {
             setActiveOrder(activeOrderRef.current);
         }
     }, []);
-
-    const handleOrderDrawerTouchStart = (e) => {
-        orderDrawerSwipeRef.current.startY = e.touches[0].clientY;
-        orderDrawerSwipeRef.current.fired = false;
-    };
-
-    const handleOrderDrawerTouchMove = (e) => {
-        if (orderDrawerSwipeRef.current.fired) return;
-        const el = e.currentTarget;
-        const deltaY = e.touches[0].clientY - orderDrawerSwipeRef.current.startY;
-        if (el.scrollTop <= 0 && deltaY > SWIPE_CLOSE_THRESHOLD) {
-            orderDrawerSwipeRef.current.fired = true;
-            closeOrderDrawer();
-        }
-    };
 
     const animateAddToCart = (sourceEl) => {
         const cartEl = document.querySelector(ACTIVE_ORDER_ICON_SELECTOR);
@@ -1075,52 +1053,22 @@ const UserDashboard = ({isDark = false, onToggleTheme}) => {
                 />
             )}
 
-            {/* Order Drawer (mobile - shows active order details) */}
-            <Drawer
-                title={
-                    <Flex align="center" gap={8}>
-                        <Badge count={activeOrder?.items?.length || 0} size="small" overflowCount={99}>
-                            <ShoppingCartOutlined style={{fontSize: 18, color: 'var(--if-tint)'}}/>
-                        </Badge>
-                        <span style={{fontWeight: 600}}>{t.activeOrder} #{activeOrder?.id}</span>
-                    </Flex>
-                }
-                placement="bottom"
-                closable={true}
-                open={orderDrawerVisible && showOrderPanel}
-                onClose={closeOrderDrawer}
-                height="85vh"
-                className="m-order-drawer"
-                destroyOnHidden
-                styles={{
-                    body: {padding: 0, overflow: 'hidden'},
-                }}
-            >
-                {showOrderPanel && (
-                    <div
-                        onTouchStart={handleOrderDrawerTouchStart}
-                        onTouchMove={handleOrderDrawerTouchMove}
-                        style={{
-                            height: '100%',
-                            overflowY: 'auto',
-                            overscrollBehaviorY: 'contain',
-                            padding: '12px 16px 24px',
-                        }}
-                    >
-                        <OrderPanel
-                            order={activeOrder}
-                            onOrderUpdate={handleOrderUpdate}
-                            onSaveForLater={handleSaveForLater}
-                            onProceedToPayment={handleProceedToPayment}
-                            onDeleteOrder={handleDeleteActiveOrder}
-                            onChangeCustomer={() => setChangeCustomerOpen(true)}
-                            notify={notify}
-                            isMobileDrawer={true}
-                            confirmDisabled={activeOrderOffline || activeOrderPending > 0}
-                        />
-                    </div>
-                )}
-            </Drawer>
+            {/* Order sheet: the active order's cart (step 1) and delivery
+                (step 2). The idle bar opens the empty cart sheet instead. */}
+            {showOrderPanel && (
+                <OrderSheet
+                    open={orderDrawerVisible}
+                    order={activeOrder}
+                    onClose={closeOrderDrawer}
+                    onOrderUpdate={handleOrderUpdate}
+                    onSaveForLater={handleSaveForLater}
+                    onProceedToPayment={handleProceedToPayment}
+                    onDeleteOrder={handleDeleteActiveOrder}
+                    onChangeCustomer={() => setChangeCustomerOpen(true)}
+                    notify={notify}
+                    confirmDisabled={activeOrderOffline || activeOrderPending > 0}
+                />
+            )}
 
             {/* Product sheet: every successful lookup (scan, catalog pick,
                 recent-scan re-run) opens it over Home. Its data is cleared
