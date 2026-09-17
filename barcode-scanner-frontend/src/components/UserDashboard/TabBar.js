@@ -1,0 +1,47 @@
+import React from 'react';
+import {useLanguage} from '../../i18n/LanguageContext';
+import IosIcon from '../Common/IosIcon';
+
+const TABS = [
+    {key: 'scan', icon: 'tab-products', label: (t) => t.productsLabel},
+    {key: 'orders', icon: 'tab-orders', label: (t) => t.orders},
+];
+
+// Floating glass tab bar: places only (Products, Orders). The trailing round
+// search tab opens the catalog and exists only when the org has it enabled.
+const TabBar = ({activeTab, onSelectTab, showSearch, onSearch}) => {
+    const {t} = useLanguage();
+    return (
+        <nav className="if-tabbar" aria-label={t.tabBarLabel}>
+            <div className="if-tabs">
+                {TABS.map(({key, icon, label}) => {
+                    const on = activeTab === key;
+                    return (
+                        <button
+                            key={key}
+                            type="button"
+                            className={`if-tab${on ? ' is-on' : ''}`}
+                            aria-current={on ? 'page' : undefined}
+                            onClick={() => onSelectTab(key)}
+                        >
+                            <IosIcon name={icon} size={24}/>
+                            <span className="if-tab-label">{label(t)}</span>
+                        </button>
+                    );
+                })}
+            </div>
+            {showSearch && (
+                <button
+                    type="button"
+                    className="if-search-tab"
+                    aria-label={t.catalog}
+                    onClick={onSearch}
+                >
+                    <IosIcon name="search" size={26} stroke={2.4}/>
+                </button>
+            )}
+        </nav>
+    );
+};
+
+export default TabBar;
