@@ -286,9 +286,10 @@ const AppContent = () => {
                         path="/dashboard"
                         element={
                             <PrivateRoute allowedRoles={['company_admin', 'company_user']}>
-                                <MainContentView isDark={isDark} toggleTheme={toggleTheme}>
-                                    <Dashboard/>
-                                </MainContentView>
+                                {/* The consultant screen is its own shell: no antd
+                                    Header, content card or Footer. Home's top bar
+                                    carries language, theme and logout instead. */}
+                                <Dashboard isDark={isDark} onToggleTheme={toggleTheme}/>
                             </PrivateRoute>
                         }
                     />

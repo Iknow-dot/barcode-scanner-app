@@ -152,26 +152,30 @@ body {
    MOBILE-FIRST USER DASHBOARD
    =================================================================== */
 
-/* ===== Dashboard Container ===== */
+/* ===== Dashboard Container =====
+   /dashboard has no antd Header, content card or Footer (App.js), so this
+   column is the whole screen. --layout-column also centres the floating
+   bottom bars (theme/ios.css .if-bottom-stack). */
 .m-dashboard {
+  --layout-column: 600px;
   display: flex;
   flex-direction: column;
-  min-height: calc(100vh - 120px);
-  max-width: 600px;
+  min-height: 100vh;
+  max-width: var(--layout-column);
   margin: 0 auto;
-  padding: 0;
+  padding: env(safe-area-inset-top, 0px) 16px 0;
 }
 
 .m-dashboard-body {
   flex: 1;
-  padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px)); /* clear the floating dock */
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
+  /* clear the floating bars: tab bar 64 + gap 10 + active-order bar 56 +
+     16 breathing room, plus the stack's bottom offset. No overflow here: the
+     page scrolls, and a scroll box would clip control shadows at its edge. */
+  padding-bottom: calc(146px + max(12px, env(safe-area-inset-bottom, 0px)));
 }
 
 /* ===== Tab Content ===== */
 .m-tab-content {
-  padding: 0 4px;
   animation: mTabFadeIn 0.2s ease-out;
 }
 
@@ -338,6 +342,36 @@ body {
   max-height: 220px;
   object-fit: contain;
   background: var(--if-fill);
+}
+
+/* ===== Home (scan tab with no product result) ===== */
+.m-home-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  padding-top: 6px;
+}
+
+.m-home-completed {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 600;
+  color: var(--if-label);
+  font-variant-numeric: tabular-nums;
+}
+
+.m-home-completed .if-icon {
+  color: var(--if-green-text);
+}
+
+.m-home-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 16px;
 }
 
 /* ===== Daily snapshot (empty state) ===== */
@@ -814,14 +848,11 @@ body {
   font-weight: 600 !important;
 }
 
-/* New order button */
-.m-new-order-btn {
-  border-radius: 14px !important;
-  height: 52px !important;
-  font-weight: 600 !important;
-  font-size: 16px !important;
-  margin-bottom: 12px;
-  box-shadow: 0 4px 16px rgba(58, 152, 102, 0.25) !important;
+/* Orders tab list: white ground now that /dashboard has no content card */
+.m-orders-list {
+  background: var(--if-bg);
+  border-radius: 14px;
+  overflow: hidden;
 }
 
 /* Incomplete orders card */
@@ -1259,8 +1290,7 @@ body {
 /* ===== Desktop overrides (larger screens) ===== */
 @media (min-width: 768px) {
   .m-dashboard {
-    max-width: 700px;
-    padding: 0 16px;
+    --layout-column: 700px;
   }
 
   .m-empty-state {
@@ -1282,7 +1312,7 @@ body {
 
 @media (min-width: 1024px) {
   .m-dashboard {
-    max-width: 800px;
+    --layout-column: 800px;
   }
 
   .m-dock {
@@ -1512,12 +1542,12 @@ body {
   100% { transform: scale(1); }
 }
 
-.m-dock-cart.m-cart-pulse {
+.if-acc-icon.m-cart-pulse {
   animation: m-cart-pulse 0.45s ease-out;
 }
 
 /* Flying ball animation: a small circle that travels from a product card
-   to the dock's cart slot when the user adds an item. */
+   to the active-order bar's cart icon when the user adds an item. */
 .m-cart-fly {
   position: fixed;
   width: 28px;

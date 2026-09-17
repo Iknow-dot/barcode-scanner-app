@@ -22,13 +22,16 @@ import {printInvoice} from '../../utils/printInvoice';
 // shadow this import for the whole function body.
 import {recordScan as logScanHistory} from '../../utils/scanLog';
 import useDailySnapshot from '../../hooks/useDailySnapshot';
-import DailySnapshot from './DailySnapshot';
+import HomeView from './HomeView';
+import TabBar from './TabBar';
+import ActiveOrderBar from './ActiveOrderBar';
+import IosIcon from '../Common/IosIcon';
 import groupItemsBySku from './groupItemsBySku';
 import {hasProductResult, isStockBlocked, stockStatusMessageKey} from './stockStatus';
 import inheritFromGroup from './inheritFromGroup';
 import formatInsufficientStock from './insufficientStock';
 import formatConfirmError from './confirmError';
-import dockCartView from './dockCartView';
+import activeOrderBarView from './activeOrderBarView';
 import {warehouseRowView, pickUnit} from './warehouseRowView';
 import {catalogFeatureEnabled} from '../../utils/features';
 import {orderStatusColor} from '../../utils/orderStatusColor';
@@ -64,16 +67,12 @@ import {
     theme
 } from "antd";
 import {
-    SearchOutlined,
     ShoppingOutlined,
     ShoppingCartOutlined,
     InboxOutlined,
-    QrcodeOutlined,
-    PlusOutlined,
     PlusCircleOutlined,
     PrinterOutlined,
     DeleteOutlined,
-    UnorderedListOutlined,
     UserOutlined,
     CalendarOutlined,
     RightOutlined,
@@ -87,12 +86,12 @@ const {Text} = Typography;
 const LOW_STOCK_THRESHOLD = 5;
 const MAX_STOCK_FOR_FULL_BAR = 15;
 
-const UserDashboard = () => {
+const UserDashboard = ({isDark = false, onToggleTheme}) => {
     const [drawerVisible, setDrawerVisible] = useState(false);
     const [loading, setLoading] = useState(false);
     const [allWarehouses, setAllWarehouses] = useState(false);
     const {setSubNav} = useContext(subNavContext);
-    const {authData} = useContext(AuthContext);
+    const {authData, logout} = useContext(AuthContext);
     // Catalog browse/search is an org-level feature; when it's off, the
     // search entry point and the find-product drawer are hidden entirely.
     const catalogEnabled = catalogFeatureEnabled(authData);
@@ -799,7 +798,7 @@ const UserDashboard = () => {
     };
 
     const animateAddToCart = (sourceEl) => {
-        const cartEl = document.querySelector('.m-dock-cart');
+        const cartEl = document.querySelector('.if-accessory .if-acc-icon');
         if (!cartEl || !sourceEl) return;
         const sourceRect = sourceEl.getBoundingClientRect();
         const cartRect = cartEl.getBoundingClientRect();
@@ -897,10 +896,21 @@ const UserDashboard = () => {
     const hasResults = hasProductResult(productInfo, balances);
     const showEmptyProductState = !hasResults && !scannerOpen;
     const showOrderPanel = orderMode && activeOrder;
-    // Passing null unless order mode is on keeps the cart slot idle for a
-    // paused order — if a real pause feature ever keeps activeOrder set with
-    // orderMode off, revisit: tapping the idle slot starts a NEW order.
-    const cartView = dockCartView(showOrderPanel ? activeOrder : null);
+    // Passing null unless order mode is on keeps the active-order bar idle for
+    // a paused order — if a real pause feature ever keeps activeOrder set with
+    // orderMode off, revisit: tapping the idle bar starts a NEW order.
+    const orderBarView = activeOrderBarView(showOrderPanel ? activeOrder : null, t);
+
+    // The active-order bar: with an order it opens the order drawer; idle, it
+    // starts an order through the client lookup, as the dock's cart slot did.
+    // Phase 3 swaps only the idle branch for the empty-cart sheet.
+    const handleOpenCart = () => {
+        if (orderBarView.active) {
+            setOrderDrawerVisible(true);
+        } else {
+            setCustomerModalOpen(true);
+        }
+    };
 
     // ===== Scan/Product Tab Content =====
     const renderScanTab = () => (
@@ -910,14 +920,22 @@ const UserDashboard = () => {
                 <OfflineBanner orderId={activeOrder.id}/>
             )}
 
-            {/* Empty product state — daily snapshot */}
+            {/* Home — the scan tab with no product result */}
             {showEmptyProductState && (
-                <DailySnapshot
+                <HomeView
+                    isDark={isDark}
                     username={authData?.user?.username}
+                    organizationName={authData?.organization_name}
+                    warehouseNames={Array.isArray(authData?.warehouses) ? authData.warehouses : []}
                     scansSummary={snapshotScans}
-                    recentScans={snapshotRecent}
                     ordersSummary={snapshotOrders}
+                    recentScans={snapshotRecent}
+                    canSearchManually={catalogEnabled}
+                    onScan={handleOpenScanner}
+                    onManualSearch={handleOpenSearch}
                     onResearch={handleResearchFromHistory}
+                    onToggleTheme={onToggleTheme}
+                    onLogout={logout}
                 />
             )}
 
@@ -1118,17 +1136,19 @@ const UserDashboard = () => {
 
         return (
             <div className="m-tab-content">
-                <Button
-                    type="primary"
-                    size="large"
-                    icon={<PlusOutlined/>}
-                    onClick={handleStartFreshOrder}
-                    block
-                    className="m-new-order-btn"
-                    style={{marginBottom: 12}}
-                >
-                    {t.newOrder}
-                </Button>
+                <div className="if-navbar is-end">
+                    <button
+                        type="button"
+                        className="if-glass-btn is-prominent"
+                        aria-label={t.newOrder}
+                        onClick={handleStartFreshOrder}
+                    >
+                        <IosIcon name="plus" size={22} stroke={2.4}/>
+                    </button>
+                </div>
+                <div className="if-large-header">
+                    <h1 className="if-large-title">{t.orders}</h1>
+                </div>
                 <Input
                     placeholder={t.searchByCustomer}
                     value={customerSearch}
@@ -1138,25 +1158,27 @@ const UserDashboard = () => {
                     style={{marginBottom: 12}}
                     size="large"
                 />
-                <Spin spinning={isLoading} size="large">
-                    {displayedOrders.length === 0 && !isLoading ? (
-                        <Empty
-                            image={Empty.PRESENTED_IMAGE_SIMPLE}
-                            description={
-                                <Text type="secondary" style={{fontSize: 13}}>
-                                    {emptyText}
-                                </Text>
-                            }
-                            style={{margin: '32px 0'}}
-                        />
-                    ) : (
-                        <List
-                            size="small"
-                            dataSource={displayedOrders}
-                            renderItem={renderOrderRow}
-                        />
-                    )}
-                </Spin>
+                <div className="m-orders-list">
+                    <Spin spinning={isLoading} size="large">
+                        {displayedOrders.length === 0 && !isLoading ? (
+                            <Empty
+                                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                                description={
+                                    <Text type="secondary" style={{fontSize: 13}}>
+                                        {emptyText}
+                                    </Text>
+                                }
+                                style={{margin: '32px 0'}}
+                            />
+                        ) : (
+                            <List
+                                size="small"
+                                dataSource={displayedOrders}
+                                renderItem={renderOrderRow}
+                            />
+                        )}
+                    </Spin>
+                </div>
             </div>
         );
     };
@@ -1269,65 +1291,21 @@ const UserDashboard = () => {
                     {activeTab === 'orders' && renderOrdersTab()}
                 </div>
 
-                {/* ===== Floating glass dock: tabs + scan + search + cart ===== */}
+                {/* ===== Floating glass bars: the active order above the tab bar.
+                    Hidden while the scanner or the catalog drawer is open. ===== */}
                 {!scannerOpen && !drawerVisible && (
-                    <div className="m-dock">
-                        <button
-                            type="button"
-                            className={`m-dock-slot ${activeTab === 'scan' ? 'on' : ''}`}
-                            onClick={() => setActiveTab('scan')}
-                            aria-pressed={activeTab === 'scan'}
-                        >
-                            <AppstoreOutlined/>
-                            <span>{t.product}</span>
-                        </button>
-                        <button
-                            type="button"
-                            className={`m-dock-slot ${activeTab === 'orders' ? 'on' : ''}`}
-                            onClick={() => setActiveTab('orders')}
-                            aria-pressed={activeTab === 'orders'}
-                        >
-                            <UnorderedListOutlined/>
-                            <span>{t.orders}</span>
-                        </button>
-                        <button
-                            type="button"
-                            className="m-dock-orb"
-                            aria-label={t.scan}
-                            onClick={handleOpenScanner}
-                        >
-                            <QrcodeOutlined/>
-                        </button>
-                        {catalogEnabled && (
-                            <button
-                                type="button"
-                                className="m-dock-slot"
-                                onClick={handleOpenSearch}
-                            >
-                                <SearchOutlined/>
-                                <span>{t.search}</span>
-                            </button>
-                        )}
-                        <button
-                            type="button"
-                            className={`m-dock-slot m-dock-cart ${cartView.opensDrawer ? 'active' : ''}`}
-                            aria-label={cartView.opensDrawer ? t.activeOrder : t.cart}
-                            onClick={() => {
-                                if (cartView.opensDrawer) {
-                                    setOrderDrawerVisible(true);
-                                } else {
-                                    setCustomerModalOpen(true);
-                                }
-                            }}
-                        >
-                            <Badge count={cartView.badgeCount} size="small" offset={[2, -2]} color="var(--if-red)">
-                                <ShoppingCartOutlined/>
-                            </Badge>
-                            <span className={cartView.totalLabel ? 'm-dock-total' : ''}>
-                                {cartView.totalLabel || t.cart}
-                            </span>
-                        </button>
-                    </div>
+                    <>
+                        <div className="if-edge-bottom" aria-hidden="true"/>
+                        <div className="if-bottom-stack">
+                            <ActiveOrderBar view={orderBarView} onOpen={handleOpenCart}/>
+                            <TabBar
+                                activeTab={activeTab}
+                                onSelectTab={setActiveTab}
+                                showSearch={catalogEnabled}
+                                onSearch={handleOpenSearch}
+                            />
+                        </div>
+                    </>
                 )}
             </div>
         </>
