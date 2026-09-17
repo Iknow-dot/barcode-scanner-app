@@ -161,4 +161,43 @@ describe('ProductSheet', () => {
         expect(screen.getByRole('button', {name: en.showOtherWarehouses(1)})).toBeInTheDocument();
         expect(screen.queryByRole('radio', {name: /Batumi/})).toBeNull();
     });
+
+    it('resets to the default pick and quantity 1 when reopened, even with a different product', () => {
+        const {rerender} = renderSheet();
+        fireEvent.click(radio('Central'));
+        fireEvent.click(plus());
+        expect(radio('Central')).toHaveAttribute('aria-checked', 'true');
+        expect(screen.getByRole('textbox', {name: en.quantity})).toHaveValue('2');
+
+        const wrap = (props) => (
+            <LanguageProvider>
+                <ProductSheet
+                    onClose={() => {}}
+                    onToggleOthers={() => {}}
+                    onAdd={() => {}}
+                    imageSrc=""
+                    unitLabel="Piece"
+                    stockStatus=""
+                    searchedAllWarehouses={false}
+                    hasLastSearch
+                    othersExpanded={false}
+                    othersLoading={false}
+                    adding={false}
+                    {...props}
+                />
+            </LanguageProvider>
+        );
+
+        // Close...
+        rerender(wrap({open: false, product: PRODUCT, balances: [VAKE, CENTRAL, EMPTY]}));
+        // ...then reopen with a different product's options.
+        rerender(wrap({
+            open: true,
+            product: {...PRODUCT, sku_name: 'Different product'},
+            balances: [EMPTY, VAKE, CENTRAL],
+        }));
+
+        expect(radio('Vake')).toHaveAttribute('aria-checked', 'true');
+        expect(screen.getByRole('textbox', {name: en.quantity})).toHaveValue('1');
+    });
 });

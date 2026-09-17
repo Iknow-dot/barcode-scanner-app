@@ -1,4 +1,5 @@
 import React from 'react';
+import ReactDOM from 'react-dom';
 import {render, screen, fireEvent, waitFor} from '@testing-library/react';
 import IosSheet from './IosSheet';
 import {LanguageProvider} from '../../i18n/LanguageContext';
@@ -114,6 +115,29 @@ describe('IosSheet', () => {
         document.querySelector('.if-sheet-scroll').scrollTop = 120;
         fireEvent.touchStart(frame, {touches: [{clientY: 100}]});
         fireEvent.touchMove(frame, {touches: [{clientY: 400}]});
+        expect(onClose).not.toHaveBeenCalled();
+    });
+
+    it('does not treat a touch starting in a portaled popup as a swipe start', () => {
+        // A date picker or dropdown opened from inside the sheet portals its
+        // popup to document.body: a DOM sibling of the frame, but still a
+        // React descendant, so the touch handlers on the frame still see it.
+        const onClose = jest.fn();
+        const Portal = () => ReactDOM.createPortal(
+            <button type="button" data-testid="portaled">Popup option</button>,
+            document.body,
+        );
+        render(
+            <LanguageProvider>
+                <IosSheet open title="Cart" onClose={onClose}>
+                    <p>Sheet content</p>
+                    <Portal/>
+                </IosSheet>
+            </LanguageProvider>
+        );
+        const portaled = screen.getByTestId('portaled');
+        fireEvent.touchStart(portaled, {touches: [{clientY: 100}]});
+        fireEvent.touchMove(portaled, {touches: [{clientY: 400}]});
         expect(onClose).not.toHaveBeenCalled();
     });
 
