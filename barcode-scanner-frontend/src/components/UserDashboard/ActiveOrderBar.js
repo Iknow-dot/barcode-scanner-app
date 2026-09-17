@@ -1,6 +1,10 @@
 import React from 'react';
 import IosIcon from '../Common/IosIcon';
 
+// Where the add-to-cart fly animation (UserDashboard's animateAddToCart) and
+// its pulse class land — shared so the two stay in sync.
+export const ACTIVE_ORDER_ICON_SELECTOR = '.if-accessory .if-acc-icon';
+
 const badgeText = (count) => (count > 99 ? '99+' : String(count));
 
 // The glass bar above the tab bar. `view` comes from activeOrderBarView; the

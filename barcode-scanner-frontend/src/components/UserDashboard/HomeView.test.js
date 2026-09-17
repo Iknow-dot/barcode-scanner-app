@@ -66,4 +66,12 @@ describe('HomeView', () => {
         expect(screen.queryByRole('button', {name: en.manualSearch})).toBeNull();
         expect(screen.getByRole('button', {name: en.scan})).toBeInTheDocument();
     });
+
+    it('renders the banner slot after the large title (e.g. the offline banner)', () => {
+        renderHome({banner: <div data-testid="test-banner">Offline</div>});
+        const title = screen.getByRole('heading', {level: 1, name: en.productsLabel});
+        const banner = screen.getByTestId('test-banner');
+        // eslint-disable-next-line no-bitwise
+        expect(title.compareDocumentPosition(banner) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
 });

@@ -22,6 +22,7 @@ const HomeView = ({
     onResearch,
     onToggleTheme,
     onLogout,
+    banner,
 }) => {
     const {t} = useLanguage();
     const subtitle = [organizationName, warehouseNames.join(', ')].filter(Boolean).join(' · ');
@@ -43,8 +44,9 @@ const HomeView = ({
             </div>
             <div className="if-large-header">
                 <h1 className="if-large-title">{t.productsLabel}</h1>
-                {subtitle && <p className="if-large-subtitle">{subtitle}</p>}
+                {subtitle && <p className="if-large-subtitle if-clamp-2">{subtitle}</p>}
             </div>
+            {banner}
             <HomeStats scansSummary={scansSummary} ordersSummary={ordersSummary}/>
             <div className="m-home-actions">
                 <button type="button" className="if-btn if-btn-primary" onClick={onScan}>

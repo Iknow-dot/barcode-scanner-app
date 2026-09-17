@@ -1,6 +1,6 @@
 import React from 'react';
 import {render, screen, fireEvent} from '@testing-library/react';
-import ActiveOrderBar from './ActiveOrderBar';
+import ActiveOrderBar, {ACTIVE_ORDER_ICON_SELECTOR} from './ActiveOrderBar';
 
 const IDLE = {active: false, badgeCount: 0, title: 'Cart', subtitle: 'Empty'};
 const ACTIVE = {active: true, badgeCount: 4, title: 'Giorgi Beridze', subtitle: 'Active Order · 488.30 ₾'};
@@ -40,6 +40,6 @@ describe('ActiveOrderBar', () => {
 
     it('exposes the cart icon the add-to-cart animation targets', () => {
         const {container} = render(<ActiveOrderBar view={ACTIVE} onOpen={() => {}}/>);
-        expect(container.querySelector('.if-accessory .if-acc-icon')).not.toBeNull();
+        expect(container.querySelector(ACTIVE_ORDER_ICON_SELECTOR)).not.toBeNull();
     });
 });

@@ -24,7 +24,8 @@ import {recordScan as logScanHistory} from '../../utils/scanLog';
 import useDailySnapshot from '../../hooks/useDailySnapshot';
 import HomeView from './HomeView';
 import TabBar from './TabBar';
-import ActiveOrderBar from './ActiveOrderBar';
+import ActiveOrderBar, {ACTIVE_ORDER_ICON_SELECTOR} from './ActiveOrderBar';
+import {nextTabAction} from './tabSelection';
 import IosIcon from '../Common/IosIcon';
 import groupItemsBySku from './groupItemsBySku';
 import {hasProductResult, isStockBlocked, stockStatusMessageKey} from './stockStatus';
@@ -798,7 +799,7 @@ const UserDashboard = ({isDark = false, onToggleTheme}) => {
     };
 
     const animateAddToCart = (sourceEl) => {
-        const cartEl = document.querySelector('.if-accessory .if-acc-icon');
+        const cartEl = document.querySelector(ACTIVE_ORDER_ICON_SELECTOR);
         if (!cartEl || !sourceEl) return;
         const sourceRect = sourceEl.getBoundingClientRect();
         const cartRect = cartEl.getBoundingClientRect();
@@ -912,14 +913,27 @@ const UserDashboard = ({isDark = false, onToggleTheme}) => {
         }
     };
 
+    // TabBar onSelectTab: re-tapping the already-selected Products tab while a
+    // product result is showing pops back to Home instead of doing nothing —
+    // see tabSelection.js. Switching tabs otherwise behaves as before.
+    const handleSelectTab = (key) => {
+        const action = nextTabAction(activeTab, key, hasResults);
+        if (action === 'pop-to-home') {
+            handleBackToDashboard();
+        } else if (action === 'switch') {
+            setActiveTab(key);
+        }
+    };
+
     // ===== Scan/Product Tab Content =====
+    // The offline banner moves depending on what's showing: on Home it
+    // renders below the large header (passed in as HomeView's `banner`
+    // slot); on the product result it stays at the top of the content, as
+    // before.
+    const offlineBanner = showOrderPanel ? <OfflineBanner orderId={activeOrder.id}/> : null;
+
     const renderScanTab = () => (
         <div className="m-tab-content">
-            {/* Active order indicator bar */}
-            {showOrderPanel && (
-                <OfflineBanner orderId={activeOrder.id}/>
-            )}
-
             {/* Home — the scan tab with no product result */}
             {showEmptyProductState && (
                 <HomeView
@@ -936,6 +950,7 @@ const UserDashboard = ({isDark = false, onToggleTheme}) => {
                     onResearch={handleResearchFromHistory}
                     onToggleTheme={onToggleTheme}
                     onLogout={logout}
+                    banner={offlineBanner}
                 />
             )}
 
@@ -943,6 +958,7 @@ const UserDashboard = ({isDark = false, onToggleTheme}) => {
             {!scannerOpen && hasResults && (
                 <Spin spinning={loading} tip={t.searchingProduct} size="large">
                     <div className="m-product-results">
+                        {offlineBanner}
                         <Button
                             type="text"
                             icon={<LeftOutlined/>}
@@ -1300,7 +1316,7 @@ const UserDashboard = ({isDark = false, onToggleTheme}) => {
                             <ActiveOrderBar view={orderBarView} onOpen={handleOpenCart}/>
                             <TabBar
                                 activeTab={activeTab}
-                                onSelectTab={setActiveTab}
+                                onSelectTab={handleSelectTab}
                                 showSearch={catalogEnabled}
                                 onSearch={handleOpenSearch}
                             />

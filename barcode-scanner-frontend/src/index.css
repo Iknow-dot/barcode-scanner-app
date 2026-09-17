@@ -161,9 +161,13 @@ body {
   display: flex;
   flex-direction: column;
   min-height: 100vh;
+  min-height: 100dvh;
   max-width: var(--layout-column);
   margin: 0 auto;
-  padding: env(safe-area-inset-top, 0px) 16px 0;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-left: max(16px, env(safe-area-inset-left));
+  padding-right: max(16px, env(safe-area-inset-right));
+  padding-bottom: 0;
 }
 
 .m-dashboard-body {
