@@ -1,6 +1,6 @@
 # iOS redesign — phase 3: order sheets
 
-Date: 2026-09-17 · Status: approved, not yet implemented
+Date: 2026-09-17 · Status: 3a implemented, 3b not yet implemented
 
 ## Context
 
