@@ -1093,11 +1093,17 @@ button.if-row:disabled .if-check {
 }
 
 .if-field-hint {
-    display: block;
-    margin-top: 4px;
     font-size: 13px;
     line-height: 18px;
     color: var(--if-label-3);
+}
+
+/* A hint that is a row's own child follows the field on its own line. One
+   nested deeper sits inline beside its label (DeliveryStep's "optional"),
+   so it must keep the label's baseline — hence the direct-child selector. */
+.if-row-main > .if-field-hint {
+    display: block;
+    margin-top: 4px;
 }
 
 /* Under the lookup sheet's search field rather than a row's field, so it
