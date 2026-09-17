@@ -63,6 +63,11 @@ const ClientLookupSheet = ({open, onSelect, onClose, onRetail}) => {
     // navbar's შენახვა action can trigger it without the form needing to
     // know about the sheet's navbar.
     const createSubmitRef = useRef(null);
+    // Mirrors ClientCreateForm's own in-flight flag (its second
+    // registerSubmit argument) so the navbar save action can render itself
+    // disabled/busy — a double tap must not fire two concurrent,
+    // non-idempotent CreateClient calls.
+    const [createBusy, setCreateBusy] = useState(false);
 
     useEffect(() => {
         if (open) {
@@ -73,6 +78,7 @@ const ClientLookupSheet = ({open, onSelect, onClose, onRetail}) => {
             setSeed(EMPTY_SEED);
             setNotFound(false);
             createSubmitRef.current = null;
+            setCreateBusy(false);
         }
     }, [open]);
 
@@ -184,6 +190,8 @@ const ClientLookupSheet = ({open, onSelect, onClose, onRetail}) => {
         <button
             type="button"
             className="if-glass-btn is-prominent is-text"
+            disabled={createBusy}
+            aria-busy={createBusy || undefined}
             onClick={() => createSubmitRef.current && createSubmitRef.current()}
         >
             {t.save}
@@ -271,8 +279,9 @@ const ClientLookupSheet = ({open, onSelect, onClose, onRetail}) => {
                         seed={seed}
                         showNotFoundBanner={notFound}
                         onCreated={onSelect}
-                        registerSubmit={(fn) => {
+                        registerSubmit={(fn, busy) => {
                             createSubmitRef.current = fn;
+                            setCreateBusy(!!busy);
                         }}
                     />
                 </>

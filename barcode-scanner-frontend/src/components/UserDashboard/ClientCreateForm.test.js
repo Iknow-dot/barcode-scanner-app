@@ -59,9 +59,10 @@ const renderForm = (props = {}) => {
     return {...utils, registerSubmit, onCreated};
 };
 
-// registerSubmit is called on every render with the latest closure; the
-// last call always has the freshest submit function.
+// registerSubmit is called on every render with the latest closure (and the
+// current busy flag as a second argument); the last call is always freshest.
 const latestSubmit = (registerSubmit) => registerSubmit.mock.calls[registerSubmit.mock.calls.length - 1][0];
+const latestBusy = (registerSubmit) => registerSubmit.mock.calls[registerSubmit.mock.calls.length - 1][1];
 
 const submit = async (registerSubmit) => {
     await act(async () => {
@@ -284,6 +285,113 @@ describe('ClientCreateForm', () => {
 
             expect(screen.getByText(en.clientAlreadyExists)).toBeInTheDocument();
             expect(onCreated).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('double-submit guard', () => {
+        const fillNames = () => {
+            fireEvent.change(screen.getByRole('textbox', {name: en.firstName}), {target: {value: 'Giorgi'}});
+            fireEvent.change(screen.getByRole('textbox', {name: en.lastName}), {target: {value: 'Beridze'}});
+        };
+
+        it('issues only one createClient call when tapped twice while a create is in flight', async () => {
+            let resolveCreate;
+            clientService.createClient.mockReturnValue(new Promise((resolve) => { resolveCreate = resolve; }));
+            const {registerSubmit, onCreated} = renderForm();
+            fillNames();
+
+            const submitFn = latestSubmit(registerSubmit);
+            let firstPromise;
+            act(() => {
+                firstPromise = submitFn();
+                // The second tap, synchronously, before the first call's
+                // createClient promise has had a chance to settle.
+                submitFn();
+            });
+
+            expect(clientService.createClient).toHaveBeenCalledTimes(1);
+
+            await act(async () => {
+                resolveCreate({success: true, data: {name: 'Giorgi Beridze'}});
+                await firstPromise;
+            });
+
+            expect(onCreated).toHaveBeenCalledTimes(1);
+        });
+
+        it('is busy while creating and enabled again after a success', async () => {
+            let resolveCreate;
+            clientService.createClient.mockReturnValue(new Promise((resolve) => { resolveCreate = resolve; }));
+            const {registerSubmit} = renderForm();
+            fillNames();
+
+            let submitPromise;
+            act(() => {
+                submitPromise = latestSubmit(registerSubmit)();
+            });
+            expect(latestBusy(registerSubmit)).toBe(true);
+
+            await act(async () => {
+                resolveCreate({success: true, data: {name: 'Giorgi Beridze'}});
+                await submitPromise;
+            });
+            expect(latestBusy(registerSubmit)).toBe(false);
+        });
+
+        it('is enabled again after a failed create', async () => {
+            clientService.createClient.mockResolvedValue({success: false, code: 'CLIENT_ALREADY_EXISTS'});
+            const {registerSubmit} = renderForm();
+            fillNames();
+
+            await submit(registerSubmit);
+
+            expect(latestBusy(registerSubmit)).toBe(false);
+        });
+    });
+
+    describe('address search after unmount', () => {
+        // React 18 silently no-ops a state update on an already-unmounted
+        // component (no console warning), so the guard can't be observed
+        // through React's own diagnostics. Instead, prove the early return
+        // actually happens: the response's `data` is defined via a getter
+        // with a side effect, so it is provably never read when the guard
+        // (correctly) drops the response before touching it.
+        it('drops a search response that resolves after the component has unmounted', async () => {
+            jest.useFakeTimers();
+            const dataAccessed = jest.fn();
+            let resolveSearch;
+            const pending = new Promise((resolve) => {
+                resolveSearch = () => resolve({
+                    success: true,
+                    get data() {
+                        dataAccessed();
+                        return {suggestions: [{label: 'Vake, Tbilisi', lat: 1, lng: 2}]};
+                    },
+                });
+            });
+            clientService.searchAddresses.mockReturnValue(pending);
+            const {unmount} = renderForm();
+
+            fireEvent.change(screen.getByPlaceholderText(en.addressLine), {target: {value: 'Vake'}});
+            await act(async () => {
+                jest.advanceTimersByTime(300);
+            });
+            expect(clientService.searchAddresses).toHaveBeenCalledWith('Vake');
+
+            // ClientLookupSheet only renders ClientCreateForm while
+            // step === STEP_CREATE, so a back-tap during a slow search
+            // unmounts it — unlike ClientLookupModal.js, which only toggled
+            // the Modal's visibility and never unmounted.
+            unmount();
+
+            await act(async () => {
+                resolveSearch();
+                await Promise.resolve();
+                await Promise.resolve();
+            });
+
+            expect(dataAccessed).not.toHaveBeenCalled();
+            jest.useRealTimers();
         });
     });
 });

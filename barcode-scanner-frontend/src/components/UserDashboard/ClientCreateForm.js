@@ -32,10 +32,13 @@ const ADDRESS_SEARCH_DEBOUNCE_MS = 300;
  * `showNotFoundBanner` is accepted here only so the caller can tell us it
  * was shown — this component never renders a second one.
  *
- * `registerSubmit` hands the sheet a submit function for its navbar
- * `შენახვა` action (re-registered every render, so the sheet always calls
- * the freshest closure); `onCreated` is called with the created client on
- * success, folded the same way ClientLookupModal.js's handleCreate did.
+ * `registerSubmit(fn, busy)` hands the sheet a submit function for its
+ * navbar `შენახვა` action (re-registered every render, so the sheet always
+ * calls the freshest closure) plus whether a create is currently in
+ * flight, so the sheet can render the action disabled/busy rather than let
+ * a double tap fire two concurrent, non-idempotent CreateClient calls;
+ * `onCreated` is called with the created client on success, folded the
+ * same way ClientLookupModal.js's handleCreate did.
  *
  * The three behaviours below are ported verbatim from ClientLookupModal.js:
  * RS.ge lookup (~291-321), create + recovery (~323-376) and the address
@@ -55,15 +58,31 @@ const ClientCreateForm = ({seed, showNotFoundBanner, onCreated, registerSubmit})
     const [addressLine, setAddressLine] = useState('');
     const [fieldErrors, setFieldErrors] = useState({});
     const [rsGeLoading, setRsGeLoading] = useState(false);
+    const [submitting, setSubmitting] = useState(false);
     const [addressOptions, setAddressOptions] = useState([]);
     const [addressSearching, setAddressSearching] = useState(false);
     const [resolvingAddress, setResolvingAddress] = useState(false);
     const [mapPosition, setMapPosition] = useState(null);
     const addressSearchTimer = useRef(null);
     const addressSearchSeq = useRef(0);
+    // Mirrors `submitting` but read synchronously inside handleSubmit: two
+    // taps of the navbar save button in the same tick both close over
+    // whatever `submitting` was at render time (stale, still false), so the
+    // React-state read alone can't stop a second concurrent create. A ref is
+    // updated immediately, before the first `await`, so the second call sees
+    // it. (The same class of bug useDebouncedField's in-flight gate hit.)
+    const submittingRef = useRef(false);
 
     useEffect(() => () => {
         if (addressSearchTimer.current) clearTimeout(addressSearchTimer.current);
+        // ClientLookupSheet only renders ClientCreateForm while
+        // step === STEP_CREATE, so tapping back during a slow address
+        // search unmounts this component — unlike ClientLookupModal.js,
+        // which only toggled the Modal's visibility and never unmounted.
+        // Invalidate any in-flight searchAddresses response the same way a
+        // newer search already invalidates an older one, so a late reply
+        // can't run against a torn-down instance.
+        addressSearchSeq.current += 1;
     }, []);
 
     const showErrorMessage = (code, detail) => {
@@ -103,66 +122,81 @@ const ClientCreateForm = ({seed, showNotFoundBanner, onCreated, registerSubmit})
 
     // ClientLookupModal.js handleCreate (~323-376), verbatim: the payload
     // shape, the isIndeterminateFailure -> recoverCreatedClient wiring, and
-    // the upstream-wins fold on success.
+    // the upstream-wins fold on success. Guarded against a double tap of
+    // the navbar save button — CreateClient is a non-idempotent write with
+    // no upstream transaction id, so two concurrent calls can create two
+    // separate client records for the same person.
     const handleSubmit = async () => {
+        if (submittingRef.current) return;
+
         const errors = {};
         if (!firstName.trim()) errors.first_name = t.firstNameRequired;
         if (!lastName.trim()) errors.last_name = t.lastNameRequired;
         setFieldErrors(errors);
         if (Object.keys(errors).length > 0) return;
 
-        const payload = {
-            first_name: firstName,
-            last_name: lastName,
-            identification_number: idNumber || '',
-            is_phys: isPhys !== false,
-            phone: phone || '',
-            phone_2: phone2 || '',
-            email: email || '',
-            address_line: addressLine || '',
-        };
-        let result = await clientService.createClient(payload);
-        if (isIndeterminateFailure(result)) {
-            // We cannot tell whether 1C committed: the platform router may
-            // have discarded our API's answer (its own 502 page), or the
-            // API may have failed to confirm. Ask whether the client is
-            // there now rather than sending the consultant to create a
-            // duplicate.
-            const {found, checked} = await recoverCreatedClient(
-                payload,
-                clientService.checkClient,
-                {delay: () => new Promise((resolve) => setTimeout(resolve, CREATE_RECOVERY_RETRY_MS))},
-            );
-            if (found) {
-                result = {success: true, data: found};
-            } else if (!checked) {
-                message.warning(t.clientCreateUnverified);
-                return;
+        submittingRef.current = true;
+        setSubmitting(true);
+        try {
+            const payload = {
+                first_name: firstName,
+                last_name: lastName,
+                identification_number: idNumber || '',
+                is_phys: isPhys !== false,
+                phone: phone || '',
+                phone_2: phone2 || '',
+                email: email || '',
+                address_line: addressLine || '',
+            };
+            let result = await clientService.createClient(payload);
+            if (isIndeterminateFailure(result)) {
+                // We cannot tell whether 1C committed: the platform router may
+                // have discarded our API's answer (its own 502 page), or the
+                // API may have failed to confirm. Ask whether the client is
+                // there now rather than sending the consultant to create a
+                // duplicate.
+                const {found, checked} = await recoverCreatedClient(
+                    payload,
+                    clientService.checkClient,
+                    {delay: () => new Promise((resolve) => setTimeout(resolve, CREATE_RECOVERY_RETRY_MS))},
+                );
+                if (found) {
+                    result = {success: true, data: found};
+                } else if (!checked) {
+                    message.warning(t.clientCreateUnverified);
+                    return;
+                }
             }
-        }
-        if (result.success) {
-            message.success(t.clientCreated);
-            // Upstream returns name/address/phone; fold the typed values
-            // back in so the caller can still attach the personal_number
-            // and the just-created name/address even if the upstream
-            // payload omits any of them.
-            const typedName = [firstName, lastName].filter(Boolean).join(' ').trim();
-            onCreated({
-                ...result.data,
-                name: result.data?.name || typedName,
-                identification_number: result.data?.identification_number || idNumber || '',
-                phone: result.data?.phone || phone || '',
-                address: result.data?.address || addressLine || '',
-            });
-        } else {
-            showErrorMessage(result.code, result.error);
+            if (result.success) {
+                message.success(t.clientCreated);
+                // Upstream returns name/address/phone; fold the typed values
+                // back in so the caller can still attach the personal_number
+                // and the just-created name/address even if the upstream
+                // payload omits any of them.
+                const typedName = [firstName, lastName].filter(Boolean).join(' ').trim();
+                onCreated({
+                    ...result.data,
+                    name: result.data?.name || typedName,
+                    identification_number: result.data?.identification_number || idNumber || '',
+                    phone: result.data?.phone || phone || '',
+                    address: result.data?.address || addressLine || '',
+                });
+            } else {
+                showErrorMessage(result.code, result.error);
+            }
+        } finally {
+            submittingRef.current = false;
+            setSubmitting(false);
         }
     };
 
     // Re-registered every render so the sheet always holds the closure with
-    // the latest field values.
+    // the latest field values, plus the current busy state so the sheet's
+    // navbar save action can render itself disabled while a create is in
+    // flight (it has no other way to know — registerSubmit is the only
+    // channel from this form back to the sheet).
     useEffect(() => {
-        if (registerSubmit) registerSubmit(handleSubmit);
+        if (registerSubmit) registerSubmit(handleSubmit, submitting);
     });
 
     const handleAddressResolved = (address) => {

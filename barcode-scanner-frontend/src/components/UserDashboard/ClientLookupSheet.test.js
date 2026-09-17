@@ -10,6 +10,7 @@ const en = translations.en;
 jest.mock('../../api', () => ({
     clientService: {
         checkClient: jest.fn(),
+        createClient: jest.fn(),
     },
 }));
 
@@ -236,5 +237,38 @@ describe('ClientLookupSheet', () => {
 
         fireEvent.click(screen.getByText(en.continueWithoutClient));
         expect(onRetail).toHaveBeenCalledTimes(1);
+    });
+
+    it('renders no save action on the lookup step', () => {
+        renderSheet();
+        expect(screen.queryByRole('button', {name: en.save})).toBeNull();
+    });
+
+    it('renders the create form inside the sheet and saves via the navbar action', async () => {
+        clientService.createClient.mockResolvedValue({success: true, data: {name: 'Giorgi Beridze'}});
+        const {onSelect} = renderSheet();
+
+        fireEvent.click(screen.getByText(en.createClientRow));
+
+        // ClientCreateForm's own fields, proving the sheet actually renders
+        // it (not just a shell) and that this test reaches real form state,
+        // not a directly-injected registerSubmit mock like
+        // ClientCreateForm.test.js uses.
+        const firstNameInput = screen.getByRole('textbox', {name: en.firstName});
+        const lastNameInput = screen.getByRole('textbox', {name: en.lastName});
+        fireEvent.change(firstNameInput, {target: {value: 'Giorgi'}});
+        fireEvent.change(lastNameInput, {target: {value: 'Beridze'}});
+
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', {name: en.save}));
+            await Promise.resolve();
+            await Promise.resolve();
+        });
+
+        expect(clientService.createClient).toHaveBeenCalledWith(expect.objectContaining({
+            first_name: 'Giorgi',
+            last_name: 'Beridze',
+        }));
+        expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({name: 'Giorgi Beridze'}));
     });
 });
