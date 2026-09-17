@@ -44,4 +44,15 @@ describe('GiftCounter', () => {
     render(<GiftCounter enabled totalQty={2} giftQty={0} onChange={() => {}} label="Gift"/>);
     expect(screen.queryByRole('button', {name: 'Gift +'})).toBeNull();
   });
+
+  it('toggles a single unit as a whole, with no split stepper', () => {
+    const onChange = jest.fn();
+    render(<GiftCounter enabled totalQty={1} giftQty={1} onChange={onChange} label="Gift"/>);
+    const pill = screen.getByRole('button', {name: 'Gift'});
+    expect(pill).toHaveAttribute('aria-pressed', 'true');
+    expect(pill).toHaveTextContent(/^Gift$/);
+    expect(screen.queryByRole('button', {name: 'Gift +'})).toBeNull();
+    fireEvent.click(pill);
+    expect(onChange).toHaveBeenCalledWith(0);
+  });
 });
