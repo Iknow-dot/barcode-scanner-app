@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import {TOKENS} from './palette';
+import {ANTD_OVERLAY_BASE, LAYER_BARS, LAYER_SHEET} from './layers';
 
 // ios.css holds the iOS primitives every later redesign phase builds on, so it
 // must stay on the palette. Allowed literals: #fff (text or icon on a tint
@@ -28,4 +29,25 @@ test('every token ios.css reads exists in the palette', () => {
     const used = [...new Set([...css.matchAll(/var\((--if-[\w-]+)/g)].map((match) => match[1]))];
     expect(used.length).toBeGreaterThan(0);
     expect(used.filter((name) => !(name in TOKENS.light))).toEqual([]);
+});
+
+// z-index of the first rule whose selector is exactly `selector`.
+const zIndexOf = (selector) => {
+    const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const rule = css.match(new RegExp(`(?:^|\\n)${escaped}\\s*\\{([^}]*)\\}`));
+    const value = rule && rule[1].match(/z-index:\s*(\d+)/);
+    return value ? Number(value[1]) : NaN;
+};
+
+test('the floating bars sit under the sheets, and the sheets under antd overlays', () => {
+    expect(zIndexOf('.if-bottom-stack')).toBe(LAYER_BARS);
+    expect(zIndexOf('.if-edge-bottom')).toBe(LAYER_BARS - 1);
+    expect(LAYER_BARS).toBeLessThan(LAYER_SHEET);
+    expect(LAYER_SHEET).toBeLessThan(ANTD_OVERLAY_BASE);
+});
+
+test('the layout column is set on :root, where sheets portaled into body can read it', () => {
+    expect(css).toMatch(/:root\s*\{\s*--layout-column:\s*600px;/);
+    const indexCss = fs.readFileSync(path.join(__dirname, '..', 'index.css'), 'utf8');
+    expect(indexCss).not.toMatch(/--layout-column\s*:/);
 });

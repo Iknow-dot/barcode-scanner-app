@@ -17,11 +17,33 @@
     flex: none;
 }
 
+/* ---------- Layout column ---------- */
+/* The consultant screen's centred column. It lives on :root rather than on
+   the screen element so the fixed bars and the sheets, which antd portals
+   into <body>, read the same width. */
+:root {
+    --layout-column: 600px;
+}
+
+@media (min-width: 768px) {
+    :root {
+        --layout-column: 700px;
+    }
+}
+
+@media (min-width: 1024px) {
+    :root {
+        --layout-column: 800px;
+    }
+}
+
 /* ---------- Glass (floating controls only, never content) ---------- */
 .if-glass-btn,
 .if-tabs,
 .if-search-tab,
-.if-accessory {
+.if-accessory,
+.if-sheet-bar,
+.if-seg.ant-segmented {
     background: var(--if-glass);
     -webkit-backdrop-filter: blur(24px) saturate(190%);
     backdrop-filter: blur(24px) saturate(190%);
@@ -271,6 +293,7 @@ button.if-row:active {
 
 /* Progress or stock meter: always next to words, never colour alone */
 .if-meter {
+    display: block;
     height: 4px;
     margin-top: 8px;
     border-radius: 2px;
@@ -283,6 +306,10 @@ button.if-row:active {
     height: 100%;
     border-radius: 2px;
     background: var(--if-green);
+}
+
+.if-meter-fill.is-low {
+    background: var(--if-orange);
 }
 
 /* ---------- Buttons (52 px; one prominent per view) ---------- */
@@ -315,10 +342,6 @@ button.if-row:active {
     box-shadow: 0 4px 20px rgba(58, 152, 102, 0.3);
 }
 
-.if-btn-primary:hover {
-    background: var(--if-tint-hover);
-}
-
 .if-btn-gray {
     background: var(--if-fill);
     color: var(--if-tint-text);
@@ -327,14 +350,14 @@ button.if-row:active {
 
 /* ---------- Floating bottom bars ---------- */
 /* Fixed stack at the bottom of the screen (active-order bar over the tab
-   bar), centred on the screen's content column: the screen sets
-   --layout-column. */
+   bar), centred on --layout-column. Layer 100 (src/theme/layers.js): under
+   the sheets (900) and every antd overlay (1000+), which cover it. */
 .if-bottom-stack {
     position: fixed;
     left: 0;
     right: 0;
     bottom: 0;
-    z-index: 1000;
+    z-index: 100;
     max-width: var(--layout-column, 600px);
     margin: 0 auto;
     padding: 0 16px max(12px, env(safe-area-inset-bottom, 0px));
@@ -356,7 +379,7 @@ button.if-row:active {
     left: 0;
     right: 0;
     bottom: 0;
-    z-index: 999;
+    z-index: 99;
     height: calc(168px + max(12px, env(safe-area-inset-bottom, 0px)));
     background: var(--if-bg-grouped);
     -webkit-mask-image: linear-gradient(to bottom, transparent, rgba(0, 0, 0, 0.45) 55%, rgba(0, 0, 0, 0.8));
@@ -524,7 +547,8 @@ button.if-row:active {
 .if-btn:focus-visible,
 .if-tab:focus-visible,
 .if-search-tab:focus-visible,
-.if-accessory:focus-visible {
+.if-accessory:focus-visible,
+.if-stepper-btn:focus-visible {
     outline: 2px solid var(--if-tint);
     outline-offset: 2px;
 }
@@ -533,4 +557,482 @@ button.if-row:active {
 .if-row:focus-visible {
     outline: 2px solid var(--if-tint);
     outline-offset: -2px;
+}
+
+/* ====================================================================
+ * Phase 3: order sheets
+ * ==================================================================== */
+
+/* ---------- Type (Dynamic Type "Large") ---------- */
+.if-title-1 {
+    font-size: 28px;
+    line-height: 34px;
+    font-weight: 700;
+    color: var(--if-label);
+    font-variant-numeric: tabular-nums;
+}
+
+.if-title-2 {
+    font-size: 22px;
+    line-height: 28px;
+    font-weight: 700;
+    color: var(--if-label);
+    font-variant-numeric: tabular-nums;
+}
+
+.if-title-3 {
+    margin: 0;
+    font-size: 20px;
+    line-height: 25px;
+    font-weight: 600;
+    color: var(--if-label);
+}
+
+.if-footnote {
+    font-size: 13px;
+    line-height: 18px;
+    color: var(--if-label-2);
+    font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Interaction states ---------- */
+/* Hover only where a pointer can hover, so a tap never leaves a stuck
+   highlight on touch screens. */
+@media (hover: hover) {
+    .if-btn-primary:not(:disabled):hover {
+        background: var(--if-tint-hover);
+    }
+
+    .if-btn-gray:not(:disabled):hover,
+    button.if-row:not(:disabled):hover,
+    .if-tab:not(.is-on):hover,
+    .if-stepper-btn:not(:disabled):hover {
+        background: var(--if-fill);
+    }
+
+    .if-glass-btn:not(.is-prominent):hover,
+    .if-search-tab:not(.is-on):hover,
+    .if-accessory:hover {
+        background: linear-gradient(var(--if-fill), var(--if-fill)), var(--if-glass);
+    }
+
+    .if-glass-btn.is-prominent:hover {
+        background: var(--if-tint-hover);
+        border-color: var(--if-tint-hover);
+    }
+}
+
+.if-glass-btn,
+.if-search-tab,
+.if-accessory {
+    transition: transform 0.12s ease, background-color 0.15s ease;
+}
+
+.if-glass-btn:active,
+.if-search-tab:active,
+.if-accessory:active {
+    transform: scale(0.96);
+}
+
+.if-tab:active,
+.if-stepper-btn:not(:disabled):active {
+    background: var(--if-fill);
+}
+
+/* After the :active and hover rules so a disabled button never reacts */
+.if-btn:disabled,
+.if-btn[aria-disabled="true"] {
+    background: var(--if-fill);
+    color: var(--if-label-3);
+    box-shadow: none;
+    cursor: default;
+    transform: none;
+}
+
+button.if-row:disabled {
+    cursor: default;
+}
+
+/* ---------- Rows: leading check or icon, trailing value ---------- */
+/* Separators start past a 24 px leading check or icon (16 + 24 + 12) */
+.if-group.is-lead-inset > * + *::before {
+    left: 52px;
+}
+
+.if-check {
+    flex: none;
+    width: 24px;
+    height: 24px;
+    border-radius: 12px;
+    border: 2px solid var(--if-label-3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+}
+
+.if-check.is-on {
+    background: var(--if-tint);
+    border-color: var(--if-tint);
+}
+
+button.if-row:disabled .if-check {
+    opacity: 0.4;
+}
+
+.if-row-icon {
+    flex: none;
+    display: flex;
+    color: var(--if-label-2);
+}
+
+.if-row-label {
+    flex: 1;
+    min-width: 0;
+    font-size: 17px;
+    line-height: 22px;
+    color: var(--if-label);
+}
+
+.if-row-value {
+    flex: none;
+    max-width: 60%;
+    font-size: 17px;
+    line-height: 22px;
+    color: var(--if-label-2);
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+/* Section header with a trailing count ("Vake · 3 products") */
+.if-section-header.is-split {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+/* ---------- Inline notices (words and a glyph, never colour alone) ---------- */
+.if-notice {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    margin: 16px 0 0;
+    padding: 12px 14px;
+    border-radius: 14px;
+    background: var(--if-bg);
+    color: var(--if-label);
+    font-size: 15px;
+    line-height: 20px;
+}
+
+.if-notice-icon {
+    flex: none;
+    display: flex;
+    color: var(--if-label-2);
+}
+
+.if-notice.is-warning {
+    background: var(--if-orange-soft);
+}
+
+.if-notice.is-warning .if-notice-icon {
+    color: var(--if-orange-text);
+}
+
+/* ---------- Empty state ---------- */
+.if-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: min(132px, 14vh) 16px 0;
+    text-align: center;
+    text-wrap: balance;
+}
+
+.if-empty-icon {
+    width: 88px;
+    height: 88px;
+    border-radius: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--if-tint-soft);
+    color: var(--if-tint-text);
+}
+
+.if-empty-title {
+    margin: 18px 0 0;
+    font-size: 20px;
+    line-height: 25px;
+    font-weight: 600;
+    color: var(--if-label);
+}
+
+.if-empty-text {
+    margin: 6px 0 0;
+    font-size: 15px;
+    line-height: 20px;
+    color: var(--if-label-2);
+}
+
+.if-empty-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding-top: 24px;
+}
+
+/* ---------- Stepper ---------- */
+.if-stepper {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    height: 44px;
+    border-radius: 22px;
+    background: var(--if-fill);
+}
+
+.if-stepper-btn {
+    flex: none;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    border: 0;
+    border-radius: 22px;
+    background: transparent;
+    color: var(--if-label);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: inherit;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.if-stepper-btn:disabled {
+    color: var(--if-label-3);
+    cursor: default;
+}
+
+.if-stepper-value {
+    width: 32px;
+    height: 44px;
+    padding: 0;
+    border: 0;
+    border-radius: 10px;
+    background: transparent;
+    color: var(--if-label);
+    font-family: inherit;
+    font-size: 17px;
+    line-height: 22px;
+    font-weight: 600;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+}
+
+.if-stepper-value:focus-visible {
+    outline: 2px solid var(--if-tint);
+    outline-offset: -4px;
+}
+
+.if-stepper-value:disabled {
+    color: var(--if-label-3);
+}
+
+/* ---------- Segmented control (antd Segmented, restyled) ---------- */
+/* The track is glass; .is-inset is for a control inside a white row, where
+   glass would vanish. Thumb radius is concentric: 22 - 1 border - 3 padding.
+   The selected fill and white label come from the antd theme (phase 1). */
+.if-seg.ant-segmented {
+    padding: 3px;
+    border-radius: 22px;
+    box-shadow: var(--if-glass-shadow-sm);
+}
+
+.if-seg.ant-segmented.is-inset {
+    background: var(--if-fill);
+    border-color: transparent;
+    box-shadow: none;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+}
+
+.if-seg.ant-segmented .ant-segmented-group {
+    gap: 2px;
+}
+
+.if-seg.ant-segmented .ant-segmented-item,
+.if-seg.ant-segmented .ant-segmented-thumb {
+    border-radius: 18px;
+}
+
+.if-seg.ant-segmented .ant-segmented-item-label {
+    min-height: 36px;
+    padding: 0 8px;
+    line-height: 36px;
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.if-seg.ant-segmented .ant-segmented-item-selected {
+    box-shadow: 0 2px 8px rgba(58, 152, 102, 0.32);
+}
+
+/* Bold on the tint so white text clears the 3:1 minimum for bold text */
+.if-seg.ant-segmented .ant-segmented-item-selected .ant-segmented-item-label {
+    font-weight: 700;
+}
+
+/* ---------- Sheets (IosSheet: antd Drawer, placement bottom) ---------- */
+/* Layer 900 (src/theme/layers.js), set by IosSheet. The .if-sheet.ant-drawer
+   prefix outranks antd's own :where()-scoped rules. */
+.if-sheet.ant-drawer .ant-drawer-mask {
+    background: rgba(0, 0, 0, 0.32);
+}
+
+.if-sheet.ant-drawer-bottom > .ant-drawer-content-wrapper {
+    left: 0;
+    right: 0;
+    max-width: var(--layout-column, 600px);
+    margin: 0 auto;
+    box-shadow: none;
+}
+
+.if-sheet.ant-drawer .ant-drawer-section {
+    background: var(--if-bg-grouped);
+    border-radius: 26px 26px 0 0;
+    overflow: hidden;
+}
+
+.if-sheet.ant-drawer .ant-drawer-body {
+    display: flex;
+    flex-direction: column;
+    padding: 0;
+    overflow: hidden;
+}
+
+.if-sheet-frame {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.if-sheet-grabber {
+    flex: none;
+    width: 36px;
+    height: 5px;
+    margin: 6px auto 0;
+    border-radius: 3px;
+    background: var(--if-label-3);
+    opacity: 0.55;
+}
+
+.if-sheet-navbar {
+    flex: none;
+    min-height: 54px;
+    padding: 0 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.if-sheet-heading {
+    flex: 1;
+    min-width: 0;
+    text-align: center;
+}
+
+.if-sheet-title {
+    margin: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 17px;
+    line-height: 22px;
+    font-weight: 600;
+    color: var(--if-label);
+}
+
+.if-sheet-subtitle {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 12px;
+    line-height: 16px;
+    color: var(--if-label-2);
+    font-variant-numeric: tabular-nums;
+}
+
+.if-sheet-nav-spacer {
+    flex: none;
+    width: 44px;
+    height: 44px;
+}
+
+/* Content scrolls; the action bar is the scroller's last child, sticky at the
+   bottom, so content passes beneath the glass and the last row is never
+   hidden behind it. */
+.if-sheet-scroll {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
+}
+
+.if-sheet-content {
+    flex: 1 0 auto;
+    padding: 4px 16px 0;
+}
+
+/* Floating glass action bar. Radius is concentric with the 14 px buttons
+   inside it (14 + 10 padding). */
+.if-sheet-bar {
+    position: sticky;
+    bottom: max(12px, env(safe-area-inset-bottom, 0px));
+    z-index: 2;
+    flex: none;
+    margin: 16px 12px max(12px, env(safe-area-inset-bottom, 0px));
+    padding: 10px;
+    border-radius: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.if-sheet-bar.is-row {
+    flex-direction: row;
+    align-items: center;
+    gap: 12px;
+}
+
+.if-sheet-bar.is-row .if-btn {
+    flex: 1;
+    width: auto;
+    min-width: 0;
+    padding: 0 12px;
+    white-space: nowrap;
+}
+
+.if-sheet-total {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 0 4px;
+}
+
+.if-sheet-total-label {
+    font-size: 15px;
+    line-height: 20px;
+    color: var(--if-label-2);
+    font-variant-numeric: tabular-nums;
+}
+
+.if-sheet-total-value.is-muted {
+    color: var(--if-label-3);
 }

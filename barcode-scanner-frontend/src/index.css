@@ -154,10 +154,9 @@ body {
 
 /* ===== Dashboard Container =====
    /dashboard has no antd Header, content card or Footer (App.js), so this
-   column is the whole screen. --layout-column also centres the floating
-   bottom bars (theme/ios.css .if-bottom-stack). */
+   column is the whole screen. --layout-column is set on :root in
+   theme/ios.css, where the floating bars and the sheets read it too. */
 .m-dashboard {
-  --layout-column: 600px;
   display: flex;
   flex-direction: column;
   min-height: 100vh;
@@ -1024,10 +1023,6 @@ body {
 
 /* ===== Desktop overrides (larger screens) ===== */
 @media (min-width: 768px) {
-  .m-dashboard {
-    --layout-column: 700px;
-  }
-
   .m-product-image {
     max-height: 300px;
   }
@@ -1038,12 +1033,6 @@ body {
 
   .m-order-item-card {
     padding: 14px 18px;
-  }
-}
-
-@media (min-width: 1024px) {
-  .m-dashboard {
-    --layout-column: 800px;
   }
 }
 
