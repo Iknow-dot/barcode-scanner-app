@@ -59,9 +59,6 @@ const ClientLookupSheet = ({open, onSelect, onClose, onRetail}) => {
     const [results, setResults] = useState([]);
     const [seed, setSeed] = useState(EMPTY_SEED);
     const [notFound, setNotFound] = useState(false);
-    // The last {tab, value} pair a search actually ran for, so re-rendering
-    // with the same value (no real edit) does not re-fire the debounce.
-    const lastSearched = useRef({tab: '', value: ''});
     // ClientCreateForm hands us its submit function (registerSubmit) so the
     // navbar's შენახვა action can trigger it without the form needing to
     // know about the sheet's navbar.
@@ -75,7 +72,6 @@ const ClientLookupSheet = ({open, onSelect, onClose, onRetail}) => {
             setResults([]);
             setSeed(EMPTY_SEED);
             setNotFound(false);
-            lastSearched.current = {tab: '', value: ''};
             createSubmitRef.current = null;
         }
     }, [open]);
@@ -90,7 +86,6 @@ const ClientLookupSheet = ({open, onSelect, onClose, onRetail}) => {
     // (or a submit racing a tab switch) is a silent no-op.
     const runSearch = async () => {
         if (!isSearchable(tab, value)) return;
-        lastSearched.current = {tab, value};
         const args = lookupArgs(tab, value);
         const result = await clientService.checkClient(args);
         if (result.success) {
@@ -117,16 +112,20 @@ const ClientLookupSheet = ({open, onSelect, onClose, onRetail}) => {
     };
 
     useEffect(() => {
+        // Not open: nothing should search, and closing while a timer is
+        // pending must cancel it — an open=false rerender still runs this
+        // effect (the sheet's own state lives above the antd Drawer that
+        // unmounts its content on close), so this bail also clears the
+        // previous run's pending timeout on the way out.
+        if (!open) return undefined;
         if (tabConfig(tab).trigger !== 'auto') return undefined;
         if (!isSearchable(tab, value)) return undefined;
-        const last = lastSearched.current;
-        if (last.tab === tab && last.value === value) return undefined;
         const timer = setTimeout(() => {
             runSearch();
         }, AUTO_LOOKUP_DEBOUNCE_MS);
         return () => clearTimeout(timer);
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [tab, value]);
+    }, [tab, value, open]);
 
     const handleTabChange = (nextTab) => {
         setTab(nextTab);

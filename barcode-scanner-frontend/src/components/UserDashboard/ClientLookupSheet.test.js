@@ -105,21 +105,53 @@ describe('ClientLookupSheet', () => {
         expect(clientService.checkClient).toHaveBeenCalledWith({identification_number: '123456789'});
     });
 
-    it('does not fire a second call when the same value is re-rendered', async () => {
+    it('searches again when the field is cleared and the same value is retyped', async () => {
         clientService.checkClient.mockResolvedValue({success: true, data: {clients: []}});
-        const {rerender} = renderSheet();
+        renderSheet();
 
         fireEvent.change(idInput(), {target: {value: '123456789'}});
         await flushDebounce();
         expect(clientService.checkClient).toHaveBeenCalledTimes(1);
 
-        rerender(
-            <LanguageProvider>
-                <ClientLookupSheet open onSelect={jest.fn()} onClose={jest.fn()}/>
-            </LanguageProvider>
-        );
+        fireEvent.click(screen.getByRole('button', {name: en.clearSearch}));
+        expect(idInput()).toHaveValue('');
+
+        fireEvent.change(idInput(), {target: {value: '123456789'}});
+        await flushDebounce();
+        expect(clientService.checkClient).toHaveBeenCalledTimes(2);
+    });
+
+    it('searches again for the same value after switching to another tab and back', async () => {
+        clientService.checkClient.mockResolvedValue({success: true, data: {clients: []}});
+        renderSheet();
+
+        fireEvent.change(idInput(), {target: {value: '123456789'}});
         await flushDebounce();
         expect(clientService.checkClient).toHaveBeenCalledTimes(1);
+
+        fireEvent.click(phoneTab());
+        fireEvent.click(screen.getByRole('radio', {name: en.lookupByIdTab}));
+        expect(idInput()).toHaveValue('');
+
+        fireEvent.change(idInput(), {target: {value: '123456789'}});
+        await flushDebounce();
+        expect(clientService.checkClient).toHaveBeenCalledTimes(2);
+    });
+
+    it('does not search after the sheet closes with a pending debounce timer', async () => {
+        clientService.checkClient.mockResolvedValue({success: true, data: {clients: []}});
+        const {rerender} = renderSheet();
+
+        fireEvent.change(idInput(), {target: {value: '123456789'}});
+        // Close before the 1500ms debounce elapses.
+        rerender(
+            <LanguageProvider>
+                <ClientLookupSheet open={false} onSelect={jest.fn()} onClose={jest.fn()}/>
+            </LanguageProvider>
+        );
+
+        await flushDebounce();
+        expect(clientService.checkClient).not.toHaveBeenCalled();
     });
 
     it('fires nothing for 8 digits', async () => {
