@@ -865,6 +865,15 @@ button.if-row:disabled .if-check {
     backdrop-filter: none;
 }
 
+/* Three labels in one block-width control (the lookup sheet's tab bar) need
+   a smaller type scale and tighter padding than the default two-option
+   segmented, or the longest Georgian label ("პირადი ნომერი") clips to an
+   ellipsis at a phone width. */
+.if-seg.ant-segmented.is-compact .ant-segmented-item-label {
+    padding: 0 4px;
+    font-size: 12px;
+}
+
 .if-seg.ant-segmented .ant-segmented-group {
     gap: 2px;
 }
@@ -1084,9 +1093,17 @@ button.if-row:disabled .if-check {
 }
 
 .if-field-hint {
+    display: block;
+    margin-top: 4px;
     font-size: 13px;
     line-height: 18px;
     color: var(--if-label-3);
+}
+
+/* Under the lookup sheet's search field rather than a row's field, so it
+   needs its own top gap instead of .if-row-main's flow. */
+.if-search-hint {
+    margin: 6px 2px 0;
 }
 
 .if-field-input.ant-input,
@@ -1141,6 +1158,24 @@ button.if-row:disabled .if-check {
     cursor: pointer;
 }
 .if-search-trail.is-action { color: var(--if-tint-text); font-weight: 600; }
+
+/* Small inline spinner for an in-flight search: the lookup field's trailing
+   slot, and the create form's address field suffix. Ring on transparent,
+   rotating via currentColor so it tints correctly wherever it's dropped in. */
+.if-spinner {
+    display: inline-block;
+    flex: none;
+    width: 16px;
+    height: 16px;
+    border: 2px solid var(--if-fill);
+    border-top-color: var(--if-label-3);
+    border-radius: 50%;
+    animation: if-spin 0.7s linear infinite;
+}
+
+@keyframes if-spin {
+    to { transform: rotate(360deg); }
+}
 
 /* Informational banner inside a sheet (the not-found notice). */
 .if-banner {

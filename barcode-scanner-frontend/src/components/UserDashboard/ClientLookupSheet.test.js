@@ -271,4 +271,178 @@ describe('ClientLookupSheet', () => {
         }));
         expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({name: 'Giorgi Beridze'}));
     });
+
+    describe('A1: a pending search must not survive a jump to the create step', () => {
+        it('does not call checkClient (or hijack onSelect) for a search left pending when the create row is tapped', async () => {
+            clientService.checkClient.mockResolvedValue({success: true, data: {clients: [CLIENT_A]}});
+            const {onSelect} = renderSheet();
+
+            fireEvent.change(idInput(), {target: {value: '123456789'}});
+            // Jump to the create step manually, before the 1500ms debounce
+            // fires — the scenario is a consultant who already knows the
+            // customer is new.
+            fireEvent.click(screen.getByText(en.createClientRow));
+            expect(screen.getByRole('dialog', {name: en.createCustomer})).toBeInTheDocument();
+
+            await flushDebounce();
+
+            expect(clientService.checkClient).not.toHaveBeenCalled();
+            expect(onSelect).not.toHaveBeenCalled();
+        });
+
+        it('does not pop the not-found banner over the create form from that same stray search', async () => {
+            clientService.checkClient.mockResolvedValue({success: false, code: 'CLIENT_NOT_FOUND'});
+            renderSheet();
+
+            fireEvent.change(idInput(), {target: {value: '123456789'}});
+            fireEvent.click(screen.getByText(en.createClientRow));
+            expect(screen.queryByText(en.clientNotFoundCreate)).toBeNull();
+
+            await flushDebounce();
+
+            expect(clientService.checkClient).not.toHaveBeenCalled();
+            expect(screen.queryByText(en.clientNotFoundCreate)).toBeNull();
+        });
+    });
+
+    describe('A2: in-flight state and a stale-response guard', () => {
+        it('shows a spinner and marks the field busy while a search is in flight, then clears it', async () => {
+            let resolveCheck;
+            clientService.checkClient.mockReturnValue(new Promise((resolve) => { resolveCheck = resolve; }));
+            renderSheet();
+            fireEvent.click(nameTab());
+            fireEvent.change(nameInput(), {target: {value: 'ბერიძე'}});
+
+            fireEvent.click(screen.getByRole('button', {name: en.searchAction}));
+            await act(async () => { await Promise.resolve(); });
+
+            // antd's Drawer portals its content onto document.body rather
+            // than RTL's own render container, so query from document.
+            expect(document.querySelector('.if-search[aria-busy="true"]')).toBeInTheDocument();
+            expect(document.querySelector('.if-spinner')).toBeInTheDocument();
+            expect(screen.queryByRole('button', {name: en.searchAction})).toBeNull();
+
+            await act(async () => {
+                resolveCheck({success: true, data: {clients: []}});
+                await Promise.resolve();
+                await Promise.resolve();
+            });
+
+            expect(document.querySelector('.if-spinner')).toBeNull();
+        });
+
+        it('discards an abandoned search that resolves after a newer one', async () => {
+            let resolveFirst;
+            let resolveSecond;
+            clientService.checkClient.mockImplementation((args) => {
+                if (args.identification_number === '123456789') {
+                    return new Promise((resolve) => { resolveFirst = resolve; });
+                }
+                return new Promise((resolve) => { resolveSecond = resolve; });
+            });
+            const {onSelect} = renderSheet();
+
+            // The ID tab has no manual search button — typing through 9 and
+            // then 11 digits is exactly how two auto-fired searches overlap.
+            fireEvent.change(idInput(), {target: {value: '123456789'}});
+            await flushDebounce();
+            expect(clientService.checkClient).toHaveBeenCalledTimes(1);
+
+            fireEvent.change(idInput(), {target: {value: '12345678901'}});
+            await flushDebounce();
+            expect(clientService.checkClient).toHaveBeenCalledTimes(2);
+
+            // The later query resolves first.
+            await act(async () => {
+                resolveSecond({success: true, data: {clients: [CLIENT_B]}});
+                await Promise.resolve();
+                await Promise.resolve();
+            });
+            expect(onSelect).toHaveBeenCalledWith(CLIENT_B);
+
+            onSelect.mockClear();
+            // The abandoned, earlier query resolves last — must be dropped,
+            // not select CLIENT_A for a query the consultant edited away from.
+            await act(async () => {
+                resolveFirst({success: true, data: {clients: [CLIENT_A]}});
+                await Promise.resolve();
+                await Promise.resolve();
+            });
+            expect(onSelect).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('A3: the create form keeps what was typed across a back-then-create-again', () => {
+        it('preserves typed fields after going back to the lookup step and tapping create again', async () => {
+            clientService.checkClient.mockResolvedValue({success: false, code: 'CLIENT_NOT_FOUND'});
+            renderSheet();
+
+            fireEvent.change(idInput(), {target: {value: '123456789'}});
+            await flushDebounce();
+            expect(screen.getByRole('dialog', {name: en.createCustomer})).toBeInTheDocument();
+
+            fireEvent.change(screen.getByRole('textbox', {name: en.firstName}), {target: {value: 'Giorgi'}});
+            fireEvent.change(screen.getByRole('textbox', {name: en.lastName}), {target: {value: 'Beridze'}});
+            fireEvent.change(screen.getByRole('textbox', {name: en.customerEmail}), {target: {value: 'giorgi@example.com'}});
+
+            fireEvent.click(screen.getByRole('button', {name: en.back}));
+            expect(screen.getByRole('dialog', {name: en.lookupClient})).toBeInTheDocument();
+
+            fireEvent.click(screen.getByText(en.createClientRow));
+
+            expect(screen.getByRole('textbox', {name: en.firstName})).toHaveValue('Giorgi');
+            expect(screen.getByRole('textbox', {name: en.lastName})).toHaveValue('Beridze');
+            expect(screen.getByRole('textbox', {name: en.customerEmail})).toHaveValue('giorgi@example.com');
+        });
+
+        it('resets to a new seed when a different search comes back not found', async () => {
+            clientService.checkClient.mockResolvedValue({success: false, code: 'CLIENT_NOT_FOUND'});
+            renderSheet();
+
+            fireEvent.change(idInput(), {target: {value: '123456789'}});
+            await flushDebounce();
+            fireEvent.change(screen.getByRole('textbox', {name: en.firstName}), {target: {value: 'Giorgi'}});
+
+            fireEvent.click(screen.getByRole('button', {name: en.back}));
+            fireEvent.change(idInput(), {target: {value: '987654321'}});
+            await flushDebounce();
+
+            expect(screen.getByRole('dialog', {name: en.createCustomer})).toBeInTheDocument();
+            expect(screen.getByRole('textbox', {name: en.firstName})).toHaveValue('');
+            expect(screen.getByRole('textbox', {name: en.customerIdNumber})).toHaveValue('987654321');
+        });
+    });
+
+    describe('A4: an inline hint for a value that is not yet searchable', () => {
+        it('shows a hint under the id field below 9 digits, and clears it once searchable', async () => {
+            renderSheet();
+
+            fireEvent.change(idInput(), {target: {value: '12345678'}});
+            expect(screen.getByText(en.lookupIdHint)).toBeInTheDocument();
+
+            fireEvent.change(idInput(), {target: {value: '123456789'}});
+            expect(screen.queryByText(en.lookupIdHint)).toBeNull();
+        });
+
+        it('shows a hint under the phone field for a non-mobile number', () => {
+            renderSheet();
+            fireEvent.click(phoneTab());
+
+            fireEvent.change(phoneInput(), {target: {value: '499451230'}});
+            expect(screen.getByText(en.lookupPhoneHint)).toBeInTheDocument();
+        });
+
+        it('shows a hint under the name field below 3 characters', () => {
+            renderSheet();
+            fireEvent.click(nameTab());
+
+            fireEvent.change(nameInput(), {target: {value: 'ბ'}});
+            expect(screen.getByText(en.lookupNameHint)).toBeInTheDocument();
+        });
+
+        it('shows no hint for an empty field', () => {
+            renderSheet();
+            expect(screen.queryByText(en.lookupIdHint)).toBeNull();
+        });
+    });
 });
