@@ -1224,3 +1224,51 @@ button.if-row:disabled .if-check {
     flex: none;
     text-align: right;
 }
+
+/* ---------- Swipe-to-reveal row actions (iOS Mail/Messages idiom) ---------- */
+/* The row's own content sits on top of its actions at rest, covering them;
+   a leftward drag, a hover, or a keyboard focus landing inside the actions
+   (:focus-within) slides the content left by --swipe-reveal to expose them.
+   --swipe-reveal is a plain layout custom property set inline per row (not
+   an --if-* colour token, so iosCss.test.js's palette check leaves it
+   alone) since a draft's print+delete panel is wider than a print-only
+   row's. Actions keep the same circular .if-stepper-btn look used
+   everywhere else in the app — only the icon colour (delete's
+   .m-order-row-delete, OrdersView.css) marks a destructive action, never a
+   full-bleed fill. */
+.if-swipe-row {
+    overflow: hidden;
+}
+
+.if-swipe-actions {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: var(--swipe-reveal, 88px);
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+}
+
+.if-swipe-content {
+    position: relative;
+    z-index: 1;
+    background: var(--if-bg);
+    /* Vertical panning stays the browser's own gesture; horizontal is read
+       from touchmove in orderRowSwipe.js, so nothing here needs
+       preventDefault to keep the two from fighting each other. */
+    touch-action: pan-y;
+    transition: transform 0.2s ease;
+}
+
+.if-swipe-row.is-open .if-swipe-content,
+.if-swipe-row:focus-within .if-swipe-content {
+    transform: translateX(calc(-1 * var(--swipe-reveal, 88px)));
+}
+
+@media (hover: hover) {
+    .if-swipe-row:hover .if-swipe-content {
+        transform: translateX(calc(-1 * var(--swipe-reveal, 88px)));
+    }
+}

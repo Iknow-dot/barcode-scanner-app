@@ -24,8 +24,15 @@
 }
 
 /* Same red used by the cart's own delete action (index.css
-   .m-cart-item-controls .if-stepper-btn.m-cart-item-delete). */
-.m-order-row-delete {
+   .m-cart-item-controls .if-stepper-btn.m-cart-item-delete) — compounded
+   with .if-stepper-btn, not a lone class, so it wins on specificity rather
+   than on stylesheet order. A lone-class version of this rule tied with
+   plain .if-stepper-btn's own `color` and lost to it under CRA's dev-bundle
+   order, so the "destructive" delete icon was silently rendering in the
+   neutral label colour — caught while adding the swipe-reveal panel, whose
+   .if-swipe-actions now holds both buttons side by side making the mismatch
+   visible at a glance. */
+.if-stepper-btn.m-order-row-delete {
     color: var(--if-red-text);
 }
 

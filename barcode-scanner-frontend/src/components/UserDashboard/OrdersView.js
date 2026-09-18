@@ -12,7 +12,12 @@ import {
     emptyCopyKey,
     localDayBounds,
 } from './ordersListView';
+import {nextSwipeAxis, swipeRevealOffset, swipeRestsOpen} from './orderRowSwipe';
 import './OrdersView.css';
+
+// Matches .if-stepper-btn's 44px touch target (ios.css) — a draft row
+// reveals print+delete (2 buttons), any other row reveals print alone.
+const ACTION_BUTTON_WIDTH = 44;
 
 // Same 300ms debounce the old customer-search effect used
 // (UserDashboard.js:234-253) — only typing a query still waits this long. A
@@ -43,96 +48,185 @@ const timeLabel = (time, t) => {
 
 /**
  * One order row: monogram (or a cart glyph for a retail order), name + id/
- * count meta, a trailing total-over-time column, a printer action (any
- * status) and — drafts only — a delete action behind a confirm. Only a draft
- * row is tappable (resumes it); the printer/trash controls stop propagation
- * so tapping them never also opens the row.
+ * count meta, a trailing total-over-time column and a chevron (drafts only).
+ * The printer action (any status) and — drafts only — a delete action
+ * behind a confirm sit in an `.if-swipe-actions` panel *behind* the row,
+ * revealed by swiping the row left (iOS Mail/Messages idiom), by hovering
+ * it, or by focusing into the panel with a keyboard (`:focus-within` in
+ * ios.css) — so the actions stay reachable without a gesture. `isOpen` is
+ * owned by OrdersView (only one row's actions are ever open at a time); this
+ * component only decides the *live* drag offset while a touch is in
+ * progress, via the pure functions in orderRowSwipe.js (nextSwipeAxis /
+ * swipeRevealOffset / swipeRestsOpen) rather than doing that arithmetic
+ * inline. Only a draft row is tappable on its own (resumes it); the actions
+ * are now DOM siblings of the row rather than nested inside it, so — unlike
+ * the old inline buttons — their clicks/keydowns never bubble into the
+ * row's own handlers at all (no stopPropagation needed).
  */
-const OrderRow = ({row, t, onOpenOrder, onPrint, onDelete}) => {
+const OrderRow = ({row, t, isOpen, onOpen, onClose, onOpenOrder, onPrint, onDelete}) => {
     const clickable = row.isResumable;
+    const revealWidth = clickable ? ACTION_BUTTON_WIDTH * 2 : ACTION_BUTTON_WIDTH;
     const openRow = () => onOpenOrder(row.key);
+
+    // Per-touch gesture state. Refs, not state: touchmove can fire many
+    // times a frame and none of this needs its own render — only dragOffset
+    // (below) does, since it drives the live inline transform.
+    const touchRef = useRef({startX: 0, startY: 0, axis: 'undecided'});
+    // Timestamp of the last horizontal drag's end, rather than a plain
+    // just-dragged boolean: most browsers still deliver one trailing click
+    // right after a touch sequence that dragged, and that specific click
+    // must be swallowed (see handleContentClick) — but the SAME boolean
+    // would just as happily swallow a later, unrelated tap on a row that's
+    // been sitting open for a while, since nothing else ever clears it. A
+    // short time window tells "the trailing click of this gesture" apart
+    // from "a fresh tap", the same disambiguation FastClick-style libraries
+    // use.
+    const lastDragEndRef = useRef(0);
+    const CLICK_SWALLOW_MS = 500;
+    // null while not actively dragging (rest position comes from the
+    // `is-open` class in ios.css instead) — a live px offset while a
+    // horizontal drag is in progress, tracking the finger with no
+    // transition.
+    const [dragOffset, setDragOffset] = useState(null);
+
+    const handleTouchStart = (event) => {
+        touchRef.current = {
+            startX: event.touches[0].clientX,
+            startY: event.touches[0].clientY,
+            axis: 'undecided',
+        };
+    };
+
+    const handleTouchMove = (event) => {
+        const touch = touchRef.current;
+        const deltaX = event.touches[0].clientX - touch.startX;
+        const deltaY = event.touches[0].clientY - touch.startY;
+        touch.axis = nextSwipeAxis(touch.axis, deltaX, deltaY);
+        // Vertical (or still-undecided) — leave it alone so the page's own
+        // scroll handles it; touch-action: pan-y (ios.css) keeps the browser
+        // from also treating this as a horizontal pan gesture of its own.
+        if (touch.axis !== 'horizontal') return;
+        setDragOffset(swipeRevealOffset(deltaX, revealWidth, isOpen));
+    };
+
+    const handleTouchEnd = () => {
+        const touch = touchRef.current;
+        if (touch.axis === 'horizontal' && dragOffset !== null) {
+            lastDragEndRef.current = Date.now();
+            if (swipeRestsOpen(dragOffset, revealWidth)) onOpen(); else onClose();
+        }
+        setDragOffset(null);
+        touch.axis = 'undecided';
+    };
+
+    // Shared by a tap on the row and a keyboard Enter/Space on it: while the
+    // actions are revealed, the first activation just closes them (the
+    // standard iOS behaviour) instead of also resuming the order in the same
+    // tap.
+    const activateRow = () => {
+        if (isOpen) {
+            onClose();
+            return;
+        }
+        if (clickable) openRow();
+    };
+
+    const handleContentClick = () => {
+        // A drag that just ended still delivers a trailing click in most
+        // browsers; swallow exactly that one so a swipe never also resumes
+        // (or immediately re-closes) the row it just opened.
+        if (Date.now() - lastDragEndRef.current < CLICK_SWALLOW_MS) return;
+        activateRow();
+    };
+
     const handleKeyDown = (event) => {
-        // The printer/trash buttons stop *pointer* propagation on click, but
-        // a keyboard Enter/Space on either still bubbles here as a keydown
-        // (bubbling can't be stopped per-event-type). Left unchecked, this
-        // branch fires for them too, preventDefault-ing their own
-        // Enter/Space-triggers-click default action and opening the row
-        // instead of printing/deleting. Only react when the row itself is
-        // the target.
+        // Nothing focusable lives inside .if-swipe-content any more (the
+        // print/delete buttons are siblings in .if-swipe-actions, not
+        // descendants), so a keydown reaching this handler always
+        // originated on the row itself — kept as a guard rather than relied
+        // on, in case something focusable is added here later.
         if (event.target !== event.currentTarget) {
             event.stopPropagation();
             return;
         }
         if (event.key === 'Enter' || event.key === ' ') {
             event.preventDefault();
-            openRow();
+            activateRow();
         }
     };
 
     return (
         <div
-            className="if-row"
-            role={clickable ? 'button' : undefined}
-            tabIndex={clickable ? 0 : undefined}
-            // The nested print/delete buttons carry their own aria-labels,
-            // which the default accessible-name algorithm would otherwise
-            // fold into this row's name ("Continue ... Print invoice #1048
-            // Delete #1048"). An explicit label overrides that.
-            aria-label={clickable ? `${t.continueOrder} ${row.name} #${row.key}` : undefined}
-            onClick={clickable ? openRow : undefined}
-            onKeyDown={clickable ? handleKeyDown : undefined}
-            style={clickable ? undefined : {cursor: 'default'}}
+            className={`if-swipe-row${isOpen ? ' is-open' : ''}`}
+            data-order-row-key={row.key}
+            style={{'--swipe-reveal': `${revealWidth}px`}}
         >
-            <span className="if-avatar" aria-hidden="true">
-                {row.isRetail ? <IosIcon name="cart" size={20} stroke={2}/> : row.initials}
-            </span>
-            <span className="if-row-main">
-                <span className="if-row-title m-order-row-name">{row.name}</span>
-                <span className="if-row-subtitle m-order-row-meta">{row.meta}</span>
-            </span>
-            <span className="if-row-trailing">
-                {row.total !== undefined && (
-                    <span className="if-row-title">{row.total} ₾</span>
+            <div className="if-swipe-actions">
+                <button
+                    type="button"
+                    className="if-stepper-btn"
+                    aria-label={`${t.printInvoice} #${row.key}`}
+                    onClick={() => onPrint(row.key)}
+                >
+                    <IosIcon name="print" size={18} stroke={2}/>
+                </button>
+                {row.isResumable && (
+                    <Popconfirm
+                        title={t.confirmDelete}
+                        onConfirm={() => onDelete(row.key)}
+                        okText={t.yes}
+                        cancelText={t.no}
+                    >
+                        <button
+                            type="button"
+                            className="if-stepper-btn m-order-row-delete"
+                            aria-label={`${t.delete} #${row.key}`}
+                        >
+                            <IosIcon name="trash" size={18}/>
+                        </button>
+                    </Popconfirm>
                 )}
-                <span className="if-row-subtitle">{timeLabel(row.time, t)}</span>
-            </span>
-            <button
-                type="button"
-                className="if-stepper-btn"
-                aria-label={`${t.printInvoice} #${row.key}`}
-                onClick={(event) => {
-                    event.stopPropagation();
-                    onPrint(row.key);
+            </div>
+            <div
+                className="if-row if-swipe-content"
+                role={clickable ? 'button' : undefined}
+                tabIndex={clickable ? 0 : undefined}
+                // An explicit label, same as before restructuring — nothing
+                // inside .if-swipe-content carries its own label any more,
+                // but this stays explicit rather than left to the default
+                // accessible-name algorithm.
+                aria-label={clickable ? `${t.continueOrder} ${row.name} #${row.key}` : undefined}
+                onClick={handleContentClick}
+                onKeyDown={handleKeyDown}
+                onTouchStart={handleTouchStart}
+                onTouchMove={handleTouchMove}
+                onTouchEnd={handleTouchEnd}
+                style={{
+                    cursor: clickable || isOpen ? 'pointer' : 'default',
+                    ...(dragOffset !== null
+                        ? {transform: `translateX(${dragOffset}px)`, transitionDuration: '0s'}
+                        : {}),
                 }}
             >
-                <IosIcon name="print" size={18} stroke={2}/>
-            </button>
-            {row.isResumable && (
-                <Popconfirm
-                    title={t.confirmDelete}
-                    onConfirm={(event) => {
-                        event?.stopPropagation();
-                        onDelete(row.key);
-                    }}
-                    onCancel={(event) => event?.stopPropagation()}
-                    okText={t.yes}
-                    cancelText={t.no}
-                >
-                    <button
-                        type="button"
-                        className="if-stepper-btn m-order-row-delete"
-                        aria-label={`${t.delete} #${row.key}`}
-                        onClick={(event) => event.stopPropagation()}
-                    >
-                        <IosIcon name="trash" size={18}/>
-                    </button>
-                </Popconfirm>
-            )}
-            {clickable && (
-                <span className="if-chev">
-                    <IosIcon name="chev" size={16} stroke={2.4}/>
+                <span className="if-avatar" aria-hidden="true">
+                    {row.isRetail ? <IosIcon name="cart" size={20} stroke={2}/> : row.initials}
                 </span>
-            )}
+                <span className="if-row-main">
+                    <span className="if-row-title m-order-row-name">{row.name}</span>
+                    <span className="if-row-subtitle m-order-row-meta">{row.meta}</span>
+                </span>
+                <span className="if-row-trailing">
+                    {row.total !== undefined && (
+                        <span className="if-row-title">{row.total} ₾</span>
+                    )}
+                    <span className="if-row-subtitle">{timeLabel(row.time, t)}</span>
+                </span>
+                {clickable && (
+                    <span className="if-chev">
+                        <IosIcon name="chev" size={16} stroke={2.4}/>
+                    </span>
+                )}
+            </div>
         </div>
     );
 };
@@ -199,6 +293,9 @@ const OrdersView = ({
     const [orders, setOrders] = useState([]);
     const [loading, setLoading] = useState(false);
     const [loadError, setLoadError] = useState('');
+    // At most one row's swipe actions are open at a time — setting this to a
+    // new key implicitly closes whichever row had it before.
+    const [openRowKey, setOpenRowKey] = useState(null);
     const fetchSeqRef = useRef(0);
     // Sentinel (not a real segment value) so the very first run also counts
     // as "the segment changed" — the initial load should fetch immediately
@@ -278,6 +375,31 @@ const OrdersView = ({
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [segment, query, userId]);
 
+    // Tapping outside the open row, or scrolling the page (the page itself
+    // scrolls — see index.css's .m-dashboard-body comment — there is no
+    // inner scroll container here to listen on instead), closes it. A click
+    // landing inside the open row's own .ant-popconfirm is deliberately left
+    // alone: Popconfirm portals its Yes/No buttons to document.body by
+    // default, so DOM-wise they are outside .if-swipe-row even though
+    // they're clearly still "using this row's actions" — the same class of
+    // trap sheetSwipe.js documents for a touch starting in a portaled popup,
+    // just hitting a click listener here instead of a touch one.
+    useEffect(() => {
+        if (openRowKey === null) return undefined;
+        const closeIfOutside = (event) => {
+            if (event.target.closest('.ant-popconfirm')) return;
+            const hitRowKey = event.target.closest('.if-swipe-row')?.dataset.orderRowKey;
+            if (hitRowKey !== String(openRowKey)) setOpenRowKey(null);
+        };
+        const closeOnScroll = () => setOpenRowKey(null);
+        document.addEventListener('click', closeIfOutside);
+        window.addEventListener('scroll', closeOnScroll, {passive: true});
+        return () => {
+            document.removeEventListener('click', closeIfOutside);
+            window.removeEventListener('scroll', closeOnScroll);
+        };
+    }, [openRowKey]);
+
     const handleRetry = () => fetchOrders(segment, query);
 
     const isSearching = query.trim().length > 0;
@@ -352,6 +474,9 @@ const OrdersView = ({
                                     key={order.id}
                                     row={orderRow(order, t, now)}
                                     t={t}
+                                    isOpen={openRowKey === order.id}
+                                    onOpen={() => setOpenRowKey(order.id)}
+                                    onClose={() => setOpenRowKey((current) => (current === order.id ? null : current))}
                                     onOpenOrder={onOpenOrder}
                                     onPrint={onPrint}
                                     onDelete={onDelete}

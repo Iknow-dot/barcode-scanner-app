@@ -1,3 +1,5 @@
+import fs from 'fs';
+import path from 'path';
 import React, {useState} from 'react';
 import {render, screen, fireEvent, act} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -667,6 +669,242 @@ describe('OrdersView', () => {
             const row = screen.getByRole('button', {name: new RegExp(`Named Row Client`)});
             expect(row.getAttribute('aria-label')).not.toMatch(/Print invoice/i);
             expect(row.getAttribute('aria-label')).not.toMatch(/Delete/i);
+        });
+    });
+
+    // Swipe-to-reveal (replaces the two always-visible printer/trash icons):
+    // dragging a row left exposes print (+ delete, drafts only) behind it.
+    // jsdom has no real touch support, so these drive the gesture with
+    // synthetic touchstart/touchmove/touchend carrying touches[0].clientX/Y,
+    // the same technique IosSheet.test.js already uses for sheetSwipe.
+    describe('swipe-to-reveal row actions', () => {
+        const swipeRowWrapper = (key) => document.querySelector(`.if-swipe-row[data-order-row-key="${key}"]`);
+        const swipeContentOf = (key) => swipeRowWrapper(key).querySelector('.if-swipe-content');
+
+        // touchmove reports the ABSOLUTE finger position, not a delta — every
+        // call here starts the touch at (200, 100) and moves to (200+dx,
+        // 100+dy), matching how a real touchmove event is shaped.
+        const drag = (el, dx, dy = 0) => {
+            fireEvent.touchStart(el, {touches: [{clientX: 200, clientY: 100}]});
+            fireEvent.touchMove(el, {touches: [{clientX: 200 + dx, clientY: 100 + dy}]});
+        };
+
+        it('tracks a leftward drag 1:1 as it happens, via swipeRevealOffset', async () => {
+            orderService.getOrders.mockResolvedValueOnce({
+                success: true,
+                data: [order({id: 90, customer_name: 'Drag Client'})],
+            });
+            renderView();
+            await flushMicrotasks();
+
+            drag(swipeContentOf(90), -50);
+
+            // Would fail if the component computed its own arithmetic instead
+            // of calling swipeRevealOffset(-50, 88, false) === -50.
+            expect(swipeContentOf(90).style.transform).toBe('translateX(-50px)');
+        });
+
+        it('snaps open past the halfway point and never calls onOpenOrder', async () => {
+            orderService.getOrders.mockResolvedValueOnce({
+                success: true,
+                data: [order({id: 91, customer_name: 'Open Client'})],
+            });
+            const {onOpenOrder} = renderView();
+            await flushMicrotasks();
+
+            drag(swipeContentOf(91), -60); // past 88/2 = 44
+            fireEvent.touchEnd(swipeContentOf(91));
+
+            expect(swipeRowWrapper(91)).toHaveClass('is-open');
+            expect(onOpenOrder).not.toHaveBeenCalled();
+        });
+
+        it('springs back closed short of the halfway point', async () => {
+            orderService.getOrders.mockResolvedValueOnce({
+                success: true,
+                data: [order({id: 92, customer_name: 'Spring Back Client'})],
+            });
+            renderView();
+            await flushMicrotasks();
+
+            drag(swipeContentOf(92), -20); // short of 88/2 = 44
+            fireEvent.touchEnd(swipeContentOf(92));
+
+            expect(swipeRowWrapper(92)).not.toHaveClass('is-open');
+        });
+
+        // Controller ruling #3, exercised through the component (the pure
+        // lock-in itself is covered by orderRowSwipe.test.js): a touch that
+        // starts as a vertical scroll must never flip into a reveal, even if
+        // a later sample within the SAME touch looks strongly horizontal.
+        it('a vertical-dominant touch never reveals actions, even if it later swings horizontal', async () => {
+            orderService.getOrders.mockResolvedValueOnce({
+                success: true,
+                data: [order({id: 93, customer_name: 'Vertical Client'})],
+            });
+            renderView();
+            await flushMicrotasks();
+            const content = swipeContentOf(93);
+
+            fireEvent.touchStart(content, {touches: [{clientX: 200, clientY: 100}]});
+            fireEvent.touchMove(content, {touches: [{clientX: 198, clientY: 140}]}); // dy dominates: locks vertical
+            fireEvent.touchMove(content, {touches: [{clientX: 80, clientY: 145}]}); // now dx dominates, but locked
+            fireEvent.touchEnd(content);
+
+            expect(content.style.transform).toBe('');
+            expect(swipeRowWrapper(93)).not.toHaveClass('is-open');
+        });
+
+        it('only one row is open at a time — opening a second closes the first', async () => {
+            orderService.getOrders.mockResolvedValueOnce({
+                success: true,
+                data: [
+                    order({id: 94, customer_name: 'First Client'}),
+                    order({id: 95, customer_name: 'Second Client'}),
+                ],
+            });
+            renderView();
+            await flushMicrotasks();
+
+            drag(swipeContentOf(94), -60);
+            fireEvent.touchEnd(swipeContentOf(94));
+            expect(swipeRowWrapper(94)).toHaveClass('is-open');
+
+            drag(swipeContentOf(95), -60);
+            fireEvent.touchEnd(swipeContentOf(95));
+
+            expect(swipeRowWrapper(94)).not.toHaveClass('is-open');
+            expect(swipeRowWrapper(95)).toHaveClass('is-open');
+        });
+
+        it('tapping elsewhere (outside the open row) closes it', async () => {
+            orderService.getOrders.mockResolvedValueOnce({
+                success: true,
+                data: [order({id: 96, customer_name: 'Elsewhere Client'})],
+            });
+            renderView();
+            await flushMicrotasks();
+
+            drag(swipeContentOf(96), -60);
+            fireEvent.touchEnd(swipeContentOf(96));
+            expect(swipeRowWrapper(96)).toHaveClass('is-open');
+
+            fireEvent.click(screen.getByPlaceholderText(en.searchByCustomer));
+
+            expect(swipeRowWrapper(96)).not.toHaveClass('is-open');
+        });
+
+        it('scrolling closes the open row', async () => {
+            orderService.getOrders.mockResolvedValueOnce({
+                success: true,
+                data: [order({id: 97, customer_name: 'Scroll Client'})],
+            });
+            renderView();
+            await flushMicrotasks();
+
+            drag(swipeContentOf(97), -60);
+            fireEvent.touchEnd(swipeContentOf(97));
+            expect(swipeRowWrapper(97)).toHaveClass('is-open');
+
+            fireEvent.scroll(window);
+
+            expect(swipeRowWrapper(97)).not.toHaveClass('is-open');
+        });
+
+        it("tapping the row's own content while open closes the reveal instead of opening the order", async () => {
+            orderService.getOrders.mockResolvedValueOnce({
+                success: true,
+                data: [order({id: 98, customer_name: 'Self Tap Client'})],
+            });
+            const {onOpenOrder} = renderView();
+            await flushMicrotasks();
+
+            drag(swipeContentOf(98), -60);
+            fireEvent.touchEnd(swipeContentOf(98));
+            expect(swipeRowWrapper(98)).toHaveClass('is-open');
+
+            // A *later*, unrelated tap, not the drag's own trailing click —
+            // advance real time past the swallow window (component's
+            // CLICK_SWALLOW_MS) so this exercises the row's own close-on-tap
+            // behaviour rather than the drag's trailing-click guard.
+            await act(async () => { jest.advanceTimersByTime(600); });
+            fireEvent.click(swipeContentOf(98));
+
+            expect(swipeRowWrapper(98)).not.toHaveClass('is-open');
+            expect(onOpenOrder).not.toHaveBeenCalled();
+        });
+
+        it('a non-resumable row reveals only print, at a narrower 44px width, and still offers no delete', async () => {
+            // isResumable follows the row's own status, not the active
+            // segment tab, so the default (draft) segment is enough here —
+            // no need to switch segments just to render a confirmed order.
+            orderService.getOrders.mockResolvedValueOnce({
+                success: true,
+                data: [order({id: 99, status: 'confirmed', customer_name: 'Print Only Client'})],
+            });
+            renderView();
+            await flushMicrotasks();
+
+            expect(swipeRowWrapper(99).style.getPropertyValue('--swipe-reveal')).toBe('44px');
+
+            drag(swipeContentOf(99), -30); // past 44/2 = 22
+            fireEvent.touchEnd(swipeContentOf(99));
+
+            expect(swipeRowWrapper(99)).toHaveClass('is-open');
+            expect(screen.getByRole('button', {name: `${en.printInvoice} #99`})).toBeInTheDocument();
+            expect(screen.queryByRole('button', {name: `${en.delete} #99`})).toBeNull();
+        });
+
+        it('a resumable (draft) row reveals print + delete at 88px', async () => {
+            orderService.getOrders.mockResolvedValueOnce({
+                success: true,
+                data: [order({id: 100, customer_name: 'Both Actions Client'})],
+            });
+            renderView();
+            await flushMicrotasks();
+
+            expect(swipeRowWrapper(100).style.getPropertyValue('--swipe-reveal')).toBe('88px');
+            expect(screen.getByRole('button', {name: `${en.printInvoice} #100`})).toBeInTheDocument();
+            expect(screen.getByRole('button', {name: `${en.delete} #100`})).toBeInTheDocument();
+        });
+
+        it('the printer and delete actions stay reachable and operable without any gesture (keyboard/mouse parity)', async () => {
+            orderService.getOrders.mockResolvedValueOnce({
+                success: true,
+                data: [order({id: 101, customer_name: 'Parity Client'})],
+            });
+            const {onPrint} = renderView();
+            await flushMicrotasks();
+
+            // Never swiped or hovered — a plain Tab + click must still reach
+            // and operate the action, exactly as ruling #2 requires.
+            const printBtn = screen.getByRole('button', {name: `${en.printInvoice} #101`});
+            printBtn.focus();
+            expect(printBtn).toHaveFocus();
+            fireEvent.click(printBtn);
+
+            expect(onPrint).toHaveBeenCalledWith(101);
+        });
+
+        // Found by manual browser verification (393x852, both themes): the
+        // delete icon rendered in the plain label colour, not red. jsdom
+        // stubs .css imports to nothing (CRA's cssTransform), so this reads
+        // the real stylesheet text instead, the same technique
+        // theme/iosCss.test.js uses. A lone `.m-order-row-delete` class ties
+        // in specificity with plain `.if-stepper-btn` (both single-class
+        // selectors) and loses under the dev bundle's actual rule order —
+        // compounding it onto `.if-stepper-btn` (matching the cart's own
+        // `.if-stepper-btn.m-cart-item-delete`, index.css) wins regardless
+        // of source order.
+        it("OrdersView.css gives the delete icon's red a specificity that beats .if-stepper-btn on its own, not just source order", () => {
+            const css = fs.readFileSync(path.join(__dirname, 'OrdersView.css'), 'utf8');
+            const compoundRule = css.match(/\.if-stepper-btn\.m-order-row-delete\s*\{/g) || [];
+            const anyRule = css.match(/\.m-order-row-delete\s*\{/g) || [];
+            expect(compoundRule.length).toBeGreaterThan(0);
+            // Every rule keyed on .m-order-row-delete must be the compound
+            // form — a lone-class version anywhere would tie with
+            // .if-stepper-btn again and be order-dependent as before.
+            expect(anyRule.length).toBe(compoundRule.length);
         });
     });
 });

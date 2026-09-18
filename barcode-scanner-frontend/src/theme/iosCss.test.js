@@ -90,3 +90,17 @@ test('the orders-row avatar, inset separator and trailing column exist with no l
     });
     expect(block.match(/#[0-9a-f]{3,8}\b/gi)).toBeNull();
 });
+
+// Swipe-to-reveal order-row actions: revealed by the JS-controlled state
+// class, but also by plain CSS on :hover and :focus-within so a mouse or
+// keyboard user reaches print/delete without ever swiping (no literal
+// colours check here — the top-of-file "hard-codes no colour" test already
+// covers this block along with the rest of the file).
+test('the swipe-to-reveal row actions are revealed by state, hover and keyboard focus alike', () => {
+    expect(css).toContain('.if-swipe-row');
+    expect(css).toContain('.if-swipe-actions');
+    expect(css).toContain('.if-swipe-content');
+    expect(css).toMatch(/\.if-swipe-row\.is-open \.if-swipe-content/);
+    expect(css).toMatch(/\.if-swipe-row:focus-within \.if-swipe-content/);
+    expect(css).toMatch(/@media \(hover: hover\)[\s\S]*\.if-swipe-row:hover \.if-swipe-content/);
+});
