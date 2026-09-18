@@ -26,8 +26,28 @@ beforeAll(() => {
     };
 });
 
+// relativeTime/groupByDay (ordersListView.js) bucket by the *local* calendar
+// day, so this suite needs a fixed local time zone to be deterministic across
+// machines/CI — same reasoning and same pin as ordersListView.test.js.
+// Scoped to this file only (set in beforeAll, not src/setupTests.js) and
+// restored in afterAll by deleting the var rather than assigning `undefined`
+// (which Node would stringify to the literal string "undefined" and break TZ
+// resolution for whichever suite this Jest worker runs next).
+const ORIGINAL_TZ = process.env.TZ;
+beforeAll(() => {
+    process.env.TZ = 'Asia/Tbilisi';
+});
+afterAll(() => {
+    if (ORIGINAL_TZ === undefined) {
+        delete process.env.TZ;
+    } else {
+        process.env.TZ = ORIGINAL_TZ;
+    }
+});
+
 // Fixed "now" for relativeTime/groupByDay — same reference point
-// ordersListView.test.js uses, so today/yesterday fixtures line up.
+// ordersListView.test.js uses (Tbilisi local: 2026-09-18 16:00), so
+// today/yesterday fixtures line up.
 const NOW = new Date('2026-09-18T12:00:00Z');
 
 const order = (overrides = {}) => ({
@@ -66,6 +86,16 @@ const flushDebounce = async (ms = 300) => {
     });
 };
 
+// A segment change fetches immediately (no setTimeout at all) — this only
+// drains the microtask queue the immediate async fetch runs on. Deliberately
+// does NOT call jest.advanceTimersByTime, to prove no timer is involved.
+const flushMicrotasks = async () => {
+    await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+    });
+};
+
 describe('OrdersView', () => {
     beforeEach(() => {
         jest.useFakeTimers();
@@ -95,6 +125,72 @@ describe('OrdersView', () => {
         await flushDebounce();
 
         expect(orderService.getOrders).toHaveBeenCalledWith({status: 'confirmed'});
+    });
+
+    it('fetches immediately on a segment change — no debounce timer involved', async () => {
+        renderView();
+        await flushMicrotasks();
+        orderService.getOrders.mockClear();
+
+        fireEvent.click(screen.getByRole('radio', {name: en.ordersSegmentConfirmed}));
+        // Deliberately no jest.advanceTimersByTime — a segment tap must not
+        // need one.
+        await flushMicrotasks();
+
+        expect(orderService.getOrders).toHaveBeenCalledWith({status: 'confirmed'});
+    });
+
+    it("keeps typing debounced at 300ms, unlike a segment change", async () => {
+        renderView();
+        await flushMicrotasks();
+        orderService.getOrders.mockClear();
+
+        fireEvent.change(screen.getByPlaceholderText(en.searchByCustomer), {target: {value: 'Ber'}});
+        await act(async () => {
+            jest.advanceTimersByTime(299);
+        });
+        expect(orderService.getOrders).not.toHaveBeenCalled();
+
+        await act(async () => {
+            jest.advanceTimersByTime(1);
+            await Promise.resolve();
+            await Promise.resolve();
+        });
+        expect(orderService.getOrders).toHaveBeenCalledWith({status: 'draft', customer_search: 'Ber'});
+    });
+
+    it("does not show the previous segment's rows under the new segment's pill while its fetch is in flight", async () => {
+        orderService.getOrders.mockResolvedValueOnce({
+            success: true,
+            data: [order({id: 51, customer_name: 'Draft Client'})],
+        });
+        renderView();
+        await flushMicrotasks();
+        expect(screen.getByText('Draft Client')).toBeInTheDocument();
+
+        let resolveConfirmed;
+        orderService.getOrders.mockImplementationOnce(() => new Promise((resolve) => { resolveConfirmed = resolve; }));
+
+        fireEvent.click(screen.getByRole('radio', {name: en.ordersSegmentConfirmed}));
+        await flushMicrotasks();
+
+        // The confirmed fetch is still pending: the draft row must be gone
+        // (not left over under the confirmed pill), and the gap must not
+        // read as a genuine "no orders in this segment" empty state either.
+        expect(screen.queryByText('Draft Client')).toBeNull();
+        expect(screen.queryByText(en.noOrdersInSegment)).toBeNull();
+        expect(document.querySelector('.if-spinner')).toBeInTheDocument();
+
+        await act(async () => {
+            resolveConfirmed({
+                success: true,
+                data: [order({id: 52, status: 'confirmed', customer_name: 'Confirmed Client'})],
+            });
+            await Promise.resolve();
+            await Promise.resolve();
+        });
+        expect(screen.getByText('Confirmed Client')).toBeInTheDocument();
+        expect(document.querySelector('.if-spinner')).toBeNull();
     });
 
     it('excludes the active order from the ღია (draft) segment', async () => {
@@ -269,9 +365,78 @@ describe('OrdersView', () => {
         expect(screen.queryByText(en.noIncompleteOrders)).toBeNull();
     });
 
-    it('calls onNewOrder from the navbar plus button', () => {
+    it('calls onNewOrder from the navbar plus button', async () => {
         const {onNewOrder} = renderView();
+        // Mount now fetches immediately (fix round 1) — settle it before the
+        // test ends, or its pending promise resolves after teardown.
+        await flushMicrotasks();
         fireEvent.click(screen.getByRole('button', {name: en.newOrder}));
         expect(onNewOrder).toHaveBeenCalledTimes(1);
+    });
+
+    // F5a fix round 1: nothing asserted the actual rendered time text, so the
+    // ordersListView.js rename (minutesAgo -> minAgo) silently blanked every
+    // 1-59-minute-old row. One render per relativeTime branch, each checking
+    // the real text — not just that *some* text is present.
+    describe('row relative time text', () => {
+        const trailingTime = () => document.querySelector('.if-row-trailing .if-row-subtitle');
+
+        it('shows "just now" for an order a few seconds old', async () => {
+            orderService.getOrders.mockResolvedValueOnce({
+                success: true,
+                data: [order({id: 60, customer_name: 'Just Now Client', created_at: '2026-09-18T11:59:50Z'})],
+            });
+            renderView();
+            await flushMicrotasks();
+
+            expect(trailingTime()).toHaveTextContent(en.justNow);
+        });
+
+        it('shows "N min ago" for an order 25 minutes old', async () => {
+            orderService.getOrders.mockResolvedValueOnce({
+                success: true,
+                data: [order({id: 61, customer_name: 'Min Ago Client', created_at: '2026-09-18T11:35:00Z'})],
+            });
+            renderView();
+            await flushMicrotasks();
+
+            expect(trailingTime()).toHaveTextContent(en.minAgo(25));
+        });
+
+        it('shows "Nh ago" for an order 3 hours old, same local day', async () => {
+            orderService.getOrders.mockResolvedValueOnce({
+                success: true,
+                data: [order({id: 62, customer_name: 'Hours Ago Client', created_at: '2026-09-18T09:00:00Z'})],
+            });
+            renderView();
+            await flushMicrotasks();
+
+            expect(trailingTime()).toHaveTextContent(en.hoursAgo(3));
+        });
+
+        it('shows the local clock time for an order from an earlier day', async () => {
+            orderService.getOrders.mockResolvedValueOnce({
+                success: true,
+                // 2026-09-17T18:20:00Z is 2026-09-17 22:20 Tbilisi local — an
+                // earlier local day than NOW (2026-09-18 16:00 Tbilisi).
+                data: [order({id: 63, customer_name: 'Clock Client', created_at: '2026-09-17T18:20:00Z'})],
+            });
+            renderView();
+            await flushMicrotasks();
+
+            expect(trailingTime()).toHaveTextContent('22:20');
+        });
+
+        it('shows no time text for an order with no timestamp', async () => {
+            orderService.getOrders.mockResolvedValueOnce({
+                success: true,
+                data: [order({id: 64, customer_name: 'No Timestamp Client', created_at: null})],
+            });
+            renderView();
+            await flushMicrotasks();
+
+            expect(screen.getByText('No Timestamp Client')).toBeInTheDocument();
+            expect(trailingTime()).toHaveTextContent('');
+        });
     });
 });

@@ -14,22 +14,27 @@ import {
 import './OrdersView.css';
 
 // Same 300ms debounce the old customer-search effect used
-// (UserDashboard.js:234-253) — now shared by every fetch, segment switches
-// included, so there is exactly one fetch path to reason about.
+// (UserDashboard.js:234-253) — only typing a query still waits this long. A
+// segment change fetches immediately (see the effect below): it is a
+// discrete, deliberate tap, not something that needs settling like keystrokes
+// do.
 const FETCH_DEBOUNCE_MS = 300;
 
-// relativeTime's {key, value} pair -> displayed text. 'clock' already carries
-// its own finished "HH:MM" string as `value`, so it needs no t lookup.
+// relativeTime's {key, value} pair -> displayed text. Keys per
+// ordersListView.js's current contract: justNow, minAgo, hoursAgo, clock
+// (that day's own "HH:MM", already a finished string, so no t lookup) and
+// none (no timestamp — nothing to show).
 const timeLabel = (time, t) => {
     switch (time.key) {
         case 'justNow':
             return t.justNow;
-        case 'minutesAgo':
-            return t.minutesAgo(time.value);
+        case 'minAgo':
+            return t.minAgo(time.value);
         case 'hoursAgo':
             return t.hoursAgo(time.value);
         case 'clock':
             return time.value;
+        case 'none':
         default:
             return '';
     }
@@ -134,6 +139,18 @@ const OrderRow = ({row, t, onOpenOrder, onPrint, onDelete}) => {
  * same pattern as FindProductDrawer's browseSeqRef / ClientLookupSheet's
  * searchSeqRef) — without it, a fast segment switch or a burst of keystrokes
  * could let a stale response land last.
+ *
+ * A segment change and a query change are NOT debounced the same way. A
+ * segment tap is a discrete, deliberate action — mirroring the old
+ * fetchIncompleteOrders, it fetches immediately (no setTimeout at all).
+ * Typing still waits the 300ms FETCH_DEBOUNCE_MS. A segment change also
+ * clears `orders` immediately (before the fetch resolves): without that, the
+ * previous segment's rows would keep rendering — with their own totals and
+ * timestamps — under the now-selected segment's already-highlighted pill for
+ * the round trip, which reads as "nothing happened" rather than as loading.
+ * While the list is empty and a fetch is in flight, an `.if-spinner`
+ * replaces the empty-state text so a genuinely empty segment and a
+ * loading-but-empty one never look the same.
  */
 const OrdersView = ({userId, activeOrderId, onOpenOrder, onPrint, onDelete, onNewOrder}) => {
     const {t} = useLanguage();
@@ -142,18 +159,29 @@ const OrdersView = ({userId, activeOrderId, onOpenOrder, onPrint, onDelete, onNe
     const [orders, setOrders] = useState([]);
     const [loading, setLoading] = useState(false);
     const fetchSeqRef = useRef(0);
+    // Sentinel (not a real segment value) so the very first run also counts
+    // as "the segment changed" — the initial load should fetch immediately
+    // too, same as the old fetchIncompleteOrders on tab activation.
+    const prevSegmentRef = useRef(null);
 
     useEffect(() => {
         if (!userId) {
             setOrders([]);
             return undefined;
         }
+        const segmentChanged = segment !== prevSegmentRef.current;
+        prevSegmentRef.current = segment;
+        if (segmentChanged) {
+            // Never let one segment's rows render under another's pill.
+            setOrders([]);
+        }
         setLoading(true);
         const trimmed = query.trim();
         const params = trimmed
             ? {status: segment, customer_search: trimmed}
             : segmentQuery(segment, {userId});
-        const handle = setTimeout(async () => {
+
+        const runFetch = async () => {
             const seq = ++fetchSeqRef.current;
             try {
                 const result = await orderService.getOrders(params);
@@ -162,7 +190,13 @@ const OrdersView = ({userId, activeOrderId, onOpenOrder, onPrint, onDelete, onNe
             } finally {
                 if (seq === fetchSeqRef.current) setLoading(false);
             }
-        }, FETCH_DEBOUNCE_MS);
+        };
+
+        if (segmentChanged) {
+            runFetch();
+            return undefined;
+        }
+        const handle = setTimeout(runFetch, FETCH_DEBOUNCE_MS);
         return () => clearTimeout(handle);
     }, [segment, query, userId]);
 
@@ -170,7 +204,7 @@ const OrdersView = ({userId, activeOrderId, onOpenOrder, onPrint, onDelete, onNe
     // The ღია (draft) segment is the consultant's own drafts, minus whichever
     // one is already open on the active-order bar — resuming that one belongs
     // to the bar, not to a second tap here.
-    const visibleOrders = segment === ORDER_SEGMENTS[0]
+    const visibleOrders = segment === 'draft'
         ? orders.filter((o) => o.id !== activeOrderId)
         : orders;
     const now = new Date();
@@ -239,7 +273,14 @@ const OrdersView = ({userId, activeOrderId, onOpenOrder, onPrint, onDelete, onNe
                         </div>
                     </React.Fragment>
                 ))
-            ) : !loading && (
+            ) : loading ? (
+                // Loading-but-empty must never look like a genuine empty
+                // state — this is the gap after a segment change (rows just
+                // cleared) or a fresh search, both mid-flight.
+                <div className="if-group if-group-empty" aria-busy="true">
+                    <span className="if-spinner"/>
+                </div>
+            ) : (
                 <div className="if-group if-group-empty">{t[emptyCopyKey(segment, isSearching)]}</div>
             )}
         </div>
