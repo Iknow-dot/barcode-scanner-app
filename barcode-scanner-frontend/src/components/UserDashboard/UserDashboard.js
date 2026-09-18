@@ -5,7 +5,7 @@ import ClientLookupSheet from './ClientLookupSheet';
 import OrderSheet from './OrderSheet';
 import ProductSheet from './ProductSheet';
 import EmptyCartSheet from './EmptyCartSheet';
-import FindProductDrawer from './FindProductDrawer';
+import CatalogView from './CatalogView';
 import subNavContext from "../../contexts/SubNavContext";
 import AuthContext from "../Auth/AuthContext";
 import useAppNotification from "../../hooks/useAppNotification";
@@ -63,13 +63,12 @@ import {
 } from "@ant-design/icons";
 
 const UserDashboard = ({isDark = false, onToggleTheme}) => {
-    const [drawerVisible, setDrawerVisible] = useState(false);
     const [loading, setLoading] = useState(false);
     const [allWarehouses, setAllWarehouses] = useState(false);
     const {setSubNav} = useContext(subNavContext);
     const {authData, logout} = useContext(AuthContext);
-    // Catalog browse/search is an org-level feature; when it's off, the
-    // search entry point and the find-product drawer are hidden entirely.
+    // Catalog browse/search is an org-level feature; when it's off, every
+    // manual-search entry point and the Catalog tab itself are hidden.
     const catalogEnabled = catalogFeatureEnabled(authData);
     const [scannerOpen, setScannerOpen] = useState(false);
     const [balances, setBalances] = useState([]);
@@ -109,8 +108,14 @@ const UserDashboard = ({isDark = false, onToggleTheme}) => {
     const refreshOrdersView = useCallback(() => setOrdersViewKey((key) => key + 1), []);
 
     // Mobile tab state: 'scan' (product), 'current' (active order workflow),
-    // or 'orders' (incomplete / draft orders).
+    // 'orders' (incomplete / draft orders), or 'catalog' (browse/search).
     const [activeTab, setActiveTab] = useState('scan');
+    // Bumped by handleSelectTab on a 'pop-to-root' re-tap of the already-active
+    // Catalog tab (see tabSelection.js) so CatalogView resets to its category
+    // root and clears its search. A first-time switch into the tab needs no
+    // bump: CatalogView unmounts/remounts with the tab (like OrdersView), and
+    // its own [resetToken] effect already fires once on every mount.
+    const [catalogResetToken, setCatalogResetToken] = useState(0);
 
     // Order sheet (the active order's cart and delivery steps)
     const [orderDrawerVisible, setOrderDrawerVisible] = useState(false);
@@ -274,7 +279,6 @@ const UserDashboard = ({isDark = false, onToggleTheme}) => {
                 lastSearchRef.current = {search, searchType};
                 setSearchedAllWarehouses(!!allWarehouses);
                 setOthersCollapsed(!allWarehouses);
-                setDrawerVisible(false);
                 // Show the product sheet over Home on the scan tab.
                 setActiveTab('scan');
                 setProductSheetOpen(true);
@@ -345,10 +349,10 @@ const UserDashboard = ({isDark = false, onToggleTheme}) => {
         });
     }, [handleSearch]);
 
-    // Selecting a product in the Find-product drawer (typeahead or category
-    // browse) closes it and runs the same scan flow as an exact sku lookup.
+    // Selecting a product in the Catalog tab (typeahead or category browse)
+    // runs the same scan flow as an exact sku lookup; handleSearch's success
+    // path switches back to the scan tab to show the resulting product sheet.
     const handleSelectFromCatalog = useCallback((sku) => {
-        setDrawerVisible(false);
         handleSearch({
             search: sku,
             searchType: 'article',
@@ -389,13 +393,20 @@ const UserDashboard = ({isDark = false, onToggleTheme}) => {
     }, [othersCollapsed, searchedAllWarehouses, handleShowOtherWarehouses]);
 
     const handleOpenScanner = () => {
-        setDrawerVisible(false);
         setScannerOpen(true);
     };
 
+    // Selects the Catalog tab. Closes the scanner first (if it's open) so the
+    // camera is released before the screen changes — this ordering matters:
+    // a camera left running keeps the device's privacy indicator lit, drains
+    // battery, and can make the next getUserMedia call fail on some Android
+    // browsers. Shared by all four entry points that open the catalog: the
+    // trailing tab (via handleSelectTab/nextTabAction, not this function),
+    // Home's manual-search button, the empty cart's, and the scanner's
+    // manual-search pill.
     const handleOpenSearch = () => {
         setScannerOpen(false);
-        setDrawerVisible(true);
+        setActiveTab('catalog');
     };
 
     // ===== Purchase Order handlers =====
@@ -773,12 +784,16 @@ const UserDashboard = ({isDark = false, onToggleTheme}) => {
     };
 
     // TabBar onSelectTab: re-tapping the already-selected Products tab while a
-    // product result is showing pops back to Home instead of doing nothing —
-    // see tabSelection.js. Switching tabs otherwise behaves as before.
+    // product result is showing pops back to Home instead of doing nothing;
+    // re-tapping the already-selected Catalog tab pops it back to its category
+    // root and clears its search — see tabSelection.js. Switching tabs
+    // otherwise behaves as before.
     const handleSelectTab = (key) => {
         const action = nextTabAction(activeTab, key, hasResults);
         if (action === 'pop-to-home') {
             handleBackToDashboard();
+        } else if (action === 'pop-to-root') {
+            setCatalogResetToken((token) => token + 1);
         } else if (action === 'switch') {
             setActiveTab(key);
         }
@@ -842,20 +857,6 @@ const UserDashboard = ({isDark = false, onToggleTheme}) => {
                 onClose={() => setScannerOpen(false)}
                 onManualSearch={catalogEnabled ? handleOpenSearch : undefined}
             />
-
-            {/* Unified Find-product drawer: smart search + category browse.
-                Only mounted when the org has the catalog feature enabled. */}
-            {catalogEnabled && (
-                <FindProductDrawer
-                    open={drawerVisible}
-                    onClose={() => setDrawerVisible(false)}
-                    onSelectProduct={handleSelectFromCatalog}
-                    onScan={handleOpenScanner}
-                    allWarehouses={allWarehouses}
-                    onAllWarehousesChange={setAllWarehouses}
-                    orderMode={!!showOrderPanel}
-                />
-            )}
 
             {/* Order sheet: the active order's cart (step 1) and delivery
                 (step 2). The idle bar opens the empty cart sheet instead. */}
@@ -925,11 +926,23 @@ const UserDashboard = ({isDark = false, onToggleTheme}) => {
                             onNewOrder={handleStartFreshOrder}
                         />
                     )}
+                    {activeTab === 'catalog' && catalogEnabled && (
+                        <CatalogView
+                            orderMode={!!showOrderPanel}
+                            onSelectProduct={handleSelectFromCatalog}
+                            onScan={handleOpenScanner}
+                            allWarehouses={allWarehouses}
+                            onAllWarehousesChange={setAllWarehouses}
+                            resetToken={catalogResetToken}
+                        />
+                    )}
                 </div>
 
                 {/* ===== Floating glass bars: the active order above the tab bar.
-                    Hidden while the scanner or the catalog drawer is open. ===== */}
-                {!scannerOpen && !drawerVisible && (
+                    Hidden only while the scanner's fullscreen overlay is open
+                    — the catalog is a real tab now, so browsing it keeps the
+                    bars visible. ===== */}
+                {!scannerOpen && (
                     <>
                         <div className="if-edge-bottom" aria-hidden="true"/>
                         <div className="if-bottom-stack">
@@ -938,7 +951,6 @@ const UserDashboard = ({isDark = false, onToggleTheme}) => {
                                 activeTab={activeTab}
                                 onSelectTab={handleSelectTab}
                                 showSearch={catalogEnabled}
-                                onSearch={handleOpenSearch}
                             />
                         </div>
                     </>

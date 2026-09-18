@@ -258,7 +258,7 @@ const OrderRow = ({row, t, isOpen, onOpen, onClose, onOpenOrder, onPrint, onDele
  * defended against a future paginated response; enabling pagination would
  * otherwise throw inside its swallowed catch. A monotonic sequence ref
  * discards a response that resolves after a newer request has started (the
- * same pattern as FindProductDrawer's browseSeqRef / ClientLookupSheet's
+ * same pattern as CatalogView's browseSeqRef / ClientLookupSheet's
  * searchSeqRef) — without it, a fast segment switch or a burst of keystrokes
  * could let a stale response land last.
  *

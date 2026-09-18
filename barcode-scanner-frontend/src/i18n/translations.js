@@ -35,7 +35,6 @@ const translations = {
         deviceNotAllowed: 'ეს ანგარიში მიბმულია სხვა მოწყობილობაზე. გთხოვთ, დაუკავშირდით ადმინისტრატორს.',
 
         // ===== Dashboard / Product Search =====
-        productSearch: 'პროდუქტის ძიება',
         productSearchSubtitle: 'მოძებნეთ პროდუქტი შტრიხკოდის ან არტიკულის მიხედვით',
         searchingProduct: 'ვეძებ პროდუქტს...',
         barcode: 'შტრიხკოდი',
@@ -45,7 +44,6 @@ const translations = {
         allWarehouses: 'ყველა საწყობი',
         scan: 'დასკანერება',
         scanAgain: 'დასკანერება',
-        scanInstead: 'დასკანერება',
         manualSearch: 'ხელით ძებნა',
         scanHint: 'მიმართეთ კამერა შტრიხკოდისკენ',
         cameraError: 'კამერაზე წვდომა ვერ მოხერხდა',
@@ -303,7 +301,6 @@ const translations = {
         removeItem: 'წაშლა',
         quantity: 'რაოდენობა',
         lineTotal: 'ჯამი',
-        orderMode: 'შეკვეთის რეჟიმი',
         exitOrderMode: 'შეკვეთის რეჟიმიდან გასვლა',
         selectCustomer: 'აირჩიეთ კლიენტი',
         createCustomer: 'კლიენტის შექმნა',
@@ -727,7 +724,6 @@ const translations = {
         deviceNotAllowed: 'This account is locked to a different device. Please contact your administrator.',
 
         // ===== Dashboard / Product Search =====
-        productSearch: 'Product Search',
         productSearchSubtitle: 'Search for a product by barcode or article number',
         searchingProduct: 'Searching for product...',
         barcode: 'Barcode',
@@ -737,7 +733,6 @@ const translations = {
         allWarehouses: 'All Warehouses',
         scan: 'Scan',
         scanAgain: 'Scan Again',
-        scanInstead: 'Scan Instead',
         manualSearch: 'Manual Search',
         scanHint: 'Point camera at a barcode',
         cameraError: 'Could not access camera',
@@ -995,7 +990,6 @@ const translations = {
         removeItem: 'Remove',
         quantity: 'Quantity',
         lineTotal: 'Total',
-        orderMode: 'Order Mode',
         exitOrderMode: 'Exit Order Mode',
         selectCustomer: 'Select Client',
         createCustomer: 'Create Client',

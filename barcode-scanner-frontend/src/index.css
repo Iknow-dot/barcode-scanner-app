@@ -536,16 +536,6 @@ body {
   min-width: 0;
 }
 
-/* ===== Search Drawer ===== */
-.search-drawer .ant-drawer-body {
-  padding-top: 16px;
-}
-
-.search-drawer .ant-drawer-header {
-  border-bottom: none;
-  padding-bottom: 0;
-}
-
 /* ===== Empty State ===== */
 .empty-state {
   padding: 48px 24px;
