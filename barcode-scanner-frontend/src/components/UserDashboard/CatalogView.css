@@ -156,6 +156,30 @@
     margin-top: 8px;
 }
 
+/* R1: stale search rows during a refetch — dim + block pointer events, the
+   same protection antd's <Spin spinning> gave the deleted drawer for free.
+   Search branch only (see CatalogView.js); the browse branch never gets
+   this class. */
+.cv-stale {
+    opacity: 0.5;
+    pointer-events: none;
+}
+
+/* F2: the category tree failed to load — message + retry, same shape as
+   OrdersView.css's .m-orders-load-error. */
+.cv-tree-error {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+}
+
+.cv-tree-error .if-btn {
+    width: auto;
+    height: auto;
+    padding: 8px 20px;
+}
+
 .cv-load-more {
     margin-top: 8px;
 }

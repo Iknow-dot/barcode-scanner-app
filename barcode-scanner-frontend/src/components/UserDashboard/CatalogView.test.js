@@ -1,4 +1,4 @@
-import React from 'react';
+import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {render, screen, fireEvent, act} from '@testing-library/react';
 import CatalogView from './CatalogView';
 import {LanguageProvider} from '../../i18n/LanguageContext';
@@ -55,37 +55,96 @@ const browsePage = (names, count = names.length) => ({
   data: {results: names.map(productRow), count},
 });
 
-// A named function component (not an inline arrow) so it has a stable
-// identity across renders — required for React.Profiler's onRender to fire
-// per-commit rather than the whole tree remounting.
-const Harness = ({onCommit = () => {}, onSelectProduct = jest.fn(), ...props}) => (
-  <React.Profiler id="catalog-view" onRender={onCommit}>
-    <LanguageProvider>
-      <CatalogView
-        onSelectProduct={onSelectProduct}
-        onScan={jest.fn()}
-        allWarehouses={false}
-        onAllWarehousesChange={jest.fn()}
-        orderMode={false}
-        resetToken={0}
-        {...props}
-      />
-    </LanguageProvider>
-  </React.Profiler>
-);
+// CatalogView no longer owns `stack`, `query` or the category `tree` itself
+// (F1/F2 fix) — UserDashboard lifts all three, the same shape it already
+// uses for OrdersView's `ordersSegment`/`ordersSearch`/etc (see
+// OrdersView.test.js's own OrdersViewHarness, which this mirrors). This
+// harness plays UserDashboard's part: it owns the state, fetches the tree
+// itself (fetch-once, with a retry callback on failure — exactly what
+// UserDashboard.js's fetchCatalogTree does), and passes everything down as
+// controlled props, so the suite exercises CatalogView through the same
+// contract production uses.
+//
+// `visible` mimics UserDashboard's `activeTab === 'catalog' && <CatalogView/>`
+// conditional mount: toggling it unmounts/remounts CatalogView while the
+// harness (standing in for UserDashboard) keeps its state — exactly what a
+// tab switch does to the real component tree.
+const CatalogViewHarness = ({
+  onCommit = () => {},
+  onSelectProduct = jest.fn(),
+  visible = true,
+  resetToken = 0,
+  ...overrideProps
+}) => {
+  const [stack, setStack] = useState([]);
+  const [query, setQuery] = useState('');
+  const [tree, setTree] = useState([]);
+  const [treeLoading, setTreeLoading] = useState(false);
+  const [treeError, setTreeError] = useState('');
+
+  const fetchTree = useCallback(async () => {
+    setTreeLoading(true);
+    setTreeError('');
+    const res = await catalogService.categoryTree();
+    if (res.success) {
+      setTree(res.data || []);
+    } else {
+      setTreeError(res.error || 'error');
+    }
+    setTreeLoading(false);
+  }, []);
+
+  // A ref, not a [treeLoading] dependency: treeLoading also returns to
+  // false when a fetch FAILS, so keying the auto-fetch on it would re-fire
+  // the moment a failed request settles — an auto-retry loop instead of
+  // waiting for the explicit Retry button (mirrors UserDashboard.js's
+  // triedCatalogTreeRef).
+  const triedTreeFetchRef = useRef(false);
+  useEffect(() => {
+    if (triedTreeFetchRef.current) return;
+    triedTreeFetchRef.current = true;
+    fetchTree();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  if (!visible) return null;
+
+  return (
+    <React.Profiler id="catalog-view" onRender={onCommit}>
+      <LanguageProvider>
+        <CatalogView
+          onSelectProduct={onSelectProduct}
+          onScan={jest.fn()}
+          allWarehouses={false}
+          onAllWarehousesChange={jest.fn()}
+          resetToken={resetToken}
+          stack={stack}
+          onStackChange={setStack}
+          query={query}
+          onQueryChange={setQuery}
+          tree={tree}
+          treeLoading={treeLoading}
+          treeError={treeError}
+          onRetryTree={fetchTree}
+          {...overrideProps}
+        />
+      </LanguageProvider>
+    </React.Profiler>
+  );
+};
 
 // onCommit (optional) runs synchronously after every React commit's DOM
 // mutations, before passive effects — the only window where a stale-state
 // flash is observable from a test.
 const renderCatalog = async ({onCommit, onSelectProduct, ...props} = {}) => {
-  const utils = render(<Harness onCommit={onCommit} onSelectProduct={onSelectProduct} {...props}/>);
+  const utils = render(<CatalogViewHarness onCommit={onCommit} onSelectProduct={onSelectProduct} {...props}/>);
   // Flush the categoryTree load so the root category list is on screen.
   await act(async () => {});
   return {
     ...utils,
     onSelectProduct,
     rerenderWith: (nextProps) => utils.rerender(
-      <Harness onCommit={onCommit} onSelectProduct={onSelectProduct} {...props} {...nextProps}/>
+      <CatalogViewHarness onCommit={onCommit} onSelectProduct={onSelectProduct} {...props} {...nextProps}/>
     ),
   };
 };
@@ -385,6 +444,186 @@ describe('scan shortcut', () => {
   });
 });
 
+// F3: the drawer's Input had allowClear; the new .if-search never showed
+// anything but the scan glyph, so clearing a query meant holding backspace
+// or discovering (undiscoverably) that a tab re-tap also clears it.
+describe('search field clear button (F3)', () => {
+  test('a typed query swaps the trailing scan glyph for a clear button, which empties the field and restores the glyph', async () => {
+    await renderCatalog();
+
+    expect(screen.getByRole('button', {name: 'Scan'})).toBeInTheDocument();
+    expect(screen.queryByRole('button', {name: 'Clear'})).not.toBeInTheDocument();
+
+    typeQuery('კოკა-კოლა ზერო');
+    expect(screen.queryByRole('button', {name: 'Scan'})).not.toBeInTheDocument();
+    expect(screen.getByRole('button', {name: 'Clear'})).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', {name: 'Clear'}));
+    expect(queryInput().value).toBe('');
+    expect(screen.getByRole('button', {name: 'Scan'})).toBeInTheDocument();
+    expect(screen.queryByRole('button', {name: 'Clear'})).not.toBeInTheDocument();
+  });
+});
+
+// R1 (whole-plan review finding): the old drawer wrapped results in antd's
+// <Spin spinning>, whose own styling dims AND disables pointer events on the
+// wrapped container. The screen's first cut checked `results.length > 0`
+// before `searchLoading`, so a previous query's rows stayed fully tappable
+// during a refetch — typing "pepsi" -> "pepsi z" while the old 5 rows were
+// still on screen let a tap on the (still-visible) 3rd row silently add the
+// wrong product. Scope (per the review): the search branch only — the
+// browse branch clears `rows` synchronously on a category change, so it was
+// never exposed to this.
+describe('stale search results stay dimmed and inert during a refetch (R1)', () => {
+  test('a tap on a stale row while a new search is loading does not select it', async () => {
+    catalogService.searchByName.mockResolvedValueOnce({success: true, data: [searchRow('Pepsi')]});
+    const onSelectProduct = jest.fn();
+    await renderCatalog({onSelectProduct});
+
+    typeQuery('pepsi');
+    act(() => jest.advanceTimersByTime(300));
+    await act(async () => {});
+    expect(screen.getByText('Pepsi')).toBeInTheDocument();
+
+    // A fresh keystroke starts a new debounce; searchLoading flips true the
+    // moment the query changes (see CatalogView.js), well before the 300ms
+    // window elapses or a new request is even sent — "Pepsi" (the previous
+    // query's row) is still the one on screen right now.
+    typeQuery('pepsi z');
+
+    const group = document.querySelector('.cv-rows .if-group');
+    expect(group).toHaveClass('cv-stale');
+    expect(group).toHaveAttribute('aria-busy', 'true');
+
+    fireEvent.click(screen.getByText('Pepsi'));
+    expect(onSelectProduct).not.toHaveBeenCalled();
+  });
+
+  test('once the refetch resolves, the new rows are visible and tappable again', async () => {
+    catalogService.searchByName.mockResolvedValueOnce({success: true, data: [searchRow('Pepsi')]});
+    const second = deferred();
+    catalogService.searchByName.mockReturnValueOnce(second.promise);
+    const onSelectProduct = jest.fn();
+    await renderCatalog({onSelectProduct});
+
+    typeQuery('pepsi');
+    act(() => jest.advanceTimersByTime(300));
+    await act(async () => {});
+
+    typeQuery('pepsi z');
+    act(() => jest.advanceTimersByTime(300));
+    await act(async () => second.resolve({success: true, data: [searchRow('Pepsi Zero')]}));
+
+    const group = document.querySelector('.cv-rows .if-group');
+    expect(group).not.toHaveClass('cv-stale');
+    expect(group).not.toHaveAttribute('aria-busy');
+
+    fireEvent.click(screen.getByText('Pepsi Zero'));
+    expect(onSelectProduct).toHaveBeenCalledWith('SKU-Pepsi Zero');
+  });
+});
+
+// F2: the category tree used to have no loading or error state at all — the
+// "Categories" header always painted over whatever `children` (derived from
+// `tree`) happened to compute, so a slow fetch showed an empty grid for a
+// moment and a failed one left a permanently blank tile wall with no
+// message and no recovery short of another tab switch.
+describe('category tree loading and error states (F2)', () => {
+  test('shows a loading spinner, not a blank grid, while the tree is still loading', async () => {
+    const d = deferred();
+    catalogService.categoryTree.mockReturnValueOnce(d.promise);
+    render(<CatalogViewHarness/>);
+    await act(async () => {});
+
+    expect(screen.getByText('Categories')).toBeInTheDocument();
+    expect(document.querySelectorAll('.cv-tile')).toHaveLength(0);
+    expect(document.querySelector('.if-spinner')).toBeInTheDocument();
+
+    await act(async () => d.resolve({success: true, data: TREE}));
+    expect(document.querySelector('.if-spinner')).not.toBeInTheDocument();
+    expect(document.querySelectorAll('.cv-tile')).toHaveLength(2);
+  });
+
+  test('shows a translated error and a retry on a failed fetch, and recovers once retried', async () => {
+    catalogService.categoryTree.mockResolvedValueOnce({success: false, error: 'Network error'});
+    render(<CatalogViewHarness/>);
+    await act(async () => {});
+
+    expect(screen.getByText('Network error')).toBeInTheDocument();
+    expect(document.querySelectorAll('.cv-tile')).toHaveLength(0);
+    const retryButton = screen.getByRole('button', {name: 'Refresh'});
+
+    // Second call (the retry) uses beforeEach's default resolved mock.
+    fireEvent.click(retryButton);
+    await act(async () => {});
+
+    expect(catalogService.categoryTree).toHaveBeenCalledTimes(2);
+    expect(screen.queryByText('Network error')).not.toBeInTheDocument();
+    expect(document.querySelectorAll('.cv-tile')).toHaveLength(2);
+  });
+});
+
+// F1/F2: CatalogView used to own `stack`/`query`/`tree` as local state, so
+// every tab switch (UserDashboard unmounts CatalogView when activeTab !==
+// 'catalog') silently reset the consultant's browse position and search —
+// and, separately, refetched the category tree on every visit instead of
+// once per session. The harness above stands in for UserDashboard: it owns
+// the state and CatalogView only renders it, so a tab switch (visible ->
+// false -> true, same harness instance) must not lose either. `resetToken`
+// starts at a NONZERO value (3) deliberately in both tests below: a naive
+// guard against firing the reset-on-mount effect (e.g. "skip only when
+// resetToken === 0") would look correct against a fresh mount but still
+// wipe the restored state here, since a consultant who has already re-tapped
+// the tab a few times in this session has a nonzero resetToken by the time
+// they switch away and back.
+describe('lifted state survives a tab switch (F1/F2)', () => {
+  test('a category drill-down position survives an unmount/remount with no refetch of the tree', async () => {
+    const snacks = deferred();
+    catalogService.listProducts.mockReturnValueOnce(snacks.promise);
+    const {rerender} = render(<CatalogViewHarness resetToken={3} visible/>);
+    await act(async () => {});
+
+    fireEvent.click(screen.getByText('Snacks'));
+    await act(async () => snacks.resolve(browsePage(['Chips'])));
+    expect(document.querySelector('.cv-crumbtitle').textContent).toBe('Snacks');
+
+    // Tab away: CatalogView unmounts (the harness — standing in for
+    // UserDashboard — stays mounted, holding stack/query/tree state).
+    rerender(<CatalogViewHarness resetToken={3} visible={false}/>);
+
+    // Tab back: CatalogView remounts. resetToken is UNCHANGED (still 3) —
+    // a normal tab entry never bumps it; only a re-tap of the already-active
+    // tab does (see UserDashboard.js).
+    catalogService.categoryTree.mockClear();
+    catalogService.listProducts.mockClear();
+    catalogService.listProducts.mockResolvedValueOnce(browsePage(['Chips']));
+    rerender(<CatalogViewHarness resetToken={3} visible/>);
+    await act(async () => {});
+
+    // The browse position (not just the tile grid) survived: still drilled
+    // into Snacks, not popped back to the category root.
+    expect(document.querySelector('.cv-crumbtitle').textContent).toBe('Snacks');
+    expect(document.querySelector('.cv-crumbline')).toBeInTheDocument();
+    // The tree itself was not refetched a second time — it's kept by the
+    // harness (standing in for UserDashboard), not refetched per mount.
+    expect(catalogService.categoryTree).not.toHaveBeenCalled();
+  });
+
+  test('an in-progress search query survives an unmount/remount', async () => {
+    const {rerender} = render(<CatalogViewHarness resetToken={3} visible/>);
+    await act(async () => {});
+
+    typeQuery('cola');
+    expect(queryInput().value).toBe('cola');
+
+    rerender(<CatalogViewHarness resetToken={3} visible={false}/>);
+    rerender(<CatalogViewHarness resetToken={3} visible/>);
+    await act(async () => {});
+
+    expect(queryInput().value).toBe('cola');
+  });
+});
+
 describe('autofocus (replaces the drawer\'s afterOpenChange)', () => {
   test('focuses the search field once the screen is active', async () => {
     await renderCatalog();
@@ -420,7 +659,7 @@ describe('autofocus (replaces the drawer\'s afterOpenChange)', () => {
   test('typing is not interrupted when an unrelated fetch resolves mid-type', async () => {
     const tree = deferred();
     catalogService.categoryTree.mockReturnValueOnce(tree.promise);
-    render(<Harness/>);
+    render(<CatalogViewHarness/>);
     await act(async () => {});
 
     const input = queryInput();

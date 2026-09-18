@@ -1,4 +1,4 @@
-import {nextTabAction} from './tabSelection';
+import {nextTabAction, openCatalogSearchActions} from './tabSelection';
 
 describe('nextTabAction', () => {
     it('switches when tapping a different tab (Orders -> Products, keeps the result)', () => {
@@ -38,5 +38,21 @@ describe('nextTabAction', () => {
         expect(nextTabAction('scan', 'catalog', true)).toBe('switch');
         expect(nextTabAction('scan', 'catalog', false)).toBe('switch');
         expect(nextTabAction('orders', 'catalog', false)).toBe('switch');
+    });
+});
+
+// F6: UserDashboard.js's handleOpenSearch always closes the scanner before
+// switching to the Catalog tab — phase 5b's fix wave was entirely about this
+// ordering, and UserDashboard.js has no test coverage to catch a regression
+// of it. This is the only assertion that matters: 'closeScanner' before
+// 'openCatalogTab', not just that both are present.
+describe('openCatalogSearchActions', () => {
+    it('closes the scanner before switching to the Catalog tab', () => {
+        const actions = openCatalogSearchActions();
+        expect(actions.indexOf('closeScanner')).toBeLessThan(actions.indexOf('openCatalogTab'));
+    });
+
+    it('performs exactly those two actions', () => {
+        expect(openCatalogSearchActions()).toEqual(['closeScanner', 'openCatalogTab']);
     });
 });

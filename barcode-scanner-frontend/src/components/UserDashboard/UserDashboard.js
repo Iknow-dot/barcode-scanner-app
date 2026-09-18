@@ -26,7 +26,7 @@ import HomeView from './HomeView';
 import OrdersView from './OrdersView';
 import TabBar from './TabBar';
 import ActiveOrderBar, {ACTIVE_ORDER_ICON_SELECTOR} from './ActiveOrderBar';
-import {nextTabAction} from './tabSelection';
+import {nextTabAction, openCatalogSearchActions} from './tabSelection';
 import IosIcon from '../Common/IosIcon';
 import groupItemsBySku from './groupItemsBySku';
 import {hasProductResult} from './stockStatus';
@@ -111,11 +111,70 @@ const UserDashboard = ({isDark = false, onToggleTheme}) => {
     // 'orders' (incomplete / draft orders), or 'catalog' (browse/search).
     const [activeTab, setActiveTab] = useState('scan');
     // Bumped by handleSelectTab on a 'pop-to-root' re-tap of the already-active
-    // Catalog tab (see tabSelection.js) so CatalogView resets to its category
-    // root and clears its search. A first-time switch into the tab needs no
-    // bump: CatalogView unmounts/remounts with the tab (like OrdersView), and
-    // its own [resetToken] effect already fires once on every mount.
+    // Catalog tab (see tabSelection.js) so CatalogView resets its lifted
+    // `stack`/`query` (below) to the category root and an empty search. A
+    // first-time (or repeat) switch INTO the tab needs no bump and must not
+    // get one: CatalogView unmounts/remounts with the tab (like OrdersView),
+    // and its own [resetToken] effect deliberately skips that mount so the
+    // lifted state it's about to render survives the switch — see
+    // CatalogView.js's docblock.
     const [catalogResetToken, setCatalogResetToken] = useState(0);
+
+    // Catalog tab: CatalogView owns `rows`/`results`/paging locally, but not
+    // its drill-down `stack`, `query`, or the fetched category `tree` (F1/F2
+    // fix) — those are lifted here so they survive both a tab switch
+    // (CatalogView only renders while activeTab === 'catalog', so it
+    // unmounts on every switch away, same as OrdersView) and the trip
+    // through the product sheet that every catalog pick causes
+    // (handleSearch's success path always lands back on the scan tab). This
+    // is the same shape ordersSegment/ordersSearch already use for
+    // OrdersView — see CatalogView.js's own docblock for the rest.
+    const [catalogStack, setCatalogStack] = useState([]);
+    const [catalogQuery, setCatalogQuery] = useState('');
+
+    // The category tree itself (F2 fix): fetched once, the first time the
+    // consultant opens the Catalog tab, and kept here rather than inside
+    // CatalogView — which would otherwise refetch it on every tab switch,
+    // since it unmounts every time. core/views/catalog_read.py's tree
+    // endpoint is uncached and unpaginated (a full per-org materialisation +
+    // GROUP BY over active products), so "once per visit" is not free
+    // against the documented ~19 req/s envelope and the 4000-consultant
+    // target — see CLAUDE.md. `catalogTreeLoading`/`catalogTreeError` drive
+    // CatalogView's loading and error states instead of the blank grid it
+    // used to show either way; the fetch-once guard itself is a ref (below),
+    // not state — see its comment for why.
+    const [catalogTree, setCatalogTree] = useState([]);
+    const [catalogTreeLoading, setCatalogTreeLoading] = useState(false);
+    const [catalogTreeError, setCatalogTreeError] = useState('');
+
+    // Shared by the fetch-once effect below and CatalogView's retry button,
+    // so there is exactly one place that fetches the tree.
+    const fetchCatalogTree = useCallback(async () => {
+        setCatalogTreeLoading(true);
+        setCatalogTreeError('');
+        const result = await catalogService.categoryTree();
+        if (result.success) {
+            setCatalogTree(result.data || []);
+        } else {
+            setCatalogTreeError(result.error);
+        }
+        setCatalogTreeLoading(false);
+    }, []);
+
+    // Fires the initial fetch exactly once, the first time the Catalog tab
+    // is entered — a ref, not a [catalogTreeLoading] dependency, because
+    // catalogTreeLoading returns to false when a fetch FAILS too (not just
+    // on success): keying this effect on it would re-fire the moment the
+    // failed request settles, auto-retrying in a loop instead of waiting for
+    // the consultant to tap Retry. Once tried, only onRetryTree (passed to
+    // CatalogView) calls fetchCatalogTree again.
+    const triedCatalogTreeRef = useRef(false);
+    useEffect(() => {
+        if (!catalogEnabled || activeTab !== 'catalog') return;
+        if (triedCatalogTreeRef.current) return;
+        triedCatalogTreeRef.current = true;
+        fetchCatalogTree();
+    }, [catalogEnabled, activeTab, fetchCatalogTree]);
 
     // Order sheet (the active order's cart and delivery steps)
     const [orderDrawerVisible, setOrderDrawerVisible] = useState(false);
@@ -396,17 +455,20 @@ const UserDashboard = ({isDark = false, onToggleTheme}) => {
         setScannerOpen(true);
     };
 
-    // Selects the Catalog tab. Closes the scanner first (if it's open) so the
-    // camera is released before the screen changes — this ordering matters:
-    // a camera left running keeps the device's privacy indicator lit, drains
-    // battery, and can make the next getUserMedia call fail on some Android
-    // browsers. Shared by all four entry points that open the catalog: the
-    // trailing tab (via handleSelectTab/nextTabAction, not this function),
-    // Home's manual-search button, the empty cart's, and the scanner's
-    // manual-search pill.
+    // Selects the Catalog tab. Runs openCatalogSearchActions() (F6,
+    // tabSelection.js) in order: closes the scanner first (if it's open) so
+    // the camera is released before the screen changes — this ordering
+    // matters: a camera left running keeps the device's privacy indicator
+    // lit, drains battery, and can make the next getUserMedia call fail on
+    // some Android browsers. Shared by all four entry points that open the
+    // catalog: the trailing tab (via handleSelectTab/nextTabAction, not this
+    // function), Home's manual-search button, the empty cart's, and the
+    // scanner's manual-search pill.
     const handleOpenSearch = () => {
-        setScannerOpen(false);
-        setActiveTab('catalog');
+        openCatalogSearchActions().forEach((action) => {
+            if (action === 'closeScanner') setScannerOpen(false);
+            if (action === 'openCatalogTab') setActiveTab('catalog');
+        });
     };
 
     // ===== Purchase Order handlers =====
@@ -928,12 +990,19 @@ const UserDashboard = ({isDark = false, onToggleTheme}) => {
                     )}
                     {activeTab === 'catalog' && catalogEnabled && (
                         <CatalogView
-                            orderMode={!!showOrderPanel}
                             onSelectProduct={handleSelectFromCatalog}
                             onScan={handleOpenScanner}
                             allWarehouses={allWarehouses}
                             onAllWarehousesChange={setAllWarehouses}
                             resetToken={catalogResetToken}
+                            stack={catalogStack}
+                            onStackChange={setCatalogStack}
+                            query={catalogQuery}
+                            onQueryChange={setCatalogQuery}
+                            tree={catalogTree}
+                            treeLoading={catalogTreeLoading}
+                            treeError={catalogTreeError}
+                            onRetryTree={fetchCatalogTree}
                         />
                     )}
                 </div>

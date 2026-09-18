@@ -14,8 +14,9 @@ const PAGE_SIZE = 25;
 // 56px thumb with a built-in placeholder: the ProductImage overlays the tinted
 // box when it loads; a missing src or a failed load (ProductImage renders
 // nothing then) leaves the placeholder visible. ProductImage stays unchanged
-// (phase 5c constraint) — ported from FindProductDrawer.js's RowThumb as-is,
-// only the wrapper class names changed (cv- prefix, this file's own CSS).
+// (phase 5c constraint) — ported from the deleted FindProductDrawer.js's
+// RowThumb as-is, only the wrapper class names changed (cv- prefix, this
+// file's own CSS).
 const RowThumb = ({item}) => {
     const src = item.image || (item.images && item.images[0]);
     return (
@@ -33,59 +34,80 @@ const RowThumb = ({item}) => {
 };
 
 /**
- * The catalog as a full tab screen (iOS redesign phase 5c, task 1) — the same
- * smart search (name/article/sku/barcode typeahead) plus drill-down category
- * browsing FindProductDrawer.js offered in a bottom Drawer, now a screen that
- * sits alongside the tab bar and the active-order bar instead of covering
- * them. FindProductDrawer.js/.css/.test.js are kept working and untouched —
- * a later task deletes them — this file ports their behaviour rather than
- * rewriting it:
+ * The catalog as a full tab screen (iOS redesign phase 5c) — the same smart
+ * search (name/article/sku/barcode typeahead) plus drill-down category
+ * browsing the deleted FindProductDrawer.js offered in a bottom Drawer, now
+ * a screen that sits alongside the tab bar and the active-order bar instead
+ * of covering them. This file ports FindProductDrawer's behaviour rather
+ * than rewriting it:
  *   - browseSeqRef / searchSeqRef: two independent monotonic sequence
  *     guards, so an out-of-order async response never overwrites a newer
  *     one. Ascending to the root (currentId becomes null) invalidates any
  *     in-flight browse fetch without starting a new one — there is nothing
  *     to fetch at the root (it would be the whole catalog).
- *   - the 300ms search debounce (unchanged: FindProductDrawer.js has no
- *     minimum query length despite this task's brief claiming one — its own
- *     test file fires a search off a 2-character 'pe' probe, so no such gate
- *     was ported; see the task report).
+ *   - the 300ms search debounce (unchanged: this component has no minimum
+ *     query length).
  *   - PAGE_SIZE = 25 and "load more" appending a page's rows onto `rows`
  *     rather than replacing them.
- *   - treeLoaded: the category tree is fetched once, the first time this
- *     component is mounted, never again.
  *
- * `resetToken` stands in for the Drawer's open/close lifecycle: this screen
- * has no `open` prop to hang an `afterOpenChange` off of — it mounts once
- * and, per the task-2 wiring this component expects, stays mounted while the
- * consultant tabs elsewhere. The parent is expected to bump `resetToken` both
- * the first time this tab becomes active and again on every re-tap while
- * already on it; either way the field refocuses and the browse position pops
- * back to the category root with the search cleared. Because React runs
- * every effect on initial mount regardless of its dependency list, one
- * effect keyed on [resetToken] covers both cases without an explicit
- * "active" prop. Nothing here refocuses on a plain re-render (a fetch
- * resolving, a keystroke) — only a resetToken change does — so typing is
- * never interrupted mid-word.
+ * `stack`, `query` and the category `tree` are controlled props, not local
+ * state (the phase fix wave's F1/F2 fix) — UserDashboard owns them, the same
+ * lifted-state shape it already uses for `ordersSegment`/`ordersSearch` on
+ * OrdersView. This screen unmounts on every tab switch (rendered
+ * conditionally on `activeTab === 'catalog'`, exactly like OrdersView on
+ * `'orders'`), so anything kept as local state here resets on every switch
+ * away and back. That used to mean: losing the consultant's drill-down
+ * position and clearing their search on every trip back to this tab (picking
+ * a product IS a tab switch — handleSearch's success path always shows the
+ * product sheet on the scan tab), and re-fetching the category tree — an
+ * uncached, unpaginated aggregate query (`core/views/catalog_read.py`) — on
+ * every visit instead of once per session. `tree`/`treeLoading`/`treeError`/
+ * `onRetryTree` mirror that: UserDashboard fetches the tree once and keeps
+ * it across mounts, handing this screen a loading flag and an already
+ * -translated error message with a retry callback instead of a fetch effect
+ * of its own — so a failed fetch shows a message and a retry button instead
+ * of a permanently blank tile wall, and a slow one shows a spinner instead of
+ * an empty grid. `rows`, `results`, `count`, `page` and the loading flags
+ * below stay local: losing them on a tab switch only costs a refetch (for
+ * whichever `stack`/`query` position survived), not the consultant's
+ * position.
+ *
+ * `resetToken` stands in for the deleted Drawer's open/close lifecycle: this
+ * screen has no `open` prop to hang an `afterOpenChange` off of. Because
+ * `stack`/`query` now survive a plain tab switch, a switch INTO this tab
+ * must NOT reset them — only refocus the field — so the effect below skips
+ * its very first run (the mount that follows every switch-in, first time or
+ * not) and only resets on a later change: the parent bumping `resetToken`
+ * again while this screen is already mounted, which happens only on a
+ * re-tap of the already-active Catalog tab. Because React runs every effect
+ * once on mount regardless of its dependency list, that skip has to be an
+ * explicit ref, not just [resetToken] — a naive effect would silently wipe
+ * the just-restored `stack`/`query` on every tab entry and undo the whole
+ * fix while looking identical at a glance. Nothing here refocuses on a plain
+ * re-render (a fetch resolving, a keystroke) — only a resetToken change past
+ * the first does — so typing is never interrupted mid-word.
  */
 const CatalogView = ({
-    orderMode,
     onSelectProduct,
     onScan,
     allWarehouses,
     onAllWarehousesChange,
     resetToken,
+    stack,
+    onStackChange,
+    query,
+    onQueryChange,
+    tree,
+    treeLoading,
+    treeError,
+    onRetryTree,
 }) => {
     const {t} = useLanguage();
     const inputRef = useRef(null);
 
-    const [query, setQuery] = useState('');
     const [results, setResults] = useState([]);
     const [searchLoading, setSearchLoading] = useState(false);
 
-    const [tree, setTree] = useState([]);
-    const [treeLoaded, setTreeLoaded] = useState(false);
-    // Drill-down position: array of category ids root→current; [] = root.
-    const [stack, setStack] = useState([]);
     const [rows, setRows] = useState([]);
     const [count, setCount] = useState(0);
     const [page, setPage] = useState(1);
@@ -96,23 +118,8 @@ const CatalogView = ({
     const browseSeqRef = useRef(0);
     const searchSeqRef = useRef(0);
 
-    // Lazy-load the category tree once, the first time this screen mounts.
-    useEffect(() => {
-        if (treeLoaded) return;
-        let cancelled = false;
-        (async () => {
-            const res = await catalogService.categoryTree();
-            if (!cancelled && res.success) {
-                setTree(res.data || []);
-                setTreeLoaded(true);
-            }
-        })();
-        return () => {
-            cancelled = true;
-        };
-    }, [treeLoaded]);
-
-    // Debounced smart search — same 300ms pattern as FindProductDrawer.js.
+    // Debounced smart search — same 300ms pattern as the deleted
+    // FindProductDrawer.js.
     useEffect(() => {
         const trimmed = query.trim();
         if (!trimmed) {
@@ -158,8 +165,10 @@ const CatalogView = ({
         }
     }, []);
 
-    // (Re)load the branch's products whenever the drill-down position moves.
-    // At the root there is no product list (it would be the whole catalog).
+    // (Re)load the branch's products whenever the drill-down position moves
+    // — including the first render after a tab switch restores a non-root
+    // `stack` (see the docblock above): that is exactly when this needs to
+    // refetch, since `rows` itself is not lifted.
     useEffect(() => {
         setRows([]);
         setCount(0);
@@ -175,13 +184,19 @@ const CatalogView = ({
     }, [currentId, fetchProducts]);
 
     // Pop back to the category root, clear the search and refocus the field
-    // — both the first time this screen becomes active and on every re-tap
-    // of its tab while already on it (task 2 bumps resetToken for both).
+    // — but only on a re-tap of the already-active tab, not on the mount
+    // that follows a plain switch into it (see the docblock above).
+    const skippedMountResetRef = useRef(false);
     useEffect(() => {
-        setStack([]);
-        setQuery('');
+        if (!skippedMountResetRef.current) {
+            skippedMountResetRef.current = true;
+            inputRef.current?.focus();
+            return;
+        }
+        onStackChange([]);
+        onQueryChange('');
         inputRef.current?.focus();
-    }, [resetToken]);
+    }, [resetToken, onStackChange, onQueryChange]);
 
     const children = useMemo(() => childrenForStack(tree, stack), [tree, stack]);
     const crumb = useMemo(() => breadcrumbForStack(tree, stack), [tree, stack]);
@@ -191,17 +206,27 @@ const CatalogView = ({
     const searching = query.trim().length > 0;
 
     const handleSelect = (sku) => {
-        setQuery('');
+        onQueryChange('');
         setResults([]);
         onSelectProduct(sku);
     };
 
-    const renderProductRow = (item, meta) => (
+    // `disabled` guards the search branch only (R1 fix) — while a refetch is
+    // in flight, the previous query's rows are still on screen (see the
+    // `searching` render below) and must not be selectable, or a fast typist
+    // can add the wrong product before the new results land. The browse
+    // branch never passes it: changing category clears `rows` synchronously,
+    // so there is nothing stale there to guard against.
+    const renderProductRow = (item, meta, {disabled = false} = {}) => (
         <button
             type="button"
             key={item.sku}
             className="if-row cv-product-row"
-            onClick={() => handleSelect(item.sku)}
+            onClick={() => {
+                if (disabled) return;
+                handleSelect(item.sku);
+            }}
+            disabled={disabled}
         >
             <RowThumb item={item}/>
             <span className="if-row-main">
@@ -228,18 +253,32 @@ const CatalogView = ({
                     className="if-search-input"
                     variant="borderless"
                     value={query}
-                    onChange={(e) => setQuery(e.target.value)}
+                    onChange={(e) => onQueryChange(e.target.value)}
                     placeholder={t.findProductPlaceholder}
                     aria-label={t.findProductPlaceholder}
                 />
-                <button
-                    type="button"
-                    className="if-search-trail is-action"
-                    aria-label={t.scan}
-                    onClick={onScan}
-                >
-                    <IosIcon name="scan" size={20} stroke={2.2}/>
-                </button>
+                {query ? (
+                    // F3: while there's something to clear, the scan glyph —
+                    // the less useful shortcut mid-query — is replaced by a
+                    // clear button. Same pattern as OrdersView.js's search.
+                    <button
+                        type="button"
+                        className="if-search-trail"
+                        aria-label={t.clearSearch}
+                        onClick={() => onQueryChange('')}
+                    >
+                        <IosIcon name="close" size={18} stroke={2.6}/>
+                    </button>
+                ) : (
+                    <button
+                        type="button"
+                        className="if-search-trail is-action"
+                        aria-label={t.scan}
+                        onClick={onScan}
+                    >
+                        <IosIcon name="scan" size={20} stroke={2.2}/>
+                    </button>
+                )}
             </div>
 
             <div className="if-group cv-allwh-group">
@@ -256,10 +295,20 @@ const CatalogView = ({
             {searching ? (
                 <div className="cv-rows">
                     {results.length > 0 ? (
-                        <div className="if-group is-thumb-inset">
+                        // R1: dim + block pointer events on the group while a
+                        // refetch is in flight — the same protection antd's
+                        // <Spin spinning> gave the old drawer for free.
+                        // aria-busy sits on this results container (not just
+                        // the search bar above) so assistive tech announces
+                        // the stale-but-visible state correctly.
+                        <div
+                            className={`if-group is-thumb-inset${searchLoading ? ' cv-stale' : ''}`}
+                            aria-busy={searchLoading || undefined}
+                        >
                             {results.map((item) => renderProductRow(item,
                                 [item.article, (item.category_path || []).join(' › ')]
-                                    .filter(Boolean).join(' · ')))}
+                                    .filter(Boolean).join(' · '),
+                                {disabled: searchLoading}))}
                         </div>
                     ) : searchLoading ? (
                         <div className="if-group if-group-empty" aria-busy="true">
@@ -274,28 +323,48 @@ const CatalogView = ({
                     {stack.length === 0 ? (
                         <>
                             <h4 className="if-section-header">{t.categoriesLabel}</h4>
-                            <div className="cv-tiles">
-                                {children.map((node) => {
-                                    const palette = TILE_PALETTE[paletteIndex(node.id)];
-                                    return (
-                                        <button
-                                            type="button"
-                                            key={node.id}
-                                            className="cv-tile"
-                                            style={{background: palette.bg}}
-                                            onClick={() => setStack([...stack, node.id])}
-                                        >
-                                            <span className="cv-tile-mono" style={{color: palette.fg}} aria-hidden="true">
-                                                {monogram(node.name)}
-                                            </span>
-                                            <span className="cv-tile-name">{node.name}</span>
-                                            <span className="cv-tile-count">
-                                                {node.product_count} {t.productCountSuffix}
-                                            </span>
-                                        </button>
-                                    );
-                                })}
-                            </div>
+                            {treeError ? (
+                                // F2: a failed tree fetch used to leave a
+                                // permanently blank tile wall with no
+                                // message and no recovery short of another
+                                // tab switch — now a translated error plus a
+                                // retry that re-runs the same fetch in place.
+                                <div className="if-group if-group-empty cv-tree-error">
+                                    <p className="if-row-subtitle">{treeError}</p>
+                                    <button type="button" className="if-btn if-btn-gray" onClick={onRetryTree}>
+                                        {t.refreshData}
+                                    </button>
+                                </div>
+                            ) : treeLoading ? (
+                                // F2: a loading state instead of the tiles
+                                // popping into an empty grid.
+                                <div className="if-group if-group-empty" aria-busy="true">
+                                    <span className="if-spinner"/>
+                                </div>
+                            ) : (
+                                <div className="cv-tiles">
+                                    {children.map((node) => {
+                                        const palette = TILE_PALETTE[paletteIndex(node.id)];
+                                        return (
+                                            <button
+                                                type="button"
+                                                key={node.id}
+                                                className="cv-tile"
+                                                style={{background: palette.bg}}
+                                                onClick={() => onStackChange([...stack, node.id])}
+                                            >
+                                                <span className="cv-tile-mono" style={{color: palette.fg}} aria-hidden="true">
+                                                    {monogram(node.name)}
+                                                </span>
+                                                <span className="cv-tile-name">{node.name}</span>
+                                                <span className="cv-tile-count">
+                                                    {node.product_count} {t.productCountSuffix}
+                                                </span>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            )}
                         </>
                     ) : (
                         <>
@@ -308,7 +377,7 @@ const CatalogView = ({
                                 <button
                                     type="button"
                                     className="cv-backpill"
-                                    onClick={() => setStack(parentStack(stack))}
+                                    onClick={() => onStackChange(parentStack(stack))}
                                 >
                                     <IosIcon name="back" size={14} stroke={2.4}/> {parentNode ? parentNode.name : t.allCategories}
                                 </button>
@@ -326,7 +395,7 @@ const CatalogView = ({
                                             type="button"
                                             key={node.id}
                                             className="cv-chip"
-                                            onClick={() => setStack([...stack, node.id])}
+                                            onClick={() => onStackChange([...stack, node.id])}
                                         >
                                             {node.name} <span className="cv-chip-cnt">{node.product_count}</span>
                                         </button>
