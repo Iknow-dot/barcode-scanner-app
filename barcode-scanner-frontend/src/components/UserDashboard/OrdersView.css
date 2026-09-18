@@ -44,3 +44,10 @@
     height: auto;
     padding: 8px 20px;
 }
+
+/* The search field and the status segments sat flush against each other
+   (measured 0px at 393px width). The canvas puts 12px between them, the same
+   rhythm the lookup sheet uses between its tabs and its field. */
+.if-seg.m-orders-seg {
+    margin-top: 12px;
+}
