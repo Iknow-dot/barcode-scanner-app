@@ -115,6 +115,22 @@ const headingValueForDate = (dayKey) => {
 };
 
 /**
+ * Local midnight today -> local midnight tomorrow, as UTC instants (ISO
+ * strings with the offset already folded in via `toISOString`). Used by
+ * OrdersView to scope the default (non-search) order list to *today* —
+ * `created_after`/`created_before` on the backend compare these against the
+ * real `created_at` timestamp, never a UTC calendar date, for the same
+ * Tbilisi-boundary reason `dayKeyOf` above is local rather than UTC: a
+ * naive UTC-day filter would hide every order created between local
+ * midnight and ~04:00 (Tbilisi is UTC+4). Pure — only reads `now`.
+ */
+export const localDayBounds = (now) => {
+    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+    const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
+    return {start: start.toISOString(), end: end.toISOString()};
+};
+
+/**
  * Orders bucketed by the viewer's local calendar day, in first-seen order
  * (the API already returns orders newest-first, so this naturally comes out
  * today → yesterday → older). Today/yesterday head by name

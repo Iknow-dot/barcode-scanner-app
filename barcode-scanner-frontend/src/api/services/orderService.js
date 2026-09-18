@@ -32,7 +32,15 @@ const offlineFallback = (orderId, op, result) => {
 /**
  * Get all purchase orders for the current user's organization.
  * @param {object} [params] - Optional query params for filtering
- *   { status, external_client_id, customer_search, order_number, date_from, date_to, created_by }
+ *   { status, external_client_id, customer_search, order_number, date_from, date_to, created_by,
+ *     created_after, created_before }
+ *   `created_after`/`created_before` are ISO-8601 instants (not dates) filtered against the real
+ *   `created_at` timestamp — OrdersView sends the viewer's local-day bounds
+ *   (see ordersListView.js::localDayBounds) on every non-search segment
+ *   fetch so the consultant Orders tab defaults to "today only", and omits
+ *   both once a search query is active so the search still reaches full
+ *   history. Distinct from `date_from`/`date_to`, which compare a UTC
+ *   calendar date and are used by the admin dashboard.
  */
 export const getOrders = (params) => {
     return api.get(API_ENDPOINTS.orders, { params });

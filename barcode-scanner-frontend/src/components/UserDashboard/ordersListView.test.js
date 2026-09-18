@@ -7,6 +7,7 @@ import {
     orderRow,
     groupByDay,
     emptyCopyKey,
+    localDayBounds,
 } from './ordersListView';
 
 // relativeTime/groupByDay bucket by the *local* calendar day (see
@@ -193,6 +194,39 @@ describe('orderRow', () => {
 
     it('carries the row time from relativeTime', () => {
         expect(orderRow(base, t, NOW).time).toEqual({key: 'minAgo', value: 25});
+    });
+});
+
+describe('localDayBounds', () => {
+    // Task: consultant Orders tab shows only *today's* orders by default.
+    // The default list must be scoped to the viewer's local calendar day,
+    // not the UTC one — same Tbilisi (UTC+4) reasoning as dayKeyOf above.
+    // NOW is Tbilisi local 2026-09-18 16:00, so the local day is 2026-09-18;
+    // its midnight-to-midnight bounds sit at 20:00Z the day before/of.
+    it('returns local midnight today -> local midnight tomorrow, as UTC instants', () => {
+        expect(localDayBounds(NOW)).toEqual({
+            start: '2026-09-17T20:00:00.000Z',
+            end: '2026-09-18T20:00:00.000Z',
+        });
+    });
+
+    // R1-class regression guard: a `now` that is already past Tbilisi local
+    // midnight (but still before UTC midnight) must resolve to *that* local
+    // day's bounds, not the UTC day's — this is the exact bug class described
+    // in the task (a naive UTC-day filter hides 00:00-04:00 local orders).
+    it('crosses the UTC day boundary correctly for a late-evening-UTC "now"', () => {
+        // 2026-09-18T21:00:00Z is Tbilisi-local 2026-09-19 01:00.
+        const lateNow = new Date('2026-09-18T21:00:00Z');
+        expect(localDayBounds(lateNow)).toEqual({
+            start: '2026-09-18T20:00:00.000Z',
+            end: '2026-09-19T20:00:00.000Z',
+        });
+    });
+
+    it('is deterministic and only reads `now`, not the system clock', () => {
+        const a = localDayBounds(NOW);
+        const b = localDayBounds(new Date(NOW.getTime()));
+        expect(a).toEqual(b);
     });
 });
 

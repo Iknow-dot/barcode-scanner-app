@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone as dt_timezone
+
 from core.models import PurchaseOrder, PurchaseOrderItem
 from core.serializers import PurchaseOrderSerializer
 from django.test import TestCase, override_settings
@@ -647,3 +649,127 @@ class GiftFlagEndpointTests(TestCase):
         self.assertEqual(lines.count(), 2)
         gift_line = lines.get(is_gift=True)
         self.assertEqual(gift_line.quantity, 2)
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
+class PurchaseOrderCreatedAfterBeforeFilterTests(TestCase):
+    """`created_after`/`created_before` (task: consultant Orders tab shows
+    only today's orders). Both filter on the real `created_at` instant
+    (`__gte`/`__lt`), never `__date` — the project runs TIME_ZONE='UTC' but
+    consultants are in Tbilisi (UTC+4), so an order created at 00:45 local
+    time is `20:45Z` the *previous* UTC day. `date_from`/`date_to` (the
+    admin dashboard's existing filters) are deliberately left untouched and
+    untested here."""
+
+    def setUp(self):
+        self.org = _make_organization(name='OrgCAB', identification_number='701')
+        self.user = User.objects.create_user(
+            username='cab-user', password='p',
+            role=User.Role.COMPANY_USER, organization=self.org,
+        )
+        self.api = APIClient()
+        self.api.force_authenticate(self.user)
+
+    def _create_order_at(self, created_at):
+        order = PurchaseOrder.objects.create(
+            organization=self.org, created_by=self.user, customer_name='Cust',
+            status='draft',
+        )
+        # created_at is auto_now_add=True, so it can only be backdated with a
+        # queryset UPDATE (auto_now_add only fires on INSERT, not on this
+        # kind of follow-up write).
+        PurchaseOrder.objects.filter(pk=order.pk).update(created_at=created_at)
+        order.refresh_from_db()
+        return order
+
+    def _ids(self, response):
+        data = response.data
+        return [o['id'] for o in (data['results'] if isinstance(data, dict) and 'results' in data else data)]
+
+    def test_late_evening_utc_order_is_inside_the_tbilisi_local_today_window(self):
+        # 2026-09-18T20:45:00Z is Tbilisi-local 2026-09-19 00:45 — inside the
+        # Tbilisi calendar day of 2026-09-19, whose local midnight-to-midnight
+        # bounds are 2026-09-18T20:00:00Z .. 2026-09-19T20:00:00Z.
+        inside = self._create_order_at(datetime(2026, 9, 18, 20, 45, tzinfo=dt_timezone.utc))
+        # Tbilisi-local 2026-09-18 23:55 — the *previous* Tbilisi day, must
+        # NOT appear in the 2026-09-19 local-day window.
+        outside = self._create_order_at(datetime(2026, 9, 18, 19, 55, tzinfo=dt_timezone.utc))
+
+        response = self.api.get('/api/v1/orders/', {
+            'status': 'draft',
+            'created_after': '2026-09-18T20:00:00Z',
+            'created_before': '2026-09-19T20:00:00Z',
+        })
+        self.assertEqual(response.status_code, 200)
+        ids = self._ids(response)
+        self.assertIn(inside.id, ids)
+        self.assertNotIn(outside.id, ids)
+
+    def test_late_evening_utc_order_is_outside_a_utc_calendar_day_window(self):
+        # Same order as above (Tbilisi-local 2026-09-19 00:45). A window
+        # built from the UTC calendar day matching that same date label
+        # (2026-09-19T00:00:00Z .. 2026-09-20T00:00:00Z) is exactly the bug
+        # this task avoids: it must NOT contain the order, because the order's
+        # raw timestamp (2026-09-18T20:45:00Z) falls before the window starts.
+        order = self._create_order_at(datetime(2026, 9, 18, 20, 45, tzinfo=dt_timezone.utc))
+
+        response = self.api.get('/api/v1/orders/', {
+            'status': 'draft',
+            'created_after': '2026-09-19T00:00:00Z',
+            'created_before': '2026-09-20T00:00:00Z',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn(order.id, self._ids(response))
+
+    def test_created_after_is_inclusive_and_created_before_is_exclusive(self):
+        at_start = self._create_order_at(datetime(2026, 9, 19, 0, 0, 0, tzinfo=dt_timezone.utc))
+        at_end = self._create_order_at(datetime(2026, 9, 20, 0, 0, 0, tzinfo=dt_timezone.utc))
+
+        response = self.api.get('/api/v1/orders/', {
+            'status': 'draft',
+            'created_after': '2026-09-19T00:00:00Z',
+            'created_before': '2026-09-20T00:00:00Z',
+        })
+        ids = self._ids(response)
+        self.assertIn(at_start.id, ids)
+        self.assertNotIn(at_end.id, ids)
+
+    def test_naive_created_after_is_treated_as_utc(self):
+        # No trailing "Z"/offset — parse_datetime returns a naive datetime,
+        # which the view makes aware in the project's configured TIME_ZONE
+        # (UTC per settings.py), rather than 500ing or silently ignoring it.
+        before_boundary = self._create_order_at(datetime(2026, 9, 18, 23, 0, tzinfo=dt_timezone.utc))
+        after_boundary = self._create_order_at(datetime(2026, 9, 19, 10, 0, tzinfo=dt_timezone.utc))
+
+        response = self.api.get('/api/v1/orders/', {
+            'status': 'draft',
+            'created_after': '2026-09-19T00:00:00',  # naive
+        })
+        self.assertEqual(response.status_code, 200)
+        ids = self._ids(response)
+        self.assertIn(after_boundary.id, ids)
+        self.assertNotIn(before_boundary.id, ids)
+
+    def test_unparseable_value_is_ignored_not_500(self):
+        order = self._create_order_at(datetime(2026, 9, 19, 10, 0, tzinfo=dt_timezone.utc))
+
+        response = self.api.get('/api/v1/orders/', {
+            'status': 'draft',
+            'created_after': 'not-a-date',
+            'created_before': 'also-not-a-date',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(order.id, self._ids(response))
+
+    def test_date_from_date_to_are_unaffected(self):
+        # Regression guard: the pre-existing admin-dashboard filters keep
+        # comparing the UTC calendar date (created_at__date), untouched by
+        # this change.
+        order = self._create_order_at(datetime(2026, 9, 18, 20, 45, tzinfo=dt_timezone.utc))
+        response = self.api.get('/api/v1/orders/', {
+            'status': 'draft',
+            'date_from': '2026-09-18',
+            'date_to': '2026-09-18',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(order.id, self._ids(response))

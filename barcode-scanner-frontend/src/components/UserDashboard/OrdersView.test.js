@@ -5,6 +5,7 @@ import OrdersView from './OrdersView';
 import {LanguageProvider} from '../../i18n/LanguageContext';
 import translations from '../../i18n/translations';
 import {orderService} from '../../api/services';
+import {localDayBounds} from './ordersListView';
 
 const en = translations.en;
 
@@ -36,6 +37,16 @@ beforeAll(() => {
 // ordersListView.test.js uses (Tbilisi local: 2026-09-18 16:00), so
 // today/yesterday fixtures line up.
 const NOW = new Date('2026-09-18T12:00:00Z');
+
+// The non-search segment queries are now scoped to "today" (task: consultant
+// Orders tab default), sent as created_after/created_before local-day
+// instants — see ordersListView.test.js for localDayBounds' own boundary
+// coverage. This just threads its output into the expected getOrders params.
+const TODAY_BOUNDS = localDayBounds(NOW);
+const todayBoundsParams = () => ({
+    created_after: TODAY_BOUNDS.start,
+    created_before: TODAY_BOUNDS.end,
+});
 
 const order = (overrides = {}) => ({
     id: 1001,
@@ -124,7 +135,9 @@ describe('OrdersView', () => {
     it('fetches the draft segment scoped to the consultant on mount', async () => {
         renderView();
         await flushDebounce();
-        expect(orderService.getOrders).toHaveBeenCalledWith({status: 'draft', created_by: 7});
+        expect(orderService.getOrders).toHaveBeenCalledWith({
+            status: 'draft', created_by: 7, ...todayBoundsParams(),
+        });
     });
 
     it("selecting a segment issues getOrders with that segment's params", async () => {
@@ -135,7 +148,7 @@ describe('OrdersView', () => {
         fireEvent.click(screen.getByRole('radio', {name: en.ordersSegmentConfirmed}));
         await flushDebounce();
 
-        expect(orderService.getOrders).toHaveBeenCalledWith({status: 'confirmed'});
+        expect(orderService.getOrders).toHaveBeenCalledWith({status: 'confirmed', ...todayBoundsParams()});
     });
 
     it('fetches immediately on a segment change — no debounce timer involved', async () => {
@@ -148,7 +161,20 @@ describe('OrdersView', () => {
         // need one.
         await flushMicrotasks();
 
-        expect(orderService.getOrders).toHaveBeenCalledWith({status: 'confirmed'});
+        expect(orderService.getOrders).toHaveBeenCalledWith({status: 'confirmed', ...todayBoundsParams()});
+    });
+
+    it('omits the local-day bounds once a search query is active', async () => {
+        renderView();
+        await flushDebounce();
+        orderService.getOrders.mockClear();
+
+        fireEvent.change(screen.getByPlaceholderText(en.searchByCustomer), {target: {value: 'Ber'}});
+        await flushDebounce();
+
+        // Exact-match assertion: created_after/created_before must be absent
+        // entirely, not just falsy — a search reaches the full order history.
+        expect(orderService.getOrders).toHaveBeenCalledWith({status: 'draft', customer_search: 'Ber'});
     });
 
     it("keeps typing debounced at 300ms, unlike a segment change", async () => {
@@ -274,7 +300,35 @@ describe('OrdersView', () => {
         expect(screen.getByText('New Result')).toBeInTheDocument();
     });
 
-    it('renders rows grouped under today / yesterday headings', async () => {
+    // Task: the default (non-search) list is a single day, so its date
+    // section headers would always read "today" and are noise — they only
+    // earn their place once a search can span days. groupByDay itself still
+    // runs either way (it's what rows[] gets bucketed by); only the <h4>
+    // rendering is gated on isSearching.
+    it('renders rows grouped under today / yesterday headings while a search is active', async () => {
+        orderService.getOrders.mockResolvedValue({
+            success: true,
+            data: [
+                order({id: 1, customer_name: 'Today Client', created_at: '2026-09-18T11:00:00Z'}),
+                order({id: 2, customer_name: 'Yesterday Client', created_at: '2026-09-17T18:20:00Z'}),
+            ],
+        });
+        renderView();
+        await flushDebounce();
+        fireEvent.change(screen.getByPlaceholderText(en.searchByCustomer), {target: {value: 'Client'}});
+        await flushDebounce();
+
+        expect(screen.getByText(en.today)).toBeInTheDocument();
+        expect(screen.getByText(en.yesterday)).toBeInTheDocument();
+        expect(screen.getByText('Today Client')).toBeInTheDocument();
+        expect(screen.getByText('Yesterday Client')).toBeInTheDocument();
+    });
+
+    it('hides the date section headers when not searching, even if the fetched rows span two days', async () => {
+        // In production the backend's created_after/created_before already
+        // keep this to one day; this fetches a two-day response directly to
+        // isolate the *rendering* rule (header visibility follows
+        // isSearching) from the fetch params tested elsewhere.
         orderService.getOrders.mockResolvedValue({
             success: true,
             data: [
@@ -285,8 +339,8 @@ describe('OrdersView', () => {
         renderView();
         await flushDebounce();
 
-        expect(screen.getByText(en.today)).toBeInTheDocument();
-        expect(screen.getByText(en.yesterday)).toBeInTheDocument();
+        expect(screen.queryByText(en.today)).toBeNull();
+        expect(screen.queryByText(en.yesterday)).toBeNull();
         expect(screen.getByText('Today Client')).toBeInTheDocument();
         expect(screen.getByText('Yesterday Client')).toBeInTheDocument();
     });

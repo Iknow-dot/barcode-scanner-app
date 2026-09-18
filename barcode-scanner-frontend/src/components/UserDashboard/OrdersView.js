@@ -10,6 +10,7 @@ import {
     orderRow,
     groupByDay,
     emptyCopyKey,
+    localDayBounds,
 } from './ordersListView';
 import './OrdersView.css';
 
@@ -150,10 +151,15 @@ const OrderRow = ({row, t, onOpenOrder, onPrint, onDelete}) => {
  *
  * One fetch effect, keyed on [segment, query], covers both the old "my
  * drafts" fetch and the old debounced customer search: an empty query uses
- * segmentQuery (created_by for drafts, org-wide for the other two); a
- * non-empty query searches within the current segment's status, org-wide
- * (colleagues' drafts stay findable, same as the old search). Both paths
- * unwrap `result.data?.results ?? result.data ?? []` — the old
+ * segmentQuery (created_by for drafts, org-wide for the other two) plus
+ * `created_after`/`created_before` from `localDayBounds(new Date())` — all
+ * three segments default to *today only* (the viewer's local day); a
+ * non-empty query drops the day bounds entirely and searches within the
+ * current segment's status, org-wide, across full history (colleagues'
+ * drafts stay findable, same as the old search — and an older invoice is
+ * still reprintable by name/phone/ID even though it has scrolled out of the
+ * default list). Both paths unwrap `result.data?.results ?? result.data ?? []`
+ * — the old
  * fetchIncompleteOrders assumed a bare array while only the search path
  * defended against a future paginated response; enabling pagination would
  * otherwise throw inside its swallowed catch. A monotonic sequence ref
@@ -209,9 +215,22 @@ const OrdersView = ({
     // right now.
     const fetchOrders = async (targetSegment, targetQuery) => {
         const trimmed = targetQuery.trim();
-        const params = trimmed
-            ? {status: targetSegment, customer_search: trimmed}
-            : segmentQuery(targetSegment, {userId});
+        // All three segments default to *today only* (viewer's local day) —
+        // a client search is exempt and reaches the full history, so a
+        // consultant can still find and reprint an older invoice. Bounds are
+        // computed fresh per fetch (not hoisted to render scope) so a fetch
+        // that fires after midnight picks up the new day.
+        let params;
+        if (trimmed) {
+            params = {status: targetSegment, customer_search: trimmed};
+        } else {
+            const {start, end} = localDayBounds(new Date());
+            params = {
+                ...segmentQuery(targetSegment, {userId}),
+                created_after: start,
+                created_before: end,
+            };
+        }
         const seq = ++fetchSeqRef.current;
         setLoading(true);
         try {
@@ -308,7 +327,7 @@ const OrdersView = ({
                 )}
             </div>
             <Segmented
-                className="if-seg"
+                className="if-seg m-orders-seg"
                 block
                 value={segment}
                 onChange={onSegmentChange}
@@ -317,9 +336,16 @@ const OrdersView = ({
             {groups.length > 0 ? (
                 groups.map((group) => (
                     <React.Fragment key={group.key}>
-                        <h4 className="if-section-header">
-                            {group.headingKey === 'date' ? group.headingValue : t[group.headingKey]}
-                        </h4>
+                        {/* The default (non-search) list is a single day, so a
+                            header here would always read "today" and is just
+                            noise. Search results can span days, so the
+                            grouping — still built by groupByDay either way —
+                            only earns a visible heading while searching. */}
+                        {isSearching && (
+                            <h4 className="if-section-header">
+                                {group.headingKey === 'date' ? group.headingValue : t[group.headingKey]}
+                            </h4>
+                        )}
                         <div className="if-group is-avatar-inset">
                             {group.orders.map((order) => (
                                 <OrderRow

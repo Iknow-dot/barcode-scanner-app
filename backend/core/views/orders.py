@@ -4,6 +4,8 @@ import json
 
 from django.db import models, transaction
 from django.http import HttpResponse
+from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 from drf_spectacular.utils import extend_schema, extend_schema_view
 from rest_framework import status as http_status
 from rest_framework.decorators import action
@@ -91,6 +93,28 @@ def _enforce_discount_permission(user, *, base_price, discount_percent, discount
             status=http_status.HTTP_403_FORBIDDEN,
         )
     return None
+
+
+def _parse_query_instant(value):
+    """Parse an ISO-8601 instant for the `created_after`/`created_before`
+    query params (consultant Orders tab: "today only" by default). Returns
+    ``None`` for a missing or unparseable value so the caller can skip the
+    filter entirely rather than raising — an invalid value from an old
+    client build must never 500.
+
+    A value with no UTC offset/`Z` parses as a naive datetime; that is made
+    aware in the project's configured TIME_ZONE (UTC, per settings.py) via
+    `timezone.make_aware`, the same rule Django applies to any other naive
+    datetime it receives, rather than being rejected.
+    """
+    if not value:
+        return None
+    parsed = parse_datetime(value)
+    if parsed is None:
+        return None
+    if timezone.is_naive(parsed):
+        parsed = timezone.make_aware(parsed, timezone.get_default_timezone())
+    return parsed
 
 
 def _enforce_gift_permission(user, *, is_gift):
@@ -219,6 +243,23 @@ class PurchaseOrderViewSet(ModelViewSet):
         date_to = self.request.query_params.get('date_to')
         if date_to:
             qs = qs.filter(created_at__date__lte=date_to)
+
+        # Local-day instant filter for the consultant Orders tab ("today
+        # only" by default). Deliberately separate from date_from/date_to
+        # above (which the admin dashboard uses and which compare the UTC
+        # calendar date via `__date`): TIME_ZONE='UTC' but consultants are in
+        # Tbilisi (UTC+4), so an order created at 00:45 local time is
+        # `20:45Z` the *previous* UTC day — a `__date` filter would hide it
+        # for the whole local working day. These compare the real timestamp
+        # instead, with the frontend computing local midnight-to-midnight
+        # bounds and sending them as ISO-8601 instants.
+        created_after = _parse_query_instant(self.request.query_params.get('created_after'))
+        if created_after is not None:
+            qs = qs.filter(created_at__gte=created_after)
+
+        created_before = _parse_query_instant(self.request.query_params.get('created_before'))
+        if created_before is not None:
+            qs = qs.filter(created_at__lt=created_before)
 
         # Created by filter (for admin to filter by consultant)
         created_by = self.request.query_params.get('created_by')
