@@ -1,3 +1,17 @@
+/*
+ * Colours: this overlay sits over a live camera feed, not the themed page,
+ * so its fixed blacks and whites (solid and translucent) are the sanctioned
+ * literal exception (CLAUDE.md, phase 1) and stay hard-coded rather than
+ * moving to src/theme/tokens.css. Everything else here is a var(--if-*)
+ * token; iosCss.test.js enforces both.
+ *
+ * z-index: LAYER_SCANNER / LAYER_SCANNER_CHROME (src/theme/layers.js) — kept
+ * as matching literals here (BarcodeScanner.js is out of scope for this
+ * change, so there is no JS wiring to set a custom property) and
+ * cross-checked against layers.js by iosCss.test.js so the two can't drift
+ * silently.
+ */
+
 /* ===== Scanner Overlay (Fullscreen) ===== */
 .scanner-overlay {
     position: fixed;
@@ -5,7 +19,7 @@
     left: 0;
     right: 0;
     bottom: 0;
-    z-index: 2000;
+    z-index: 1900; /* LAYER_SCANNER (src/theme/layers.js): above every antd overlay, below antd's static Modal.confirm/notifications */
     background: #000;
     display: flex;
     flex-direction: column;
@@ -27,7 +41,7 @@
     top: 0;
     left: 0;
     right: 0;
-    z-index: 2010;
+    z-index: 1910; /* LAYER_SCANNER_CHROME (src/theme/layers.js): above the scanner's own video surface */
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -166,7 +180,9 @@
     right: 10%;
     height: 2px;
     background: linear-gradient(90deg, transparent, var(--if-brand) 20%, var(--if-brand) 80%, transparent);
-    box-shadow: 0 0 8px rgba(66, 174, 117, 0.6);
+    /* Token-derived, not a hand-copied rgb() of --if-brand: color-mix reads
+       the token itself, so a token change can't leave this glow stale. */
+    box-shadow: 0 0 8px color-mix(in srgb, var(--if-brand) 60%, transparent);
     animation: scanLineMove 2.5s ease-in-out infinite;
     border-radius: 1px;
 }
@@ -188,7 +204,7 @@
     bottom: 0;
     left: 0;
     right: 0;
-    z-index: 2010;
+    z-index: 1910; /* LAYER_SCANNER_CHROME (src/theme/layers.js): above the scanner's own video surface */
     display: flex;
     flex-direction: column;
     align-items: center;

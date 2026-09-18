@@ -1,7 +1,17 @@
 import fs from 'fs';
 import path from 'path';
 import {TOKENS} from './palette';
-import {ANTD_OVERLAY_BASE, LAYER_BARS, LAYER_SHEET, LAYER_SHEET_MAX, LAYER_SHEET_STEP, sheetZIndex} from './layers';
+import {
+    ANTD_OVERLAY_BASE,
+    ANTD_STATIC_MODAL,
+    LAYER_BARS,
+    LAYER_SCANNER,
+    LAYER_SCANNER_CHROME,
+    LAYER_SHEET,
+    LAYER_SHEET_MAX,
+    LAYER_SHEET_STEP,
+    sheetZIndex,
+} from './layers';
 
 // ios.css holds the iOS primitives every later redesign phase builds on, so it
 // must stay on the palette. Allowed literals: #fff (text or icon on a tint
@@ -103,4 +113,59 @@ test('the swipe-to-reveal row actions are revealed by state, hover and keyboard 
     expect(css).toMatch(/\.if-swipe-row\.is-open \.if-swipe-content/);
     expect(css).toMatch(/\.if-swipe-row:focus-within \.if-swipe-content/);
     expect(css).toMatch(/@media \(hover: hover\)[\s\S]*\.if-swipe-row:hover \.if-swipe-content/);
+});
+
+// ====================================================================
+// F5b task 2: the full-screen barcode scanner overlay
+// (BarcodeScanner.css). Unlike ios.css, it sits over a live camera feed
+// rather than the themed page, so CLAUDE.md sanctions its fixed blacks and
+// whites (solid and translucent) as a literal-colour exception. Everything
+// else in the file must still be a var(--if-*) token.
+// ====================================================================
+const scannerCss = fs.readFileSync(
+    path.join(__dirname, '..', 'components', 'UserDashboard', 'BarcodeScanner.css'),
+    'utf8'
+).replace(/\/\*[\s\S]*?\*\//g, '');
+
+const SCANNER_ALLOWED_LITERALS = [
+    /^#000$/i,
+    /^#fff$/i,
+    /^rgba\(0, 0, 0, 0?\.\d+\)$/,
+    /^rgba\(255, 255, 255, 0?\.\d+\)$/,
+];
+
+test("BarcodeScanner.css hard-codes no colour beyond the camera overlay's blacks and whites", () => {
+    const literals = scannerCss.match(/#[0-9a-f]{3,8}\b|rgba?\([^)]*\)|hsla?\([^)]*\)/gi) || [];
+    expect(literals.filter((literal) => !SCANNER_ALLOWED_LITERALS.some((rule) => rule.test(literal)))).toEqual([]);
+});
+
+test('every token BarcodeScanner.css reads exists in the palette', () => {
+    const used = [...new Set([...scannerCss.matchAll(/var\((--if-[\w-]+)/g)].map((match) => match[1]))];
+    expect(used.length).toBeGreaterThan(0);
+    expect(used.filter((name) => !(name in TOKENS.light))).toEqual([]);
+});
+
+// z-index of the first rule whose selector is exactly `selector`, read out of
+// BarcodeScanner.css (its literals are kept in sync with layers.js by hand,
+// since BarcodeScanner.js is out of scope for this change — see the file's
+// own header comment).
+const scannerZIndexOf = (selector) => {
+    const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const rule = scannerCss.match(new RegExp(`(?:^|\\n)${escaped}\\s*\\{([^}]*)\\}`));
+    const value = rule && rule[1].match(/z-index:\s*(\d+)/);
+    return value ? Number(value[1]) : NaN;
+};
+
+test('the scanner sits above every antd overlay and below its own chrome, both below antd\'s static Modal.confirm', () => {
+    expect(scannerZIndexOf('.scanner-overlay')).toBe(LAYER_SCANNER);
+    expect(scannerZIndexOf('.scanner-top-bar')).toBe(LAYER_SCANNER_CHROME);
+    expect(scannerZIndexOf('.scanner-bottom-bar')).toBe(LAYER_SCANNER_CHROME);
+    expect(LAYER_SCANNER).toBeGreaterThan(ANTD_OVERLAY_BASE);
+    expect(LAYER_SCANNER_CHROME).toBeGreaterThan(LAYER_SCANNER);
+    expect(LAYER_SCANNER_CHROME).toBeLessThan(ANTD_STATIC_MODAL);
+});
+
+test("the scan line's glow is derived from the brand token, not a hand-copied rgb() duplicate", () => {
+    expect(scannerCss).toMatch(/color-mix\(in srgb, var\(--if-brand\)[^)]*\)/);
+    expect(scannerCss).not.toMatch(/rgba\(\s*66,\s*174,\s*117/);
 });
