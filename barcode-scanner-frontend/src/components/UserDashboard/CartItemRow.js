@@ -1,5 +1,5 @@
 import React, {memo, useCallback, useState} from 'react';
-import {InputNumber, Popconfirm} from 'antd';
+import {Input} from 'antd';
 import {orderService} from '../../api';
 import {useLanguage} from '../../i18n/LanguageContext';
 import IosIcon from '../Common/IosIcon';
@@ -139,33 +139,35 @@ const CartItemRow = ({
                     <div className="m-cart-item-editor">
                         <label className="m-cart-item-field">
                             <span className="if-field-label">{t.price}</span>
-                            <InputNumber
-                                key={`price-${view.effectivePrice}`}
-                                aria-label={t.price}
-                                min={0}
-                                max={view.priceCap > 0 ? view.priceCap : undefined}
-                                defaultValue={parseFloat(view.effectivePrice)}
-                                suffix="₾"
-                                controls={false}
-                                inputMode="decimal"
-                                onPressEnter={(event) => event.currentTarget.blur()}
-                                onBlur={savePrice}
-                            />
+                            <span className="m-cart-item-field-input">
+                                <Input
+                                    key={`price-${view.effectivePrice}`}
+                                    variant="borderless"
+                                    className="if-field-input"
+                                    aria-label={t.price}
+                                    inputMode="decimal"
+                                    defaultValue={view.effectivePrice}
+                                    onPressEnter={(event) => event.currentTarget.blur()}
+                                    onBlur={savePrice}
+                                />
+                                <span className="m-cart-item-field-unit" aria-hidden="true">₾</span>
+                            </span>
                         </label>
                         <label className="m-cart-item-field">
                             <span className="if-field-label">{t.discountPercent}</span>
-                            <InputNumber
-                                key={`discount-${view.discountPercent}`}
-                                aria-label={t.discountPercent}
-                                min={0}
-                                max={Math.min(100, maxDiscountPercent || 100)}
-                                defaultValue={view.discountPercent || 0}
-                                suffix="%"
-                                controls={false}
-                                inputMode="decimal"
-                                onPressEnter={(event) => event.currentTarget.blur()}
-                                onBlur={saveDiscount}
-                            />
+                            <span className="m-cart-item-field-input">
+                                <Input
+                                    key={`discount-${view.discountPercent}`}
+                                    variant="borderless"
+                                    className="if-field-input"
+                                    aria-label={t.discountPercent}
+                                    inputMode="decimal"
+                                    defaultValue={String(view.discountPercent || 0)}
+                                    onPressEnter={(event) => event.currentTarget.blur()}
+                                    onBlur={saveDiscount}
+                                />
+                                <span className="m-cart-item-field-unit" aria-hidden="true">%</span>
+                            </span>
                         </label>
                     </div>
                 )}
@@ -200,28 +202,23 @@ const CartItemRow = ({
                         incrementLabel={t.increaseQuantity}
                         iconSize={18}
                         minSlot={row.totalQty === 1 ? (
-                            // At exactly one unit, minus becomes delete (with
-                            // today's confirmation): the row cannot shrink
-                            // further, and there is no room for a separate
-                            // delete button beside the gift pill. A row whose
-                            // minimum instead reflects a gift unit that must
-                            // stay (totalQty > 1) keeps a plain, disabled
-                            // minus — there's nothing left to delete yet.
-                            <Popconfirm
-                                title={t.confirmDelete}
-                                onConfirm={handleRemove}
-                                okText={t.yes}
-                                cancelText={t.no}
+                            // At exactly one unit, minus becomes an instant
+                            // delete — no confirmation step: the row cannot
+                            // shrink further, and there is no room for a
+                            // separate delete button beside the gift pill.
+                            // A row whose minimum instead reflects a gift
+                            // unit that must stay (totalQty > 1) keeps a
+                            // plain, disabled minus — there's nothing left
+                            // to delete yet.
+                            <button
+                                type="button"
+                                className="if-stepper-btn m-cart-item-delete"
+                                aria-label={t.delete}
+                                disabled={busy}
+                                onClick={handleRemove}
                             >
-                                <button
-                                    type="button"
-                                    className="if-stepper-btn m-cart-item-delete"
-                                    aria-label={t.delete}
-                                    disabled={busy}
-                                >
-                                    <IosIcon name="trash" size={18}/>
-                                </button>
-                            </Popconfirm>
+                                <IosIcon name="trash" size={18}/>
+                            </button>
                         ) : undefined}
                     />
                     <GiftCounter

@@ -385,9 +385,28 @@ body {
   margin-top: 8px;
 }
 
-.m-cart-item-field .ant-input-number {
+/* The price/discount editor's fields: the app's own borderless field
+   primitive (.if-field-input from theme/ios.css), with the ₾/% unit set
+   beside it as plain text rather than antd InputNumber's suffix chrome. */
+.m-cart-item-field-input {
+  display: flex;
+  align-items: center;
+  gap: 4px;
   width: 100%;
   margin-top: 2px;
+}
+
+.m-cart-item-field-input .if-field-input.ant-input {
+  flex: 1;
+  min-width: 0;
+  margin-top: 0;
+}
+
+.m-cart-item-field-unit {
+  flex: none;
+  font-size: 15px;
+  line-height: 22px;
+  color: var(--if-label-3);
 }
 
 .m-cart-item-captions {
