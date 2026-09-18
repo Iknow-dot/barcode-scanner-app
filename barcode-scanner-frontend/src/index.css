@@ -536,11 +536,6 @@ body {
   min-width: 0;
 }
 
-/* Incomplete orders card */
-.m-incomplete-orders-card {
-  border-radius: 12px !important;
-}
-
 /* ===== Search Drawer ===== */
 .search-drawer .ant-drawer-body {
   padding-top: 16px;

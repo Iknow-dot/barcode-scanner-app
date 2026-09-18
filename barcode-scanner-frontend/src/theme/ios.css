@@ -196,11 +196,13 @@
     -webkit-tap-highlight-color: transparent;
 }
 
-button.if-row {
+button.if-row,
+.if-row[role="button"] {
     cursor: pointer;
 }
 
-button.if-row:active {
+button.if-row:active,
+.if-row[role="button"]:active {
     background: var(--if-fill);
 }
 
@@ -612,6 +614,7 @@ button.if-row:active {
 
     .if-btn-gray:not(:disabled):hover,
     button.if-row:not(:disabled):hover,
+    .if-row[role="button"]:hover,
     .if-tab:not(.is-on):hover,
     .if-stepper-btn:not(:disabled):hover {
         background: var(--if-fill);
