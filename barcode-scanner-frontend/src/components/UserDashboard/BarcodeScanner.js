@@ -305,9 +305,13 @@ const BarcodeScanner = ({open, onScan, onClose, onManualSearch}) => {
 
             {/* Bottom controls */}
             <div className="scanner-bottom-bar">
-                <span className="scanner-hint">{t.scanHint}</span>
+                <span className="scanner-glass-pill scanner-hint">{t.scanHint}</span>
                 {onManualSearch && (
-                    <button type="button" className="scanner-manual-search-btn" onClick={onManualSearch}>
+                    <button
+                        type="button"
+                        className="scanner-glass-pill scanner-manual-search-btn"
+                        onClick={onManualSearch}
+                    >
                         <IosIcon name="keyboard" size={22}/>
                         {t.manualSearch}
                     </button>

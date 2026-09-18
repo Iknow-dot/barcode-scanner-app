@@ -41,17 +41,20 @@ test('every token ios.css reads exists in the palette', () => {
     expect(used.filter((name) => !(name in TOKENS.light))).toEqual([]);
 });
 
-// z-index of the first rule whose selector is exactly `selector`.
-const zIndexOf = (selector) => {
+// z-index of the first rule whose selector is exactly `selector`, read out of
+// the given stylesheet string. Parameterised over the stylesheet (rather than
+// closing over `css`) so ios.css and BarcodeScanner.css below share one
+// lookup regex instead of each keeping a near-identical copy in sync by hand.
+const zIndexOf = (stylesheet, selector) => {
     const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const rule = css.match(new RegExp(`(?:^|\\n)${escaped}\\s*\\{([^}]*)\\}`));
+    const rule = stylesheet.match(new RegExp(`(?:^|\\n)${escaped}\\s*\\{([^}]*)\\}`));
     const value = rule && rule[1].match(/z-index:\s*(\d+)/);
     return value ? Number(value[1]) : NaN;
 };
 
 test('the floating bars sit under the sheets, and the sheets under antd overlays', () => {
-    expect(zIndexOf('.if-bottom-stack')).toBe(LAYER_BARS);
-    expect(zIndexOf('.if-edge-bottom')).toBe(LAYER_BARS - 1);
+    expect(zIndexOf(css, '.if-bottom-stack')).toBe(LAYER_BARS);
+    expect(zIndexOf(css, '.if-edge-bottom')).toBe(LAYER_BARS - 1);
     expect(LAYER_BARS).toBeLessThan(LAYER_SHEET);
     expect(LAYER_SHEET).toBeLessThan(ANTD_OVERLAY_BASE);
 });
@@ -145,21 +148,15 @@ test('every token BarcodeScanner.css reads exists in the palette', () => {
     expect(used.filter((name) => !(name in TOKENS.light))).toEqual([]);
 });
 
-// z-index of the first rule whose selector is exactly `selector`, read out of
-// BarcodeScanner.css (its literals are kept in sync with layers.js by hand,
-// since BarcodeScanner.js is out of scope for this change — see the file's
-// own header comment).
-const scannerZIndexOf = (selector) => {
-    const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const rule = scannerCss.match(new RegExp(`(?:^|\\n)${escaped}\\s*\\{([^}]*)\\}`));
-    const value = rule && rule[1].match(/z-index:\s*(\d+)/);
-    return value ? Number(value[1]) : NaN;
-};
+// BarcodeScanner.css's z-index literals are kept in sync with layers.js by
+// hand, since BarcodeScanner.js is out of scope for this change — see the
+// file's own header comment. Read via the shared `zIndexOf` above, not a
+// second copy of its regex.
 
 test('the scanner sits above every antd overlay and below its own chrome, both below antd\'s static Modal.confirm', () => {
-    expect(scannerZIndexOf('.scanner-overlay')).toBe(LAYER_SCANNER);
-    expect(scannerZIndexOf('.scanner-top-bar')).toBe(LAYER_SCANNER_CHROME);
-    expect(scannerZIndexOf('.scanner-bottom-bar')).toBe(LAYER_SCANNER_CHROME);
+    expect(zIndexOf(scannerCss, '.scanner-overlay')).toBe(LAYER_SCANNER);
+    expect(zIndexOf(scannerCss, '.scanner-top-bar')).toBe(LAYER_SCANNER_CHROME);
+    expect(zIndexOf(scannerCss, '.scanner-bottom-bar')).toBe(LAYER_SCANNER_CHROME);
     expect(LAYER_SCANNER).toBeGreaterThan(ANTD_OVERLAY_BASE);
     expect(LAYER_SCANNER_CHROME).toBeGreaterThan(LAYER_SCANNER);
     expect(LAYER_SCANNER_CHROME).toBeLessThan(ANTD_STATIC_MODAL);
