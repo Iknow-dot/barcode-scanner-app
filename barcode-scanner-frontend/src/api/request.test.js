@@ -28,6 +28,20 @@ describe('apiRequest failure envelope', () => {
         expect(result.success).toBe(false);
         expect(result.data).toBeUndefined();
     });
+
+    it('translates a request that never reached the server', async () => {
+        // axios always sets message to its own English "Network Error", so the
+        // consultant would otherwise read that in an otherwise Georgian screen.
+        const result = await apiRequest(() => Promise.reject({message: 'Network Error'}));
+
+        expect(result.error).toBe(translations.ka.networkError);
+        expect(result.error).not.toBe('Network Error');
+    });
+
+    it('keeps axios’s message when a response arrived with no body, since it names the status', () => {
+        expect(extractErrorMessage({message: 'Request failed with status code 500', response: {status: 500}}))
+            .toBe('Request failed with status code 500');
+    });
 });
 
 describe('extractErrorMessage', () => {

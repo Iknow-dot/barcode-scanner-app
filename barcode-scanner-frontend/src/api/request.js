@@ -46,6 +46,12 @@ const looksLikeHtml = (text) => /^\s*(<!DOCTYPE|<html)/i.test(text);
 export const extractErrorMessage = (error) => {
     const t = getT();
     const data = error.response?.data;
+    // A request that never reached the server carries only axios's own English
+    // message ("Network Error", or its timeout text), which the consultant
+    // cannot read and cannot act on — prefer our translated one. A response
+    // that arrived but carried no body keeps axios's message, because that one
+    // at least names the status.
+    if (!error.response) return t.networkError || error.message;
     if (!data) return error.message || t.networkError;
 
     // Plain string response
