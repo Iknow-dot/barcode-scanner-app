@@ -903,6 +903,68 @@ button.if-row:disabled .if-check {
     font-weight: 700;
 }
 
+/* iOS's toggles overshoot a little and settle rather than easing linearly to
+   a stop. One curve, shared, so every toggle in the app moves the same way —
+   the segmented thumb just below, the antd Switch handle, and .if-pill. */
+:root {
+    --if-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+    --if-spring-fast: 260ms;
+}
+
+/* antd (6.x, @rc-component/segmented) renders the sliding thumb as a
+   transient element: MotionThumb mounts a fresh `.ant-segmented-thumb` div
+   only while sliding between options and unmounts it once settled — the
+   selected option itself carries `.ant-segmented-item-selected` at rest.
+   antd only times the thumb's own transform/width while it carries
+   `.ant-segmented-thumb-motion-appear-active`, and — confirmed by rendering
+   both components and reading the injected <style> text — every antd rule
+   is scoped under `:where(.css-...)`, which has *zero* specificity. So
+   antd's rule for that state is really only two plain classes
+   (`.ant-segmented` + `.ant-segmented-thumb-motion-appear-active`). Our
+   unconditional selector below is three classes and so always outranks it;
+   the explicit -appear-active variant is kept only to still win at four
+   classes even if a future antd release drops the :where() wrapper. No
+   !important needed either way. `width` is included (the template this was
+   built from didn't have it) because antd's own thumb rule times it too —
+   omitting it would leave the thumb resizing between differently-wide
+   segments with no transition at all. */
+.if-seg.ant-segmented .ant-segmented-thumb,
+.if-seg.ant-segmented .ant-segmented-thumb.ant-segmented-thumb-motion-appear-active,
+.if-seg.ant-segmented .ant-segmented-item-selected {
+    transition: transform var(--if-spring-fast) var(--if-spring),
+                width var(--if-spring-fast) var(--if-spring),
+                background-color var(--if-spring-fast) ease,
+                color 160ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .if-seg.ant-segmented .ant-segmented-thumb,
+    .if-seg.ant-segmented .ant-segmented-thumb.ant-segmented-thumb-motion-appear-active,
+    .if-seg.ant-segmented .ant-segmented-item-selected {
+        transition: none;
+    }
+}
+
+/* ---------- Switch (antd Switch — no if- wrapper exists on any of its call
+   sites, so this targets the real antd class directly; every Switch in the
+   app, iOS screens and admin forms alike, gets the same toggle feel). antd's
+   own handle rule is `.ant-switch .ant-switch-handle { transition: all
+   var(--ant-motion-duration-mid) ease-in-out }`, same :where()-wrapped
+   pattern as above, so it's really two classes; doubling .ant-switch here
+   makes ours three, beating it outright without !important. Only
+   inset-inline-start (the handle's slide) takes the spring — antd doesn't
+   put a background on the handle div itself (that's its ::before), so a
+   background-color entry here would be a no-op. ---------- */
+.ant-switch.ant-switch .ant-switch-handle {
+    transition: inset-inline-start var(--if-spring-fast) var(--if-spring);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .ant-switch.ant-switch .ant-switch-handle {
+        transition: none;
+    }
+}
+
 /* ---------- Sheets (IosSheet: antd Drawer, placement bottom) ---------- */
 /* Layer 900 (src/theme/layers.js), set by IosSheet. The .if-sheet.ant-drawer
    prefix outranks antd's own :where()-scoped rules. */
@@ -1075,6 +1137,9 @@ button.if-row:disabled .if-check {
     white-space: nowrap;
     cursor: pointer;
     -webkit-tap-highlight-color: transparent;
+    transition: transform var(--if-spring-fast) var(--if-spring),
+                background-color 160ms ease,
+                color 160ms ease;
 }
 
 .if-pill.is-on {
@@ -1082,9 +1147,19 @@ button.if-row:disabled .if-check {
     color: var(--if-tint-text);
 }
 
+.if-pill:active {
+    transform: scale(0.94);
+}
+
 .if-pill:focus-visible {
     outline: 2px solid var(--if-tint);
     outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .if-pill {
+        transition: none;
+    }
 }
 
 /* ---------- Form rows (label above an inline, borderless field) ---------- */
@@ -1285,4 +1360,40 @@ button.if-row:disabled .if-check {
     .if-swipe-row:hover .if-swipe-content {
         transform: translateX(calc(-1 * var(--swipe-reveal, 88px)));
     }
+}
+
+/* ---------- Action sheet (IosActionSheet: a list of choices on IosSheet,
+   with Cancel set apart in its own group below — the iOS UIActionSheet
+   layout). Rows reuse .if-row/.if-group (44px min-height, active/focus
+   states) rather than redeclaring them; only alignment and colour differ
+   from a plain list row, since actions read as centred tinted commands. ---------- */
+.if-action-sheet-cancel-group {
+    margin-top: 8px;
+}
+
+.if-action-sheet-row {
+    justify-content: center;
+    text-align: center;
+    color: var(--if-tint-text);
+    font-size: 17px;
+    font-weight: 600;
+}
+
+.if-action-sheet-row.is-destructive {
+    color: var(--if-red-text);
+}
+
+/* Visually hidden but still read by a screen reader — used to append the
+   "destructive" hint to an action's accessible description without putting
+   the word in the visible label. Standard clip-based hiding technique. */
+.if-visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
 }

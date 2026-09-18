@@ -35,10 +35,37 @@ test('ios.css uses no named colours', () => {
     expect(css.match(/(?<![-\w])(white|black|gray|grey|red|green|blue|orange)(?![-\w])/gi)).toBeNull();
 });
 
+// --if-spring / --if-spring-fast are the shared toggle timing function, not
+// a colour, so — unlike every other --if-* custom property — they don't
+// belong in tokens.css/palette.js (the antd colour mirror; see palette.js's
+// own header comment) and are exempt from the membership check below.
+const NON_PALETTE_TOKENS = ['--if-spring', '--if-spring-fast'];
+
 test('every token ios.css reads exists in the palette', () => {
     const used = [...new Set([...css.matchAll(/var\((--if-[\w-]+)/g)].map((match) => match[1]))];
     expect(used.length).toBeGreaterThan(0);
-    expect(used.filter((name) => !(name in TOKENS.light))).toEqual([]);
+    expect(used.filter((name) => !NON_PALETTE_TOKENS.includes(name) && !(name in TOKENS.light))).toEqual([]);
+});
+
+// F8 (iOS motion and actions, task 1): the shared spring timing function for
+// every toggle (segmented thumb, antd Switch handle, .if-pill), and its
+// reduced-motion opt-out.
+test('the spring timing function exists and every toggle that uses it disables it under reduced motion', () => {
+    expect(css).toMatch(/--if-spring:\s*cubic-bezier\([^)]+\);/);
+    expect(css).toMatch(/--if-spring-fast:\s*260ms;/);
+
+    // Split the reduced-motion media block out so this test can fail for
+    // the right reason: an assertion against the whole file would still
+    // pass if the "none" landed in some unrelated rule.
+    const reducedMotionBlocks = [...css.matchAll(/@media \(prefers-reduced-motion: reduce\) \{([\s\S]*?)\n\}/g)]
+        .map((match) => match[1]);
+    const disablesTransitionFor = (selector) => reducedMotionBlocks.some(
+        (block) => block.includes(selector) && /transition:\s*none;/.test(block)
+    );
+
+    ['.ant-segmented-thumb', '.ant-segmented-item-selected', '.ant-switch-handle', '.if-pill'].forEach((selector) => {
+        expect(disablesTransitionFor(selector)).toBe(true);
+    });
 });
 
 // z-index of the first rule whose selector is exactly `selector`, read out of
