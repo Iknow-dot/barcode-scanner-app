@@ -67,7 +67,7 @@ on a row.
 | Health probe | ✓ since `f881e85` | ✓ ships with every deploy |
 | External uptime monitor pinging it | — | **Not recorded in the repo.** Confirm one exists and who it alerts |
 | Sentry, backend | ✓ verified locally 2026-09-09 | **Not yet:** `SENTRY_DSN` and friends must be set in the live App Spec (rollout step 5) |
-| Sentry, frontend | ✓ | **Not yet:** `REACT_APP_SENTRY_DSN` etc. must be `RUN_TIME` vars while the frontend runs the dev server |
+| Sentry, frontend | ✓ | **Not yet:** `REACT_APP_SENTRY_DSN` etc. must be `BUILD_TIME` vars on the static-site component, because CRA inlines them into the bundle |
 | Sentry alert rules → Slack | — | **Not yet** (rollout step 6) |
 | DigitalOcean logs | ✓ | ✓ always on. Short retention, no search or alerting |
 | PostHog, frontend events | ✓ | Depends on `REACT_APP_PUBLIC_POSTHOG_KEY` / `_HOST` in the live spec |
