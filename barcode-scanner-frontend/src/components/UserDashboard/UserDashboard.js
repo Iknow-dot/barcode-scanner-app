@@ -840,6 +840,7 @@ const UserDashboard = ({isDark = false, onToggleTheme}) => {
                 open={scannerOpen}
                 onScan={handleScanResult}
                 onClose={() => setScannerOpen(false)}
+                onManualSearch={catalogEnabled ? handleOpenSearch : undefined}
             />
 
             {/* Unified Find-product drawer: smart search + category browse.
