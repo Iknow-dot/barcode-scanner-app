@@ -90,6 +90,19 @@ test('the search field and info banner primitives exist with no literal colours'
     expect(block.match(/#[0-9a-f]{3,8}\b/gi)).toBeNull();
 });
 
+// The control band under a screen's title. Neither .if-search nor .if-seg
+// carries a margin (both are also used inline inside rows), so this is what
+// keeps a screen's content off them — measured flush at 0px on three screens
+// before it existed.
+test('the toolbar band gives the controls under a title their own rhythm', () => {
+    const start = css.indexOf('.if-toolbar {');
+    expect(start).toBeGreaterThan(-1);
+    const block = css.slice(start, css.indexOf('}', start) + 1);
+    expect(block).toMatch(/gap:\s*12px/);
+    expect(block).toMatch(/margin-bottom:\s*12px/);
+    expect(block.match(/#[0-9a-f]{3,8}\b/gi)).toBeNull();
+});
+
 // F5a task 2: the orders canvas row primitives (avatar, inset separator, trailing column).
 test('the orders-row avatar, inset separator and trailing column exist with no literal colours', () => {
     const avatarStart = css.indexOf('.if-avatar {');

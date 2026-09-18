@@ -42,10 +42,16 @@ const HomeView = ({
                     onLogout={onLogout}
                 />
             </div>
-            <div className="if-large-header">
-                <h1 className="if-large-title">{t.productsLabel}</h1>
-                {subtitle && <p className="if-large-subtitle if-clamp-2">{subtitle}</p>}
-            </div>
+            {/* No "Products" title: the tab bar already names this place, so
+                the large title only repeated it and cost a third of the screen
+                above the fold. The organisation and its warehouses carry the
+                heading instead — the one thing here a consultant cannot read
+                off the rest of the screen. */}
+            {subtitle && (
+                <div className="if-large-header">
+                    <h1 className="if-large-subtitle if-clamp-2">{subtitle}</h1>
+                </div>
+            )}
             {banner}
             <HomeStats scansSummary={scansSummary} ordersSummary={ordersSummary}/>
             <div className="m-home-actions">

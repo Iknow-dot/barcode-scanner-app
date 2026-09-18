@@ -427,34 +427,36 @@ const OrdersView = ({
             <div className="if-large-header">
                 <h1 className="if-large-title">{t.orders}</h1>
             </div>
-            <div className="if-search">
-                <IosIcon name="search" size={18} stroke={2.4}/>
-                <Input
-                    className="if-search-input"
-                    variant="borderless"
-                    value={query}
-                    onChange={(event) => onQueryChange(event.target.value)}
-                    placeholder={t.searchByCustomer}
-                    aria-label={t.searchByCustomer}
+            <div className="if-toolbar">
+                <div className="if-search">
+                    <IosIcon name="search" size={18} stroke={2.4}/>
+                    <Input
+                        className="if-search-input"
+                        variant="borderless"
+                        value={query}
+                        onChange={(event) => onQueryChange(event.target.value)}
+                        placeholder={t.searchByCustomer}
+                        aria-label={t.searchByCustomer}
+                    />
+                    {query && (
+                        <button
+                            type="button"
+                            className="if-search-trail"
+                            aria-label={t.clearSearch}
+                            onClick={() => onQueryChange('')}
+                        >
+                            <IosIcon name="close" size={18} stroke={2.6}/>
+                        </button>
+                    )}
+                </div>
+                <Segmented
+                    className="if-seg"
+                    block
+                    value={segment}
+                    onChange={onSegmentChange}
+                    options={ORDER_SEGMENTS.map((seg) => ({label: t[segmentLabelKey(seg)], value: seg}))}
                 />
-                {query && (
-                    <button
-                        type="button"
-                        className="if-search-trail"
-                        aria-label={t.clearSearch}
-                        onClick={() => onQueryChange('')}
-                    >
-                        <IosIcon name="close" size={18} stroke={2.6}/>
-                    </button>
-                )}
             </div>
-            <Segmented
-                className="if-seg m-orders-seg"
-                block
-                value={segment}
-                onChange={onSegmentChange}
-                options={ORDER_SEGMENTS.map((seg) => ({label: t[segmentLabelKey(seg)], value: seg}))}
-            />
             {groups.length > 0 ? (
                 groups.map((group) => (
                     <React.Fragment key={group.key}>

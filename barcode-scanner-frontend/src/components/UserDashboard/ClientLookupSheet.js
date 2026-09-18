@@ -254,6 +254,7 @@ const ClientLookupSheet = ({open, onSelect, onClose, onRetail}) => {
             bottomBar={step === STEP_LOOKUP ? retailButton : undefined}
         >
             <div hidden={step !== STEP_LOOKUP}>
+                <div className="if-toolbar">
                 <Segmented
                     className="if-seg is-compact"
                     block
@@ -279,6 +280,7 @@ const ClientLookupSheet = ({open, onSelect, onClose, onRetail}) => {
                     {trailing}
                 </div>
                 {hintKey && <div className="if-field-hint if-search-hint">{t[hintKey]}</div>}
+                </div>
                 {results.length > 0 && (
                     <h4 className="if-section-header">{countLabel(results.length, t)}</h4>
                 )}

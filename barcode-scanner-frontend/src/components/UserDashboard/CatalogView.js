@@ -256,6 +256,7 @@ const CatalogView = ({
                 <h1 className="if-large-title">{t.catalog}</h1>
             </div>
 
+            <div className="if-toolbar">
             <div className="if-search" aria-busy={searchLoading || undefined}>
                 <IosIcon name="search" size={18} stroke={2.4}/>
                 <Input
@@ -289,6 +290,7 @@ const CatalogView = ({
                         <IosIcon name="scan" size={20} stroke={2.2}/>
                     </button>
                 )}
+            </div>
             </div>
 
             <div className="if-group cv-allwh-group">

@@ -1115,6 +1115,20 @@ button.if-row:disabled .if-check {
     margin: 6px 2px 0;
 }
 
+/* The band of controls under a screen's title — a search field, a segmented
+   control, or both in either order. Neither .if-search nor .if-seg carries a
+   margin of its own (both are also used inline inside rows, where a margin
+   would be wrong), so without this every screen that put content straight
+   after one had it sitting flush: measured 0 px on the orders list, the
+   catalog and the client-lookup sheet. The gap matches the canvas, which
+   lays these out as a 12 px flex column. */
+.if-toolbar {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
 .if-field-input.ant-input,
 .if-field-input.ant-picker {
     width: 100%;

@@ -42,10 +42,12 @@ describe('HomeView', () => {
         localStorage.removeItem('language');
     });
 
-    it('titles the page with the organization and warehouses under it', () => {
+    it('heads the page with the organization and its warehouses, not a "Products" title', () => {
         renderHome();
-        expect(screen.getByRole('heading', {level: 1, name: en.productsLabel})).toBeInTheDocument();
-        expect(screen.getByText('Dika test · Vake, Saburtalo')).toBeInTheDocument();
+        // The tab bar already names this place; repeating it in a large title
+        // cost a third of the screen above the fold and said nothing.
+        expect(screen.queryByRole('heading', {name: en.productsLabel})).toBeNull();
+        expect(screen.getByRole('heading', {level: 1, name: 'Dika test · Vake, Saburtalo'})).toBeInTheDocument();
     });
 
     it('shows the logo variant for the current theme', () => {
@@ -69,7 +71,7 @@ describe('HomeView', () => {
 
     it('renders the banner slot after the large title (e.g. the offline banner)', () => {
         renderHome({banner: <div data-testid="test-banner">Offline</div>});
-        const title = screen.getByRole('heading', {level: 1, name: en.productsLabel});
+        const title = screen.getByRole('heading', {level: 1, name: 'Dika test · Vake, Saburtalo'});
         const banner = screen.getByTestId('test-banner');
         // eslint-disable-next-line no-bitwise
         expect(title.compareDocumentPosition(banner) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
