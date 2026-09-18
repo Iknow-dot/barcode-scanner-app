@@ -8,7 +8,7 @@ const en = translations.en;
 
 const renderBar = (props) => render(
     <LanguageProvider>
-        <TabBar activeTab="scan" onSelectTab={jest.fn()} showSearch onSearch={jest.fn()} {...props}/>
+        <TabBar activeTab="scan" onSelectTab={jest.fn()} showSearch {...props}/>
     </LanguageProvider>
 );
 
@@ -41,11 +41,29 @@ describe('TabBar', () => {
         expect(onSelectTab).toHaveBeenLastCalledWith('scan');
     });
 
-    it('opens the catalog from the trailing search tab', () => {
-        const onSearch = jest.fn();
-        renderBar({onSearch});
+    it('selects the catalog tab from the trailing search button', () => {
+        const onSelectTab = jest.fn();
+        renderBar({onSelectTab});
         fireEvent.click(screen.getByRole('button', {name: en.catalog}));
-        expect(onSearch).toHaveBeenCalledTimes(1);
+        expect(onSelectTab).toHaveBeenCalledWith('catalog');
+    });
+
+    it('marks the trailing search button selected when the catalog tab is active', () => {
+        renderBar({activeTab: 'catalog'});
+        const search = screen.getByRole('button', {name: en.catalog});
+        expect(search).toHaveClass('if-search-tab', 'is-on');
+        expect(search).toHaveAttribute('aria-current', 'page');
+        const products = screen.getByRole('button', {name: en.productsLabel});
+        const orders = screen.getByRole('button', {name: en.orders});
+        expect(products).not.toHaveClass('is-on');
+        expect(orders).not.toHaveClass('is-on');
+    });
+
+    it('leaves the trailing search button unselected when a real tab is active', () => {
+        renderBar({activeTab: 'scan'});
+        const search = screen.getByRole('button', {name: en.catalog});
+        expect(search).not.toHaveClass('is-on');
+        expect(search).not.toHaveAttribute('aria-current');
     });
 
     it('leaves out the search tab when the catalog is off', () => {

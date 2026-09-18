@@ -8,8 +8,12 @@ const TABS = [
 ];
 
 // Floating glass tab bar: places only (Products, Orders). The trailing round
-// search tab opens the catalog and exists only when the org has it enabled.
-const TabBar = ({activeTab, onSelectTab, showSearch, onSearch}) => {
+// search tab selects the catalog — a real tab, through the same
+// onSelectTab as Products/Orders — and exists only when the org has it
+// enabled. It stays visually a round search button, apart from the two
+// labeled tabs, but shows the same selected state (is-on / aria-current)
+// when the catalog is the active screen.
+const TabBar = ({activeTab, onSelectTab, showSearch}) => {
     const {t} = useLanguage();
     return (
         <nav className="if-tabbar" aria-label={t.tabBarLabel}>
@@ -33,9 +37,10 @@ const TabBar = ({activeTab, onSelectTab, showSearch, onSearch}) => {
             {showSearch && (
                 <button
                     type="button"
-                    className="if-search-tab"
+                    className={`if-search-tab${activeTab === 'catalog' ? ' is-on' : ''}`}
                     aria-label={t.catalog}
-                    onClick={onSearch}
+                    aria-current={activeTab === 'catalog' ? 'page' : undefined}
+                    onClick={() => onSelectTab('catalog')}
                 >
                     <IosIcon name="search" size={26} stroke={2.4}/>
                 </button>

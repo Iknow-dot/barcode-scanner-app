@@ -23,4 +23,20 @@ describe('nextTabAction', () => {
         expect(nextTabAction('orders', 'orders', true)).toBe('none');
         expect(nextTabAction('orders', 'orders', false)).toBe('none');
     });
+
+    it('pops to root when re-tapping the already-selected Catalog tab', () => {
+        expect(nextTabAction('catalog', 'catalog', false)).toBe('pop-to-root');
+        expect(nextTabAction('catalog', 'catalog', true)).toBe('pop-to-root');
+    });
+
+    it('keeps pop-to-root distinct from pop-to-home', () => {
+        expect(nextTabAction('scan', 'scan', true)).toBe('pop-to-home');
+        expect(nextTabAction('catalog', 'catalog', true)).toBe('pop-to-root');
+    });
+
+    it('switches when tapping Catalog from anywhere', () => {
+        expect(nextTabAction('scan', 'catalog', true)).toBe('switch');
+        expect(nextTabAction('scan', 'catalog', false)).toBe('switch');
+        expect(nextTabAction('orders', 'catalog', false)).toBe('switch');
+    });
 });
