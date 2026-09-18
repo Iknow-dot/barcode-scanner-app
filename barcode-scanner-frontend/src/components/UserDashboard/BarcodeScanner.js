@@ -20,6 +20,12 @@ const BarcodeScanner = ({open, onScan, onClose, onManualSearch}) => {
     const scannerRef = useRef(null);
     const hasScannedRef = useRef(false);
     const isStartingRef = useRef(false);
+    // Generation token for the in-flight `start()` call (F2). Incremented by
+    // both stopScanner and startScanner, so a start that is still awaiting
+    // getUserMedia when a close (or a newer start) runs can tell, once it
+    // resolves, that it has been superseded and must stop the camera itself
+    // rather than leave it referenced by nothing.
+    const startTokenRef = useRef(0);
     const closeButtonRef = useRef(null);
     // The element focused right before the scanner opened, so it can be
     // restored on close. Captured from `document.activeElement`, so it is
@@ -48,16 +54,31 @@ const BarcodeScanner = ({open, onScan, onClose, onManualSearch}) => {
 
     const stopScanner = useCallback(async () => {
         isStartingRef.current = false;
-        if (scannerRef.current) {
+        // F2: invalidate any start() that is still in flight — if it
+        // resolves after this, it must not keep the camera it just turned
+        // on referenced by nothing.
+        startTokenRef.current += 1;
+        // F1: take the instance and clear the ref synchronously, before any
+        // await. html5-qrcode's stop() opens a transaction rather than
+        // transitioning immediately — getState() keeps reporting the active
+        // state for the whole async teardown — so on a flip, React runs this
+        // cleanup and the new effect body's startScanner back to back before
+        // either await settles. If the ref were cleared only after this
+        // await (as it used to be), the continuation below would run *after*
+        // startScanner has already replaced it with a new, running instance,
+        // and this line would wipe the reference to that instance instead of
+        // the one this call is actually stopping — orphaning a live camera.
+        // Nulling first means no later continuation can wipe a newer one.
+        const scanner = scannerRef.current;
+        scannerRef.current = null;
+        if (scanner) {
             try {
-                const state = scannerRef.current.getState();
-                if (isActiveScanState(state)) {
-                    await scannerRef.current.stop();
+                if (isActiveScanState(scanner.getState())) {
+                    await scanner.stop();
                 }
             } catch (e) {
                 // Ignore stop errors during cleanup
             }
-            scannerRef.current = null;
         }
         setTorchOn(false);
         setTorchAvailable(false);
@@ -69,18 +90,24 @@ const BarcodeScanner = ({open, onScan, onClose, onManualSearch}) => {
         // Prevent concurrent start attempts
         if (isStartingRef.current) return;
         isStartingRef.current = true;
+        // F2: this call's generation. Checked again after the awaited
+        // scanner.start() below — if stopScanner (or a newer startScanner)
+        // ran in the meantime and bumped the counter, this call has been
+        // superseded.
+        const token = ++startTokenRef.current;
 
-        // Ensure any previous instance is cleaned up
-        if (scannerRef.current) {
+        // Ensure any previous instance is cleaned up (same ref-before-await
+        // ordering as stopScanner, for the same reason — see its comment).
+        const previousScanner = scannerRef.current;
+        scannerRef.current = null;
+        if (previousScanner) {
             try {
-                const state = scannerRef.current.getState();
-                if (isActiveScanState(state)) {
-                    await scannerRef.current.stop();
+                if (isActiveScanState(previousScanner.getState())) {
+                    await previousScanner.stop();
                 }
             } catch (e) {
                 // ignore
             }
-            scannerRef.current = null;
         }
 
         hasScannedRef.current = false;
@@ -131,6 +158,19 @@ const BarcodeScanner = ({open, onScan, onClose, onManualSearch}) => {
                 }
             );
 
+            if (startTokenRef.current !== token) {
+                // F2: superseded while getUserMedia was resolving — a close
+                // (or a newer start) already ran while this one was still in
+                // flight. Nothing refers to this camera on purpose; stop it
+                // ourselves so it can't orphan, and don't touch whatever
+                // ran after us.
+                if (scannerRef.current === scanner) {
+                    scannerRef.current = null;
+                }
+                await scanner.stop().catch(() => {});
+                return;
+            }
+
             // Check torch capability after camera starts
             try {
                 const capabilities = scanner.getRunningTrackCameraCapabilities();
@@ -143,10 +183,22 @@ const BarcodeScanner = ({open, onScan, onClose, onManualSearch}) => {
 
             setCameraError(null);
         } catch (err) {
+            if (startTokenRef.current !== token) {
+                // Superseded — the close/newer start already reset error and
+                // torch state; don't resurrect a stale error for a start
+                // nobody is waiting on.
+                return;
+            }
             console.error('Camera start error:', err);
             setCameraError(classifyCameraError(err));
         } finally {
-            isStartingRef.current = false;
+            // Only this call's own generation may clear the "starting" guard
+            // — if it was superseded, whatever call replaced it already owns
+            // that flag (stopScanner cleared it immediately, and a newer
+            // startScanner set it again before this one resumed).
+            if (startTokenRef.current === token) {
+                isStartingRef.current = false;
+            }
         }
     }, []); // No dependencies — uses refs for callbacks, takes facing as parameter
 

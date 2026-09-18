@@ -17,6 +17,13 @@ const en = translations.en;
 // must be re-armed in beforeEach below, or `new Html5Qrcode(...)` silently
 // falls back to an empty default instance and every test fails with
 // "scanner.start is not a function".
+//
+// F3(b): the enum values are deliberately NOT the library's real 1/2/3.
+// `BarcodeScanner.js`'s `isActiveScanState` is supposed to compare against
+// the imported `Html5QrcodeScannerState` constants rather than hardcoded
+// literals — if it were ever reverted to `state === 2 || state === 3`, these
+// non-standard values would make every active-state check fail silently,
+// which would show up as `.stop()` never being called anywhere in this file.
 jest.mock('html5-qrcode', () => {
     const Html5Qrcode = jest.fn();
     return {
@@ -26,13 +33,85 @@ jest.mock('html5-qrcode', () => {
             getRunningTrackCameraCapabilities: jest.fn(),
             Html5Qrcode,
         },
-        Html5QrcodeScannerState: {NOT_STARTED: 1, SCANNING: 2, PAUSED: 3},
+        Html5QrcodeScannerState: {NOT_STARTED: 41, SCANNING: 47, PAUSED: 48},
         Html5Qrcode,
     };
 });
 
 // eslint-disable-next-line import/first
-import {__mock} from 'html5-qrcode';
+import {__mock, Html5QrcodeScannerState} from 'html5-qrcode';
+
+// F3(a): the library's real transaction semantics (read out of
+// node_modules/html5-qrcode/esm/html5-qrcode.js:109-263 and
+// esm/state-manager.js:13-32), modelled per-instance rather than the flat
+// `getState: () => 2` the previous mock used everywhere:
+//   - `getState()` reports NOT_STARTED for the whole of a pending `start()`
+//     (the transition to SCANNING is only *executed*, flipping the state,
+//     once the camera has actually come up) and SCANNING from then on.
+//   - `getState()` keeps reporting SCANNING for the *entire* async `stop()`
+//     teardown, including while it is still in flight — the transition to
+//     NOT_STARTED is likewise only executed once `stop()`'s promise settles.
+//   - a second `stop()` call while one is already in flight throws
+//     synchronously, matching `StateManagerImpl.startTransition`'s
+//     `failIfTransitionOngoing()`.
+// A flat mock hides exactly the bug this file exists to catch: with a
+// constant SCANNING, `startScanner`'s own "clean up the previous instance"
+// `stop()` call never behaves differently from a fresh one, which happens to
+// resync the microtask ordering the regression depends on. See the
+// "camera lifecycle" describe block below.
+const liveHtml5QrcodeInstances = [];
+const createRealisticHtml5QrcodeInstance = () => {
+    let started = false;
+    let stopping = false;
+    const instance = {
+        start: (...args) => __mock.start(...args).then(
+            (result) => {
+                started = true;
+                return result;
+            },
+            (error) => {
+                started = false;
+                throw error;
+            }
+        ),
+        stop: (...args) => {
+            const state = instance.getState();
+            if (state !== Html5QrcodeScannerState.SCANNING && state !== Html5QrcodeScannerState.PAUSED) {
+                throw new Error('Cannot stop, scanner is not running or paused.');
+            }
+            if (stopping) {
+                throw new Error('Cannot transition to a new state, already under transition');
+            }
+            stopping = true;
+            return __mock.stop(...args).then(
+                (result) => {
+                    stopping = false;
+                    started = false;
+                    return result;
+                },
+                (error) => {
+                    stopping = false;
+                    throw error;
+                }
+            );
+        },
+        getState: () => {
+            if (stopping) return Html5QrcodeScannerState.SCANNING;
+            return started ? Html5QrcodeScannerState.SCANNING : Html5QrcodeScannerState.NOT_STARTED;
+        },
+        getRunningTrackCameraCapabilities: __mock.getRunningTrackCameraCapabilities,
+    };
+    liveHtml5QrcodeInstances.push(instance);
+    return instance;
+};
+
+// Number of constructed instances whose camera is, per the state machine
+// above, still on (SCANNING — started, or mid-`stop()`) rather than fully
+// torn down. This is the same accounting the whole-plan review's
+// reproduction used ("live: [...]") to show the orphaned stream.
+const liveInstanceCount = () => liveHtml5QrcodeInstances.filter(
+    (instance) => instance.getState() !== Html5QrcodeScannerState.NOT_STARTED
+).length;
 
 const renderScanner = (props = {}) => {
     const handlers = {onScan: jest.fn(), onClose: jest.fn()};
@@ -47,6 +126,7 @@ const renderScanner = (props = {}) => {
 describe('BarcodeScanner', () => {
     beforeEach(() => {
         localStorage.setItem('language', 'en');
+        liveHtml5QrcodeInstances.length = 0;
         // resetMocks wipes every mock's implementation before each test
         // (see the comment on jest.mock above) — all four are re-armed here,
         // including Html5Qrcode itself, not just start/stop.
@@ -55,12 +135,7 @@ describe('BarcodeScanner', () => {
         __mock.getRunningTrackCameraCapabilities.mockImplementation(() => ({
             torchFeature: () => ({isSupported: () => false}),
         }));
-        __mock.Html5Qrcode.mockImplementation(() => ({
-            start: __mock.start,
-            stop: __mock.stop,
-            getState: () => 2,
-            getRunningTrackCameraCapabilities: __mock.getRunningTrackCameraCapabilities,
-        }));
+        __mock.Html5Qrcode.mockImplementation(() => createRealisticHtml5QrcodeInstance());
     });
 
     afterEach(() => {
@@ -109,10 +184,107 @@ describe('BarcodeScanner', () => {
             </LanguageProvider>
         );
 
-        await waitFor(() => expect(__mock.stop).toHaveBeenCalled());
+        // Exact count, not just toHaveBeenCalled(): closing calls the
+        // component's own stopScanner twice (effect cleanup, then the
+        // `else` branch re-running because `open` itself changed — see the
+        // single effect in BarcodeScanner.js). Today that second call never
+        // reaches the underlying library stop() — by the time it runs, the
+        // ref is already cleared — so exactly one real stop() happens. A
+        // regression that made the second call redundantly invoke stop()
+        // again (or, worse, dropped the real one) would slip past a loose
+        // toHaveBeenCalled() assertion.
+        await waitFor(() => expect(__mock.stop).toHaveBeenCalledTimes(1));
         // A closed scanner renders nothing — the overlay, and the camera
         // element the library was writing frames into, are both gone.
         expect(screen.queryByRole('dialog')).toBeNull();
+    });
+
+    // F1/F2: the whole-plan review's headline finding. The previous mock's
+    // constant `getState` masked this — see the block comment above
+    // `createRealisticHtml5QrcodeInstance`. Both tests below are RED against
+    // the pre-fix BarcodeScanner.js (proven while building this suite) and
+    // GREEN once stopScanner clears the ref before its own `await`, and
+    // startScanner's generation token stops a start that was superseded
+    // while it was still in flight.
+    //
+    // `flushAsync` settles every pending promise chain, however many `.then`
+    // hops long, before asserting. A fixed number of `await Promise.resolve()`
+    // hops or relying on `waitFor`'s own polling is not enough here: `waitFor`
+    // evaluates its callback synchronously on the very first call, so an
+    // assertion checked immediately after resolving a promise can observe a
+    // *pre*-settlement snapshot and pass before the state it is meant to
+    // check has actually been reached — a genuine "passes for the wrong
+    // reason" trap this suite hit while being written (see F2's test below).
+    // A macrotask boundary (setTimeout) is ordered after the *entire*
+    // microtask queue drains, including microtasks that chained `.then`s
+    // enqueue while draining, regardless of how deep the chain is.
+    const flushAsync = () => act(() => new Promise((resolve) => {
+        setTimeout(resolve, 0);
+    }));
+
+    describe('camera lifecycle', () => {
+        it('flipping the camera leaves exactly one live instance running, and closing stops it', async () => {
+            const {rerender} = renderScanner();
+            await waitFor(() => expect(__mock.start).toHaveBeenCalledTimes(1));
+            await flushAsync();
+            expect(liveInstanceCount()).toBe(1);
+
+            fireEvent.click(screen.getByRole('button', {name: en.flipCamera}));
+
+            await waitFor(() => expect(__mock.start).toHaveBeenCalledTimes(2));
+            await flushAsync();
+            // The flip must settle on exactly one running camera — the new
+            // instance — not zero (both torn down) and not two (the old one
+            // orphaned alongside the new one).
+            expect(liveInstanceCount()).toBe(1);
+
+            rerender(
+                <LanguageProvider>
+                    <BarcodeScanner open={false} onScan={() => {}} onClose={() => {}}/>
+                </LanguageProvider>
+            );
+            await flushAsync();
+
+            // This is the regression: against the pre-fix code the ref that
+            // `stopScanner` reads on close has already been wiped by the
+            // flip, so the still-running instance is never told to stop and
+            // this stays 1 instead of settling to 0.
+            expect(liveInstanceCount()).toBe(0);
+        });
+
+        it('closing while the camera is still starting leaves nothing running once getUserMedia resolves', async () => {
+            let resolveStart;
+            __mock.start.mockImplementationOnce(
+                () => new Promise((resolve) => {
+                    resolveStart = resolve;
+                })
+            );
+            const {rerender} = renderScanner();
+            await waitFor(() => expect(__mock.start).toHaveBeenCalledTimes(1));
+
+            // Close while start() is still pending — getState() reads
+            // NOT_STARTED for the whole pending transition, so a stopScanner
+            // that only stops what looks "active" has nothing to stop yet.
+            rerender(
+                <LanguageProvider>
+                    <BarcodeScanner open={false} onScan={() => {}} onClose={() => {}}/>
+                </LanguageProvider>
+            );
+
+            // getUserMedia "resolves" only now, after the close already ran.
+            resolveStart();
+            await flushAsync();
+
+            // This is F2's regression: against the pre-fix code nothing
+            // referenced this instance once the ref was nulled during the
+            // close, so the now-started camera is never stopped and this
+            // stays 1 instead of settling to 0. (Checked with a full async
+            // flush rather than `waitFor`, precisely because `waitFor`'s
+            // first, synchronous check here lands *before* resolveStart()'s
+            // continuation has run and would otherwise see a coincidental,
+            // not-yet-orphaned 0 and stop looking.)
+            expect(liveInstanceCount()).toBe(0);
+        });
     });
 
     it('renders the classified message for a start rejection and retries into a working camera', async () => {
