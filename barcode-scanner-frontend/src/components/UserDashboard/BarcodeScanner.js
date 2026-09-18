@@ -1,27 +1,29 @@
 import React, {useEffect, useRef, useState, useCallback} from 'react';
-import {Html5Qrcode} from 'html5-qrcode';
-import {Button, Typography, Space} from 'antd';
-import {
-    CloseOutlined,
-    BulbOutlined,
-    BulbFilled,
-    SwapOutlined,
-} from '@ant-design/icons';
+import {Html5Qrcode, Html5QrcodeScannerState} from 'html5-qrcode';
+import {BulbOutlined, BulbFilled, SwapOutlined} from '@ant-design/icons';
 import {useLanguage} from '../../i18n/LanguageContext';
+import {classifyCameraError} from './cameraError';
+import IosIcon from '../Common/IosIcon';
 import './BarcodeScanner.css';
-
-const {Text} = Typography;
 
 const SCANNER_ELEMENT_ID = 'barcode-scanner-video';
 
-const BarcodeScanner = ({open, onScan, onClose}) => {
+// html5-qrcode's own state enum, imported rather than compared against the
+// literals 2/3 — a library version bump renumbering these must not silently
+// change the stop/start guards below.
+const isActiveScanState = (state) =>
+    state === Html5QrcodeScannerState.SCANNING || state === Html5QrcodeScannerState.PAUSED;
+
+const BarcodeScanner = ({open, onScan, onClose, onManualSearch}) => {
     const {t} = useLanguage();
+    const containerRef = useRef(null);
     const scannerRef = useRef(null);
     const hasScannedRef = useRef(false);
     const isStartingRef = useRef(false);
     const [torchOn, setTorchOn] = useState(false);
     const [torchAvailable, setTorchAvailable] = useState(false);
     const [facingMode, setFacingMode] = useState('environment');
+    // classifyCameraError() result ({kind, messageKey, canRetry, detail}), or null
     const [cameraError, setCameraError] = useState(null);
 
     // Store onScan in a ref so the scanner callback never goes stale
@@ -36,8 +38,7 @@ const BarcodeScanner = ({open, onScan, onClose}) => {
         if (scannerRef.current) {
             try {
                 const state = scannerRef.current.getState();
-                // State 2 = SCANNING, State 3 = PAUSED
-                if (state === 2 || state === 3) {
+                if (isActiveScanState(state)) {
                     await scannerRef.current.stop();
                 }
             } catch (e) {
@@ -60,7 +61,7 @@ const BarcodeScanner = ({open, onScan, onClose}) => {
         if (scannerRef.current) {
             try {
                 const state = scannerRef.current.getState();
-                if (state === 2 || state === 3) {
+                if (isActiveScanState(state)) {
                     await scannerRef.current.stop();
                 }
             } catch (e) {
@@ -70,17 +71,22 @@ const BarcodeScanner = ({open, onScan, onClose}) => {
         }
 
         hasScannedRef.current = false;
+        setCameraError(null);
 
-        // Small delay to ensure DOM element is ready
-        await new Promise(resolve => setTimeout(resolve, 100));
-
-        const element = document.getElementById(SCANNER_ELEMENT_ID);
+        // The video container only exists in the DOM while `open`, and it
+        // mounts in the same commit this effect runs after, so the ref is
+        // already attached here — no artificial delay needed. html5-qrcode's
+        // constructor still wants an element *id* string rather than a node,
+        // so the id is read off the ref'd element instead of reaching for
+        // document.getElementById: a future restyle that reorders or delays
+        // the markup can't silently leave this pointing at nothing.
+        const element = containerRef.current;
         if (!element) {
             isStartingRef.current = false;
             return;
         }
 
-        const scanner = new Html5Qrcode(SCANNER_ELEMENT_ID);
+        const scanner = new Html5Qrcode(element.id);
         scannerRef.current = scanner;
 
         try {
@@ -125,9 +131,7 @@ const BarcodeScanner = ({open, onScan, onClose}) => {
             setCameraError(null);
         } catch (err) {
             console.error('Camera start error:', err);
-            setCameraError(
-                typeof err === 'string' ? err : err?.message || 'Camera error'
-            );
+            setCameraError(classifyCameraError(err));
         } finally {
             isStartingRef.current = false;
         }
@@ -145,6 +149,12 @@ const BarcodeScanner = ({open, onScan, onClose}) => {
             stopScanner();
         };
     }, [open, facingMode, startScanner, stopScanner]);
+
+    // Retry after a start failure — re-runs the same start path the effect
+    // above uses, so a successful retry clears cameraError the same way.
+    const handleRetry = useCallback(() => {
+        startScanner(facingMode);
+    }, [startScanner, facingMode]);
 
     // Toggle torch
     const handleToggleTorch = useCallback(async () => {
@@ -172,24 +182,41 @@ const BarcodeScanner = ({open, onScan, onClose}) => {
     if (!open) return null;
 
     return (
-        <div className="scanner-overlay">
+        <div className="scanner-overlay" role="dialog" aria-modal="true" aria-label={t.scan}>
             {/* Top bar */}
             <div className="scanner-top-bar">
-                <Text className="scanner-title">
-                    {t.scan || 'Scan'}
-                </Text>
-                <Button
-                    type="text"
-                    icon={<CloseOutlined/>}
-                    onClick={onClose}
-                    className="scanner-close-btn"
-                    size="large"
-                />
+                <button type="button" className="scanner-close-btn" aria-label={t.close} onClick={onClose}>
+                    <IosIcon name="close" size={20} stroke={2.4}/>
+                </button>
+                <div className="scanner-top-actions">
+                    {torchAvailable && (
+                        <button
+                            type="button"
+                            className="scanner-control-btn"
+                            onClick={handleToggleTorch}
+                            aria-pressed={torchOn}
+                            data-testid="scanner-torch-btn"
+                        >
+                            {torchOn
+                                ? <BulbFilled style={{fontSize: 22, color: '#fadb14'}}/>
+                                : <BulbOutlined style={{fontSize: 22, color: '#fff'}}/>
+                            }
+                        </button>
+                    )}
+                    <button
+                        type="button"
+                        className="scanner-control-btn"
+                        onClick={handleFlipCamera}
+                        data-testid="scanner-flip-btn"
+                    >
+                        <SwapOutlined style={{fontSize: 22, color: '#fff'}}/>
+                    </button>
+                </div>
             </div>
 
             {/* Scanner video area */}
             <div className="scanner-video-container">
-                <div id={SCANNER_ELEMENT_ID} className="scanner-video-element"/>
+                <div ref={containerRef} id={SCANNER_ELEMENT_ID} className="scanner-video-element"/>
 
                 {/* Viewfinder overlay */}
                 <div className="scanner-viewfinder">
@@ -205,41 +232,29 @@ const BarcodeScanner = ({open, onScan, onClose}) => {
                 {/* Camera error */}
                 {cameraError && (
                     <div className="scanner-error">
-                        <Text style={{color: '#fff', textAlign: 'center', padding: 24}}>
-                            {cameraError}
-                        </Text>
+                        <IosIcon name="warn" size={32} stroke={2}/>
+                        <p className="scanner-error-message">{t[cameraError.messageKey]}</p>
+                        {cameraError.detail && (
+                            <p className="scanner-error-detail">{cameraError.detail}</p>
+                        )}
+                        {cameraError.canRetry && (
+                            <button type="button" className="scanner-retry-btn" onClick={handleRetry}>
+                                {t.retry}
+                            </button>
+                        )}
                     </div>
                 )}
             </div>
 
             {/* Bottom controls */}
             <div className="scanner-bottom-bar">
-                <Space size="large">
-                    {torchAvailable && (
-                        <Button
-                            type="text"
-                            shape="circle"
-                            size="large"
-                            className="scanner-control-btn"
-                            icon={torchOn
-                                ? <BulbFilled style={{fontSize: 22, color: '#fadb14'}}/>
-                                : <BulbOutlined style={{fontSize: 22, color: '#fff'}}/>
-                            }
-                            onClick={handleToggleTorch}
-                        />
-                    )}
-                    <Button
-                        type="text"
-                        shape="circle"
-                        size="large"
-                        className="scanner-control-btn"
-                        icon={<SwapOutlined style={{fontSize: 22, color: '#fff'}}/>}
-                        onClick={handleFlipCamera}
-                    />
-                </Space>
-                <Text className="scanner-hint">
-                    {t.scanHint || 'Point camera at a barcode'}
-                </Text>
+                <span className="scanner-hint">{t.scanHint}</span>
+                {onManualSearch && (
+                    <button type="button" className="scanner-manual-search-btn" onClick={onManualSearch}>
+                        <IosIcon name="keyboard" size={22}/>
+                        {t.manualSearch}
+                    </button>
+                )}
             </div>
         </div>
     );
