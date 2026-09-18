@@ -1,5 +1,6 @@
 import axios from 'axios';
 import API_ENDPOINTS from './endpoints';
+import {runtimeEnv} from '../config/runtimeEnv';
 
 // Set up the base URL for the API
 // Below the 60s at which the platform router abandons a request and answers
@@ -9,7 +10,7 @@ import API_ENDPOINTS from './endpoints';
 export const REQUEST_TIMEOUT_MS = 50000;
 
 const client = axios.create({
-    baseURL: process.env.REACT_APP_API_BASE_URL || "http://localhost:8000",
+    baseURL: runtimeEnv().REACT_APP_API_BASE_URL || "http://localhost:8000",
     timeout: REQUEST_TIMEOUT_MS,
     headers: {
         'Content-Type': 'application/json',

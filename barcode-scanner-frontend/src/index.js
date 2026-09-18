@@ -11,6 +11,8 @@ import {PostHogProvider} from 'posthog-js/react';
 import {registerServiceWorker} from './components/serviceWorkerRegistration';
 import * as Sentry from '@sentry/react';
 import {buildSentryOptions} from './observability/sentryOptions';
+import {initAnalytics} from './observability/analytics';
+import {runtimeEnv} from './config/runtimeEnv';
 
 
 // Swallow the benign ResizeObserver loop warning that AntD + TipTap
@@ -24,18 +26,19 @@ window.addEventListener('error', (e) => {
 });
 
 
+// Build-time REACT_APP_* values with the production image's runtime config
+// (public/config.js) layered on top — see ./config/runtimeEnv.
+const env = runtimeEnv();
+
 // Absent DSN means no client at all, so local dev and `npm test` stay silent.
 // The options themselves live in ./observability/sentryOptions so they can be
 // asserted on; this file only decides whether to install them.
-if (process.env.REACT_APP_SENTRY_DSN) {
-    Sentry.init(buildSentryOptions(process.env));
+if (env.REACT_APP_SENTRY_DSN) {
+    Sentry.init(buildSentryOptions(env));
 }
 
-
-posthog.init(process.env.REACT_APP_PUBLIC_POSTHOG_KEY, {
-  api_host: process.env.REACT_APP_PUBLIC_POSTHOG_HOST,
-  defaults: '2025-12-24',
-});
+// Absent key means PostHog is never initialized and never called.
+initAnalytics(env);
 
 // Apply the saved theme before the first render so a dark-mode user never
 // sees a light frame; App keeps the class in sync after that.

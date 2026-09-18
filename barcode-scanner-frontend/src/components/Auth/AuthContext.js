@@ -1,5 +1,5 @@
 import React, { createContext, useState } from 'react';
-import posthog from 'posthog-js';
+import { identifyUser, resetUser } from '../../observability/analytics';
 
 const AuthContext = createContext();
 
@@ -22,7 +22,7 @@ export const AuthProvider = ({ children }) => {
 
     // Re-identify user in PostHog on page refresh if already logged in
     if (token && role && user) {
-      posthog.identify(user?.username, {
+      identifyUser(user?.username, {
         role: role,
         organization_id: sanitizedOrgId,
         organization_name: sanitizedOrgName,
@@ -44,7 +44,7 @@ export const AuthProvider = ({ children }) => {
     localStorage.removeItem('user');
     localStorage.removeItem('gift_marking_enabled');
     localStorage.removeItem('product_catalog_enabled');
-    posthog.reset();
+    resetUser();
     setAuthData(null);
   };
 
@@ -64,7 +64,7 @@ export const AuthProvider = ({ children }) => {
     localStorage.setItem('gift_marking_enabled', String(giftEnabled));
     localStorage.setItem('product_catalog_enabled', String(catalogEnabled));
     // Identify user in PostHog with role and organization
-    posthog.identify(user?.username, {
+    identifyUser(user?.username, {
       role: role,
       organization_id: safeOrgId,
       organization_name: safeOrgName,

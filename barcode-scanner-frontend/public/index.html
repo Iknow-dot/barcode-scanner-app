@@ -9,6 +9,11 @@
   <meta http-equiv="Expires" content="0" />
   <meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests">
 
+  <!-- Runtime configuration (API URL, Sentry, PostHog). A plain blocking
+       script so window.__APP_CONFIG__ exists before the deferred app bundle
+       runs; the production image regenerates it at container start. -->
+  <script src="%PUBLIC_URL%/config.js"></script>
+
   <!-- PWA -->
   <meta name="theme-color" content="#3a9866" />
   <meta name="application-name" content="iflow.ge" />

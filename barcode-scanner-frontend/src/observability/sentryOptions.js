@@ -44,7 +44,9 @@ export function buildSentryOptions(env = process.env) {
     return {
         dsn: env.REACT_APP_SENTRY_DSN,
         environment: env.REACT_APP_SENTRY_ENVIRONMENT || 'production',
-        release: env.REACT_APP_SENTRY_RELEASE || undefined,
+        // A numbered release image bakes REACT_APP_VERSION in at build time;
+        // an explicit SENTRY_RELEASE (e.g. a commit hash) still wins.
+        release: env.REACT_APP_SENTRY_RELEASE || env.REACT_APP_VERSION || undefined,
         integrations: [Sentry.browserTracingIntegration()],
         tracesSampleRate: Number(env.REACT_APP_SENTRY_TRACES_SAMPLE_RATE || 0.05),
         // Scoped to our own API so trace headers never reach Photon or RS.ge.

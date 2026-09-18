@@ -1,0 +1,49 @@
+# Production server for the built frontend.
+#
+# Rendered at container start by the nginx image's envsubst step, which is
+# restricted to ${PORT} (NGINX_ENVSUBST_FILTER in the Dockerfile) so nginx's
+# own $variables pass through untouched. docker/runtime-config.sh then drops
+# the optional snippets (backend proxy, trusted upstream proxy) into
+# /etc/nginx/runtime.d/ before nginx starts.
+
+# Keep the scheme a TLS terminator in front of us saw; fall back to our own.
+# Django trusts this header (SECURE_PROXY_SSL_HEADER) for its HTTPS redirect.
+map $http_x_forwarded_proto $forwarded_proto {
+    default $http_x_forwarded_proto;
+    ""      $scheme;
+}
+
+server {
+    listen ${PORT};
+    server_name _;
+    root /usr/share/nginx/html;
+
+    gzip on;
+    gzip_min_length 1024;
+    gzip_types text/css application/javascript application/json image/svg+xml;
+
+    include /etc/nginx/runtime.d/*.server.conf;
+
+    # CRA fingerprints everything under /static/, so it can be cached forever.
+    location /static/ {
+        add_header Cache-Control "public, max-age=31536000, immutable";
+        try_files $uri =404;
+    }
+
+    # Generated per container, and holds the install's settings.
+    location = /config.js {
+        root /usr/share/nginx/runtime;
+        add_header Cache-Control "no-store";
+    }
+
+    # The shell and the service worker must be revalidated on every load, or a
+    # browser keeps running the previous release after an upgrade.
+    location = /service-worker.js {
+        add_header Cache-Control "no-cache";
+    }
+
+    location / {
+        add_header Cache-Control "no-cache";
+        try_files $uri /index.html;
+    }
+}

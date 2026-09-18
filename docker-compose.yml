@@ -36,6 +36,8 @@ services:
   frontend:
     build:
       context: ./barcode-scanner-frontend
+      # The Dockerfile's default target is the nginx release image.
+      target: dev
     volumes:
       - ./barcode-scanner-frontend:/app
       - /app/node_modules

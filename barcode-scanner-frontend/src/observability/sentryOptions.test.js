@@ -101,4 +101,20 @@ describe('buildSentryOptions', () => {
     // Trace headers never reach Photon or RS.ge.
     expect(options.tracePropagationTargets).toEqual(['https://api.example.com']);
   });
+
+  it('falls back to the app version as the release', () => {
+    const options = buildSentryOptions({REACT_APP_SENTRY_DSN: DSN, REACT_APP_VERSION: '1.4.0'});
+
+    expect(options.release).toBe('1.4.0');
+  });
+
+  it('prefers an explicit release over the app version', () => {
+    const options = buildSentryOptions({
+      REACT_APP_SENTRY_DSN: DSN,
+      REACT_APP_SENTRY_RELEASE: 'abc123',
+      REACT_APP_VERSION: '1.4.0',
+    });
+
+    expect(options.release).toBe('abc123');
+  });
 });
