@@ -173,3 +173,63 @@ test("the scan line's glow is derived from the brand token, not a hand-copied rg
     expect(scannerCss).toMatch(/color-mix\(in srgb, var\(--if-brand\)[^)]*\)/);
     expect(scannerCss).not.toMatch(/rgba\(\s*66,\s*174,\s*117/);
 });
+
+// ====================================================================
+// F5 (phase 5c fix wave): close the redesign's own colour guard for the
+// last two files it added — CatalogView.css (task 1) and OrdersView.css
+// (5a) — neither of which had a literal-colour test of its own before this.
+// noLegacyBlue.test.js already catches antd's default blue tree-wide, so
+// what's left uncaught here is any OTHER hard-coded literal. Same per-file
+// allowlist pattern as ios.css/BarcodeScanner.css above.
+// ====================================================================
+const catalogCss = fs.readFileSync(
+    path.join(__dirname, '..', 'components', 'UserDashboard', 'CatalogView.css'),
+    'utf8'
+).replace(/\/\*[\s\S]*?\*\//g, '');
+
+// The category tiles sit on fixed pastel backgrounds (categoryTileStyle.js),
+// not the theme's own surface colours, so their text is fixed dark ink in
+// both themes rather than a var(--if-*) token that would go near-invisible
+// on a pastel tile in dark mode — the phase 1 decision CLAUDE.md and
+// categoryTileStyle.js document. Sanctioned literal exception, same as the
+// tile pastels themselves.
+const CATALOG_ALLOWED_LITERALS = [
+    /^#232323$/i,
+    /^#54595f$/i,
+];
+
+test('CatalogView.css hard-codes no colour beyond the fixed tile ink', () => {
+    const literals = catalogCss.match(/#[0-9a-f]{3,8}\b|rgba?\([^)]*\)|hsla?\([^)]*\)/gi) || [];
+    expect(literals.filter((literal) => !CATALOG_ALLOWED_LITERALS.some((rule) => rule.test(literal)))).toEqual([]);
+});
+
+test('CatalogView.css uses no named colours', () => {
+    expect(catalogCss.match(/(?<![-\w])(white|black|gray|grey|red|green|blue|orange)(?![-\w])/gi)).toBeNull();
+});
+
+test('every token CatalogView.css reads exists in the palette', () => {
+    const used = [...new Set([...catalogCss.matchAll(/var\((--if-[\w-]+)/g)].map((match) => match[1]))];
+    expect(used.length).toBeGreaterThan(0);
+    expect(used.filter((name) => !(name in TOKENS.light))).toEqual([]);
+});
+
+const ordersCss = fs.readFileSync(
+    path.join(__dirname, '..', 'components', 'UserDashboard', 'OrdersView.css'),
+    'utf8'
+).replace(/\/\*[\s\S]*?\*\//g, '');
+
+// Unlike CatalogView.css, OrdersView.css has no sanctioned literal at all —
+// every colour in it is already a var(--if-*) token.
+test('OrdersView.css hard-codes no literal colour at all', () => {
+    expect(ordersCss.match(/#[0-9a-f]{3,8}\b|rgba?\([^)]*\)|hsla?\([^)]*\)/gi)).toBeNull();
+});
+
+test('OrdersView.css uses no named colours', () => {
+    expect(ordersCss.match(/(?<![-\w])(white|black|gray|grey|red|green|blue|orange)(?![-\w])/gi)).toBeNull();
+});
+
+test('every token OrdersView.css reads exists in the palette', () => {
+    const used = [...new Set([...ordersCss.matchAll(/var\((--if-[\w-]+)/g)].map((match) => match[1]))];
+    expect(used.length).toBeGreaterThan(0);
+    expect(used.filter((name) => !(name in TOKENS.light))).toEqual([]);
+});
