@@ -1,0 +1,66 @@
+# On-premise install: PostgreSQL, the Django API and the nginx frontend,
+# served together as one origin on HTTP_PORT. Every setting comes from .env
+# next to this file (copy .env.example). Put HTTPS in front of it: browsers only
+# allow the barcode camera on HTTPS pages. See README.md.
+name: iflow
+
+services:
+  db:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: iflow
+      POSTGRES_USER: iflow
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U iflow -d iflow"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  backend:
+    image: ${BACKEND_IMAGE:?set BACKEND_IMAGE in .env}
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    # No published port: reachable only through the frontend's proxy.
+    environment:
+      DATABASE_URL: postgres://iflow:${POSTGRES_PASSWORD}@db:5432/iflow
+      DATABASE_SSL_REQUIRE: "False"
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?set DJANGO_SECRET_KEY in .env}
+      FERNET_KEY: ${FERNET_KEY:?set FERNET_KEY in .env}
+      DEBUG: "False"
+      ALLOWED_HOSTS: ${PUBLIC_HOSTNAME:?set PUBLIC_HOSTNAME in .env}
+      CORS_ALLOWED_ORIGINS: https://${PUBLIC_HOSTNAME}
+      SECURE_SSL_REDIRECT: ${SECURE_SSL_REDIRECT:-True}
+      # CRA's bundles own /static/ on this origin; the frontend proxies this path.
+      STATIC_URL: /django-static/
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      PHOTON_USER_AGENT: ${PHOTON_USER_AGENT:-}
+      # Optional monitoring: blank means off.
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-onprem}
+      SENTRY_TRACES_SAMPLE_RATE: ${SENTRY_TRACES_SAMPLE_RATE:-}
+      POSTHOG_DASHBOARD_URL: ${POSTHOG_DASHBOARD_URL:-}
+
+  frontend:
+    image: ${FRONTEND_IMAGE:?set FRONTEND_IMAGE in .env}
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "${HTTP_PORT:-8080}:8080"
+    environment:
+      BACKEND_UPSTREAM: http://backend:8080
+      TRUSTED_PROXY_CIDR: ${TRUSTED_PROXY_CIDR:-}
+      # Optional monitoring: blank means off.
+      REACT_APP_SENTRY_DSN: ${REACT_APP_SENTRY_DSN:-}
+      REACT_APP_SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-onprem}
+      REACT_APP_PUBLIC_POSTHOG_KEY: ${REACT_APP_PUBLIC_POSTHOG_KEY:-}
+      REACT_APP_PUBLIC_POSTHOG_HOST: ${REACT_APP_PUBLIC_POSTHOG_HOST:-}
+
+volumes:
+  db-data:
