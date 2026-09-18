@@ -6,6 +6,8 @@ on:
     branches:
       - main
       - djangoRewrite
+  # release.yml runs this suite before building release images.
+  workflow_call:
 
 # A newer push to the same branch makes the in-flight run redundant.
 concurrency:

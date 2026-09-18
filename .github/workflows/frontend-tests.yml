@@ -6,6 +6,8 @@ on:
     branches:
       - main
       - djangoRewrite
+  # release.yml runs this suite before building release images.
+  workflow_call:
 
 concurrency:
   group: frontend-tests-${{ github.ref }}
