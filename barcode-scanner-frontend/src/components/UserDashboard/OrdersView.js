@@ -54,8 +54,17 @@ const timeLabel = (time, t) => {
  * left (iOS Mail/Messages idiom), by hovering it, or by focusing into the
  * panel with a keyboard (`:focus-within` in ios.css) — so the actions stay
  * reachable without a gesture. The swipe reveal already IS the deliberate
- * gesture, so delete is instant on tap — no popover gate behind it. `isOpen`
- * is owned by OrdersView (only one row's actions are ever open at a time);
+ * gesture, so a tap on delete once the row IS open deletes instantly — no
+ * popover gate behind it. But hover and keyboard focus reveal the very same
+ * actions with no swipe behind them at all (:hover / :focus-within in
+ * ios.css) — a pointer merely crossing the row toward something else, or a
+ * Tab landing on it, would otherwise let one click/Space delete an order
+ * with zero deliberate gesture (F2 fix). So delete's own activation checks
+ * `isOpen`: a tap or Space on delete while the row is still closed only
+ * opens it (arms it, exactly like a swipe would), never deletes on that
+ * first hit; the row being open — however it got that way — is what makes
+ * the very next tap on delete instant. Print is unaffected (harmless,
+ * reversible either way). `isOpen` is owned by OrdersView (only one row's actions are ever open at a time);
  * this component only decides the *live* drag offset while a touch is in
  * progress, via the pure functions in orderRowSwipe.js (nextSwipeAxis /
  * swipeRevealOffset / swipeRestsOpen) rather than doing that arithmetic
@@ -180,6 +189,16 @@ const OrderRow = ({row, t, isOpen, onOpen, onClose, onOpenOrder, onPrint, onDele
                         aria-label={`${t.delete} #${row.key}`}
                         onClick={(event) => {
                             event.stopPropagation();
+                            // F2: hover/focus can reveal this button with no
+                            // swipe behind it — the first activation while
+                            // the row is still closed only opens it (arms
+                            // it), the same deliberate step a swipe already
+                            // is. Only a tap while the row IS open deletes,
+                            // still on a single instant tap, no dialog.
+                            if (!isOpen) {
+                                onOpen();
+                                return;
+                            }
                             onDelete(row.key);
                         }}
                     >

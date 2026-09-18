@@ -98,16 +98,32 @@ describe('CartItemRow', () => {
         expect(orderService.updateOrderItem).toHaveBeenCalledWith(7, 11, {quantity: 3});
     });
 
-    it('turns minus into delete at one paid unit', () => {
+    // F3 (Important): minus used to be REPLACED by delete in the exact same
+    // 44px slot at the minimum — a consultant correcting a quantity down
+    // (3 → 2 → 1) could have their next repeated tap land on a control that
+    // had become a trash can in the same spot, instantly removing the whole
+    // line with no message. Delete is now its own separate, persistent
+    // control (see the row's controls, below) rather than a slot swap — the
+    // stepper's minus simply disables at the minimum instead, same as
+    // QuantityStepper does everywhere else it's used (ProductSheet's own
+    // stepper, for example).
+    it('disables minus at one paid unit instead of replacing it with delete', () => {
         renderRow({row: rowFor([line({quantity: '1', line_total: '89.90'})])});
-        expect(screen.queryByRole('button', {name: en.decreaseQuantity})).toBeNull();
-        expect(screen.getByRole('button', {name: en.delete})).toBeInTheDocument();
+        expect(screen.getByRole('button', {name: en.decreaseQuantity})).toBeDisabled();
     });
 
-    it('keeps minus, not delete, above the minimum', () => {
+    it('keeps minus enabled above the minimum', () => {
         renderRow();
         expect(screen.getByRole('button', {name: en.decreaseQuantity})).not.toBeDisabled();
-        expect(screen.queryByRole('button', {name: en.delete})).toBeNull();
+    });
+
+    // Delete is offered as its own control regardless of the current
+    // quantity now — not only once the stepper has been walked down to one
+    // unit — so it never shares a slot with a control the consultant is
+    // repeatedly tapping.
+    it('offers delete as its own control at any quantity, not only at the minimum', () => {
+        renderRow(); // default row is quantity 2
+        expect(screen.getByRole('button', {name: en.delete})).toBeInTheDocument();
     });
 
     it('marks the row as a gift through the gift pill', async () => {
@@ -123,10 +139,6 @@ describe('CartItemRow', () => {
     });
 
     it('deletes the row on a single tap, with no confirmation step', async () => {
-        // F4: delete only ever shows at totalQty === 1, so a row that still
-        // pairs a paid and a gift line (totalQty >= 2, see below) can no
-        // longer reach it — this exercises the one id it removes here.
-        //
         // This fails if a Popconfirm (or any other confirm step) is
         // reintroduced: the click would only open a confirmation surface
         // rather than calling removeOrderItem, so the waitFor below would
@@ -136,6 +148,17 @@ describe('CartItemRow', () => {
         expect(screen.queryByRole('button', {name: en.yes})).toBeNull();
         expect(screen.queryByRole('button', {name: en.no})).toBeNull();
         expect(screen.queryByText(en.confirmDelete)).toBeNull();
+        await waitFor(() => expect(onOrderUpdate).toHaveBeenCalledWith(UPDATED));
+        expect(orderService.removeOrderItem).toHaveBeenCalledWith(7, 11);
+    });
+
+    // F3: delete is no longer gated behind quantity 1 — this exercises it at
+    // the default row's quantity (2), proving the persistent control removes
+    // the whole line however many units it currently holds, not just the
+    // single-unit case the old slot-swap only ever reached.
+    it('deletes the whole line in one tap above the minimum too', async () => {
+        const {onOrderUpdate} = renderRow(); // default row is quantity 2
+        fireEvent.click(screen.getByRole('button', {name: en.delete}));
         await waitFor(() => expect(onOrderUpdate).toHaveBeenCalledWith(UPDATED));
         expect(orderService.removeOrderItem).toHaveBeenCalledWith(7, 11);
     });
@@ -244,13 +267,33 @@ describe('CartItemRow', () => {
         await waitFor(() => expect(gift).not.toBeDisabled());
     });
 
-    it('shows a disabled minus, not delete, when the minimum still holds a gift unit', () => {
+    it('shows a disabled minus when the minimum still holds a gift unit', () => {
         const row = rowFor([
             line({quantity: '1', line_total: '89.90'}),
             line({id: 12, quantity: '1', is_gift: true, line_total: '0.00'}),
         ]);
         renderRow({row});
-        expect(screen.queryByRole('button', {name: en.delete})).toBeNull();
         expect(screen.getByRole('button', {name: en.decreaseQuantity})).toBeDisabled();
+    });
+
+    // F3: delete removes BOTH physical lines behind a gift-bearing row in
+    // one tap — reachable now that delete is its own persistent control
+    // rather than gated behind totalQty === 1 (which a paid+gift pair can
+    // never reach through the stepper, since its floor is giftQty + 1). This
+    // closes a previously-unreachable coverage gap for handleRemove's
+    // multi-id loop.
+    it('deletes both the paid and gift lines together from a gift-bearing row', async () => {
+        const row = rowFor([
+            line({quantity: '1', line_total: '89.90'}),
+            line({id: 12, quantity: '1', is_gift: true, line_total: '0.00'}),
+        ]);
+        const {onOrderUpdate} = renderRow({row});
+
+        fireEvent.click(screen.getByRole('button', {name: en.delete}));
+
+        await waitFor(() => expect(onOrderUpdate).toHaveBeenCalledWith(UPDATED));
+        expect(orderService.removeOrderItem).toHaveBeenCalledWith(7, 11);
+        expect(orderService.removeOrderItem).toHaveBeenCalledWith(7, 12);
+        expect(orderService.removeOrderItem).toHaveBeenCalledTimes(2);
     });
 });

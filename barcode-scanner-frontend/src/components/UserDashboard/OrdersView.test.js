@@ -386,11 +386,23 @@ describe('OrdersView', () => {
         expect(onOpenOrder).not.toHaveBeenCalled();
     });
 
-    // The swipe that revealed this red action already IS the confirming
-    // gesture (task: instant delete, no confirmation step) — a single tap
-    // must call onDelete right away. Fails if onDelete isn't called on the
-    // first click, or needs a second click/dialog interaction first.
-    it('the trash icon deletes a draft instantly, on the first tap, and never calls onOpenOrder', async () => {
+    // F2 (Important): the swipe that reveals this red action IS the
+    // deliberate gesture for a touch user — but @media (hover: hover) also
+    // reveals it on a plain mouse-over, and :focus-within reveals it on
+    // keyboard focus (ios.css), both independent of the JS `isOpen` state a
+    // swipe sets. So a pointer crossing the list (the reviewed trackpad
+    // scenario: moving toward a row to resume it, no intent to delete
+    // anything) could reveal AND click delete in one motion, with nothing
+    // deliberate behind it. Ruling: delete only ACTIVATES once the row is
+    // explicitly open — a completed swipe already sets that (see the next
+    // test); a tap on delete itself while the row is still closed only
+    // opens it (arms it, exactly as a swipe would), never deletes on that
+    // first hit. Print is unaffected (harmless, reversible — a hover reveal
+    // is enough for it, unchanged).
+    //
+    // Fails if delete still calls onDelete on an unarmed first click (the
+    // pre-fix behaviour) — the exact hover-cross accident the review found.
+    it('a first tap on delete with no prior swipe only opens the row — it does not delete', async () => {
         orderService.getOrders.mockResolvedValue({
             success: true,
             data: [order({id: 45, customer_name: 'Delete Client'})],
@@ -398,25 +410,58 @@ describe('OrdersView', () => {
         const {onDelete, onOpenOrder} = renderView();
         await flushDebounce();
 
-        fireEvent.click(screen.getByRole('button', {name: `${en.delete} #45`}));
+        const deleteBtn = screen.getByRole('button', {name: `${en.delete} #45`});
+        fireEvent.click(deleteBtn);
 
-        expect(onDelete).toHaveBeenCalledWith(45);
+        expect(onDelete).not.toHaveBeenCalled();
         expect(onOpenOrder).not.toHaveBeenCalled();
+        expect(document.querySelector('.if-swipe-row[data-order-row-key="45"]')).toHaveClass('is-open');
     });
 
-    // Proves no confirmation step remains anywhere in this screen — fails if
-    // a Popconfirm (or any other Yes/No gate) is reintroduced in front of
-    // the delete tap.
-    it('deleting an order leaves no Yes/No confirmation in the document', async () => {
+    // The second half of the same ruling: once the row is open — whether
+    // that came from the arming tap above or from a real swipe past
+    // halfway (swipeRestsOpen, exercised elsewhere in this file) — a tap on
+    // delete is still exactly one instant tap, no dialog. Fails if a second
+    // click is needed on top of an already-open row, or if onDelete still
+    // isn't called at all.
+    it('deletes on the very next tap once the row is open, with no dialog either way', async () => {
+        orderService.getOrders.mockResolvedValue({
+            success: true,
+            data: [order({id: 45, customer_name: 'Delete Client'})],
+        });
+        const {onDelete} = renderView();
+        await flushDebounce();
+
+        const deleteBtn = screen.getByRole('button', {name: `${en.delete} #45`});
+        fireEvent.click(deleteBtn); // arms (opens) — see test above
+        fireEvent.click(deleteBtn); // row is open now: this tap deletes
+
+        expect(onDelete).toHaveBeenCalledWith(45);
+        expect(onDelete).toHaveBeenCalledTimes(1);
+    });
+
+    // Proves no confirmation step remains anywhere in this screen, through
+    // BOTH of the two deliberate taps F2 now requires — fails if a
+    // Popconfirm (or any other Yes/No gate) is reintroduced in front of
+    // either tap. (A test that only checked "no Yes/No" without also
+    // asserting onDelete fired — see the two tests above — would also pass
+    // if delete had silently stopped working, which is why this is split.)
+    it('deleting an order leaves no Yes/No confirmation in the document at any point', async () => {
         orderService.getOrders.mockResolvedValue({
             success: true,
             data: [order({id: 145, customer_name: 'No Confirm Client'})],
         });
-        renderView();
+        const {onDelete} = renderView();
         await flushDebounce();
 
-        fireEvent.click(screen.getByRole('button', {name: `${en.delete} #145`}));
+        const deleteBtn = screen.getByRole('button', {name: `${en.delete} #145`});
+        fireEvent.click(deleteBtn); // opens
+        expect(screen.queryByText(en.yes)).not.toBeInTheDocument();
+        expect(screen.queryByText(en.no)).not.toBeInTheDocument();
+        expect(screen.queryByText(en.confirmDelete)).not.toBeInTheDocument();
 
+        fireEvent.click(deleteBtn); // deletes
+        expect(onDelete).toHaveBeenCalledWith(145);
         expect(screen.queryByText(en.yes)).not.toBeInTheDocument();
         expect(screen.queryByText(en.no)).not.toBeInTheDocument();
         expect(screen.queryByText(en.confirmDelete)).not.toBeInTheDocument();
@@ -658,7 +703,16 @@ describe('OrdersView', () => {
             expect(onOpenOrder).not.toHaveBeenCalled();
         });
 
-        it('Space on the trash icon deletes instantly and does not open the row', async () => {
+        // F2's keyboard rule, made consistent with the pointer rule above
+        // rather than left looser: :focus-within reveals the trash button to
+        // a Tab the same way :hover reveals it to a mouse, with no swipe
+        // behind it either way. So the first Space only arms (opens) the
+        // row, exactly like the first pointer tap does — never deletes on
+        // that first activation. The second Space, now that the row is
+        // open, deletes instantly (still no confirm dialog). Fails if the
+        // first Space alone calls onDelete (the pre-fix, looser keyboard
+        // path), or if the second Space fails to.
+        it('Space on the trash icon arms it first, then deletes on the second Space', async () => {
             orderService.getOrders.mockResolvedValueOnce({
                 success: true,
                 data: [order({id: 81, customer_name: 'Keyboard Delete Client'})],
@@ -670,9 +724,10 @@ describe('OrdersView', () => {
             const trashBtn = screen.getByRole('button', {name: `${en.delete} #81`});
             trashBtn.focus();
             await user.keyboard('[Space]');
+            expect(onDelete).not.toHaveBeenCalled();
+            expect(onOpenOrder).not.toHaveBeenCalled();
 
-            // Space activates the button like a click — no confirm gate to
-            // pass through first.
+            await user.keyboard('[Space]');
             expect(onDelete).toHaveBeenCalledWith(81);
             expect(onOpenOrder).not.toHaveBeenCalled();
         });

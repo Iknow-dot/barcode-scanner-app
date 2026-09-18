@@ -201,25 +201,6 @@ const CartItemRow = ({
                         decrementLabel={t.decreaseQuantity}
                         incrementLabel={t.increaseQuantity}
                         iconSize={18}
-                        minSlot={row.totalQty === 1 ? (
-                            // At exactly one unit, minus becomes an instant
-                            // delete — no confirmation step: the row cannot
-                            // shrink further, and there is no room for a
-                            // separate delete button beside the gift pill.
-                            // A row whose minimum instead reflects a gift
-                            // unit that must stay (totalQty > 1) keeps a
-                            // plain, disabled minus — there's nothing left
-                            // to delete yet.
-                            <button
-                                type="button"
-                                className="if-stepper-btn m-cart-item-delete"
-                                aria-label={t.delete}
-                                disabled={busy}
-                                onClick={handleRemove}
-                            >
-                                <IosIcon name="trash" size={18}/>
-                            </button>
-                        ) : undefined}
                     />
                     <GiftCounter
                         enabled={giftEnabled}
@@ -229,6 +210,26 @@ const CartItemRow = ({
                         onChange={handleGiftChange}
                         disabled={busy}
                     />
+                    {/* F3: delete used to take the minus button's exact slot
+                        at totalQty === 1 — a consultant correcting a
+                        quantity down (3 → 2 → 1) could have their next tap
+                        land on a control that had just become a trash can in
+                        the same spot, instantly removing the whole line
+                        (paid and gift together) with no message. It is now
+                        its own persistent, visually separated control,
+                        offered at any quantity rather than only at the
+                        minimum — the minus button just disables at the
+                        floor instead, like QuantityStepper does everywhere
+                        else it's used. */}
+                    <button
+                        type="button"
+                        className="if-stepper-btn m-cart-item-delete"
+                        aria-label={t.delete}
+                        disabled={busy}
+                        onClick={handleRemove}
+                    >
+                        <IosIcon name="trash" size={18}/>
+                    </button>
                 </div>
             </div>
         </div>

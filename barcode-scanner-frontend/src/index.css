@@ -436,7 +436,12 @@ body {
   margin-top: 8px;
 }
 
+/* F3: its own control, visually separated from the stepper/gift group it
+   used to share a slot with — pushed to the far end of the row rather than
+   sitting inline where a repeated stepper tap could land on it by
+   accident. */
 .m-cart-item-controls .if-stepper-btn.m-cart-item-delete {
+  margin-left: auto;
   color: var(--if-red-text);
 }
 
