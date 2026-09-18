@@ -193,6 +193,59 @@ describe('OrderSheet', () => {
         expect(screen.getByRole('button', {name: en.confirmOrder})).toBeDisabled();
     });
 
+    // F1 (Critical): the removed Popconfirm used to be the de-facto
+    // double-submit guard — its Yes button unmounted on tap, so a second tap
+    // hit nothing. Nothing replaced it: handleConfirm set no state, so the
+    // button stayed live for the whole round trip and a second tap during a
+    // slow confirm reached onProceedToPayment (and so the 1C push) again,
+    // capable of creating two real orders for one cart. Fails against the
+    // pre-fix code because the button has no `disabled`/in-flight state at
+    // all: the second fireEvent.click is never blocked, so
+    // onProceedToPayment is called twice instead of once.
+    it('blocks a second tap while a confirm is in flight', async () => {
+        let resolveConfirm;
+        const onProceedToPayment = jest.fn(() => new Promise((resolve) => { resolveConfirm = resolve; }));
+        renderSheet({onProceedToPayment});
+        fireEvent.click(screen.getByRole('button', {name: en.nextStep}));
+        const confirmBtn = screen.getByRole('button', {name: en.confirmOrder});
+
+        fireEvent.click(confirmBtn);
+        expect(confirmBtn).toBeDisabled();
+        // A disabled button does not receive a second click in a real
+        // browser; this only proves the guard exists rather than relying on
+        // it (same pattern CartItemRow.test.js's busy-guard tests use).
+        fireEvent.click(confirmBtn);
+        await waitFor(() => expect(onProceedToPayment).toHaveBeenCalledTimes(1));
+
+        resolveConfirm();
+        await waitFor(() => expect(confirmBtn).not.toBeDisabled());
+    });
+
+    // F1: a guard that only clears on SUCCESS wedges the button shut after a
+    // FAILED confirm — this project has shipped that exact bug twice before.
+    // handleProceedToPayment never throws (it notifies and returns on a
+    // failure response), so this exercises the same "the awaited call
+    // settles" path a real failure takes, and checks the button is usable
+    // again afterwards. Fails against the pre-fix code for the same reason
+    // as the test above (no disabled state at all — this one would actually
+    // already pass by accident pre-fix, which is exactly why the OTHER
+    // direction above is the one that proves the guard exists).
+    it('re-enables the confirm button after a settled (e.g. failed) confirm, and allows trying again', async () => {
+        let resolveConfirm;
+        const onProceedToPayment = jest.fn(() => new Promise((resolve) => { resolveConfirm = resolve; }));
+        renderSheet({onProceedToPayment});
+        fireEvent.click(screen.getByRole('button', {name: en.nextStep}));
+        const confirmBtn = screen.getByRole('button', {name: en.confirmOrder});
+
+        fireEvent.click(confirmBtn);
+        await waitFor(() => expect(onProceedToPayment).toHaveBeenCalledTimes(1));
+        resolveConfirm(); // the order stays mounted either way; only a successful confirm unmounts it via showOrderPanel
+        await waitFor(() => expect(confirmBtn).not.toBeDisabled());
+
+        fireEvent.click(confirmBtn);
+        await waitFor(() => expect(onProceedToPayment).toHaveBeenCalledTimes(2));
+    });
+
     // Task: the ⋯ menu is now an IosActionSheet (rows are plain buttons, not
     // antd menuitems). Fails if the sheet doesn't open, or if selecting the
     // row doesn't call the handler.

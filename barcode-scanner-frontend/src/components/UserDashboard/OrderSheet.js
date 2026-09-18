@@ -57,6 +57,15 @@ const OrderSheet = ({
     const [step, setStep] = useState(1);
     // The cart's ⋯ menu, an IosActionSheet stacked over this sheet (level 1).
     const [menuOpen, setMenuOpen] = useState(false);
+    // F1: the in-flight guard for Confirm. The removed Popconfirm used to be
+    // the de-facto double-submit guard (its Yes button unmounted on tap, so
+    // a second tap hit nothing) and nothing replaced it — there is no
+    // server-side lock either (core/views/orders.py's plain get_object(), no
+    // select_for_update), so two taps during a slow fail-closed 1C push
+    // could create two real orders for one cart. Cleared in handleConfirm's
+    // `finally` — clearing only on success would wedge the button shut after
+    // a failed confirm, which this project has shipped twice before.
+    const [confirming, setConfirming] = useState(false);
     // Loaded by DeliveryStep with a function that flushes its pending
     // debounced fields; called before confirming so a comment typed just
     // before the tap reaches the order ahead of the confirm PATCH, instead
@@ -120,13 +129,24 @@ const OrderSheet = ({
     const header = orderStepHeader(step, t);
     const giftCount = cartGiftCount(items);
 
-    // Confirming is instant — no popover gate. The flush still runs first: a
-    // comment typed just before the tap must reach the order ahead of the
+    // Confirming is instant — no popover gate, but the button disables itself
+    // for the whole round trip (F1) so a second tap during a slow fail-closed
+    // 1C push can't fire a second confirm PATCH. The flush still runs first:
+    // a comment typed just before the tap must reach the order ahead of the
     // confirm PATCH (see deliveryFlushRef above), not race the unmount flush
     // against an order already confirmed.
     const handleConfirm = async () => {
-        if (deliveryFlushRef.current) await deliveryFlushRef.current();
-        onProceedToPayment();
+        setConfirming(true);
+        try {
+            if (deliveryFlushRef.current) await deliveryFlushRef.current();
+            await onProceedToPayment();
+        } finally {
+            // A successful confirm unmounts this whole sheet (showOrderPanel
+            // goes false in UserDashboard), so this only matters for a
+            // failed one — where it must NOT stay disabled, or the
+            // consultant can never try again.
+            setConfirming(false);
+        }
     };
 
     // Delete is instant too — the swipe/tap into this destructive row IS the
@@ -174,7 +194,8 @@ const OrderSheet = ({
             <button
                 type="button"
                 className="if-btn if-btn-primary"
-                disabled={!hasItems || confirmDisabled}
+                disabled={!hasItems || confirmDisabled || confirming}
+                aria-busy={confirming || undefined}
                 onClick={handleConfirm}
             >
                 {t.confirmOrder}
