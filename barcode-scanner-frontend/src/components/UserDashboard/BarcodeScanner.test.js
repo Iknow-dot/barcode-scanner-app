@@ -186,7 +186,7 @@ describe('BarcodeScanner', () => {
         }));
         renderScanner();
 
-        const torchButton = await screen.findByTestId('scanner-torch-btn');
+        const torchButton = await screen.findByRole('button', {name: en.torchToggle});
         fireEvent.click(torchButton);
         await waitFor(() => expect(enable).toHaveBeenCalledTimes(1));
 
@@ -194,13 +194,64 @@ describe('BarcodeScanner', () => {
         await waitFor(() => expect(disable).toHaveBeenCalledTimes(1));
     });
 
+    // F1: the default mock's `isSupported: () => false` (armed in beforeEach)
+    // means the torch capability was never granted — the button must not
+    // render at all, not just be untested. Without the `torchAvailable &&`
+    // guard in BarcodeScanner.js this fails because the button is present.
+    it('has no torch control when the running track does not support it', async () => {
+        renderScanner();
+        await waitFor(() => expect(__mock.start).toHaveBeenCalledTimes(1));
+
+        expect(screen.queryByRole('button', {name: en.torchToggle})).toBeNull();
+        expect(screen.queryByTestId('scanner-torch-btn')).toBeNull();
+    });
+
     it('keeps the flip control even when the canvas omits it, and it restarts the camera facing the other way', async () => {
         renderScanner();
         await waitFor(() => expect(__mock.start).toHaveBeenCalledTimes(1));
 
-        fireEvent.click(screen.getByTestId('scanner-flip-btn'));
+        fireEvent.click(screen.getByRole('button', {name: en.flipCamera}));
 
         await waitFor(() => expect(__mock.start).toHaveBeenCalledTimes(2));
         expect(__mock.start.mock.calls[1][0]).toEqual({facingMode: 'user'});
+    });
+
+    // F3: aria-modal="true" is a promise that everything outside is inert.
+    // The scanner is hand-rolled (no antd Drawer underneath), so it must earn
+    // that promise itself: Escape closes it, focus moves onto the close
+    // button on open, and focus is restored to whatever had it before the
+    // scanner opened. A full focus trap is deliberately out of scope.
+    it('moves focus to the close button when it opens', async () => {
+        renderScanner();
+        await waitFor(() => expect(screen.getByRole('button', {name: en.close})).toHaveFocus());
+    });
+
+    it('closes on Escape', async () => {
+        const {onClose} = renderScanner();
+        await waitFor(() => expect(__mock.start).toHaveBeenCalledTimes(1));
+
+        fireEvent.keyDown(document, {key: 'Escape'});
+
+        expect(onClose).toHaveBeenCalledTimes(1);
+    });
+
+    it('restores focus to the previously focused element when it closes', async () => {
+        const trigger = document.createElement('button');
+        trigger.textContent = 'open scanner';
+        document.body.appendChild(trigger);
+        trigger.focus();
+        expect(trigger).toHaveFocus();
+
+        const {rerender} = renderScanner();
+        await waitFor(() => expect(screen.getByRole('button', {name: en.close})).toHaveFocus());
+
+        rerender(
+            <LanguageProvider>
+                <BarcodeScanner open={false} onScan={() => {}} onClose={() => {}}/>
+            </LanguageProvider>
+        );
+
+        await waitFor(() => expect(trigger).toHaveFocus());
+        document.body.removeChild(trigger);
     });
 });

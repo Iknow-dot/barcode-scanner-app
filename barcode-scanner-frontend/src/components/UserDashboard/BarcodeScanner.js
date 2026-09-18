@@ -20,18 +20,31 @@ const BarcodeScanner = ({open, onScan, onClose, onManualSearch}) => {
     const scannerRef = useRef(null);
     const hasScannedRef = useRef(false);
     const isStartingRef = useRef(false);
+    const closeButtonRef = useRef(null);
+    // The element focused right before the scanner opened, so it can be
+    // restored on close. Captured from `document.activeElement`, so it is
+    // only ever as good as whatever the browser still reports focused at
+    // that moment (see the focus-management effect below).
+    const previouslyFocusedRef = useRef(null);
     const [torchOn, setTorchOn] = useState(false);
     const [torchAvailable, setTorchAvailable] = useState(false);
     const [facingMode, setFacingMode] = useState('environment');
     // classifyCameraError() result ({kind, messageKey, canRetry, detail}), or null
     const [cameraError, setCameraError] = useState(null);
 
-    // Store onScan in a ref so the scanner callback never goes stale
-    // and never causes dependency-chain re-renders
+    // Store onScan/onClose in refs so neither goes stale and neither causes
+    // dependency-chain re-renders (the Escape-to-close effect below reads
+    // onCloseRef instead of depending on `onClose` directly, so it isn't torn
+    // down and rebuilt every time the parent re-renders while open).
     const onScanRef = useRef(onScan);
     useEffect(() => {
         onScanRef.current = onScan;
     }, [onScan]);
+
+    const onCloseRef = useRef(onClose);
+    useEffect(() => {
+        onCloseRef.current = onClose;
+    }, [onClose]);
 
     const stopScanner = useCallback(async () => {
         isStartingRef.current = false;
@@ -150,6 +163,42 @@ const BarcodeScanner = ({open, onScan, onClose, onManualSearch}) => {
         };
     }, [open, facingMode, startScanner, stopScanner]);
 
+    // F3: `role="dialog" aria-modal="true"` promises everything outside is
+    // inert. Every other dialog-shaped surface in this app gets that from
+    // antd's Drawer (portal, mask, focus trap, Escape); this one is
+    // hand-rolled, so it earns the promise itself here: Escape closes it, and
+    // — in the effect below — focus moves onto the close button on open and
+    // is restored to whatever had it on close. A full focus trap (blocking
+    // Tab from ever reaching the browser chrome) is deliberately not
+    // implemented.
+    useEffect(() => {
+        if (!open) return undefined;
+        const handleKeyDown = (event) => {
+            if (event.key === 'Escape') {
+                onCloseRef.current();
+            }
+        };
+        document.addEventListener('keydown', handleKeyDown);
+        return () => document.removeEventListener('keydown', handleKeyDown);
+    }, [open]);
+
+    // Focus management half of F3: move focus into the dialog (the close
+    // button — the sensible target, always present) when it opens, and put
+    // focus back where it was when it closes. Best-effort restore only: if
+    // the previously focused element has since been unmounted (e.g. the
+    // trigger button lives in a view the parent hides while the scanner is
+    // open), `.focus()` on a detached node is a silent no-op rather than an
+    // error.
+    useEffect(() => {
+        if (open) {
+            previouslyFocusedRef.current = document.activeElement;
+            closeButtonRef.current?.focus();
+        } else if (previouslyFocusedRef.current) {
+            previouslyFocusedRef.current.focus();
+            previouslyFocusedRef.current = null;
+        }
+    }, [open]);
+
     // Retry after a start failure — re-runs the same start path the effect
     // above uses, so a successful retry clears cameraError the same way.
     const handleRetry = useCallback(() => {
@@ -185,7 +234,13 @@ const BarcodeScanner = ({open, onScan, onClose, onManualSearch}) => {
         <div className="scanner-overlay" role="dialog" aria-modal="true" aria-label={t.scan}>
             {/* Top bar */}
             <div className="scanner-top-bar">
-                <button type="button" className="scanner-close-btn" aria-label={t.close} onClick={onClose}>
+                <button
+                    type="button"
+                    className="scanner-close-btn"
+                    aria-label={t.close}
+                    onClick={onClose}
+                    ref={closeButtonRef}
+                >
                     <IosIcon name="close" size={20} stroke={2.4}/>
                 </button>
                 <div className="scanner-top-actions">
@@ -195,6 +250,7 @@ const BarcodeScanner = ({open, onScan, onClose, onManualSearch}) => {
                             className="scanner-control-btn"
                             onClick={handleToggleTorch}
                             aria-pressed={torchOn}
+                            aria-label={t.torchToggle}
                             data-testid="scanner-torch-btn"
                         >
                             {torchOn
@@ -207,6 +263,7 @@ const BarcodeScanner = ({open, onScan, onClose, onManualSearch}) => {
                         type="button"
                         className="scanner-control-btn"
                         onClick={handleFlipCamera}
+                        aria-label={t.flipCamera}
                         data-testid="scanner-flip-btn"
                     >
                         <SwapOutlined style={{fontSize: 22, color: '#fff'}}/>
