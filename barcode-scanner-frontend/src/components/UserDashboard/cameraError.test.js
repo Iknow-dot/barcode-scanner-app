@@ -1,4 +1,5 @@
 import {classifyCameraError, CAMERA_ERROR_KINDS} from './cameraError';
+import translations from '../../i18n/translations';
 
 describe('classifyCameraError', () => {
     it('names a denied permission', () => {
@@ -45,5 +46,31 @@ describe('classifyCameraError', () => {
         const keys = [permission, notFound, busy, unknown].map((r) => r.messageKey);
         expect(new Set(keys).size).toBe(4);
         expect(CAMERA_ERROR_KINDS).toEqual(['permission', 'notFound', 'busy', 'unknown']);
+    });
+
+    // F5: BarcodeScanner.js renders `t[cameraError.messageKey]` directly —
+    // a renamed or missing key resolves to `undefined` and the consultant
+    // sees a warning triangle with no message at all. CAMERA_ERROR_KINDS is
+    // exported precisely so this can be checked without hand-copying the
+    // kind -> messageKey map a second time here: one representative error
+    // per kind, run through the real classifier, so this fails the moment a
+    // kind's key drifts out of sync with either locale — including a
+    // messageKey that only ka or only en forgot.
+    it('has a translated, non-empty message for every camera error kind, in both locales', () => {
+        const sampleErrorFor = {
+            permission: {name: 'NotAllowedError'},
+            notFound: {name: 'NotFoundError'},
+            busy: {name: 'NotReadableError'},
+            unknown: {message: 'mystery'},
+        };
+        expect(Object.keys(sampleErrorFor).sort()).toEqual([...CAMERA_ERROR_KINDS].sort());
+
+        CAMERA_ERROR_KINDS.forEach((kind) => {
+            const {messageKey} = classifyCameraError(sampleErrorFor[kind]);
+            ['ka', 'en'].forEach((locale) => {
+                expect(typeof translations[locale][messageKey]).toBe('string');
+                expect(translations[locale][messageKey].length).toBeGreaterThan(0);
+            });
+        });
     });
 });
