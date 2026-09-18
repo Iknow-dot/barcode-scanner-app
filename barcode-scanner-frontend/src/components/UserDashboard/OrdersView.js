@@ -51,6 +51,17 @@ const OrderRow = ({row, t, onOpenOrder, onPrint, onDelete}) => {
     const clickable = row.isResumable;
     const openRow = () => onOpenOrder(row.key);
     const handleKeyDown = (event) => {
+        // The printer/trash buttons stop *pointer* propagation on click, but
+        // a keyboard Enter/Space on either still bubbles here as a keydown
+        // (bubbling can't be stopped per-event-type). Left unchecked, this
+        // branch fires for them too, preventDefault-ing their own
+        // Enter/Space-triggers-click default action and opening the row
+        // instead of printing/deleting. Only react when the row itself is
+        // the target.
+        if (event.target !== event.currentTarget) {
+            event.stopPropagation();
+            return;
+        }
         if (event.key === 'Enter' || event.key === ' ') {
             event.preventDefault();
             openRow();
@@ -62,6 +73,11 @@ const OrderRow = ({row, t, onOpenOrder, onPrint, onDelete}) => {
             className="if-row"
             role={clickable ? 'button' : undefined}
             tabIndex={clickable ? 0 : undefined}
+            // The nested print/delete buttons carry their own aria-labels,
+            // which the default accessible-name algorithm would otherwise
+            // fold into this row's name ("Continue ... Print invoice #1048
+            // Delete #1048"). An explicit label overrides that.
+            aria-label={clickable ? `${t.continueOrder} ${row.name} #${row.key}` : undefined}
             onClick={clickable ? openRow : undefined}
             onKeyDown={clickable ? handleKeyDown : undefined}
             style={clickable ? undefined : {cursor: 'default'}}
@@ -71,7 +87,7 @@ const OrderRow = ({row, t, onOpenOrder, onPrint, onDelete}) => {
             </span>
             <span className="if-row-main">
                 <span className="if-row-title m-order-row-name">{row.name}</span>
-                <span className="if-row-subtitle">{row.meta}</span>
+                <span className="if-row-subtitle m-order-row-meta">{row.meta}</span>
             </span>
             <span className="if-row-trailing">
                 {row.total !== undefined && (
@@ -126,6 +142,12 @@ const OrderRow = ({row, t, onOpenOrder, onPrint, onDelete}) => {
  * antd List of incomplete-drafts + a separate org-wide customer search
  * (UserDashboard.js's fetchIncompleteOrders / renderOrderRow / renderOrdersTab).
  *
+ * `segment` and `query` are controlled props, not local state (F3 fix):
+ * UserDashboard owns both so a tab switch — which unmounts this component,
+ * since it only renders while activeTab === 'orders' — doesn't reset the
+ * consultant's chosen segment or half-typed search. onSegmentChange /
+ * onQueryChange are the setters UserDashboard passes down.
+ *
  * One fetch effect, keyed on [segment, query], covers both the old "my
  * drafts" fetch and the old debounced customer search: an empty query uses
  * segmentQuery (created_by for drafts, org-wide for the other two); a
@@ -150,23 +172,73 @@ const OrderRow = ({row, t, onOpenOrder, onPrint, onDelete}) => {
  * the round trip, which reads as "nothing happened" rather than as loading.
  * While the list is empty and a fetch is in flight, an `.if-spinner`
  * replaces the empty-state text so a genuinely empty segment and a
- * loading-but-empty one never look the same.
+ * loading-but-empty one never look the same. A failed fetch (F2 fix) is a
+ * third, distinct state — `loadError` holds the already-translated message
+ * `api/request.js` built, with a retry action that reuses the fetch — so it
+ * can never be confused with a genuinely empty segment.
  */
-const OrdersView = ({userId, activeOrderId, onOpenOrder, onPrint, onDelete, onNewOrder}) => {
+const OrdersView = ({
+    userId,
+    activeOrderId,
+    segment,
+    onSegmentChange,
+    query,
+    onQueryChange,
+    onOpenOrder,
+    onPrint,
+    onDelete,
+    onNewOrder,
+}) => {
     const {t} = useLanguage();
-    const [segment, setSegment] = useState(ORDER_SEGMENTS[0]);
-    const [query, setQuery] = useState('');
     const [orders, setOrders] = useState([]);
     const [loading, setLoading] = useState(false);
+    const [loadError, setLoadError] = useState('');
     const fetchSeqRef = useRef(0);
     // Sentinel (not a real segment value) so the very first run also counts
     // as "the segment changed" — the initial load should fetch immediately
-    // too, same as the old fetchIncompleteOrders on tab activation.
+    // too, same as the old fetchIncompleteOrders on tab activation. Reset to
+    // the sentinel whenever the `!userId` guard below bails, so a later
+    // fetch (once userId comes back) is treated as fresh rather than as a
+    // same-segment debounce.
     const prevSegmentRef = useRef(null);
+
+    // Shared by the effect below and the failure state's retry action, so
+    // there is exactly one place that builds params and unwraps the
+    // response. Takes the segment/query to fetch explicitly rather than
+    // reading the props, so a retry always refetches for what's on screen
+    // right now.
+    const fetchOrders = async (targetSegment, targetQuery) => {
+        const trimmed = targetQuery.trim();
+        const params = trimmed
+            ? {status: targetSegment, customer_search: trimmed}
+            : segmentQuery(targetSegment, {userId});
+        const seq = ++fetchSeqRef.current;
+        setLoading(true);
+        try {
+            const result = await orderService.getOrders(params);
+            if (seq !== fetchSeqRef.current) return;
+            if (result.success) {
+                setOrders(result.data?.results ?? result.data ?? []);
+                setLoadError('');
+            } else {
+                // Distinct from a genuine empty segment (F2 fix) — result.error
+                // is already a human-readable, translated message (falls back
+                // to t.networkError itself when the request never reached the
+                // server; see api/request.js::extractErrorMessage).
+                setOrders([]);
+                setLoadError(result.error);
+            }
+        } finally {
+            if (seq === fetchSeqRef.current) setLoading(false);
+        }
+    };
 
     useEffect(() => {
         if (!userId) {
             setOrders([]);
+            setLoading(false);
+            setLoadError('');
+            prevSegmentRef.current = null;
             return undefined;
         }
         const segmentChanged = segment !== prevSegmentRef.current;
@@ -174,31 +246,20 @@ const OrdersView = ({userId, activeOrderId, onOpenOrder, onPrint, onDelete, onNe
         if (segmentChanged) {
             // Never let one segment's rows render under another's pill.
             setOrders([]);
-        }
-        setLoading(true);
-        const trimmed = query.trim();
-        const params = trimmed
-            ? {status: segment, customer_search: trimmed}
-            : segmentQuery(segment, {userId});
-
-        const runFetch = async () => {
-            const seq = ++fetchSeqRef.current;
-            try {
-                const result = await orderService.getOrders(params);
-                if (seq !== fetchSeqRef.current) return;
-                setOrders(result.success ? (result.data?.results ?? result.data ?? []) : []);
-            } finally {
-                if (seq === fetchSeqRef.current) setLoading(false);
-            }
-        };
-
-        if (segmentChanged) {
-            runFetch();
+            setLoadError('');
+            fetchOrders(segment, query);
             return undefined;
         }
-        const handle = setTimeout(runFetch, FETCH_DEBOUNCE_MS);
+        const handle = setTimeout(() => fetchOrders(segment, query), FETCH_DEBOUNCE_MS);
         return () => clearTimeout(handle);
+        // fetchOrders is intentionally omitted: it's recreated every render
+        // from the same [segment, query, userId] this effect already
+        // depends on, so including it would not change when the effect
+        // fires — it would only make the dependency list noisier.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [segment, query, userId]);
+
+    const handleRetry = () => fetchOrders(segment, query);
 
     const isSearching = query.trim().length > 0;
     // The ღია (draft) segment is the consultant's own drafts, minus whichever
@@ -231,7 +292,7 @@ const OrdersView = ({userId, activeOrderId, onOpenOrder, onPrint, onDelete, onNe
                     className="if-search-input"
                     variant="borderless"
                     value={query}
-                    onChange={(event) => setQuery(event.target.value)}
+                    onChange={(event) => onQueryChange(event.target.value)}
                     placeholder={t.searchByCustomer}
                     aria-label={t.searchByCustomer}
                 />
@@ -240,7 +301,7 @@ const OrdersView = ({userId, activeOrderId, onOpenOrder, onPrint, onDelete, onNe
                         type="button"
                         className="if-search-trail"
                         aria-label={t.clearSearch}
-                        onClick={() => setQuery('')}
+                        onClick={() => onQueryChange('')}
                     >
                         <IosIcon name="close" size={18} stroke={2.6}/>
                     </button>
@@ -250,7 +311,7 @@ const OrdersView = ({userId, activeOrderId, onOpenOrder, onPrint, onDelete, onNe
                 className="if-seg"
                 block
                 value={segment}
-                onChange={setSegment}
+                onChange={onSegmentChange}
                 options={ORDER_SEGMENTS.map((seg) => ({label: t[segmentLabelKey(seg)], value: seg}))}
             />
             {groups.length > 0 ? (
@@ -279,6 +340,15 @@ const OrdersView = ({userId, activeOrderId, onOpenOrder, onPrint, onDelete, onNe
                 // cleared) or a fresh search, both mid-flight.
                 <div className="if-group if-group-empty" aria-busy="true">
                     <span className="if-spinner"/>
+                </div>
+            ) : loadError ? (
+                // A failed fetch (F2 fix) — also never a genuine empty state,
+                // and never silently identical to it.
+                <div className="if-group if-group-empty m-orders-load-error">
+                    <p className="if-row-subtitle">{loadError}</p>
+                    <button type="button" className="if-btn if-btn-gray" onClick={handleRetry}>
+                        {t.refreshData}
+                    </button>
                 </div>
             ) : (
                 <div className="if-group if-group-empty">{t[emptyCopyKey(segment, isSearching)]}</div>

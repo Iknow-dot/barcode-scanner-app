@@ -1,5 +1,6 @@
-import React from 'react';
+import React, {useState} from 'react';
 import {render, screen, fireEvent, act} from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import OrdersView from './OrdersView';
 import {LanguageProvider} from '../../i18n/LanguageContext';
 import translations from '../../i18n/translations';
@@ -61,6 +62,30 @@ const order = (overrides = {}) => ({
     ...overrides,
 });
 
+// OrdersView.js (F3 fix) no longer owns `segment`/`query` state itself — the
+// real app (UserDashboard.js) lifts both so they survive a tab switch. This
+// harness plays UserDashboard's part: it owns the state and passes it down
+// as controlled props, exactly like the real parent does, so the rest of
+// this suite exercises OrdersView through the same contract production uses.
+// `visible` mimics UserDashboard's `activeTab === 'orders' && <OrdersView/>`
+// conditional mount — toggling it unmounts/remounts OrdersView while the
+// harness (standing in for UserDashboard) keeps its state, which is exactly
+// what a tab switch does to the real component tree.
+const OrdersViewHarness = ({initialSegment = 'draft', initialQuery = '', visible = true, ...rest}) => {
+    const [segment, setSegment] = useState(initialSegment);
+    const [query, setQuery] = useState(initialQuery);
+    if (!visible) return null;
+    return (
+        <OrdersView
+            segment={segment}
+            onSegmentChange={setSegment}
+            query={query}
+            onQueryChange={setQuery}
+            {...rest}
+        />
+    );
+};
+
 const renderView = (props = {}) => {
     const handlers = {
         onOpenOrder: jest.fn(),
@@ -70,7 +95,7 @@ const renderView = (props = {}) => {
     };
     const utils = render(
         <LanguageProvider>
-            <OrdersView userId={7} activeOrderId={null} {...handlers} {...props}/>
+            <OrdersViewHarness userId={7} activeOrderId={null} {...handlers} {...props}/>
         </LanguageProvider>
     );
     return {...handlers, ...utils};
@@ -437,6 +462,171 @@ describe('OrdersView', () => {
 
             expect(screen.getByText('No Timestamp Client')).toBeInTheDocument();
             expect(trailingTime()).toHaveTextContent('');
+        });
+    });
+
+    // F8 (guard half): the `!userId` early return used to bail out of the
+    // effect without resetting `loading`, so a userId that clears while a
+    // fetch is in flight left the spinner stranded forever (the segment is
+    // "empty" — orders got cleared — but loading never goes back to false).
+    it('does not strand the loading spinner if userId clears while mounted', async () => {
+        orderService.getOrders.mockImplementationOnce(() => new Promise(() => {})); // never resolves
+        const handlers = {
+            onOpenOrder: jest.fn(), onPrint: jest.fn(), onDelete: jest.fn(), onNewOrder: jest.fn(),
+        };
+        const {rerender} = render(
+            <LanguageProvider>
+                <OrdersViewHarness userId={7} activeOrderId={null} {...handlers}/>
+            </LanguageProvider>
+        );
+        await flushMicrotasks();
+        expect(document.querySelector('.if-spinner')).toBeInTheDocument();
+
+        rerender(
+            <LanguageProvider>
+                <OrdersViewHarness userId={null} activeOrderId={null} {...handlers}/>
+            </LanguageProvider>
+        );
+
+        expect(document.querySelector('.if-spinner')).toBeNull();
+        expect(screen.getByText(en.noIncompleteOrders)).toBeInTheDocument();
+    });
+
+    // F2: a failed fetch used to fall through to `setOrders([])`, which reads
+    // as the exact same "no orders" copy as a genuinely empty segment — a
+    // consultant on flaky shop Wi-Fi couldn't tell a network failure from
+    // "my drafts are gone."
+    describe('a failed fetch', () => {
+        it('shows a distinct failure state instead of the genuine-empty copy', async () => {
+            orderService.getOrders.mockResolvedValueOnce({success: false, error: en.networkError});
+            renderView();
+            await flushMicrotasks();
+
+            expect(screen.getByText(en.networkError)).toBeInTheDocument();
+            expect(screen.queryByText(en.noIncompleteOrders)).toBeNull();
+        });
+
+        it('offers a retry that refetches and clears the failure state on success', async () => {
+            orderService.getOrders.mockResolvedValueOnce({success: false, error: en.networkError});
+            renderView();
+            await flushMicrotasks();
+            expect(screen.getByText(en.networkError)).toBeInTheDocument();
+
+            orderService.getOrders.mockResolvedValueOnce({
+                success: true,
+                data: [order({id: 70, customer_name: 'Recovered Client'})],
+            });
+            fireEvent.click(screen.getByRole('button', {name: en.refreshData}));
+            await flushMicrotasks();
+
+            expect(screen.getByText('Recovered Client')).toBeInTheDocument();
+            expect(screen.queryByText(en.networkError)).toBeNull();
+        });
+    });
+
+    // F3: OrdersView used to own `segment`/`query` as local state, so every
+    // tab switch (UserDashboard unmounts OrdersView when activeTab !==
+    // 'orders') silently reset both to their defaults. The harness above
+    // stands in for UserDashboard: it owns the state and OrdersView only
+    // renders it, so a tab switch (visible -> false -> true, same harness
+    // instance) must not lose the consultant's choices.
+    it('keeps the chosen segment and search text after a tab switch away and back', async () => {
+        orderService.getOrders.mockResolvedValue({success: true, data: []});
+        const handlers = {
+            onOpenOrder: jest.fn(),
+            onPrint: jest.fn(),
+            onDelete: jest.fn(),
+            onNewOrder: jest.fn(),
+        };
+        const {rerender} = render(
+            <LanguageProvider>
+                <OrdersViewHarness userId={7} activeOrderId={null} {...handlers} visible/>
+            </LanguageProvider>
+        );
+        await flushMicrotasks();
+
+        fireEvent.click(screen.getByRole('radio', {name: en.ordersSegmentConfirmed}));
+        await flushMicrotasks();
+        fireEvent.change(screen.getByPlaceholderText(en.searchByCustomer), {target: {value: 'Beridze'}});
+        await flushDebounce();
+
+        // Tab away: OrdersView unmounts (the harness stays mounted, holding
+        // the state — exactly like UserDashboard's conditional render).
+        rerender(
+            <LanguageProvider>
+                <OrdersViewHarness userId={7} activeOrderId={null} {...handlers} visible={false}/>
+            </LanguageProvider>
+        );
+
+        // Tab back: OrdersView remounts.
+        orderService.getOrders.mockClear();
+        rerender(
+            <LanguageProvider>
+                <OrdersViewHarness userId={7} activeOrderId={null} {...handlers} visible/>
+            </LanguageProvider>
+        );
+        await flushMicrotasks();
+
+        expect(screen.getByRole('radio', {name: en.ordersSegmentConfirmed})).toBeChecked();
+        expect(screen.getByPlaceholderText(en.searchByCustomer)).toHaveValue('Beridze');
+        // The remount still refreshes immediately (existing refresh
+        // behaviour), now scoped to the segment/query that survived.
+        expect(orderService.getOrders).toHaveBeenCalledWith({status: 'confirmed', customer_search: 'Beridze'});
+    });
+
+    // F4: onKeyDown sat on the row and only the nested buttons' onClick
+    // stopped *pointer* propagation — a bubbled Enter/Space from the printer
+    // or trash button still hit the row's handler, which preventDefault'd
+    // the button's own activation and opened the row instead.
+    describe('keyboard activation on the row icons', () => {
+        it('Enter on the printer icon prints and does not open the row', async () => {
+            orderService.getOrders.mockResolvedValueOnce({
+                success: true,
+                data: [order({id: 80, customer_name: 'Keyboard Print Client'})],
+            });
+            const user = userEvent.setup({delay: null});
+            const {onPrint, onOpenOrder} = renderView();
+            await flushMicrotasks();
+
+            const printBtn = screen.getByRole('button', {name: `${en.printInvoice} #80`});
+            printBtn.focus();
+            await user.keyboard('{Enter}');
+
+            expect(onPrint).toHaveBeenCalledWith(80);
+            expect(onOpenOrder).not.toHaveBeenCalled();
+        });
+
+        it('Space on the trash icon opens the delete confirm and does not open the row', async () => {
+            orderService.getOrders.mockResolvedValueOnce({
+                success: true,
+                data: [order({id: 81, customer_name: 'Keyboard Delete Client'})],
+            });
+            const user = userEvent.setup({delay: null});
+            const {onDelete, onOpenOrder} = renderView();
+            await flushMicrotasks();
+
+            const trashBtn = screen.getByRole('button', {name: `${en.delete} #81`});
+            trashBtn.focus();
+            await user.keyboard('[Space]');
+
+            // Space opens the Popconfirm; it must not itself call onDelete or
+            // open the row.
+            expect(await screen.findByRole('button', {name: en.yes})).toBeInTheDocument();
+            expect(onDelete).not.toHaveBeenCalled();
+            expect(onOpenOrder).not.toHaveBeenCalled();
+        });
+
+        it("the row's accessible name is not polluted by the nested print/delete button labels", async () => {
+            orderService.getOrders.mockResolvedValueOnce({
+                success: true,
+                data: [order({id: 82, customer_name: 'Named Row Client'})],
+            });
+            renderView();
+            await flushMicrotasks();
+
+            const row = screen.getByRole('button', {name: new RegExp(`Named Row Client`)});
+            expect(row.getAttribute('aria-label')).not.toMatch(/Print invoice/i);
+            expect(row.getAttribute('aria-label')).not.toMatch(/Delete/i);
         });
     });
 });

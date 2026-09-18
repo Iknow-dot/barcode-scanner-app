@@ -10,8 +10,37 @@
     white-space: nowrap;
 }
 
+/* F9 fix: at phone width the name/meta column can be under 70px (avatar 40 +
+   print 44 + trash 44 + chevron 16 + five 12px gaps + 32px dashboard padding
+   + 32px row padding leave very little of a 393px screen for it). The name
+   above already ellipsizes via .m-order-row-name; without this, the meta
+   line ("#1048 · 3 პროდუქტი") has no such rule and wraps to a second line
+   instead, growing the row under it. Confirmed in a real browser at a
+   393px-equivalent width — see final-fix-report.md. */
+.m-order-row-meta {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 /* Same red used by the cart's own delete action (index.css
    .m-cart-item-controls .if-stepper-btn.m-cart-item-delete). */
 .m-order-row-delete {
     color: var(--if-red-text);
+}
+
+/* F2 fix: a failed fetch's message + retry button, stacked instead of
+   .if-group-empty's plain centred text — .if-btn is full-width by default,
+   so this needs its own narrow, centred column. */
+.m-orders-load-error {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+}
+
+.m-orders-load-error .if-btn {
+    width: auto;
+    height: auto;
+    padding: 8px 20px;
 }

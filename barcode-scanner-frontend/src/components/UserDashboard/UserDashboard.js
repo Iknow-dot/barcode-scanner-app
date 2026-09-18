@@ -88,12 +88,23 @@ const UserDashboard = ({isDark = false, onToggleTheme}) => {
     const [customerModalOpen, setCustomerModalOpen] = useState(false);
     const [changeCustomerOpen, setChangeCustomerOpen] = useState(false);
 
-    // Orders tab: OrdersView owns its own fetch/segment/search state and has
-    // no exposed refresh handle. Bumping this remounts it (via `key` below),
-    // forcing a refetch — used after actions elsewhere in the dashboard
-    // (save-for-later, confirm, delete) change order data that OrdersView may
-    // already hold in its local state. See handleSaveForLater /
-    // handleProceedToPayment / handleDeleteActiveOrder / handleDeleteIncompleteOrder.
+    // Orders tab: OrdersView owns its own fetch state, but not its segment/
+    // search state (F3 fix) — those are lifted here so they survive both a
+    // tab switch (OrdersView only renders while activeTab === 'orders', so
+    // it unmounts on every switch away) and the refresh remount below.
+    // 'draft' is the literal ORDER_SEGMENTS[0] value (settled in task 3's
+    // review: use the literal, not the array lookup).
+    const [ordersSegment, setOrdersSegment] = useState('draft');
+    const [ordersSearch, setOrdersSearch] = useState('');
+
+    // OrdersView has no exposed refresh handle. Bumping this remounts it
+    // (via `key` below), forcing a refetch — used after actions elsewhere in
+    // the dashboard (save-for-later, confirm, delete) change order data that
+    // OrdersView may already hold in its local state. See handleSaveForLater
+    // / handleProceedToPayment / handleDeleteActiveOrder /
+    // handleDeleteIncompleteOrder. The remount still refetches with
+    // whatever segment/search survived above, since those no longer live
+    // inside OrdersView.
     const [ordersViewKey, setOrdersViewKey] = useState(0);
     const refreshOrdersView = useCallback(() => setOrdersViewKey((key) => key + 1), []);
 
@@ -903,6 +914,10 @@ const UserDashboard = ({isDark = false, onToggleTheme}) => {
                             key={ordersViewKey}
                             userId={currentUserId}
                             activeOrderId={activeOrder?.id}
+                            segment={ordersSegment}
+                            onSegmentChange={setOrdersSegment}
+                            query={ordersSearch}
+                            onQueryChange={setOrdersSearch}
                             onOpenOrder={handleContinueOrder}
                             onPrint={(orderId) => printInvoice(orderId, t, notify)}
                             onDelete={handleDeleteIncompleteOrder}
