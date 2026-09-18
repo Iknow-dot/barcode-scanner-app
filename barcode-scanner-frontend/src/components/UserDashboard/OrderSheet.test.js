@@ -18,7 +18,7 @@ jest.mock('../../api', () => ({
 
 const en = translations.en;
 
-// jsdom lacks these browser APIs that antd's Drawer, Dropdown and Modal touch.
+// jsdom lacks these browser APIs that antd's Drawer (under IosSheet/IosActionSheet) touches.
 beforeAll(() => {
     window.matchMedia = window.matchMedia || ((query) => ({
         matches: false, media: query, onchange: null,
@@ -148,19 +148,27 @@ describe('OrderSheet', () => {
         expect(screen.getByRole('dialog', {name: en.cart})).toBeInTheDocument();
     });
 
-    it('confirms the order from the delivery step after asking', async () => {
+    // Task: the confirm popover is gone — tapping Confirm proceeds on the
+    // first tap. Fails if handleConfirm still waits on any Yes/No gate, or if
+    // onProceedToPayment isn't reached without one.
+    it('confirms the order from the delivery step on the first tap, with no popover gate', async () => {
         const {onProceedToPayment} = renderSheet();
         fireEvent.click(screen.getByRole('button', {name: en.nextStep}));
         expect(screen.getByText(en.total)).toBeInTheDocument();
+
         fireEvent.click(screen.getByRole('button', {name: en.confirmOrder}));
-        expect(await screen.findByText(en.confirmProceedToPayment)).toBeInTheDocument();
-        fireEvent.click(screen.getByRole('button', {name: en.yes}));
+
         await waitFor(() => expect(onProceedToPayment).toHaveBeenCalledTimes(1));
+        expect(screen.queryByText(en.yes)).not.toBeInTheDocument();
+        expect(screen.queryByText(en.no)).not.toBeInTheDocument();
     });
 
     it('flushes a pending delivery edit before confirming, and waits for it to land', async () => {
         // F6: confirming used to unmount DeliveryStep immediately, whose own
-        // unmount-flush then PATCHed an order already marked confirmed.
+        // unmount-flush then PATCHed an order already marked confirmed. Now
+        // that Confirm has no popover gate, this exercises handleConfirm's
+        // real path directly: a single tap must still await the flush before
+        // calling onProceedToPayment, not just fire it eagerly.
         let resolveUpdate;
         orderService.updateOrder.mockReturnValue(new Promise((resolve) => { resolveUpdate = resolve; }));
         const {onProceedToPayment} = renderSheet();
@@ -171,7 +179,6 @@ describe('OrderSheet', () => {
         // No blur: the debounce timer is still pending when Confirm is tapped.
 
         fireEvent.click(screen.getByRole('button', {name: en.confirmOrder}));
-        fireEvent.click(await screen.findByRole('button', {name: en.yes}));
 
         expect(orderService.updateOrder).toHaveBeenCalledWith(42, {notes: 'Call first'});
         expect(onProceedToPayment).not.toHaveBeenCalled();
@@ -186,28 +193,50 @@ describe('OrderSheet', () => {
         expect(screen.getByRole('button', {name: en.confirmOrder})).toBeDisabled();
     });
 
+    // Task: the ⋯ menu is now an IosActionSheet (rows are plain buttons, not
+    // antd menuitems). Fails if the sheet doesn't open, or if selecting the
+    // row doesn't call the handler.
     it('saves the order for later from the ⋯ menu', async () => {
         const {onSaveForLater} = renderSheet();
         fireEvent.click(screen.getByRole('button', {name: en.moreActions}));
-        fireEvent.click(await screen.findByRole('menuitem', {name: new RegExp(en.saveForLater)}));
+        fireEvent.click(await screen.findByRole('button', {name: en.saveForLater}));
         expect(onSaveForLater).toHaveBeenCalledTimes(1);
     });
 
     it('changes the customer from the ⋯ menu', async () => {
         const {onChangeCustomer} = renderSheet();
         fireEvent.click(screen.getByRole('button', {name: en.moreActions}));
-        fireEvent.click(await screen.findByRole('menuitem', {name: new RegExp(en.changeCustomer)}));
+        fireEvent.click(await screen.findByRole('button', {name: en.changeCustomer}));
         expect(onChangeCustomer).toHaveBeenCalledTimes(1);
     });
 
-    it('deletes the order from the ⋯ menu only after confirming', async () => {
+    // Task: instant delete — the destructive row in the action sheet IS the
+    // deliberate gesture, so selecting it calls onDeleteOrder directly on the
+    // first tap. Fails if onDeleteOrder needs a second confirming tap, or if
+    // it isn't called at all.
+    it('deletes the order from the ⋯ menu on the first tap, with no confirm step', async () => {
         const {onDeleteOrder} = renderSheet();
         fireEvent.click(screen.getByRole('button', {name: en.moreActions}));
-        fireEvent.click(await screen.findByRole('menuitem', {name: new RegExp(en.deleteOrder)}));
-        const confirm = await screen.findByRole('dialog', {name: en.confirmDeleteOrder});
-        expect(onDeleteOrder).not.toHaveBeenCalled();
-        fireEvent.click(within(confirm).getByRole('button', {name: en.yes}));
-        await waitFor(() => expect(onDeleteOrder).toHaveBeenCalledTimes(1));
+        const deleteRow = await screen.findByRole('button', {name: en.deleteOrder});
+
+        fireEvent.click(deleteRow);
+
+        expect(onDeleteOrder).toHaveBeenCalledTimes(1);
+    });
+
+    // Proves no confirmation step remains anywhere in this screen for either
+    // removed popover (delete-order, confirm-order) — fails if a
+    // modal.confirm, Popconfirm or any other Yes/No gate is reintroduced.
+    // confirmDeleteOrder/confirmProceedToPayment were those popovers' only
+    // consumers and are gone from the translations now, so this checks for
+    // the shared yes/no strings instead of a since-deleted key.
+    it('deleting the order leaves no Yes/No confirmation in the document', async () => {
+        renderSheet();
+        fireEvent.click(screen.getByRole('button', {name: en.moreActions}));
+        fireEvent.click(await screen.findByRole('button', {name: en.deleteOrder}));
+
+        expect(screen.queryByText(en.yes)).not.toBeInTheDocument();
+        expect(screen.queryByText(en.no)).not.toBeInTheDocument();
     });
 
     it('closes from the close button', () => {

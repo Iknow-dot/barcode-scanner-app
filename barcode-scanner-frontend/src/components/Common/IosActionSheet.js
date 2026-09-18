@@ -12,8 +12,12 @@ import IosSheet from './IosSheet';
  *
  * `actions`: [{key, label, icon?, destructive?, onSelect}]. Selecting a row
  * calls its `onSelect` and then closes the sheet; Cancel only closes.
+ *
+ * `level` (default 0) passes straight through to IosSheet, for a caller that
+ * opens this over a sheet already on screen (see IosSheet.js's own `level`
+ * doc) — e.g. an order's own ⋯ menu, opened while the order sheet is up.
  */
-const IosActionSheet = ({open, onClose, title, actions = [], cancelLabel}) => {
+const IosActionSheet = ({open, onClose, title, actions = [], cancelLabel, level = 0}) => {
     const {t} = useLanguage();
 
     const select = (action) => {
@@ -22,7 +26,7 @@ const IosActionSheet = ({open, onClose, title, actions = [], cancelLabel}) => {
     };
 
     return (
-        <IosSheet open={open} onClose={onClose} title={title}>
+        <IosSheet open={open} onClose={onClose} title={title} level={level}>
             <ul className="if-group if-action-sheet-group">
                 {actions.map((action) => {
                     const hintId = action.destructive ? `if-action-sheet-hint-${action.key}` : undefined;

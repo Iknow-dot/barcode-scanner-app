@@ -28,6 +28,7 @@ import TabBar from './TabBar';
 import ActiveOrderBar, {ACTIVE_ORDER_ICON_SELECTOR} from './ActiveOrderBar';
 import {nextTabAction, openCatalogSearchActions} from './tabSelection';
 import IosIcon from '../Common/IosIcon';
+import IosSheet from '../Common/IosSheet';
 import groupItemsBySku from './groupItemsBySku';
 import {hasProductResult} from './stockStatus';
 import inheritFromGroup from './inheritFromGroup';
@@ -52,14 +53,12 @@ import {
 import {isOffline} from '../../utils/connectivity';
 import {
     Collapse,
-    Modal,
     Result,
     theme
 } from "antd";
 import {
     ShoppingOutlined,
     InboxOutlined,
-    CheckCircleFilled,
 } from "@ant-design/icons";
 
 const UserDashboard = ({isDark = false, onToggleTheme}) => {
@@ -178,6 +177,18 @@ const UserDashboard = ({isDark = false, onToggleTheme}) => {
 
     // Order sheet (the active order's cart and delivery steps)
     const [orderDrawerVisible, setOrderDrawerVisible] = useState(false);
+
+    // The order-confirmed result sheet (Print / Done) that follows a
+    // successful confirm. Not a confirmation — there's nothing to accept or
+    // cancel out of, it's a result with a follow-up action — so it keeps
+    // both choices rather than collapsing to a single dismiss. Split into an
+    // open flag and the id separately (rather than nulling the id to close)
+    // so the confirmed order's id is still there for `afterClose` to read
+    // once the sheet has actually finished animating away — see
+    // clearConfirmedOrder below and ProductSheet's afterClose for the same
+    // pattern.
+    const [confirmedOrderSheetOpen, setConfirmedOrderSheetOpen] = useState(false);
+    const [confirmedOrderId, setConfirmedOrderId] = useState(null);
 
     // Product sheet (opened by every successful lookup) and the empty cart
     // sheet (the idle active-order bar). addFlowRef holds a pick while the
@@ -609,7 +620,7 @@ const UserDashboard = ({isDark = false, onToggleTheme}) => {
             }
             return;
         }
-        // Reset order panel state immediately — the modal lives on the
+        // Reset order panel state immediately — the result sheet lives on the
         // dashboard, not on the panel.
         setOrderMode(false);
         activeOrderRef.current = null;
@@ -617,15 +628,19 @@ const UserDashboard = ({isDark = false, onToggleTheme}) => {
         setOrderDrawerVisible(false);
         refreshOrdersView();
         refreshSnapshot();
-        Modal.confirm({
-            title: t.orderConfirmedSuccess,
-            content: t.orderConfirmedPrintPrompt(orderId),
-            icon: <CheckCircleFilled style={{color: 'var(--if-green-text)'}}/>,
-            okText: t.printInvoice,
-            cancelText: t.done,
-            okType: 'primary',
-            onOk: () => printInvoice(orderId, t, notify),
-        });
+        setConfirmedOrderId(orderId);
+        setConfirmedOrderSheetOpen(true);
+    };
+
+    // Done just dismisses; the id itself is cleared only once the close
+    // animation actually finishes (see confirmedOrderSheetOpen's own
+    // comment), so the sheet's content doesn't blank out mid-transition.
+    const closeConfirmedOrderSheet = () => setConfirmedOrderSheetOpen(false);
+    const clearConfirmedOrder = () => setConfirmedOrderId(null);
+
+    const handlePrintConfirmedOrder = () => {
+        printInvoice(confirmedOrderId, t, notify);
+        closeConfirmedOrderSheet();
     };
 
     const handleDeleteActiveOrder = async () => {
@@ -667,11 +682,11 @@ const UserDashboard = ({isDark = false, onToggleTheme}) => {
         }
     };
 
-    // OrdersView's own row already stops the confirm-popup's propagation
-    // before calling onDelete (see OrdersView.js's OrderRow), so this takes
-    // just the id. It has no setter into OrdersView's local `orders` state,
-    // so it asks the view to refetch via refreshOrdersView instead of
-    // pruning a list in place.
+    // Instant delete — the swipe that revealed the row's red action already
+    // IS the confirming gesture, so onDelete fires straight from the tap (see
+    // OrdersView.js's OrderRow) and this takes just the id. It has no setter
+    // into OrdersView's local `orders` state, so it asks the view to refetch
+    // via refreshOrdersView instead of pruning a list in place.
     const handleDeleteIncompleteOrder = async (orderId) => {
         const result = await orderService.deleteOrder(orderId);
         if (result.success) {
@@ -967,6 +982,34 @@ const UserDashboard = ({isDark = false, onToggleTheme}) => {
                 onScan={handleEmptyCartScan}
                 onManualSearch={handleEmptyCartSearch}
             />
+
+            {/* Order-confirmed result: a native sheet, not a Modal.confirm —
+                it's a result with a follow-up action rather than something to
+                accept or cancel out of, so it keeps both Print and Done. */}
+            <IosSheet
+                open={confirmedOrderSheetOpen}
+                onClose={closeConfirmedOrderSheet}
+                afterClose={clearConfirmedOrder}
+                title={t.orderConfirmedSuccess}
+                bottomBarLayout="row"
+                bottomBar={(
+                    <>
+                        <button type="button" className="if-btn if-btn-gray" onClick={closeConfirmedOrderSheet}>
+                            {t.done}
+                        </button>
+                        <button type="button" className="if-btn if-btn-primary" onClick={handlePrintConfirmedOrder}>
+                            {t.printInvoice}
+                        </button>
+                    </>
+                )}
+            >
+                <div className="if-empty">
+                    <div className="if-empty-icon" aria-hidden="true">
+                        <IosIcon name="check" size={40} stroke={2.2}/>
+                    </div>
+                    <p className="if-empty-text">{t.orderConfirmedPrintPrompt(confirmedOrderId)}</p>
+                </div>
+            </IosSheet>
 
             {/* ===== Mobile-First Layout ===== */}
             <div className="m-dashboard">

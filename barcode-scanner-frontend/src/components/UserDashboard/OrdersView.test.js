@@ -15,7 +15,7 @@ jest.mock('../../api/services', () => ({
     orderService: {getOrders: jest.fn()},
 }));
 
-// jsdom lacks these browser APIs that antd's Segmented and Popconfirm touch.
+// jsdom lacks these browser APIs that antd's Segmented touches.
 beforeAll(() => {
     window.matchMedia = window.matchMedia || ((query) => ({
         matches: false, media: query, onchange: null,
@@ -386,7 +386,11 @@ describe('OrdersView', () => {
         expect(onOpenOrder).not.toHaveBeenCalled();
     });
 
-    it('the trash icon deletes a draft behind its confirm and never calls onOpenOrder', async () => {
+    // The swipe that revealed this red action already IS the confirming
+    // gesture (task: instant delete, no confirmation step) — a single tap
+    // must call onDelete right away. Fails if onDelete isn't called on the
+    // first click, or needs a second click/dialog interaction first.
+    it('the trash icon deletes a draft instantly, on the first tap, and never calls onOpenOrder', async () => {
         orderService.getOrders.mockResolvedValue({
             success: true,
             data: [order({id: 45, customer_name: 'Delete Client'})],
@@ -395,11 +399,27 @@ describe('OrdersView', () => {
         await flushDebounce();
 
         fireEvent.click(screen.getByRole('button', {name: `${en.delete} #45`}));
-        expect(onDelete).not.toHaveBeenCalled();
-        fireEvent.click(await screen.findByRole('button', {name: en.yes}));
 
         expect(onDelete).toHaveBeenCalledWith(45);
         expect(onOpenOrder).not.toHaveBeenCalled();
+    });
+
+    // Proves no confirmation step remains anywhere in this screen — fails if
+    // a Popconfirm (or any other Yes/No gate) is reintroduced in front of
+    // the delete tap.
+    it('deleting an order leaves no Yes/No confirmation in the document', async () => {
+        orderService.getOrders.mockResolvedValue({
+            success: true,
+            data: [order({id: 145, customer_name: 'No Confirm Client'})],
+        });
+        renderView();
+        await flushDebounce();
+
+        fireEvent.click(screen.getByRole('button', {name: `${en.delete} #145`}));
+
+        expect(screen.queryByText(en.yes)).not.toBeInTheDocument();
+        expect(screen.queryByText(en.no)).not.toBeInTheDocument();
+        expect(screen.queryByText(en.confirmDelete)).not.toBeInTheDocument();
     });
 
     it('a confirmed row offers no trash icon', async () => {
@@ -638,7 +658,7 @@ describe('OrdersView', () => {
             expect(onOpenOrder).not.toHaveBeenCalled();
         });
 
-        it('Space on the trash icon opens the delete confirm and does not open the row', async () => {
+        it('Space on the trash icon deletes instantly and does not open the row', async () => {
             orderService.getOrders.mockResolvedValueOnce({
                 success: true,
                 data: [order({id: 81, customer_name: 'Keyboard Delete Client'})],
@@ -651,10 +671,9 @@ describe('OrdersView', () => {
             trashBtn.focus();
             await user.keyboard('[Space]');
 
-            // Space opens the Popconfirm; it must not itself call onDelete or
-            // open the row.
-            expect(await screen.findByRole('button', {name: en.yes})).toBeInTheDocument();
-            expect(onDelete).not.toHaveBeenCalled();
+            // Space activates the button like a click — no confirm gate to
+            // pass through first.
+            expect(onDelete).toHaveBeenCalledWith(81);
             expect(onOpenOrder).not.toHaveBeenCalled();
         });
 

@@ -1,9 +1,9 @@
 import React, {useCallback, useContext, useEffect, useMemo, useRef, useState} from 'react';
-import {Dropdown, Modal, Popconfirm} from 'antd';
 import {DeleteOutlined, SaveOutlined, UserSwitchOutlined} from '@ant-design/icons';
 import AuthContext from '../Auth/AuthContext';
 import {useLanguage} from '../../i18n/LanguageContext';
 import displayCustomerName from '../../utils/orderDisplay';
+import IosActionSheet from '../Common/IosActionSheet';
 import IosIcon from '../Common/IosIcon';
 import IosSheet from '../Common/IosSheet';
 import CartItemRow from './CartItemRow';
@@ -46,8 +46,6 @@ const OrderSheet = ({
 }) => {
     const {t} = useLanguage();
     const {authData} = useContext(AuthContext);
-    // Rendered through a context holder so the confirm follows the app theme.
-    const [modal, modalContextHolder] = Modal.useModal();
     const discountConfig = useMemo(() => ({
         canApplyDiscount: !!authData?.user?.can_apply_discount,
         maxDiscountPercent: parseFloat(authData?.user?.max_discount_percent || 0),
@@ -57,6 +55,8 @@ const OrderSheet = ({
 
     const [localOrder, setLocalOrder] = useState(order);
     const [step, setStep] = useState(1);
+    // The cart's ⋯ menu, an IosActionSheet stacked over this sheet (level 1).
+    const [menuOpen, setMenuOpen] = useState(false);
     // Loaded by DeliveryStep with a function that flushes its pending
     // debounced fields; called before confirming so a comment typed just
     // before the tap reaches the order ahead of the confirm PATCH, instead
@@ -120,36 +120,27 @@ const OrderSheet = ({
     const header = orderStepHeader(step, t);
     const giftCount = cartGiftCount(items);
 
+    // Confirming is instant — no popover gate. The flush still runs first: a
+    // comment typed just before the tap must reach the order ahead of the
+    // confirm PATCH (see deliveryFlushRef above), not race the unmount flush
+    // against an order already confirmed.
     const handleConfirm = async () => {
         if (deliveryFlushRef.current) await deliveryFlushRef.current();
         onProceedToPayment();
     };
 
-    const handleDeleteClick = () => {
-        modal.confirm({
-            title: t.confirmDeleteOrder,
-            okText: t.yes,
-            cancelText: t.no,
-            okButtonProps: {danger: true},
-            onOk: onDeleteOrder,
-        });
-    };
-
-    const menu = {
-        items: [
-            {key: 'save', label: t.saveForLater, icon: <SaveOutlined/>, onClick: onSaveForLater},
-            {key: 'change-customer', label: t.changeCustomer, icon: <UserSwitchOutlined/>, onClick: onChangeCustomer},
-            {type: 'divider'},
-            {key: 'delete', label: t.deleteOrder, icon: <DeleteOutlined/>, danger: true, onClick: handleDeleteClick},
-        ],
-    };
+    // Delete is instant too — the swipe/tap into this destructive row IS the
+    // deliberate gesture, so selecting it calls onDeleteOrder directly.
+    const menuActions = [
+        {key: 'save', label: t.saveForLater, icon: <SaveOutlined/>, onSelect: onSaveForLater},
+        {key: 'change-customer', label: t.changeCustomer, icon: <UserSwitchOutlined/>, onSelect: onChangeCustomer},
+        {key: 'delete', label: t.deleteOrder, icon: <DeleteOutlined/>, destructive: true, onSelect: onDeleteOrder},
+    ];
 
     const trailing = step === 1 ? (
-        <Dropdown menu={menu} trigger={['click']} placement="bottomRight">
-            <button type="button" className="if-glass-btn" aria-label={t.moreActions}>
-                <IosIcon name="more" size={20}/>
-            </button>
-        </Dropdown>
+        <button type="button" className="if-glass-btn" aria-label={t.moreActions} onClick={() => setMenuOpen(true)}>
+            <IosIcon name="more" size={20}/>
+        </button>
     ) : null;
 
     const total = (
@@ -180,21 +171,14 @@ const OrderSheet = ({
                 <span className="if-sheet-total-label">{t.total}</span>
                 {total}
             </div>
-            <Popconfirm
-                title={t.confirmProceedToPayment}
-                onConfirm={handleConfirm}
-                okText={t.yes}
-                cancelText={t.no}
+            <button
+                type="button"
+                className="if-btn if-btn-primary"
                 disabled={!hasItems || confirmDisabled}
+                onClick={handleConfirm}
             >
-                <button
-                    type="button"
-                    className="if-btn if-btn-primary"
-                    disabled={!hasItems || confirmDisabled}
-                >
-                    {t.confirmOrder}
-                </button>
-            </Popconfirm>
+                {t.confirmOrder}
+            </button>
         </>
     );
 
@@ -205,7 +189,6 @@ const OrderSheet = ({
 
     return (
         <>
-        {modalContextHolder}
         <IosSheet
             open={open}
             onClose={onClose}
@@ -268,6 +251,12 @@ const OrderSheet = ({
                 />
             )}
         </IosSheet>
+        <IosActionSheet
+            open={menuOpen}
+            onClose={() => setMenuOpen(false)}
+            actions={menuActions}
+            level={1}
+        />
         </>
     );
 };

@@ -481,8 +481,6 @@ const translations = {
         tokenLabel_item_line_total: 'ჯამი',
 
         orderResumedExisting: 'ამ კლიენტს უკვე ჰქონდა ღია შეკვეთა — გაგრძელდა არსებული',
-        confirmDeleteOrder: 'გსურთ შეკვეთის წაშლა?',
-        confirmProceedToPayment: 'გსურთ შეკვეთის დადასტურება და გადახდაზე გადასვლა?',
         incompleteOrders: 'ღია შეკვეთები',
         noIncompleteOrders: 'დღეს ღია შეკვეთები არ არის',
         continueOrder: 'გაგრძელება',
@@ -1171,8 +1169,6 @@ const translations = {
         tokenLabel_item_line_total: 'Line total',
 
         orderResumedExisting: 'This client already had an open order — resumed it',
-        confirmDeleteOrder: 'Are you sure you want to delete this order?',
-        confirmProceedToPayment: 'Are you sure you want to confirm the order and proceed to payment?',
         incompleteOrders: 'Incomplete Orders',
         noIncompleteOrders: 'No incomplete orders today',
         continueOrder: 'Continue',

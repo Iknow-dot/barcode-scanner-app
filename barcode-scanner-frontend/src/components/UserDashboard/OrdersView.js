@@ -1,5 +1,5 @@
 import React, {useEffect, useRef, useState} from 'react';
-import {Input, Popconfirm, Segmented} from 'antd';
+import {Input, Segmented} from 'antd';
 import {orderService} from '../../api/services';
 import {useLanguage} from '../../i18n/LanguageContext';
 import IosIcon from '../Common/IosIcon';
@@ -49,19 +49,22 @@ const timeLabel = (time, t) => {
 /**
  * One order row: monogram (or a cart glyph for a retail order), name + id/
  * count meta, a trailing total-over-time column and a chevron (drafts only).
- * The printer action (any status) and — drafts only — a delete action
- * behind a confirm sit in an `.if-swipe-actions` panel *behind* the row,
- * revealed by swiping the row left (iOS Mail/Messages idiom), by hovering
- * it, or by focusing into the panel with a keyboard (`:focus-within` in
- * ios.css) — so the actions stay reachable without a gesture. `isOpen` is
- * owned by OrdersView (only one row's actions are ever open at a time); this
- * component only decides the *live* drag offset while a touch is in
+ * The printer action (any status) and — drafts only — a delete action sit in
+ * an `.if-swipe-actions` panel *behind* the row, revealed by swiping the row
+ * left (iOS Mail/Messages idiom), by hovering it, or by focusing into the
+ * panel with a keyboard (`:focus-within` in ios.css) — so the actions stay
+ * reachable without a gesture. The swipe reveal already IS the deliberate
+ * gesture, so delete is instant on tap — no popover gate behind it. `isOpen`
+ * is owned by OrdersView (only one row's actions are ever open at a time);
+ * this component only decides the *live* drag offset while a touch is in
  * progress, via the pure functions in orderRowSwipe.js (nextSwipeAxis /
  * swipeRevealOffset / swipeRestsOpen) rather than doing that arithmetic
  * inline. Only a draft row is tappable on its own (resumes it); the actions
- * are now DOM siblings of the row rather than nested inside it, so — unlike
- * the old inline buttons — their clicks/keydowns never bubble into the
- * row's own handlers at all (no stopPropagation needed).
+ * are DOM siblings of the row rather than nested inside it, so — unlike the
+ * old inline buttons — their clicks/keydowns never bubble into the row's own
+ * handlers at all. Delete's own onClick still calls stopPropagation
+ * explicitly, belt-and-braces on top of that DOM structure, so tapping it
+ * can never also open the order.
  */
 const OrderRow = ({row, t, isOpen, onOpen, onClose, onOpenOrder, onPrint, onDelete}) => {
     const clickable = row.isResumable;
@@ -171,20 +174,17 @@ const OrderRow = ({row, t, isOpen, onOpen, onClose, onOpenOrder, onPrint, onDele
                     <IosIcon name="print" size={18} stroke={2}/>
                 </button>
                 {row.isResumable && (
-                    <Popconfirm
-                        title={t.confirmDelete}
-                        onConfirm={() => onDelete(row.key)}
-                        okText={t.yes}
-                        cancelText={t.no}
+                    <button
+                        type="button"
+                        className="if-stepper-btn m-order-row-delete"
+                        aria-label={`${t.delete} #${row.key}`}
+                        onClick={(event) => {
+                            event.stopPropagation();
+                            onDelete(row.key);
+                        }}
                     >
-                        <button
-                            type="button"
-                            className="if-stepper-btn m-order-row-delete"
-                            aria-label={`${t.delete} #${row.key}`}
-                        >
-                            <IosIcon name="trash" size={18}/>
-                        </button>
-                    </Popconfirm>
+                        <IosIcon name="trash" size={18}/>
+                    </button>
                 )}
             </div>
             <div
@@ -377,17 +377,14 @@ const OrdersView = ({
 
     // Tapping outside the open row, or scrolling the page (the page itself
     // scrolls — see index.css's .m-dashboard-body comment — there is no
-    // inner scroll container here to listen on instead), closes it. A click
-    // landing inside the open row's own .ant-popconfirm is deliberately left
-    // alone: Popconfirm portals its Yes/No buttons to document.body by
-    // default, so DOM-wise they are outside .if-swipe-row even though
-    // they're clearly still "using this row's actions" — the same class of
-    // trap sheetSwipe.js documents for a touch starting in a portaled popup,
-    // just hitting a click listener here instead of a touch one.
+    // inner scroll container here to listen on instead), closes it. The
+    // delete button's own click carries stopPropagation, so a delete tap
+    // never reaches this listener as an "outside" click in the first place —
+    // no portaled-popup carve-out is needed any more now that delete is
+    // instant instead of routed through a Popconfirm.
     useEffect(() => {
         if (openRowKey === null) return undefined;
         const closeIfOutside = (event) => {
-            if (event.target.closest('.ant-popconfirm')) return;
             const hitRowKey = event.target.closest('.if-swipe-row')?.dataset.orderRowKey;
             if (hitRowKey !== String(openRowKey)) setOpenRowKey(null);
         };
