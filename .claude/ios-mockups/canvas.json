@@ -1,0 +1,27 @@
+{
+  "artboards": [
+    { "file": "Guide.dc.html", "title": "Apple HIG applied", "x": 0, "y": 0, "w": 860, "h": 1760 },
+    { "file": "Main.dc.html", "title": "Home", "x": 980, "y": 0, "w": 393, "h": 852 },
+    { "file": "Catalog.dc.html", "title": "Catalog", "x": 1453, "y": 0, "w": 393, "h": 852 },
+    { "file": "Orders.dc.html", "title": "Orders", "x": 1926, "y": 0, "w": 393, "h": 852 },
+    { "file": "Scanner.dc.html", "title": "Scanner", "x": 980, "y": 992, "w": 393, "h": 852 },
+    { "file": "Product.dc.html", "title": "Product", "x": 1453, "y": 992, "w": 393, "h": 852 },
+    { "file": "Cart.dc.html", "title": "Cart 1/2", "x": 1926, "y": 992, "w": 393, "h": 852 },
+    { "file": "Delivery.dc.html", "title": "Delivery 2/2", "x": 2399, "y": 992, "w": 393, "h": 852 },
+    { "file": "ClientLookupTabs3.dc.html", "title": "Lookup B: 3 tabs (default)", "x": 980, "y": 1984, "w": 393, "h": 852 },
+    { "file": "ClientCreate.dc.html", "title": "New client", "x": 1453, "y": 1984, "w": 393, "h": 852 },
+    { "file": "CartEmpty.dc.html", "title": "Cart: empty", "x": 1926, "y": 1984, "w": 393, "h": 852 },
+    { "file": "MainEmptyCart.dc.html", "title": "Home: empty cart", "x": 2399, "y": 1984, "w": 393, "h": 852 },
+    { "file": "ClientLookup.dc.html", "title": "Lookup A: one field", "x": 980, "y": 2976, "w": 393, "h": 852 },
+    { "file": "ClientLookupTabs2.dc.html", "title": "Lookup C: 2 tabs", "x": 1453, "y": 2976, "w": 393, "h": 852 },
+    { "file": "ClientLookupNumpad.dc.html", "title": "Lookup D: number pad", "x": 1926, "y": 2976, "w": 393, "h": 852 }
+  ],
+  "annotations": [
+    { "id": "tabs-note", "x": 2399, "y": 0, "w": 300, "text": "Tabs row\nThe tab bar holds only places: Home, Orders, and the trailing search tab for the catalog. Scanning is Home's one prominent button. The active order sits above the tab bar on every tab.\n\nOrders adds status segments; today that tab lists only open orders." },
+    { "id": "scan-note", "x": 2872, "y": 992, "w": 300, "text": "Scan to checkout\nThe scanner is full-screen; product, cart and delivery are sheets. On the product sheet you pick a warehouse row (checkmark) and set quantity with one stepper, replacing today's per-row + buttons.\n\nSave for later and delete order move into the cart's ⋯ menu." },
+    { "id": "cart-empty-note", "x": 2872, "y": 1984, "w": 300, "text": "Empty cart\nNo order yet: no client and no products. The sheet says the cart is empty and offers the two ways to add a product: scanning is the one prominent button, manual search sits under it. There is no ⋯ menu, since there is no order to save or delete.\n\nშემდეგი stays disabled until the first product is added, as it is today. The total reads 0.00 ₾ rather than hiding, so the bar keeps its place.\n\nHome stays as it always is, with scanning already its prominent button. The active-order bar stays in place but idle: a soft cart icon, no badge (iOS hides zero badges), კალათა · ცარიელია. It is quiet but not grayed out: gray would read as disabled, and tapping it still opens the empty cart." },
+    { "id": "client-note", "x": 2872, "y": 2976, "w": 300, "text": "Client\nLookup uses 3 tabs: ID, phone and name. The selected tab labels the field and picks the keyboard, the number pad for ID and phone and letters for a name (3+ characters). The create form puts every label above its field and stacks the phone fields.\n\nThe alternatives we considered (A, C, D) are in the row below." },
+    { "id": "lookup-alts", "x": 2399, "y": 2976, "w": 300, "text": "Lookup alternatives\nB (3 tabs, above) is the default. A, B and C show the same name search so they compare directly; D shows the number pad, which is its whole point.\n\nA · One field: fewest controls. Digits search ID and phone, letters search names. Opens the letters keyboard, so digits take a tap on 123.\n\nB · 3 tabs (chosen): explicit, and the ID and phone tabs open the number pad. 1C searches ID and phone the same way, so those two tabs return the same client either way.\n\nC · 2 tabs: matches the two searches 1C has and still picks the keyboard. A name search starts with a tap.\n\nD · Number pad first: one field, fastest for IDs and phones. The აბგ key switches to letters for a name." }
+  ],
+  "launch": { "view": "canvas" }
+}

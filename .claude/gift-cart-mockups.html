@@ -1,0 +1,533 @@
+<meta charset="utf-8">
+<title>Gift marking — cart UI options</title>
+<style>
+  :root {
+    --bg: #f2f5f9;
+    --surface: #ffffff;
+    --ink: #1c2430;
+    --muted: #5c6675;
+    --line: rgba(28, 36, 48, 0.12);
+    --accent: #1677ff;
+    --gift: #eb2f96;
+    --good: #52c41a;
+    --chip-bg: rgba(22, 119, 255, 0.08);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #10141a;
+      --surface: #1a2028;
+      --ink: #e8ecf2;
+      --muted: #97a1b0;
+      --line: rgba(232, 236, 242, 0.12);
+      --chip-bg: rgba(22, 119, 255, 0.18);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #10141a;
+    --surface: #1a2028;
+    --ink: #e8ecf2;
+    --muted: #97a1b0;
+    --line: rgba(232, 236, 242, 0.12);
+    --chip-bg: rgba(22, 119, 255, 0.18);
+  }
+  :root[data-theme="light"] {
+    --bg: #f2f5f9;
+    --surface: #ffffff;
+    --ink: #1c2430;
+    --muted: #5c6675;
+    --line: rgba(28, 36, 48, 0.12);
+    --chip-bg: rgba(22, 119, 255, 0.08);
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: -apple-system, "Segoe UI", Roboto, "Noto Sans Georgian", "Helvetica Neue", Arial, sans-serif;
+    line-height: 1.5;
+    margin: 0;
+    padding: 40px 24px 72px;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; }
+
+  .eyebrow {
+    font-size: 12px;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--accent);
+    font-weight: 600;
+    margin: 0 0 8px;
+  }
+  h1 {
+    font-size: clamp(24px, 3.4vw, 34px);
+    font-weight: 650;
+    letter-spacing: -0.01em;
+    margin: 0 0 10px;
+    text-wrap: balance;
+  }
+  .lede {
+    color: var(--muted);
+    max-width: 66ch;
+    margin: 0 0 8px;
+    font-size: 15px;
+  }
+  .hint {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 13px;
+    color: var(--muted);
+    background: var(--chip-bg);
+    border-radius: 999px;
+    padding: 5px 14px;
+    margin-top: 6px;
+  }
+  .hint b { color: var(--accent); font-weight: 600; }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+    gap: 28px;
+    margin-top: 36px;
+    align-items: start;
+  }
+  .option {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 22px 22px 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    min-width: 0;
+  }
+  .opt-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .opt-tag {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    padding: 3px 10px;
+    border-radius: 999px;
+    background: var(--chip-bg);
+    color: var(--accent);
+    white-space: nowrap;
+  }
+  .opt-tag.pick { background: rgba(82, 196, 26, 0.14); color: #3f9714; }
+  .opt-tag.old { background: rgba(92, 102, 117, 0.12); color: var(--muted); }
+  .option h2 { font-size: 17px; font-weight: 650; margin: 0; }
+  .opt-sub { color: var(--muted); font-size: 13.5px; margin: 0; }
+
+  .notes { margin: 0; padding: 0; list-style: none; font-size: 13px; color: var(--muted); display: flex; flex-direction: column; gap: 5px; }
+  .notes li { padding-left: 18px; position: relative; }
+  .notes li::before { content: "+"; position: absolute; left: 2px; font-weight: 700; color: var(--good); }
+  .notes li.con::before { content: "–"; color: #d4380d; }
+
+  /* ============ phone frame (app light theme, like a screenshot) ============ */
+  .phone {
+    background: #f5f5f5;
+    border: 1px solid var(--line);
+    border-radius: 22px;
+    padding: 14px 10px;
+    max-height: 700px;
+    overflow-y: auto;
+    color: rgba(0, 0, 0, 0.88);
+    font-size: 13px;
+    max-width: 420px;
+    margin: 0 auto;
+    width: 100%;
+  }
+  .phone * { box-sizing: border-box; }
+
+  .cartbar {
+    display: flex; align-items: center; gap: 8px;
+    padding: 2px 4px 10px;
+    font-weight: 600; font-size: 14px;
+  }
+  .cartbar .cart-ico { color: #1677ff; position: relative; display: inline-flex; }
+  .cartbar .count-badge {
+    position: absolute; top: -6px; right: -8px;
+    background: #ff4d4f; color: #fff; font-size: 9px; font-weight: 600;
+    border-radius: 8px; padding: 0 4px; line-height: 13px;
+  }
+  .cartbar .draft {
+    margin-left: auto; font-size: 11px; font-weight: 500;
+    color: #1677ff; background: #e6f4ff; border: 1px solid #91caff;
+    border-radius: 4px; padding: 0 7px; line-height: 18px;
+  }
+
+  .pcard {
+    background: #fff;
+    border: 1px solid rgba(0, 0, 0, 0.06);
+    border-radius: 12px;
+    padding: 12px 12px 10px;
+    margin-bottom: 10px;
+    position: relative;
+  }
+  .pcard-head { display: flex; align-items: flex-start; gap: 10px; }
+  .thumb {
+    flex: 0 0 40px; width: 40px; height: 40px; border-radius: 8px;
+    background: rgba(22, 119, 255, 0.08); color: #1677ff;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .ptitle { flex: 1; min-width: 0; }
+  .pname { font-weight: 600; font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
+  .partic { color: rgba(0, 0, 0, 0.45); font-size: 11.5px; }
+  .icon-btn {
+    background: none; border: none; padding: 4px; border-radius: 6px;
+    color: rgba(0, 0, 0, 0.45); cursor: pointer; display: inline-flex; align-items: center;
+  }
+  .icon-btn.danger { color: #ff4d4f; }
+  .icon-btn:hover { background: rgba(0, 0, 0, 0.04); }
+  .card-gift-count {
+    display: inline-flex; align-items: center; gap: 4px; margin-left: auto;
+    font-size: 10.5px; font-weight: 600; color: #c41d7f;
+    background: #fff0f6; border: 1px solid #ffadd2; border-radius: 999px;
+    padding: 1px 8px; white-space: nowrap;
+  }
+
+  .prow {
+    margin-top: 9px; padding: 9px 10px;
+    border: 1px solid rgba(0, 0, 0, 0.06); border-radius: 10px;
+    background: rgba(0, 0, 0, 0.015);
+    display: flex; flex-direction: column; gap: 7px;
+    border-left: 3px solid transparent;
+    transition: border-color .18s, background .18s;
+  }
+  .prow.gifted {
+    border-left-color: #eb2f96;
+    background: rgba(235, 47, 150, 0.05);
+    border-color: rgba(235, 47, 150, 0.28);
+  }
+  .prow.part-gift {
+    border-left-color: #eb2f96;
+    background: rgba(235, 47, 150, 0.03);
+    border-color: rgba(235, 47, 150, 0.2);
+  }
+  .wh-line { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .wh-tag {
+    font-size: 10.5px; line-height: 18px; padding: 0 7px; border-radius: 4px;
+    background: #f6ffed; border: 1px solid #b7eb8f; color: #389e0d; font-weight: 500;
+  }
+  .stock-cap { font-size: 11px; color: rgba(0, 0, 0, 0.45); }
+  .qty-price-line { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .stepper {
+    display: inline-flex; align-items: center; height: 28px;
+    border: 1px solid #d9d9d9; border-radius: 8px; overflow: hidden; background: #fff;
+    flex-shrink: 0;
+  }
+  .stepper button {
+    width: 28px; height: 28px; border: none; background: #fff; cursor: pointer;
+    font-size: 13px; color: rgba(0, 0, 0, 0.65); line-height: 1;
+  }
+  .stepper button:disabled { color: rgba(0, 0, 0, 0.2); cursor: default; }
+  .stepper .q {
+    width: 34px; text-align: center; font-size: 13px;
+    border-left: 1px solid #d9d9d9; border-right: 1px solid #d9d9d9;
+    line-height: 26px; font-variant-numeric: tabular-nums;
+  }
+  .price { font-size: 13px; font-weight: 500; font-variant-numeric: tabular-nums; }
+  .line-total { margin-left: auto; font-weight: 600; color: #52c41a; font-size: 14px; font-variant-numeric: tabular-nums; }
+
+  .gift-line { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+  .gift-pill {
+    display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+    height: 26px; padding: 0 11px; border-radius: 999px;
+    border: 1px solid #d9d9d9; background: #fff; color: rgba(0, 0, 0, 0.55);
+    font-size: 11.5px; font-weight: 500; cursor: pointer;
+    transition: all .15s; white-space: nowrap;
+  }
+  .gift-pill:hover { border-color: #eb2f96; color: #eb2f96; }
+  .gift-pill.on {
+    background: #eb2f96; border-color: #eb2f96; color: #fff; font-weight: 600;
+  }
+  .gift-pill.partial {
+    background: #fff0f6; border-color: #eb2f96; color: #c41d7f; font-weight: 600;
+  }
+
+  .gift-mini {
+    display: inline-flex; align-items: center; height: 26px;
+    border: 1px solid #ffadd2; border-radius: 8px; overflow: hidden; background: #fff;
+  }
+  .gift-mini button {
+    width: 26px; height: 26px; border: none; background: #fff0f6; cursor: pointer;
+    font-size: 12px; color: #c41d7f; line-height: 1;
+  }
+  .gift-mini button:disabled { color: rgba(196, 29, 127, 0.3); cursor: default; }
+  .gift-mini .gq {
+    min-width: 40px; text-align: center; font-size: 11.5px; font-weight: 600; color: #c41d7f;
+    border-left: 1px solid #ffadd2; border-right: 1px solid #ffadd2;
+    line-height: 24px; padding: 0 4px; font-variant-numeric: tabular-nums;
+  }
+
+  /* ================= TOUCH-SIZED variant (44px minimum targets) ================= */
+  .touch { font-size: 14.5px; }
+  .touch .cartbar { font-size: 15px; padding-bottom: 12px; }
+  .touch .pcard { padding: 14px 14px 12px; border-radius: 14px; margin-bottom: 12px; }
+  .touch .thumb { flex-basis: 48px; width: 48px; height: 48px; border-radius: 10px; }
+  .touch .thumb svg { width: 22px; height: 22px; }
+  .touch .pname { font-size: 15.5px; }
+  .touch .partic { font-size: 12.5px; }
+  .touch .icon-btn { padding: 12px; }
+  .touch .icon-btn svg { width: 20px; height: 20px; }
+  .touch .card-gift-count { font-size: 12px; padding: 3px 10px; }
+  .touch .card-gift-count svg { width: 13px; height: 13px; }
+
+  .touch .prow { padding: 12px; gap: 10px; border-radius: 12px; margin-top: 10px; }
+  .touch .wh-tag { font-size: 12px; line-height: 22px; padding: 0 9px; }
+  .touch .stock-cap { font-size: 12.5px; }
+
+  .touch .stepper { height: 44px; border-radius: 10px; }
+  .touch .stepper button { width: 44px; height: 44px; font-size: 18px; }
+  .touch .stepper .q { width: 48px; font-size: 16px; line-height: 42px; }
+  .touch .price { font-size: 15px; }
+  .touch .line-total { font-size: 17px; }
+
+  .touch .gift-line { gap: 10px; }
+  .touch .gift-pill {
+    height: 44px; padding: 0 18px; border-radius: 999px;
+    font-size: 14px; gap: 8px; flex: 1; min-width: 0;
+  }
+  .touch .gift-pill svg { width: 18px; height: 18px; }
+  .touch .gift-mini { height: 44px; border-radius: 10px; }
+  .touch .gift-mini button { width: 44px; height: 44px; font-size: 17px; }
+  .touch .gift-mini .gq { min-width: 56px; font-size: 14.5px; line-height: 42px; }
+
+  .touch .total-bar { padding: 14px 16px; border-radius: 14px; font-size: 15px; }
+  .touch .total-bar b { font-size: 19px; }
+  .touch .total-bar .gift-sum { font-size: 12.5px; }
+
+  .total-bar {
+    display: flex; align-items: center; justify-content: space-between;
+    background: #fff; border: 1px solid rgba(0, 0, 0, 0.06); border-radius: 12px;
+    padding: 10px 14px; font-size: 14px;
+  }
+  .total-bar .gift-sum { font-size: 11px; color: #c41d7f; font-weight: 600; }
+  .total-bar b { color: #52c41a; font-size: 17px; font-variant-numeric: tabular-nums; }
+
+  svg.i { width: 15px; height: 15px; display: block; }
+  svg.i-sm { width: 11px; height: 11px; display: block; }
+  svg.i-lg { width: 18px; height: 18px; display: block; }
+
+  .verdict {
+    margin-top: 40px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 24px 26px;
+  }
+  .verdict h2 { margin: 0 0 8px; font-size: 18px; }
+  .verdict p { color: var(--muted); font-size: 14.5px; max-width: 78ch; margin: 0 0 8px; }
+  .verdict b { color: var(--ink); }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; }
+  }
+</style>
+
+<div class="wrap">
+  <p class="eyebrow">barcode-scanner-app · cart / OrderPanel · round 3</p>
+  <h1>B1, sized for thumbs</h1>
+  <p class="lede">
+    Final direction: the inline gift counter (B1), scaled for one-handed phone use.
+    Every tap target is at least <b>44×44px</b> (Apple HIG minimum; Material asks 48dp):
+    quantity stepper, gift pill, and gift mini-stepper. The gift controls sit on their own line,
+    with the pill stretching full-width — a big, separated target that can't be confused with the
+    quantity stepper above it. Round-2 compact sizing is kept on the left for comparison.
+  </p>
+  <span class="hint">Both frames are <b>interactive</b> — toggle pills and use the steppers.</span>
+
+  <div class="grid" id="grid"></div>
+
+  <div class="verdict">
+    <h2>What changed vs round 2</h2>
+    <p>
+      Steppers went from 28px to <b>44px</b> buttons with a wider count readout; the gift pill grew to
+      44px tall and stretches across the row; the gift mini-stepper matches at 44px with a larger
+      "1 / 3" readout; product name, prices and line totals stepped up ~2px each; row padding and
+      card spacing widened so adjacent targets don't crowd. In Ant Design terms the implementation is
+      <code>size="large"</code> controls (40px) bumped to 44px via the existing cart CSS in
+      <code>index.css</code> — no new components.
+    </p>
+    <p>
+      Amounts on part-gift rows stay whatever the backend returns today — magenta is only a marker;
+      no pricing behavior is assumed.
+    </p>
+  </div>
+</div>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="ic-gift" viewBox="0 0 24 24">
+      <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+        d="M20 12v9H4v-9M2 7h20v5H2zM12 22V7M12 7H7.5a2.5 2.5 0 1 1 0-5C11 2 12 7 12 7zM12 7h4.5a2.5 2.5 0 1 0 0-5C13 2 12 7 12 7z"/>
+    </symbol>
+    <symbol id="ic-trash" viewBox="0 0 24 24">
+      <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+        d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m3 0v14a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6"/>
+    </symbol>
+    <symbol id="ic-shop" viewBox="0 0 24 24">
+      <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+        d="M3 9l1-5h16l1 5M3 9v11h18V9M3 9h18M9 20v-6h6v6"/>
+    </symbol>
+    <symbol id="ic-cart" viewBox="0 0 24 24">
+      <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+        d="M1 3h4l2.6 12.4a2 2 0 0 0 2 1.6h9.7a2 2 0 0 0 2-1.6L23 7H6"/>
+      <circle cx="10" cy="21" r="1.5" fill="currentColor"/>
+      <circle cx="18" cy="21" r="1.5" fill="currentColor"/>
+    </symbol>
+  </defs>
+</svg>
+
+<script>
+(function () {
+  function freshState() {
+    return [
+      { name: 'კოკა-კოლა 0.5ლ',        art: '04871', price: 3.5,  stock: 46, qty: 2, gift: 0 },
+      { name: 'შოკოლადი „ბარამბო" 90გ', art: '11203', price: 5.8,  stock: 12, qty: 3, gift: 1 },
+      { name: 'ყავა „იაკობსი" 100გ',    art: '07742', price: 11.9, stock: 8,  qty: 1, gift: 1 }
+    ];
+  }
+  var states = { compact: freshState(), touch: freshState() };
+
+  function svg(id, cls) {
+    return '<svg class="' + (cls || 'i') + '"><use href="#' + id + '"/></svg>';
+  }
+  function money(n) { return n.toFixed(2) + ' ₾'; }
+
+  function cartbar(state) {
+    var units = state.reduce(function (a, p) { return a + p.qty; }, 0);
+    return '<div class="cartbar">' +
+      '<span class="cart-ico">' + svg('ic-cart', 'i-lg') + '<span class="count-badge">' + units + '</span></span>' +
+      '<span>შეკვეთა #214</span><span class="draft">დრაფტი</span></div>';
+  }
+
+  function cardHead(p) {
+    var count = p.gift > 0
+      ? '<span class="card-gift-count">' + svg('ic-gift', 'i-sm') + ' ' + p.gift + '</span>'
+      : '';
+    return '<div class="pcard-head">' +
+      '<div class="thumb">' + svg('ic-shop', 'i-lg') + '</div>' +
+      '<div class="ptitle"><span class="pname">' + p.name + '</span>' +
+        '<span class="partic">არტიკული: ' + p.art + '</span></div>' +
+      count +
+      '<button class="icon-btn danger" aria-label="წაშლა">' + svg('ic-trash') + '</button>' +
+      '</div>';
+  }
+
+  function cardB1(p, i) {
+    var rowCls = p.gift === 0 ? '' : (p.gift === p.qty ? ' gifted' : ' part-gift');
+    var pill;
+    if (p.gift === 0) {
+      pill = '<button class="gift-pill" data-act="pill">' + svg('ic-gift') + ' საჩუქარი</button>';
+    } else {
+      var cls = p.gift === p.qty ? 'on' : 'partial';
+      pill = '<button class="gift-pill ' + cls + '" data-act="pill">' + svg('ic-gift') + ' ' +
+        p.gift + '/' + p.qty + ' საჩუქარი</button>';
+    }
+    var mini = p.gift > 0
+      ? '<span class="gift-mini">' +
+          '<button data-act="gift-dec">−</button>' +
+          '<span class="gq">' + p.gift + ' / ' + p.qty + '</span>' +
+          '<button data-act="gift-inc"' + (p.gift >= p.qty ? ' disabled' : '') + '>+</button></span>'
+      : '';
+    return '<div class="pcard" data-i="' + i + '">' + cardHead(p) +
+      '<div class="prow' + rowCls + '">' +
+      '<div class="wh-line">' +
+        '<span class="wh-tag">ცენტრალური ✓</span>' +
+        '<span class="stock-cap">ნაშთი: ' + p.stock + '</span></div>' +
+      '<div class="qty-price-line">' +
+        '<span class="stepper">' +
+          '<button data-act="qty-dec"' + (p.qty <= 1 ? ' disabled' : '') + '>−</button>' +
+          '<span class="q">' + p.qty + '</span>' +
+          '<button data-act="qty-inc">+</button></span>' +
+        '<span class="price">' + money(p.price) + '</span>' +
+        '<span class="line-total">' + money(p.qty * p.price) + '</span>' +
+      '</div>' +
+      '<div class="gift-line">' + pill + mini + '</div>' +
+      '</div></div>';
+  }
+
+  function totalBar(state) {
+    var total = state.reduce(function (a, p) { return a + p.qty * p.price; }, 0);
+    var gifts = state.reduce(function (a, p) { return a + p.gift; }, 0);
+    return '<div class="total-bar"><span>ჯამი: ' +
+      (gifts > 0 ? '<span class="gift-sum">· ' + gifts + ' საჩუქარი</span>' : '') +
+      '</span><b>' + money(total) + '</b></div>';
+  }
+
+  function renderPhone(key) {
+    var state = states[key];
+    var html = cartbar(state);
+    state.forEach(function (p, i) { html += cardB1(p, i); });
+    html += totalBar(state);
+    return html;
+  }
+
+  var options = [
+    {
+      key: 'compact', tag: 'Round 2', tagCls: 'old',
+      title: 'Compact (for comparison)',
+      sub: '28px stepper buttons, 26px pill — desktop-ish density. Fine with a mouse, fiddly with a thumb.',
+      notes: [
+        { con: true, text: '28px targets are under every mobile guideline' },
+        { con: true, text: 'Gift mini-stepper sits close to the qty stepper' }
+      ]
+    },
+    {
+      key: 'touch', tag: 'Final', tagCls: 'pick',
+      title: 'Touch-sized',
+      sub: 'Every control ≥44px. The gift pill stretches full-width on its own line; steppers get big square buttons.',
+      notes: [
+        { text: '44×44px minimum on all steppers, pills and icon buttons' },
+        { text: 'Gift line is spatially separated from the qty stepper' },
+        { text: 'Bigger type: name 15.5px, totals 17px — readable at arm\'s length' },
+        { text: 'Maps to Ant size="large" plus the cart CSS — no new components' }
+      ]
+    }
+  ];
+
+  var grid = document.getElementById('grid');
+  var phones = {};
+  options.forEach(function (opt) {
+    var art = document.createElement('article');
+    art.className = 'option';
+    var notes = opt.notes.map(function (n) {
+      return '<li' + (n.con ? ' class="con"' : '') + '>' + n.text + '</li>';
+    }).join('');
+    art.innerHTML =
+      '<div class="opt-head"><span class="opt-tag ' + (opt.tagCls || '') + '">' + opt.tag + '</span>' +
+      '<h2>' + opt.title + '</h2></div>' +
+      '<p class="opt-sub">' + opt.sub + '</p>' +
+      '<div class="phone' + (opt.key === 'touch' ? ' touch' : '') + '" data-variant="' + opt.key + '">' +
+        renderPhone(opt.key) + '</div>' +
+      '<ul class="notes">' + notes + '</ul>';
+    grid.appendChild(art);
+    phones[opt.key] = art.querySelector('.phone');
+  });
+
+  function rerender(key) {
+    phones[key].innerHTML = renderPhone(key);
+  }
+
+  document.addEventListener('click', function (e) {
+    var btn = e.target.closest('[data-act]');
+    if (!btn) return;
+    var phone = btn.closest('.phone');
+    if (!phone) return;
+    var key = phone.getAttribute('data-variant');
+    var card = btn.closest('.pcard');
+    var i = card ? parseInt(card.getAttribute('data-i'), 10) : null;
+    if (i == null) return;
+    var p = states[key][i];
+    var act = btn.getAttribute('data-act');
+
+    if (act === 'qty-inc') { p.qty += 1; }
+    else if (act === 'qty-dec') { p.qty = Math.max(1, p.qty - 1); p.gift = Math.min(p.gift, p.qty); }
+    else if (act === 'gift-inc') { p.gift = Math.min(p.qty, p.gift + 1); }
+    else if (act === 'gift-dec') { p.gift = Math.max(0, p.gift - 1); }
+    else if (act === 'pill') { p.gift = p.gift > 0 ? 0 : 1; }
+    rerender(key);
+  });
+})();
+</script>

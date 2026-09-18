@@ -33,3 +33,12 @@ backend/staticfiles/
 # Git worktrees
 .worktrees/
 .superpowers/
+
+# Design mockups: sources live in .claude/ios-mockups/src, the rest is build output
+.claude/ios-mockups/*.dc.html
+.claude/ios-mockups/preview/
+.claude/ios-mockups/iflow-on-iphone.html
+
+# Local editor/tool scratch
+.claude/launch.json
+.playwright-mcp/

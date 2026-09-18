@@ -1,0 +1,701 @@
+<meta charset="utf-8">
+<title>Catalog — consultant side, visual directions</title>
+<style>
+  :root {
+    --bg: #f2f5f9;
+    --surface: #ffffff;
+    --ink: #1c2430;
+    --muted: #5c6675;
+    --line: rgba(28, 36, 48, 0.12);
+    --accent: #1677ff;
+    --good: #52c41a;
+    --chip-bg: rgba(22, 119, 255, 0.08);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #10141a;
+      --surface: #1a2028;
+      --ink: #e8ecf2;
+      --muted: #97a1b0;
+      --line: rgba(232, 236, 242, 0.12);
+      --chip-bg: rgba(22, 119, 255, 0.18);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #10141a;
+    --surface: #1a2028;
+    --ink: #e8ecf2;
+    --muted: #97a1b0;
+    --line: rgba(232, 236, 242, 0.12);
+    --chip-bg: rgba(22, 119, 255, 0.18);
+  }
+  :root[data-theme="light"] {
+    --bg: #f2f5f9;
+    --surface: #ffffff;
+    --ink: #1c2430;
+    --muted: #5c6675;
+    --line: rgba(28, 36, 48, 0.12);
+    --chip-bg: rgba(22, 119, 255, 0.08);
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: -apple-system, "Segoe UI", Roboto, "Noto Sans Georgian", "Helvetica Neue", Arial, sans-serif;
+    line-height: 1.5;
+    margin: 0;
+    padding: 40px 24px 72px;
+  }
+  .wrap { max-width: 1240px; margin: 0 auto; }
+
+  .eyebrow {
+    font-size: 12px;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--accent);
+    font-weight: 600;
+    margin: 0 0 8px;
+  }
+  h1 {
+    font-size: clamp(24px, 3.4vw, 34px);
+    font-weight: 650;
+    letter-spacing: -0.01em;
+    margin: 0 0 10px;
+    text-wrap: balance;
+  }
+  .lede {
+    color: var(--muted);
+    max-width: 72ch;
+    margin: 0 0 8px;
+    font-size: 15px;
+  }
+  .hint {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 13px;
+    color: var(--muted);
+    background: var(--chip-bg);
+    border-radius: 999px;
+    padding: 5px 14px;
+    margin-top: 6px;
+    margin-right: 8px;
+  }
+  .hint b { color: var(--accent); font-weight: 600; }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+    gap: 28px;
+    margin-top: 36px;
+    align-items: start;
+  }
+  .grid.current-row { grid-template-columns: minmax(300px, 380px) 1fr; margin-top: 28px; }
+  @media (max-width: 760px) { .grid.current-row { grid-template-columns: 1fr; } }
+
+  .option {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 22px 22px 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    min-width: 0;
+  }
+  .opt-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .opt-tag {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    padding: 3px 10px;
+    border-radius: 999px;
+    background: var(--chip-bg);
+    color: var(--accent);
+    white-space: nowrap;
+  }
+  .opt-tag.pick { background: rgba(82, 196, 26, 0.14); color: #3f9714; }
+  .opt-tag.old { background: rgba(92, 102, 117, 0.12); color: var(--muted); }
+  .option h2 { font-size: 17px; font-weight: 650; margin: 0; }
+  .opt-sub { color: var(--muted); font-size: 13.5px; margin: 0; }
+
+  .notes { margin: 0; padding: 0; list-style: none; font-size: 13px; color: var(--muted); display: flex; flex-direction: column; gap: 5px; }
+  .notes li { padding-left: 18px; position: relative; }
+  .notes li::before { content: "+"; position: absolute; left: 2px; font-weight: 700; color: var(--good); }
+  .notes li.con::before { content: "–"; color: #d4380d; }
+
+  /* ============ phone frame (app light theme, like a screenshot) ============ */
+  .phone {
+    background: #f5f5f5;
+    border: 1px solid var(--line);
+    border-radius: 22px;
+    padding: 0 0 14px;
+    max-height: 720px;
+    overflow-y: auto;
+    color: rgba(0, 0, 0, 0.88);
+    font-size: 13px;
+    max-width: 420px;
+    margin: 0 auto;
+    width: 100%;
+  }
+  .phone * { box-sizing: border-box; }
+  .pbody { padding: 0 12px; }
+
+  /* drawer chrome */
+  .dhead {
+    position: sticky; top: 0; z-index: 2;
+    background: #fff;
+    border-bottom: 1px solid rgba(0,0,0,0.06);
+    border-radius: 22px 22px 0 0;
+    padding: 8px 14px 10px;
+  }
+  .handle { width: 36px; height: 4px; border-radius: 2px; background: rgba(0,0,0,0.15); margin: 0 auto 8px; }
+  .dtitle { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 14px; }
+  .dtitle svg { color: #1677ff; }
+  .dclose { margin-left: auto; color: rgba(0,0,0,0.45); font-size: 16px; line-height: 1; }
+
+  .searchrow { display: flex; gap: 8px; margin: 12px 0 0; }
+  .searchbox {
+    flex: 1; display: flex; align-items: center; gap: 8px;
+    background: #fff; border: 1px solid #d9d9d9; border-radius: 10px;
+    padding: 0 12px; height: 40px; color: rgba(0,0,0,0.3); font-size: 13px;
+    min-width: 0;
+  }
+  .searchbox span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .scanbtn {
+    flex: none; display: inline-flex; align-items: center; gap: 6px;
+    height: 40px; padding: 0 12px; border-radius: 10px;
+    border: 1px solid #d9d9d9; background: #fff; font-size: 13px; font-weight: 500;
+  }
+  .scanbtn svg { color: rgba(0,0,0,0.65); }
+
+  .whrow {
+    display: flex; align-items: center; justify-content: space-between;
+    margin: 10px 2px 6px; font-size: 12.5px; color: rgba(0,0,0,0.45);
+  }
+  .switch {
+    width: 34px; height: 20px; border-radius: 10px; background: #1677ff; position: relative; flex: none;
+  }
+  .switch::after {
+    content: ""; position: absolute; top: 2px; right: 2px;
+    width: 16px; height: 16px; border-radius: 50%; background: #fff;
+  }
+  .switch.off { background: rgba(0,0,0,0.25); }
+  .switch.off::after { right: auto; left: 2px; }
+
+  /* category chips scroller */
+  .chips {
+    display: flex; gap: 8px; overflow-x: auto; padding: 8px 2px 10px;
+    scrollbar-width: none;
+  }
+  .chips::-webkit-scrollbar { display: none; }
+  .chip {
+    flex: none; display: inline-flex; align-items: center; gap: 6px;
+    height: 30px; padding: 0 13px; border-radius: 999px;
+    background: #fff; border: 1px solid rgba(0,0,0,0.1);
+    font-size: 12.5px; font-weight: 500; white-space: nowrap; color: rgba(0,0,0,0.75);
+  }
+  .chip .cnt { font-size: 11px; color: rgba(0,0,0,0.4); font-weight: 400; }
+  .chip.on { background: #1677ff; border-color: #1677ff; color: #fff; }
+  .chip.on .cnt { color: rgba(255,255,255,0.75); }
+
+  /* breadcrumb / back pill */
+  .crumbline { display: flex; align-items: center; gap: 8px; margin: 4px 2px 8px; }
+  .backpill {
+    display: inline-flex; align-items: center; gap: 5px;
+    height: 28px; padding: 0 12px 0 8px; border-radius: 999px;
+    background: rgba(22,119,255,0.08); color: #1677ff; font-size: 12.5px; font-weight: 500;
+  }
+  .crumbtitle { font-weight: 650; font-size: 15px; }
+  .crumbcount { color: rgba(0,0,0,0.4); font-size: 12px; margin-left: auto; }
+
+  .seccap {
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px;
+    color: rgba(0,0,0,0.45); margin: 8px 2px 6px;
+  }
+
+  /* ============ Option A: rich list rows ============ */
+  .rowcard {
+    display: flex; align-items: center; gap: 12px;
+    background: #fff; border: 1px solid rgba(0,0,0,0.06); border-radius: 12px;
+    padding: 10px 12px; margin-bottom: 8px;
+  }
+  .rthumb {
+    flex: none; width: 56px; height: 56px; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 26px; border: 1px solid rgba(0,0,0,0.05);
+  }
+  .rthumb.ph { background: rgba(22,119,255,0.06); color: rgba(22,119,255,0.5); font-size: 20px; }
+  .rmain { flex: 1; min-width: 0; }
+  .rname {
+    font-weight: 600; font-size: 13.5px; line-height: 1.3;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  }
+  .rmeta { color: rgba(0,0,0,0.45); font-size: 11.5px; margin-top: 2px; }
+  .rside { flex: none; text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+  .rprice { font-weight: 700; font-size: 14px; font-variant-numeric: tabular-nums; }
+  .raddbtn {
+    width: 26px; height: 26px; border-radius: 8px; border: none;
+    background: rgba(22,119,255,0.1); color: #1677ff;
+    display: inline-flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 600;
+  }
+
+  .loadmore {
+    display: block; width: 100%; height: 38px; border-radius: 10px;
+    border: 1px solid #d9d9d9; background: #fff; color: rgba(0,0,0,0.65);
+    font-size: 13px; font-weight: 500; margin-top: 4px;
+  }
+
+  /* ============ Option B: showcase grid ============ */
+  .pgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 2px; }
+  .gcard {
+    background: #fff; border: 1px solid rgba(0,0,0,0.06); border-radius: 12px;
+    overflow: hidden; display: flex; flex-direction: column;
+  }
+  .gimg {
+    aspect-ratio: 1 / 1; display: flex; align-items: center; justify-content: center;
+    font-size: 44px; position: relative;
+  }
+  .gimg.ph { background: rgba(22,119,255,0.05); color: rgba(22,119,255,0.4); font-size: 30px; }
+  .gbody { padding: 8px 10px 10px; display: flex; flex-direction: column; gap: 3px; flex: 1; }
+  .gname {
+    font-weight: 600; font-size: 12.5px; line-height: 1.3;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+    min-height: 2.6em;
+  }
+  .gmeta { color: rgba(0,0,0,0.4); font-size: 10.5px; }
+  .gfoot { display: flex; align-items: center; justify-content: space-between; margin-top: auto; padding-top: 4px; }
+  .gprice { font-weight: 700; font-size: 13.5px; font-variant-numeric: tabular-nums; }
+
+  /* ============ Option C: category tiles ============ */
+  .cattiles { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 2px; }
+  .cattile {
+    border-radius: 14px; padding: 14px 12px 12px; min-height: 92px;
+    display: flex; flex-direction: column; justify-content: flex-end; gap: 2px;
+    border: 1px solid rgba(0,0,0,0.05); position: relative; overflow: hidden;
+  }
+  .cattile .cico { font-size: 26px; position: absolute; top: 10px; right: 12px; opacity: 0.9; }
+  .cattile .cname { font-weight: 650; font-size: 13.5px; line-height: 1.25; }
+  .cattile .ccount { font-size: 11.5px; color: rgba(0,0,0,0.5); }
+
+  .divider {
+    display: flex; align-items: center; gap: 10px; margin: 16px 0 10px;
+    color: rgba(0,0,0,0.4); font-size: 11.5px; white-space: nowrap;
+  }
+  .divider::before, .divider::after { content: ""; flex: 1; border-top: 1px dashed rgba(0,0,0,0.15); }
+
+  .segment {
+    display: inline-flex; background: rgba(0,0,0,0.05); border-radius: 9px; padding: 2px; margin-left: auto;
+  }
+  .segment button {
+    border: none; background: transparent; border-radius: 7px; padding: 4px 9px;
+    display: inline-flex; align-items: center; color: rgba(0,0,0,0.45);
+  }
+  .segment button.on { background: #fff; color: #1677ff; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+
+  /* ============ current-state phone (deliberately plain) ============ */
+  .oldrow {
+    display: flex; align-items: center; gap: 10px;
+    padding: 9px 2px; border-bottom: 1px solid rgba(0,0,0,0.06); background: #fff;
+  }
+  .oldrow:first-child { border-top: 1px solid rgba(0,0,0,0.06); }
+  .oldthumb {
+    flex: none; width: 36px; height: 36px; border-radius: 6px;
+    display: flex; align-items: center; justify-content: center; font-size: 17px;
+    background: rgba(0,0,0,0.04);
+  }
+  .oldmain { flex: 1; min-width: 0; }
+  .oldname { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .oldmeta { color: rgba(0,0,0,0.45); font-size: 12px; }
+  .oldcat { display: flex; align-items: center; padding: 10px 2px; border-bottom: 1px solid rgba(0,0,0,0.06); background: #fff; font-size: 13px; }
+  .oldcat .n { color: rgba(0,0,0,0.45); font-size: 12px; margin-left: 8px; }
+  .oldcat .chev { margin-left: auto; color: rgba(0,0,0,0.35); font-size: 11px; }
+  .oldwrap { background:#fff; border-radius: 8px; padding: 0 10px; margin-top: 8px; }
+
+  footer.next {
+    margin-top: 44px; padding: 18px 22px;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 14px;
+    font-size: 14px; color: var(--muted); max-width: 860px;
+  }
+  footer.next b { color: var(--ink); }
+</style>
+
+<div class="wrap">
+  <p class="eyebrow">FindProductDrawer · კატალოგი კონსულტანტის მხარეს</p>
+  <h1>Catalog, three visual directions</h1>
+  <p class="lede">
+    The current drawer renders categories as bare text rows and products as an admin-style list with
+    36&nbsp;px thumbnails — functional, but it reads like a settings screen, not a product catalog.
+    All three options below keep the exact same behavior (smart search + scan button on top, category
+    drill-down below, tap a product → live 1C price/stock fetch → add-to-cart sheet) and restyle only
+    the presentation layer.
+  </p>
+  <p class="hint"><b>Data reality:</b>&nbsp;many products have no photo — every option must look good imageless.</p>
+  <p class="hint"><b>No stock in the list:</b>&nbsp;live stock arrives only after tapping a product, so rows show price only.</p>
+
+  <div class="grid current-row">
+    <div class="option">
+      <div class="opt-head">
+        <span class="opt-tag old">დღეს · current</span>
+        <h2>Plain Ant list</h2>
+      </div>
+      <p class="opt-sub">What consultants see now — for contrast.</p>
+      <div class="phone">
+        <div class="dhead">
+          <div class="handle"></div>
+          <div class="dtitle">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+            პროდუქტის ძიება
+            <span class="dclose">✕</span>
+          </div>
+        </div>
+        <div class="pbody">
+          <div class="searchrow">
+            <div class="searchbox">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+              <span>დასახელება, არტიკული ან შტრიხკოდი</span>
+            </div>
+            <button class="scanbtn">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/><rect x="8" y="8" width="8" height="8" rx="1"/></svg>
+              დასკანერება
+            </button>
+          </div>
+          <div class="whrow">ყველა საწყობი <span class="switch off"></span></div>
+          <div class="oldwrap">
+            <div class="oldcat">სამზარეულო <span class="n">214</span><span class="chev">›</span></div>
+            <div class="oldcat">ჭურჭელი <span class="n">89</span><span class="chev">›</span></div>
+            <div class="oldcat">წვრილი ტექნიკა <span class="n">67</span><span class="chev">›</span></div>
+            <div class="oldcat">სააბაზანო <span class="n">52</span><span class="chev">›</span></div>
+            <div class="oldcat">ტექსტილი <span class="n">48</span><span class="chev">›</span></div>
+          </div>
+          <div class="seccap" style="margin-top:14px;">პროდუქტები · 214</div>
+          <div class="oldwrap">
+            <div class="oldrow">
+              <div class="oldthumb">🍳</div>
+              <div class="oldmain">
+                <div class="oldname">ტაფა გრანიტის საფარით 28სმ</div>
+                <div class="oldmeta">MG-2814 · 89.90 ₾</div>
+              </div>
+            </div>
+            <div class="oldrow">
+              <div class="oldthumb">🫕</div>
+              <div class="oldmain">
+                <div class="oldname">ქვაბების ნაკრები ინდუქციური 6 ცალი</div>
+                <div class="oldmeta">KS-6001 · 249.00 ₾</div>
+              </div>
+            </div>
+            <div class="oldrow">
+              <div class="oldmain">
+                <div class="oldname">ელექტრო ჩაიდანი უჟანგავი 1.7ლ</div>
+                <div class="oldmeta">EK-1700 · 119.50 ₾</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <ul class="notes">
+        <li class="con">Thumbnails too small to recognize a product; missing photos collapse the row.</li>
+        <li class="con">Price is buried in the muted meta line — the number consultants need most.</li>
+        <li class="con">Categories and products look identical; no visual hierarchy.</li>
+      </ul>
+    </div>
+    <div></div>
+  </div>
+
+  <div class="grid">
+    <!-- ================= OPTION A ================= -->
+    <div class="option">
+      <div class="opt-head">
+        <span class="opt-tag">Option A</span>
+        <span class="opt-tag pick">recommended</span>
+        <h2>Rich list + category chips</h2>
+      </div>
+      <p class="opt-sub">Same single-column list, but card rows with 56&nbsp;px photos, prominent right-aligned price, and categories as a horizontal chip scroller instead of a full-width list.</p>
+      <div class="phone">
+        <div class="dhead">
+          <div class="handle"></div>
+          <div class="dtitle">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+            პროდუქტის ძიება
+            <span class="dclose">✕</span>
+          </div>
+        </div>
+        <div class="pbody">
+          <div class="searchrow">
+            <div class="searchbox">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+              <span>დასახელება, არტიკული ან შტრიხკოდი</span>
+            </div>
+            <button class="scanbtn">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/><rect x="8" y="8" width="8" height="8" rx="1"/></svg>
+              დასკანერება
+            </button>
+          </div>
+          <div class="whrow">ყველა საწყობი <span class="switch off"></span></div>
+          <div class="chips">
+            <span class="chip on">სამზარეულო <span class="cnt">214</span></span>
+            <span class="chip">ჭურჭელი <span class="cnt">89</span></span>
+            <span class="chip">წვრილი ტექნიკა <span class="cnt">67</span></span>
+            <span class="chip">სააბაზანო <span class="cnt">52</span></span>
+          </div>
+          <div class="crumbline">
+            <span class="backpill">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="m15 18-6-6 6-6"/></svg>
+              ყველა კატეგორია
+            </span>
+            <span class="crumbtitle">სამზარეულო</span>
+            <span class="crumbcount">214 პროდუქტი</span>
+          </div>
+          <div class="rowcard">
+            <div class="rthumb" style="background:#fdf1e7;">🍳</div>
+            <div class="rmain">
+              <div class="rname">ტაფა გრანიტის საფარით 28სმ</div>
+              <div class="rmeta">MG-2814 · სამზარეულო › ტაფები</div>
+            </div>
+            <div class="rside">
+              <span class="rprice">89.90 ₾</span>
+              <button class="raddbtn">+</button>
+            </div>
+          </div>
+          <div class="rowcard">
+            <div class="rthumb" style="background:#eef4ec;">🫕</div>
+            <div class="rmain">
+              <div class="rname">ქვაბების ნაკრები ინდუქციური 6 ცალი</div>
+              <div class="rmeta">KS-6001 · სამზარეულო › ქვაბები</div>
+            </div>
+            <div class="rside">
+              <span class="rprice">249.00 ₾</span>
+              <button class="raddbtn">+</button>
+            </div>
+          </div>
+          <div class="rowcard">
+            <div class="rthumb ph">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 8v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8"/><path d="m3.3 7 8.7-4 8.7 4"/><path d="M12 12v9"/><path d="M3.3 7 12 11l8.7-4"/></svg>
+            </div>
+            <div class="rmain">
+              <div class="rname">ელექტრო ჩაიდანი უჟანგავი 1.7ლ</div>
+              <div class="rmeta">EK-1700 · სამზარეულო › წვრილი ტექნიკა</div>
+            </div>
+            <div class="rside">
+              <span class="rprice">119.50 ₾</span>
+              <button class="raddbtn">+</button>
+            </div>
+          </div>
+          <div class="rowcard">
+            <div class="rthumb" style="background:#f3eef8;">🥣</div>
+            <div class="rmain">
+              <div class="rname">ბლენდერი სტაციონარული 1000W</div>
+              <div class="rmeta">BL-1000 · სამზარეულო › წვრილი ტექნიკა</div>
+            </div>
+            <div class="rside">
+              <span class="rprice">189.00 ₾</span>
+              <button class="raddbtn">+</button>
+            </div>
+          </div>
+          <button class="loadmore">მეტის ჩვენება</button>
+        </div>
+      </div>
+      <ul class="notes">
+        <li>Price is the loudest element after the name — matches how consultants actually use the list.</li>
+        <li>Missing photo degrades to a tinted box icon, row keeps its shape.</li>
+        <li>Chip scroller keeps top categories one tap away without burying products below.</li>
+        <li>Smallest code change: same Ant <code>List</code>, custom row render + chips row.</li>
+        <li class="con">Chips only show one tree level at a time; deep trees still need the back pill.</li>
+      </ul>
+    </div>
+
+    <!-- ================= OPTION B ================= -->
+    <div class="option">
+      <div class="opt-head">
+        <span class="opt-tag">Option B</span>
+        <h2>Showcase grid</h2>
+      </div>
+      <p class="opt-sub">Image-led two-column cards, like a shop app. Best when the org's catalog photos are good; weakest when they're missing.</p>
+      <div class="phone">
+        <div class="dhead">
+          <div class="handle"></div>
+          <div class="dtitle">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+            პროდუქტის ძიება
+            <span class="dclose">✕</span>
+          </div>
+        </div>
+        <div class="pbody">
+          <div class="searchrow">
+            <div class="searchbox">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+              <span>დასახელება, არტიკული ან შტრიხკოდი</span>
+            </div>
+            <button class="scanbtn">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/><rect x="8" y="8" width="8" height="8" rx="1"/></svg>
+              დასკანერება
+            </button>
+          </div>
+          <div class="whrow">ყველა საწყობი <span class="switch off"></span></div>
+          <div class="chips">
+            <span class="chip on">სამზარეულო <span class="cnt">214</span></span>
+            <span class="chip">ჭურჭელი <span class="cnt">89</span></span>
+            <span class="chip">წვრილი ტექნიკა <span class="cnt">67</span></span>
+            <span class="chip">სააბაზანო <span class="cnt">52</span></span>
+          </div>
+          <div class="crumbline">
+            <span class="backpill">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="m15 18-6-6 6-6"/></svg>
+              ყველა კატეგორია
+            </span>
+            <span class="crumbtitle">სამზარეულო</span>
+          </div>
+          <div class="pgrid">
+            <div class="gcard">
+              <div class="gimg" style="background:#fdf1e7;">🍳</div>
+              <div class="gbody">
+                <div class="gname">ტაფა გრანიტის საფარით 28სმ</div>
+                <div class="gmeta">MG-2814</div>
+                <div class="gfoot"><span class="gprice">89.90 ₾</span><button class="raddbtn">+</button></div>
+              </div>
+            </div>
+            <div class="gcard">
+              <div class="gimg" style="background:#eef4ec;">🫕</div>
+              <div class="gbody">
+                <div class="gname">ქვაბების ნაკრები ინდუქციური 6 ცალი</div>
+                <div class="gmeta">KS-6001</div>
+                <div class="gfoot"><span class="gprice">249.00 ₾</span><button class="raddbtn">+</button></div>
+              </div>
+            </div>
+            <div class="gcard">
+              <div class="gimg ph">
+                <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M21 8v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8"/><path d="m3.3 7 8.7-4 8.7 4"/><path d="M12 12v9"/><path d="M3.3 7 12 11l8.7-4"/></svg>
+              </div>
+              <div class="gbody">
+                <div class="gname">ელექტრო ჩაიდანი უჟანგავი 1.7ლ</div>
+                <div class="gmeta">EK-1700</div>
+                <div class="gfoot"><span class="gprice">119.50 ₾</span><button class="raddbtn">+</button></div>
+              </div>
+            </div>
+            <div class="gcard">
+              <div class="gimg" style="background:#f3eef8;">🥣</div>
+              <div class="gbody">
+                <div class="gname">ბლენდერი სტაციონარული 1000W</div>
+                <div class="gmeta">BL-1000</div>
+                <div class="gfoot"><span class="gprice">189.00 ₾</span><button class="raddbtn">+</button></div>
+              </div>
+            </div>
+          </div>
+          <button class="loadmore" style="margin-top:10px;">მეტის ჩვენება</button>
+        </div>
+      </div>
+      <ul class="notes">
+        <li>Most attractive when photos exist — products sell themselves.</li>
+        <li>Familiar shop-app pattern; zero learning curve for consultants.</li>
+        <li class="con">Half the catalog imageless → a wall of placeholder tiles looks worse than a list.</li>
+        <li class="con">~2 products per row ⇒ twice the scrolling on long categories.</li>
+        <li class="con">Long Georgian names clamp to 2 lines and truncate often at this width.</li>
+      </ul>
+    </div>
+
+    <!-- ================= OPTION C ================= -->
+    <div class="option">
+      <div class="opt-head">
+        <span class="opt-tag">Option C</span>
+        <h2>Aisle view — category tiles first</h2>
+      </div>
+      <p class="opt-sub">The root screen becomes a colorful tile wall of departments (like store aisles); inside a category you get Option A's list with a grid/list toggle.</p>
+      <div class="phone">
+        <div class="dhead">
+          <div class="handle"></div>
+          <div class="dtitle">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+            პროდუქტის ძიება
+            <span class="dclose">✕</span>
+          </div>
+        </div>
+        <div class="pbody">
+          <div class="searchrow">
+            <div class="searchbox">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+              <span>დასახელება, არტიკული ან შტრიხკოდი</span>
+            </div>
+            <button class="scanbtn">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/><rect x="8" y="8" width="8" height="8" rx="1"/></svg>
+              დასკანერება
+            </button>
+          </div>
+          <div class="whrow">ყველა საწყობი <span class="switch off"></span></div>
+          <div class="seccap">კატეგორიები</div>
+          <div class="cattiles">
+            <div class="cattile" style="background:linear-gradient(135deg,#fdf1e7,#fbe3cf);">
+              <span class="cico">🍳</span>
+              <span class="cname">სამზარეულო</span>
+              <span class="ccount">214 პროდუქტი</span>
+            </div>
+            <div class="cattile" style="background:linear-gradient(135deg,#e9f2fb,#d7e8f9);">
+              <span class="cico">🍽️</span>
+              <span class="cname">ჭურჭელი</span>
+              <span class="ccount">89 პროდუქტი</span>
+            </div>
+            <div class="cattile" style="background:linear-gradient(135deg,#f3eef8,#e8ddf3);">
+              <span class="cico">🔌</span>
+              <span class="cname">წვრილი ტექნიკა</span>
+              <span class="ccount">67 პროდუქტი</span>
+            </div>
+            <div class="cattile" style="background:linear-gradient(135deg,#e8f5f0,#d5ecdf);">
+              <span class="cico">🛁</span>
+              <span class="cname">სააბაზანო</span>
+              <span class="ccount">52 პროდუქტი</span>
+            </div>
+          </div>
+          <div class="divider">კატეგორიაში შესვლის შემდეგ</div>
+          <div class="crumbline">
+            <span class="backpill">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="m15 18-6-6 6-6"/></svg>
+              უკან
+            </span>
+            <span class="crumbtitle">სამზარეულო</span>
+            <span class="segment">
+              <button class="on"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+              <button><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></button>
+            </span>
+          </div>
+          <div class="rowcard">
+            <div class="rthumb" style="background:#fdf1e7;">🍳</div>
+            <div class="rmain">
+              <div class="rname">ტაფა გრანიტის საფარით 28სმ</div>
+              <div class="rmeta">MG-2814</div>
+            </div>
+            <div class="rside">
+              <span class="rprice">89.90 ₾</span>
+              <button class="raddbtn">+</button>
+            </div>
+          </div>
+          <div class="rowcard">
+            <div class="rthumb" style="background:#eef4ec;">🫕</div>
+            <div class="rmain">
+              <div class="rname">ქვაბების ნაკრები ინდუქციური 6 ცალი</div>
+              <div class="rmeta">KS-6001</div>
+            </div>
+            <div class="rside">
+              <span class="rprice">249.00 ₾</span>
+              <button class="raddbtn">+</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <ul class="notes">
+        <li>The root screen finally looks like a catalog — inviting, brandable per department.</li>
+        <li>Grid/list toggle gives each org (good photos vs. none) its best view.</li>
+        <li class="con">Tile colors/icons need assignment per category — 1C gives only names, so it's a hash-based palette, not curated.</li>
+        <li class="con">Most work: tiles + toggle + two render paths to maintain.</li>
+        <li class="con">One extra tap before any product is visible.</li>
+      </ul>
+    </div>
+  </div>
+
+  <footer class="next">
+    <b>How to read this:</b> all three keep today's search-first flow untouched — they differ only in how
+    categories and product rows look. <b>My pick is Option A</b>: it upgrades every screen state (with or
+    without photos), changes nothing functionally, and is the smallest diff. Option C's grid/list
+    toggle can be layered on later without redoing A. Reply with <b>A / B / C</b> (or a mix, e.g. "A but
+    with C's category tiles at root") and I'll write up the design spec and implementation plan.
+  </footer>
+</div>

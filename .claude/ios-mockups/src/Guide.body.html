@@ -1,0 +1,70 @@
+<div style="width: 860px; min-height: 1760px; background: #fff; padding: 48px 52px 52px; font-family: var(--font);">
+  <div class="fn" style="color: #296e49; font-weight: 600;">iFlow · consultant app on iPhone</div>
+  <div class="t1" style="margin-top: 6px;">Apple's Human Interface Guidelines, applied</div>
+  <div class="callout l2" style="margin-top: 10px; max-width: 680px;">iOS-native structure with iknow.ge's palette (green accent, charcoal text, neutral grays), and the iFlow logo and Noto Sans Georgian kept. Quoted rules and numbers come from developer.apple.com/design/human-interface-guidelines; "today" figures are measured from the app's current stylesheet. Screen copy uses the app's real Georgian strings; names, stock and prices are sample data.</div>
+
+  <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 32px;">
+    <div style="background: var(--bg-grouped); border-radius: 14px; padding: 18px 20px;">
+      <div class="hl">Tabs are for places, not actions</div>
+      <div class="sub l2" style="margin-top: 6px;">"Use tabs for navigation, not actions." Today's dock mixes two sections with three actions (scan, search, cart). Now the tab bar holds პროდუქტები and შეკვეთები plus the trailing search tab iOS allows, which opens the catalog. Scanning is the one prominent button on Home. The active order rides above the tab bar instead of hiding in it.</div>
+      <div class="fn" style="margin-top: 10px; color: #296e49; font-weight: 600;">Home · Catalog · Orders</div>
+    </div>
+    <div style="background: var(--bg-grouped); border-radius: 14px; padding: 18px 20px;">
+      <div class="hl">Sheets for tasks, full screen for the camera</div>
+      <div class="sub l2" style="margin-top: 6px;">Sheets suit a scoped task; for camera views, "consider a full-screen modal." One sheet at a time, with a grabber. The order is a two-step sheet: Cart (1 / 2) moves on with შემდეგი, Delivery (2 / 2) keeps Back leading, and only the last step carries the confirming action.</div>
+      <div class="fn" style="margin-top: 10px; color: #296e49; font-weight: 600;">Scanner · Product · Cart · Delivery</div>
+    </div>
+    <div style="background: var(--bg-grouped); border-radius: 14px; padding: 18px 20px;">
+      <div class="hl">17 pt text, never below 11 pt</div>
+      <div class="sub l2" style="margin-top: 6px;">iOS default text is 17 pt, minimum 11 pt. The app sets much of its mobile text at 13–14 px, with labels at 11 and 10 px. These screens use the Dynamic Type defaults below, and product names wrap to a second line instead of clipping to one.</div>
+      <div class="fn" style="margin-top: 10px; color: #296e49; font-weight: 600;">All screens</div>
+    </div>
+    <div style="background: var(--bg-grouped); border-radius: 14px; padding: 18px 20px;">
+      <div class="hl">44 × 44 pt touch targets</div>
+      <div class="sub l2" style="margin-top: 6px;">Default control size is 44×44 pt, minimum 28×28. Today's add-to-order button is 36 px. Here every stepper half, row, toolbar button and gift toggle is 44 pt tall or more, with roughly 12 pt padding around bezeled controls.</div>
+      <div class="fn" style="margin-top: 10px; color: #296e49; font-weight: 600;">Product · Cart</div>
+    </div>
+    <div style="background: var(--bg-grouped); border-radius: 14px; padding: 18px 20px;">
+      <div class="hl">One accent, never color alone</div>
+      <div class="sub l2" style="margin-top: 6px;">A color that marks interactivity shouldn't style static text, so prices move from blue to label color. Stock levels carry a word and a glyph ("მცირე ნაშთი" with a warning mark), never just a green or orange number. Contrast: iknow's green #42AE75 is only 2.8:1 with white, under the 3:1 needed even for bold text, so fills use a deeper shade of it, #3A9866 at 3.6:1, with bold labels; small green text uses #296E49, 5.5:1 on the gray background. A selected segment fills with the accent, so the choice reads at a glance.</div>
+      <div class="fn" style="margin-top: 10px; color: #296e49; font-weight: 600;">Product · Home · Orders · Delivery · Lookup</div>
+    </div>
+    <div style="background: var(--bg-grouped); border-radius: 14px; padding: 18px 20px;">
+      <div class="hl">Labels above fields, one prominent button</div>
+      <div class="sub l2" style="margin-top: 6px;">Placeholders disappear while typing, so every field keeps a label. Side-by-side fields stack when text grows (the phone-field bug). Client lookup uses tabs for ID, phone and name: the selected tab labels the field and picks the keyboard, the number pad for ID and phone. One or two prominent buttons per view, verb-first. Destructive actions are system red and never primary.</div>
+      <div class="fn" style="margin-top: 10px; color: #296e49; font-weight: 600;">Client lookup · Client create</div>
+    </div>
+    <div style="grid-column: 1 / -1; background: var(--bg-grouped); border-radius: 14px; padding: 18px 20px;">
+      <div class="hl">Glass for floating controls, never content</div>
+      <div class="sub l2" style="margin-top: 6px;">Apple's Liquid Glass is a layer for the controls and navigation that float above content, and Apple advises against using it in the content layer. So the tab bar, active-order bar, toolbar buttons, segment tracks, sheet action bars and the scanner's camera controls are glass, and content scrolls beneath them. Lists, cards and fields stay solid so text keeps its contrast. A selected segment stays solid green on its glass track, and corner radii are concentric with the controls they hold.</div>
+      <div class="fn" style="margin-top: 10px; color: #296e49; font-weight: 600;">Home · Catalog · Orders · Scanner · every sheet</div>
+    </div>
+  </div>
+
+  <div style="display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 16px; margin-top: 16px;">
+    <div style="border: 1px solid var(--sep); border-radius: 14px; padding: 18px 20px;">
+      <div class="fn l2" style="font-weight: 600;">Type · Dynamic Type "Large" defaults</div>
+      <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 12px;">
+        <div style="display: flex; align-items: baseline; gap: 14px;"><span class="c1 l3 num" style="width: 124px; flex: none;">Large Title 34/41</span><span class="lt">შეკვეთები</span></div>
+        <div style="display: flex; align-items: baseline; gap: 14px;"><span class="c1 l3 num" style="width: 124px; flex: none;">Title 1 28/34</span><span class="t1 num">89.90 ₾</span></div>
+        <div style="display: flex; align-items: baseline; gap: 14px;"><span class="c1 l3 num" style="width: 124px; flex: none;">Title 3 20/25</span><span class="t3">ტაფა გრანიტის საფარით</span></div>
+        <div style="display: flex; align-items: baseline; gap: 14px;"><span class="c1 l3 num" style="width: 124px; flex: none;">Headline 17/22</span><span class="hl">კალათა</span></div>
+        <div style="display: flex; align-items: baseline; gap: 14px;"><span class="c1 l3 num" style="width: 124px; flex: none;">Body 17/22</span><span class="body">ყველა საწყობი</span></div>
+        <div style="display: flex; align-items: baseline; gap: 14px;"><span class="c1 l3 num" style="width: 124px; flex: none;">Subhead 15/20</span><span class="sub">გიორგი ბერიძე</span></div>
+        <div style="display: flex; align-items: baseline; gap: 14px;"><span class="c1 l3 num" style="width: 124px; flex: none;">Footnote 13/18</span><span class="fn l2">12 თავისუფალი · 2 რეზერვი</span></div>
+        <div style="display: flex; align-items: baseline; gap: 14px;"><span class="c1 l3 num" style="width: 124px; flex: none;">Caption 2 11/13</span><span class="c2">პროდუქტები</span></div>
+      </div>
+    </div>
+    <div style="border: 1px solid var(--sep); border-radius: 14px; padding: 18px 20px;">
+      <div class="fn l2" style="font-weight: 600;">Color</div>
+      <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 12px;">
+        <div style="display: flex; align-items: center; gap: 12px;"><span style="width: 36px; height: 36px; border-radius: 10px; background: #42ae75; flex: none;"></span><div><div class="sub" style="font-weight: 600;">iknow green #42AE75</div><div class="fn l2">Decorative only, like the scan line</div></div></div>
+        <div style="display: flex; align-items: center; gap: 12px;"><span style="width: 36px; height: 36px; border-radius: 10px; background: #3a9866; flex: none;"></span><div><div class="sub" style="font-weight: 600;">Tint #3A9866</div><div class="fn l2">Fills, bold labels, selection</div></div></div>
+        <div style="display: flex; align-items: center; gap: 12px;"><span style="width: 36px; height: 36px; border-radius: 10px; background: #296e49; flex: none;"></span><div><div class="sub" style="font-weight: 600;">Tint text #296E49</div><div class="fn l2">Links and small tinted text</div></div></div>
+        <div style="display: flex; align-items: center; gap: 12px;"><span style="width: 36px; height: 36px; border-radius: 10px; background: #232323; flex: none;"></span><div><div class="sub" style="font-weight: 600;">Charcoal #232323</div><div class="fn l2">Text, from iknow.ge</div></div></div>
+        <div style="display: flex; align-items: center; gap: 12px;"><span style="width: 36px; height: 36px; border-radius: 10px; background: #f2f2f2; border: 1px solid var(--sep); flex: none;"></span><div><div class="sub" style="font-weight: 600;">Grouped background #F2F2F2</div><div class="fn l2">iknow's #F7F7F7, one step darker so white cards separate</div></div></div>
+        <div style="display: flex; align-items: center; gap: 12px;"><span style="display: flex; gap: 4px; flex: none;"><span style="width: 16px; height: 36px; border-radius: 6px; background: #34c759;"></span><span style="width: 16px; height: 36px; border-radius: 6px; background: #ff8d28;"></span><span style="width: 16px; height: 36px; border-radius: 6px; background: #ff383c;"></span></span><div><div class="sub" style="font-weight: 600;">Green · Orange · Red</div><div class="fn l2">Stock meters and warnings, always with words</div></div></div>
+      </div>
+    </div>
+  </div>
+</div>

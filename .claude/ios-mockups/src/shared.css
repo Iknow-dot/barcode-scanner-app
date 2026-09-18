@@ -1,0 +1,152 @@
+/* iFlow on iPhone — shared tokens + components for every artboard.
+   Structure follows Apple HIG (Dynamic Type default sizes, 44pt targets,
+   floating tab bar, sheets). Palette follows iknow.ge (green accent,
+   charcoal text, neutral grays); type and 14px button radius from the app. */
+:root {
+  /* iknow.ge's #42AE75 is 2.8:1 with white, under the 3:1 bold minimum, so
+     fills use a deeper shade of the same hue and small text a deeper one. */
+  --brand: #42ae75;
+  --tint: #3a9866;
+  --tint-text: #296e49;
+  --tint-soft: rgba(58, 152, 102, 0.14);
+  --bg-grouped: #f2f2f2;
+  --bg: #ffffff;
+  --fill: rgba(35, 35, 35, 0.07);
+  --label: #232323;
+  --label-2: #54595f;
+  --label-3: #8890a4;
+  --sep: #e0e0e0;
+  --green: #34c759;
+  --orange: #ff8d28;
+  --red: #ff383c;
+  /* Glass is for controls floating above content, never the content layer.
+     Translucent enough that content scrolling beneath shows through. */
+  --glass: rgba(255, 255, 255, 0.6);
+  --glass-blur: blur(24px) saturate(190%);
+  --glass-rim: rgba(255, 255, 255, 0.85);
+  --glass-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.9), 0 2px 10px rgba(28, 36, 48, 0.1);
+  --glass-shadow-lg: inset 0 1px 1px rgba(255, 255, 255, 0.9), 0 10px 32px rgba(28, 36, 48, 0.18), 0 2px 8px rgba(28, 36, 48, 0.08);
+  --glass-dark: rgba(28, 28, 32, 0.46);
+  --glass-dark-rim: rgba(255, 255, 255, 0.2);
+  --glass-dark-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.16), 0 8px 24px rgba(0, 0, 0, 0.35);
+  --font: "Noto Sans Georgian", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+* { box-sizing: border-box; }
+body { margin: 0; font-family: var(--font); color: var(--label); background: var(--bg-grouped); -webkit-font-smoothing: antialiased; }
+a { color: var(--tint-text); }
+a:hover { color: #1f5537; }
+svg { display: block; flex: none; }
+
+.screen { width: 393px; height: 852px; position: relative; overflow: hidden; background: var(--bg-grouped); }
+.safe-top { height: 59px; }
+
+/* Dynamic Type — iOS "Large" defaults (size/leading in pt) */
+.lt { font-size: 34px; line-height: 41px; font-weight: 700; }
+.t1 { font-size: 28px; line-height: 34px; font-weight: 700; }
+.t2 { font-size: 22px; line-height: 28px; font-weight: 700; }
+.t3 { font-size: 20px; line-height: 25px; font-weight: 600; }
+.hl { font-size: 17px; line-height: 22px; font-weight: 600; }
+.body { font-size: 17px; line-height: 22px; font-weight: 400; }
+.callout { font-size: 16px; line-height: 21px; }
+.sub { font-size: 15px; line-height: 20px; }
+.fn { font-size: 13px; line-height: 18px; }
+.c1 { font-size: 12px; line-height: 16px; }
+.c2 { font-size: 11px; line-height: 13px; }
+.l2 { color: var(--label-2); }
+.l3 { color: var(--label-3); }
+.num { font-variant-numeric: tabular-nums; }
+.clamp2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+
+/* Toolbar */
+.navbar { height: 54px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 16px; }
+.nav-title { font-size: 17px; line-height: 22px; font-weight: 600; text-align: center; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.glass-btn { width: 44px; height: 44px; border-radius: 22px; background: var(--glass); backdrop-filter: var(--glass-blur); border: 1px solid var(--glass-rim); box-shadow: var(--glass-shadow); display: flex; align-items: center; justify-content: center; color: var(--label); }
+.glass-btn.prominent { background: var(--tint); border-color: var(--tint); color: #fff; box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.35), 0 4px 14px rgba(58, 152, 102, 0.32); }
+.glass-pill { height: 44px; padding: 0 16px; border-radius: 22px; background: var(--glass); backdrop-filter: var(--glass-blur); border: 1px solid var(--glass-rim); box-shadow: var(--glass-shadow); display: flex; align-items: center; gap: 6px; font-size: 17px; font-weight: 600; }
+.glass-pill.prominent { background: var(--tint); border-color: var(--tint); color: #fff; font-weight: 700; box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.35), 0 4px 14px rgba(58, 152, 102, 0.32); }
+.glass-pill.disabled { color: var(--label-3); }
+/* Dark glass for controls over the camera feed */
+.glass-dark { background: var(--glass-dark); backdrop-filter: var(--glass-blur); border: 1px solid var(--glass-dark-rim); box-shadow: var(--glass-dark-shadow); color: #fff; }
+.large-title { padding: 0 16px 10px; }
+
+/* Inset grouped lists */
+.section-h { padding: 22px 32px 7px; font-size: 13px; line-height: 18px; color: var(--label-2); display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.section-f { padding: 7px 32px 0; font-size: 13px; line-height: 18px; color: var(--label-2); }
+.group { margin: 0 16px; background: var(--bg); border-radius: 14px; overflow: hidden; }
+.row { position: relative; min-height: 44px; display: flex; align-items: center; gap: 12px; padding: 11px 16px; }
+.row + .row::before { content: ""; position: absolute; top: 0; right: 0; left: var(--sep-left, 16px); height: 1px; background: var(--sep); }
+.row-main { flex: 1; min-width: 0; }
+.row-side { flex: none; display: flex; align-items: center; gap: 8px; text-align: right; }
+.chev { color: rgba(35, 35, 35, 0.3); }
+.thumb { width: 48px; height: 48px; border-radius: 10px; flex: none; display: flex; align-items: center; justify-content: center; }
+
+/* Buttons (44pt+ targets; one prominent per view) */
+.btn { height: 52px; border-radius: 14px; border: none; display: flex; align-items: center; justify-content: center; gap: 8px; font-family: var(--font); font-size: 17px; line-height: 22px; width: 100%; }
+.btn.primary { background: var(--tint); color: #fff; font-weight: 700; box-shadow: 0 4px 20px rgba(58, 152, 102, 0.3); }
+.btn.gray { background: var(--fill); color: var(--tint-text); font-weight: 600; }
+.btn.plain { background: none; color: var(--tint-text); font-weight: 600; height: 44px; }
+.btn.disabled { background: var(--fill); color: var(--label-3); font-weight: 700; }
+.btn.destructive { background: rgba(255, 56, 60, 0.12); color: #d70015; font-weight: 600; }
+
+/* Controls */
+.search { height: 44px; border-radius: 22px; background: var(--fill); display: flex; align-items: center; gap: 8px; padding: 0 0 0 14px; color: var(--label-2); font-size: 17px; }
+.search .ph { color: var(--label-3); flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.search .typed { color: var(--label); flex: 1; }
+.search .trail { width: 44px; height: 44px; border-radius: 22px; display: flex; align-items: center; justify-content: center; color: var(--tint-text); }
+/* Segment track is glass; `.inset` is for a control sitting inside a white row,
+   where glass would vanish. Thumb radius is concentric: 22 - 1 border - 3 pad. */
+.seg { height: 44px; border-radius: 22px; background: var(--glass); backdrop-filter: var(--glass-blur); border: 1px solid var(--glass-rim); box-shadow: var(--glass-shadow); padding: 3px; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 2px; }
+.seg.inset { background: var(--fill); backdrop-filter: none; border-color: transparent; box-shadow: none; }
+.seg span { border-radius: 18px; display: flex; align-items: center; justify-content: center; font-size: 13px; line-height: 16px; font-weight: 500; color: var(--label); white-space: nowrap; padding: 0 4px; }
+/* Selected segment carries the accent. Labels go bold so white on the tint
+   (3.6:1) clears Apple's 3:1 minimum for bold text. */
+.seg span.on { background: var(--tint); color: #fff; font-weight: 700; box-shadow: 0 2px 8px rgba(58, 152, 102, 0.32); }
+.switch { width: 51px; height: 31px; border-radius: 16px; background: var(--tint); position: relative; flex: none; }
+.switch::after { content: ""; position: absolute; top: 2px; right: 2px; width: 27px; height: 27px; border-radius: 50%; background: #fff; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.18); }
+.switch.off { background: rgba(120, 120, 128, 0.16); }
+.switch.off::after { right: auto; left: 2px; }
+.stepper { height: 44px; border-radius: 22px; background: var(--fill); display: flex; align-items: center; flex: none; }
+.stepper b { width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; color: var(--label); }
+.stepper .val { min-width: 32px; text-align: center; font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.tag { height: 26px; padding: 0 10px; border-radius: 13px; display: inline-flex; align-items: center; gap: 5px; font-size: 13px; line-height: 16px; font-weight: 600; white-space: nowrap; }
+.field-label { font-size: 13px; line-height: 18px; color: var(--label-2); }
+.field-value { font-size: 17px; line-height: 22px; margin-top: 2px; }
+.field-ph { font-size: 17px; line-height: 22px; margin-top: 2px; color: var(--label-3); }
+
+/* Floating Liquid-Glass tab bar (navigation only) + trailing search tab */
+.tabbar { position: absolute; left: 16px; right: 16px; bottom: 26px; display: flex; gap: 10px; align-items: center; z-index: 5; }
+.tabs { flex: 1; height: 64px; border-radius: 32px; background: var(--glass); backdrop-filter: var(--glass-blur); border: 1px solid var(--glass-rim); box-shadow: var(--glass-shadow-lg); display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 4px; }
+.tab { border-radius: 28px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; color: rgba(0, 0, 0, 0.72); font-size: 11px; line-height: 13px; font-weight: 500; }
+.tab.on { color: var(--tint-text); background: var(--tint-soft); font-weight: 600; }
+.search-tab { width: 64px; height: 64px; border-radius: 32px; background: var(--glass); backdrop-filter: var(--glass-blur); border: 1px solid var(--glass-rim); box-shadow: var(--glass-shadow-lg); display: flex; align-items: center; justify-content: center; color: rgba(0, 0, 0, 0.72); }
+.search-tab.on { color: var(--tint-text); background: linear-gradient(var(--tint-soft), var(--tint-soft)), var(--glass); }
+
+/* Scroll-edge fade under floating bars: light enough that content still
+   shows through the glass above it */
+.edge-bottom { position: absolute; left: 0; right: 0; bottom: 0; height: 180px; background: linear-gradient(to bottom, rgba(242, 242, 242, 0), rgba(242, 242, 242, 0.45) 55%, rgba(242, 242, 242, 0.8)); z-index: 4; }
+
+/* Active-order accessory above the tab bar */
+.accessory { position: absolute; left: 16px; right: 16px; bottom: 100px; height: 56px; border-radius: 28px; background: var(--glass); backdrop-filter: var(--glass-blur); border: 1px solid var(--glass-rim); box-shadow: var(--glass-shadow-lg); display: flex; align-items: center; gap: 10px; padding: 0 8px 0 8px; z-index: 5; }
+.acc-icon { width: 40px; height: 40px; border-radius: 20px; background: var(--tint); color: #fff; display: flex; align-items: center; justify-content: center; position: relative; }
+.acc-badge { position: absolute; top: -3px; right: -4px; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 10px; background: #fff; color: var(--label); font-size: 12px; line-height: 20px; font-weight: 700; text-align: center; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2); }
+
+/* Sheets */
+.dim { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.32); }
+.under { position: absolute; left: 10px; right: 10px; top: 49px; height: 60px; border-radius: 26px 26px 0 0; background: #d6d6d6; }
+.sheet { position: absolute; left: 0; right: 0; top: 69px; bottom: 0; background: var(--bg-grouped); border-radius: 26px 26px 0 0; overflow: hidden; }
+.sheet.white { background: var(--bg); }
+.grabber { width: 36px; height: 5px; border-radius: 3px; background: rgba(35, 35, 35, 0.3); margin: 6px auto 0; }
+/* Floating glass action bar; the sheet's content scrolls beneath it. Radius is
+   concentric with the 14px buttons inside (14 + 10 padding). */
+.sheet-bottom { position: absolute; left: 12px; right: 12px; bottom: 26px; padding: 10px; border-radius: 24px; background: var(--glass); backdrop-filter: var(--glass-blur); border: 1px solid var(--glass-rim); box-shadow: var(--glass-shadow-lg); display: flex; flex-direction: column; gap: 8px; z-index: 5; }
+
+/* iOS number pad, drawn only where the keyboard type is the point of the screen */
+.numpad { position: absolute; left: 0; right: 0; bottom: 0; height: 256px; padding: 8px 6px 0; background: rgba(209, 212, 219, 0.94); backdrop-filter: var(--glass-blur); z-index: 6; }
+.numpad-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px 6px; }
+.numpad-grid b { height: 46px; border-radius: 8px; background: #fff; box-shadow: 0 1px 0 rgba(0, 0, 0, 0.3); display: flex; flex-direction: column; align-items: center; justify-content: center; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 25px; line-height: 28px; font-weight: 400; color: #000; }
+.numpad-grid b i { font-style: normal; font-size: 10px; line-height: 11px; font-weight: 600; letter-spacing: 1.5px; }
+.numpad-grid span { height: 46px; display: flex; align-items: center; justify-content: center; color: #000; }
+
+/* Stock meter — always paired with words, never color alone */
+.meter { height: 4px; border-radius: 2px; background: rgba(120, 120, 128, 0.16); overflow: hidden; margin-top: 8px; }
+.meter i { display: block; height: 100%; border-radius: 2px; }

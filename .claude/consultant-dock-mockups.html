@@ -1,0 +1,815 @@
+<meta charset="utf-8">
+<title>Consultant Action Bar Mockups</title>
+<style>
+  :root {
+    --bg: #f2f5f9;
+    --surface: #ffffff;
+    --ink: #1c2430;
+    --muted: #5c6675;
+    --line: rgba(28, 36, 48, 0.12);
+    --accent: #1677ff;
+    --good: #52c41a;
+    --chip-bg: rgba(22, 119, 255, 0.08);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #10141a;
+      --surface: #1a2028;
+      --ink: #e8ecf2;
+      --muted: #97a1b0;
+      --line: rgba(232, 236, 242, 0.12);
+      --chip-bg: rgba(22, 119, 255, 0.18);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #10141a;
+    --surface: #1a2028;
+    --ink: #e8ecf2;
+    --muted: #97a1b0;
+    --line: rgba(232, 236, 242, 0.12);
+    --chip-bg: rgba(22, 119, 255, 0.18);
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: -apple-system, "Segoe UI", Roboto, "Noto Sans Georgian", "Helvetica Neue", Arial, sans-serif;
+    line-height: 1.5;
+    margin: 0;
+    padding: 40px 24px 72px;
+  }
+  .wrap { max-width: 1240px; margin: 0 auto; }
+
+  .eyebrow {
+    font-size: 12px;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--accent);
+    font-weight: 600;
+    margin: 0 0 8px;
+  }
+  h1 {
+    font-size: clamp(24px, 3.4vw, 34px);
+    font-weight: 650;
+    letter-spacing: -0.01em;
+    margin: 0 0 10px;
+    text-wrap: balance;
+  }
+  .lede {
+    color: var(--muted);
+    max-width: 72ch;
+    margin: 0 0 8px;
+    font-size: 15px;
+  }
+  .hint {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 13px;
+    color: var(--muted);
+    background: var(--chip-bg);
+    border-radius: 999px;
+    padding: 5px 14px;
+    margin-top: 6px;
+    margin-right: 8px;
+  }
+  .hint b { color: var(--accent); font-weight: 600; }
+
+  .section-title {
+    font-size: 20px;
+    font-weight: 650;
+    margin: 44px 0 0;
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+    gap: 28px;
+    margin-top: 24px;
+    align-items: start;
+  }
+  .grid.current-row { grid-template-columns: minmax(300px, 420px) 1fr; margin-top: 28px; }
+  @media (max-width: 760px) { .grid.current-row { grid-template-columns: 1fr; } }
+
+  .option {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 22px 22px 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    min-width: 0;
+  }
+  .opt-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .opt-tag {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    padding: 3px 10px;
+    border-radius: 999px;
+    background: var(--chip-bg);
+    color: var(--accent);
+    white-space: nowrap;
+  }
+  .opt-tag.pick { background: rgba(82, 196, 26, 0.14); color: #3f9714; }
+  .opt-tag.old { background: rgba(92, 102, 117, 0.12); color: var(--muted); }
+  .option h2 { font-size: 17px; font-weight: 650; margin: 0; }
+  .opt-sub { color: var(--muted); font-size: 13.5px; margin: 0; }
+
+  .notes { margin: 0; padding: 0; list-style: none; font-size: 13px; color: var(--muted); display: flex; flex-direction: column; gap: 5px; }
+  .notes li { padding-left: 18px; position: relative; }
+  .notes li::before { content: "+"; position: absolute; left: 2px; font-weight: 700; color: var(--good); }
+  .notes li.con::before { content: "–"; color: #d4380d; }
+  .notes li.fx::before { content: "→"; color: var(--accent); font-weight: 600; }
+
+  /* state toggle above each phone */
+  .state-toggle {
+    display: inline-flex;
+    align-self: flex-start;
+    background: var(--chip-bg);
+    border-radius: 999px;
+    padding: 3px;
+    gap: 2px;
+  }
+  .state-toggle button {
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    font: inherit;
+    font-size: 12.5px;
+    font-weight: 600;
+    padding: 5px 14px;
+    border-radius: 999px;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+  }
+  .state-toggle button.on { background: var(--accent); color: #fff; }
+
+  /* ============ phone frame — replicates the app's light theme ============ */
+  .phone {
+    position: relative;
+    background: #f5f5f5;
+    border: 1px solid var(--line);
+    border-radius: 26px;
+    height: 640px;
+    overflow: hidden;
+    color: rgba(0, 0, 0, 0.88);
+    font-size: 13px;
+    max-width: 400px;
+    margin: 0 auto;
+    width: 100%;
+  }
+  .phone * { box-sizing: border-box; }
+
+  .pcontent {
+    position: absolute;
+    inset: 0;
+    padding: 14px 14px 150px;
+    overflow: hidden;
+  }
+
+  /* active-order strip pinned at top of content (today's UI + Option A) */
+  .top-strip {
+    display: none;
+    align-items: center;
+    gap: 8px;
+    background: #1677ff;
+    color: #fff;
+    border-radius: 10px;
+    padding: 9px 12px;
+    font-size: 12.5px;
+    font-weight: 500;
+    margin-bottom: 12px;
+  }
+  .phone.has-order .top-strip { display: flex; }
+  .top-strip svg { flex: none; }
+  .top-strip .grow { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .top-strip b { font-weight: 700; white-space: nowrap; }
+
+  .greet { margin: 6px 2px 14px; }
+  .greet-title { font-size: 18px; font-weight: 650; }
+  .greet-sub { font-size: 12.5px; color: rgba(0,0,0,0.45); margin-top: 2px; }
+
+  .kpis { display: flex; gap: 10px; }
+  .kpi {
+    flex: 1;
+    background: #fff;
+    border-radius: 12px;
+    padding: 12px 12px 10px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    min-width: 0;
+  }
+  .kpi-label { display: flex; align-items: center; gap: 5px; font-size: 11px; color: rgba(0,0,0,0.5); white-space: nowrap; overflow: hidden; }
+  .kpi-label svg { flex: none; }
+  .kpi.blue .kpi-label svg { color: #1677ff; }
+  .kpi.green .kpi-label svg { color: #52c41a; }
+  .kpi-value { font-size: 26px; font-weight: 700; line-height: 1.25; font-variant-numeric: tabular-nums; }
+  .kpi-meta { font-size: 10.5px; color: rgba(0,0,0,0.4); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  .rs-head { font-size: 12.5px; font-weight: 650; color: rgba(0,0,0,0.6); margin: 16px 2px 8px; }
+  .rs-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: #fff;
+    border-radius: 12px;
+    padding: 10px 12px;
+    margin-bottom: 8px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  }
+  .rs-ic {
+    width: 32px; height: 32px; border-radius: 8px; flex: none;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(22, 119, 255, 0.08); color: #1677ff;
+  }
+  .rs-ic.miss { background: rgba(255, 77, 79, 0.08); color: #ff4d4f; }
+  .rs-body { flex: 1; min-width: 0; }
+  .rs-name { font-size: 12.5px; font-weight: 550; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .rs-meta { font-size: 11px; color: rgba(0,0,0,0.4); }
+  .rs-price { font-size: 12.5px; font-weight: 650; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .rs-price.miss { color: #ff4d4f; font-weight: 500; font-size: 11px; }
+
+  /* ============ shared bottom-bar chrome ============ */
+  .bar {
+    position: absolute;
+    left: 0; right: 0; bottom: 0;
+    background: rgba(255, 255, 255, 0.92);
+    backdrop-filter: blur(18px) saturate(160%);
+    -webkit-backdrop-filter: blur(18px) saturate(160%);
+    border-top: 1px solid rgba(0, 0, 0, 0.07);
+    padding: 10px 14px 10px;
+  }
+  .tabrow {
+    display: flex;
+    justify-content: space-around;
+    padding-top: 7px;
+    margin-top: 9px;
+    border-top: 1px solid rgba(0, 0, 0, 0.05);
+  }
+  .tab {
+    display: flex; flex-direction: column; align-items: center; gap: 2px;
+    color: rgba(0,0,0,0.38);
+    font-size: 10.5px; font-weight: 550;
+    min-width: 84px; padding: 2px 8px;
+  }
+  .tab.on { color: #1677ff; font-weight: 650; }
+
+  /* today's pills */
+  .cur-actions { display: flex; gap: 10px; justify-content: center; }
+  .pill {
+    display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+    height: 46px; border-radius: 23px; border: none;
+    font: inherit; font-size: 14px; font-weight: 600; cursor: pointer;
+  }
+  .pill.primary {
+    background: #1677ff; color: #fff;
+    flex: 1; max-width: 190px;
+    box-shadow: 0 4px 16px rgba(22, 119, 255, 0.3);
+  }
+  .pill.ghost {
+    background: #fff; color: rgba(0,0,0,0.75);
+    border: 1px solid #d9d9d9;
+    flex: 1; max-width: 140px;
+    font-weight: 500;
+  }
+
+  /* big iOS-style action row (Options A + B) */
+  .actions { display: flex; gap: 10px; }
+  .big-scan {
+    flex: 1;
+    display: inline-flex; align-items: center; justify-content: center; gap: 9px;
+    height: 56px; border-radius: 17px; border: none;
+    background: #1677ff; color: #fff;
+    font: inherit; font-size: 16.5px; font-weight: 650; letter-spacing: 0.01em;
+    box-shadow: 0 5px 18px rgba(22, 119, 255, 0.32);
+    cursor: pointer;
+    transition: transform 0.12s ease;
+  }
+  .sq {
+    flex: none;
+    width: 56px; height: 56px; border-radius: 17px;
+    display: inline-flex; align-items: center; justify-content: center;
+    background: rgba(120, 120, 128, 0.12);
+    border: 1px solid rgba(0, 0, 0, 0.05);
+    color: rgba(0,0,0,0.7);
+    cursor: pointer;
+    transition: transform 0.12s ease;
+  }
+  .big-scan:active, .sq:active, .pill:active { transform: scale(0.965); }
+
+  /* floating cart bubble (today + Option A) */
+  .fab {
+    position: absolute;
+    right: 14px;
+    width: 56px; height: 56px; border-radius: 50%;
+    border: none; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    background: #1677ff; color: #fff;
+    box-shadow: 0 6px 20px rgba(22, 119, 255, 0.35);
+    z-index: 3;
+  }
+  .fab .badge {
+    position: absolute; top: -4px; right: -4px;
+    min-width: 19px; height: 19px; border-radius: 10px;
+    background: #ff4d4f; color: #fff;
+    font-size: 11px; font-weight: 700; font-style: normal;
+    display: flex; align-items: center; justify-content: center;
+    padding: 0 5px;
+    border: 2px solid #f5f5f5;
+  }
+  .fab.cur-fab { bottom: 132px; }
+  .phone:not(.has-order) .fab.cur-fab { background: #8c8c8c; box-shadow: 0 6px 20px rgba(0,0,0,0.18); }
+  .phone:not(.has-order) .fab .badge { display: none; }
+
+  .fab.a-fab { bottom: 138px; width: 60px; height: 60px; display: none; border: 3px solid rgba(255,255,255,0.85); }
+  .phone.has-order .fab.a-fab { display: flex; }
+
+  /* Option B — mini-player order strip inside the bar */
+  .ministrip {
+    display: none;
+    width: 100%;
+    align-items: center; gap: 9px;
+    border: 1px solid rgba(22, 119, 255, 0.25);
+    background: rgba(22, 119, 255, 0.07);
+    border-radius: 14px;
+    padding: 8px 12px 8px 8px;
+    margin-bottom: 9px;
+    font: inherit;
+    cursor: pointer;
+    text-align: left;
+  }
+  .phone.has-order .ministrip { display: flex; }
+  .ms-chip {
+    position: relative; flex: none;
+    width: 34px; height: 34px; border-radius: 10px;
+    background: #1677ff; color: #fff;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .ms-chip .badge {
+    position: absolute; top: -5px; right: -5px;
+    min-width: 17px; height: 17px; border-radius: 9px;
+    background: #ff4d4f; color: #fff;
+    font-size: 10px; font-weight: 700; font-style: normal;
+    display: flex; align-items: center; justify-content: center;
+    padding: 0 4px;
+    border: 2px solid #eef4ff;
+  }
+  .ms-label { flex: 1; min-width: 0; }
+  .ms-title { font-size: 12.5px; font-weight: 650; color: rgba(0,0,0,0.85); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ms-sub { font-size: 11px; color: rgba(0,0,0,0.45); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ms-total { font-size: 14px; font-weight: 700; color: #1677ff; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .ministrip .chev { color: rgba(0,0,0,0.3); flex: none; }
+
+  /* Option C — floating liquid-glass dock */
+  .phone.opt-c .pcontent { padding-bottom: 110px; }
+  .dock {
+    position: absolute;
+    left: 12px; right: 12px; bottom: 12px;
+    height: 72px;
+    border-radius: 36px;
+    background: rgba(255, 255, 255, 0.78);
+    backdrop-filter: blur(22px) saturate(180%);
+    -webkit-backdrop-filter: blur(22px) saturate(180%);
+    border: 1px solid rgba(255, 255, 255, 0.9);
+    box-shadow: 0 10px 32px rgba(28, 36, 48, 0.18), 0 2px 8px rgba(28, 36, 48, 0.08);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 18px;
+  }
+  .slot {
+    display: flex; flex-direction: column; align-items: center; gap: 2px;
+    color: rgba(0,0,0,0.4);
+    font-size: 9.5px; font-weight: 550;
+    min-width: 52px;
+    position: relative;
+    cursor: pointer;
+  }
+  .slot.on { color: #1677ff; font-weight: 650; }
+  .scan-orb {
+    flex: none;
+    width: 62px; height: 62px;
+    border-radius: 50%;
+    border: 4px solid rgba(255, 255, 255, 0.95);
+    background: #1677ff; color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 6px 20px rgba(22, 119, 255, 0.4);
+    margin-top: -26px;
+    cursor: pointer;
+    transition: transform 0.12s ease;
+  }
+  .scan-orb:active { transform: scale(0.95); }
+  .slot .badge {
+    position: absolute; top: -4px; right: 6px;
+    min-width: 17px; height: 17px; border-radius: 9px;
+    background: #ff4d4f; color: #fff;
+    font-size: 10px; font-weight: 700; font-style: normal;
+    display: none; align-items: center; justify-content: center;
+    padding: 0 4px;
+    border: 2px solid #fff;
+  }
+  .phone.has-order .slot .badge { display: flex; }
+  .slot .lbl-total { display: none; color: #1677ff; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .phone.has-order .slot .lbl-total { display: block; }
+  .phone.has-order .slot .lbl-idle { display: none; }
+  .phone.has-order .slot.cartslot { color: rgba(0,0,0,0.65); }
+
+  .verdict {
+    margin-top: 40px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-left: 4px solid var(--good);
+    border-radius: 14px;
+    padding: 20px 24px;
+    font-size: 14.5px;
+    max-width: 900px;
+  }
+  .verdict h2 { font-size: 16px; margin: 0 0 8px; }
+  .verdict p { margin: 0 0 8px; color: var(--muted); }
+  .verdict p:last-child { margin-bottom: 0; }
+  .verdict b { color: var(--ink); }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; animation: none !important; }
+  }
+</style>
+
+<div class="wrap">
+  <p class="eyebrow">Consultant page · mobile bottom bar</p>
+  <h1>Bigger buttons, an iOS feel — and a cart that knows its place</h1>
+  <p class="lede">
+    Three directions for the consultant page's bottom controls. All of them make the primary
+    actions thumb-sized instead of two mid-size pills floating in the middle of the bar, and each
+    one answers the "cart bubble feels off" problem differently. Phone frames use the app's real
+    Georgian strings and light theme.
+  </p>
+  <span class="hint">Use the <b>Active order</b> toggle on each phone — the cart treatment is the main difference between options.</span>
+
+  <!-- ================= CURRENT STATE ================= -->
+  <div class="grid current-row">
+    <div class="option">
+      <div class="opt-head">
+        <span class="opt-tag old">Today</span>
+        <h2>Current bottom bar</h2>
+      </div>
+      <div class="state-toggle" role="group" aria-label="Order state">
+        <button data-state="no">No order</button>
+        <button class="on" data-state="yes">Active order</button>
+      </div>
+      <div class="phone has-order">
+        <div class="pcontent">
+          <div class="top-strip">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="21" r="1.5"/><circle cx="19" cy="21" r="1.5"/><path d="M2 3h3l2.7 12.4a2 2 0 0 0 2 1.6h8.7a2 2 0 0 0 2-1.6L23 7H6"/></svg>
+            <span class="grow">აქტიური შეკვეთა #142 · გ. ბერიძე</span>
+            <b>145.50 ₾ ›</b>
+          </div>
+          <div class="greet">
+            <div class="greet-title">საღამო მშვიდობისა, ნინო</div>
+            <div class="greet-sub">აი შენი დღევანდელი აქტივობა</div>
+          </div>
+          <div class="kpis">
+            <div class="kpi blue">
+              <div class="kpi-label"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 5v14M8 5v14M12 5v9M16 5v14M20 5v14"/></svg> დღევანდელი სკანერები</div>
+              <div class="kpi-value">24</div>
+              <div class="kpi-meta">18 ნაპოვნი · 6 ვერ მოიძებნა</div>
+            </div>
+            <div class="kpi green">
+              <div class="kpi-label"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 7h12l1 14H5L6 7z"/><path d="M9 7a3 3 0 0 1 6 0"/></svg> დღევანდელი შეკვეთები</div>
+              <div class="kpi-value">3</div>
+              <div class="kpi-meta">145.50 ₾ ჯამი</div>
+            </div>
+          </div>
+          <div class="rs-head">ბოლო სკანერები</div>
+          <div class="rs-row">
+            <div class="rs-ic"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 5v14M8 5v14M12 5v9M16 5v14M20 5v14"/></svg></div>
+            <div class="rs-body"><div class="rs-name">სამზარეულოს ონკანი ქრომი</div><div class="rs-meta">14:32</div></div>
+            <div class="rs-price">129.00 ₾</div>
+          </div>
+          <div class="rs-row">
+            <div class="rs-ic"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 5v14M8 5v14M12 5v9M16 5v14M20 5v14"/></svg></div>
+            <div class="rs-body"><div class="rs-name">LED პანელი 24W ნეიტრალური</div><div class="rs-meta">14:18</div></div>
+            <div class="rs-price">45.50 ₾</div>
+          </div>
+          <div class="rs-row">
+            <div class="rs-ic miss"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></div>
+            <div class="rs-body"><div class="rs-name">კუთხის პროფილი 2.7მ</div><div class="rs-meta">13:55</div></div>
+            <div class="rs-price miss">ვერ მოიძებნა</div>
+          </div>
+        </div>
+
+        <button class="fab cur-fab" aria-label="Cart">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="21" r="1.5"/><circle cx="19" cy="21" r="1.5"/><path d="M2 3h3l2.7 12.4a2 2 0 0 0 2 1.6h8.7a2 2 0 0 0 2-1.6L23 7H6"/></svg>
+          <i class="badge">3</i>
+        </button>
+
+        <div class="bar">
+          <div class="cur-actions">
+            <button class="pill primary">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2M3 12h18"/></svg>
+              დასკანერება
+            </button>
+            <button class="pill ghost">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+              ძებნა
+            </button>
+          </div>
+          <div class="tabrow">
+            <div class="tab on"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg><span>პროდუქტი</span></div>
+            <div class="tab"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01"/></svg><span>შეკვეთები</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="option">
+      <div class="opt-head">
+        <span class="opt-tag old">Diagnosis</span>
+        <h2>Why it feels off</h2>
+      </div>
+      <p class="opt-sub">What the current layout does that reads as "web page", not "app".</p>
+      <ul class="notes">
+        <li class="con">The most-used control on the page — Scan — is a 46&nbsp;px pill capped at 200&nbsp;px, floating centered with dead space either side. iOS puts the primary action edge-to-edge at 50–56&nbsp;px.</li>
+        <li class="con">The bar stacks two rows (~112&nbsp;px tall), yet nothing inside it is actually big. Height without size.</li>
+        <li class="con">The cart bubble hovers 130&nbsp;px up the screen: it covers list rows, warehouse cards and drawer buttons as you scroll.</li>
+        <li class="con">One order is announced twice — a blue strip at the top of the page and a bubble at the bottom right. Two homes for the same fact.</li>
+        <li class="con">With no order the bubble goes gray but stays tappable — and tapping it opens the client picker. Nothing about a gray cart says "start an order here".</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ================= OPTIONS ================= -->
+  <h2 class="section-title">Directions</h2>
+  <div class="grid">
+
+    <!-- ============ OPTION A ============ -->
+    <div class="option">
+      <div class="opt-head">
+        <span class="opt-tag">Option A</span>
+        <h2>Full-width split bar</h2>
+      </div>
+      <p class="opt-sub">Smallest change: Scan takes the whole row as a 56&nbsp;px squircle, Search becomes a square glass icon button. Cart bubble stays, but only while an order is active.</p>
+      <div class="state-toggle" role="group" aria-label="Order state">
+        <button data-state="no">No order</button>
+        <button class="on" data-state="yes">Active order</button>
+      </div>
+      <div class="phone has-order">
+        <div class="pcontent">
+          <div class="top-strip">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="21" r="1.5"/><circle cx="19" cy="21" r="1.5"/><path d="M2 3h3l2.7 12.4a2 2 0 0 0 2 1.6h8.7a2 2 0 0 0 2-1.6L23 7H6"/></svg>
+            <span class="grow">აქტიური შეკვეთა #142 · გ. ბერიძე</span>
+            <b>145.50 ₾ ›</b>
+          </div>
+          <div class="greet">
+            <div class="greet-title">საღამო მშვიდობისა, ნინო</div>
+            <div class="greet-sub">აი შენი დღევანდელი აქტივობა</div>
+          </div>
+          <div class="kpis">
+            <div class="kpi blue">
+              <div class="kpi-label"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 5v14M8 5v14M12 5v9M16 5v14M20 5v14"/></svg> დღევანდელი სკანერები</div>
+              <div class="kpi-value">24</div>
+              <div class="kpi-meta">18 ნაპოვნი · 6 ვერ მოიძებნა</div>
+            </div>
+            <div class="kpi green">
+              <div class="kpi-label"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 7h12l1 14H5L6 7z"/><path d="M9 7a3 3 0 0 1 6 0"/></svg> დღევანდელი შეკვეთები</div>
+              <div class="kpi-value">3</div>
+              <div class="kpi-meta">145.50 ₾ ჯამი</div>
+            </div>
+          </div>
+          <div class="rs-head">ბოლო სკანერები</div>
+          <div class="rs-row">
+            <div class="rs-ic"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 5v14M8 5v14M12 5v9M16 5v14M20 5v14"/></svg></div>
+            <div class="rs-body"><div class="rs-name">სამზარეულოს ონკანი ქრომი</div><div class="rs-meta">14:32</div></div>
+            <div class="rs-price">129.00 ₾</div>
+          </div>
+          <div class="rs-row">
+            <div class="rs-ic"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 5v14M8 5v14M12 5v9M16 5v14M20 5v14"/></svg></div>
+            <div class="rs-body"><div class="rs-name">LED პანელი 24W ნეიტრალური</div><div class="rs-meta">14:18</div></div>
+            <div class="rs-price">45.50 ₾</div>
+          </div>
+        </div>
+
+        <button class="fab a-fab" aria-label="Cart">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="21" r="1.5"/><circle cx="19" cy="21" r="1.5"/><path d="M2 3h3l2.7 12.4a2 2 0 0 0 2 1.6h8.7a2 2 0 0 0 2-1.6L23 7H6"/></svg>
+          <i class="badge">3</i>
+        </button>
+
+        <div class="bar">
+          <div class="actions">
+            <button class="big-scan">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2M3 12h18"/></svg>
+              დასკანერება
+            </button>
+            <button class="sq" aria-label="ძებნა">
+              <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+            </button>
+          </div>
+          <div class="tabrow">
+            <div class="tab on"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg><span>პროდუქტი</span></div>
+            <div class="tab"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01"/></svg><span>შეკვეთები</span></div>
+          </div>
+        </div>
+      </div>
+      <ul class="notes">
+        <li>Scan becomes the biggest control on the screen — full-width, 56&nbsp;px, continuous-corner squircle.</li>
+        <li>Search keeps its own one-tap target; icon-only in iOS "gray fill" material, zero relearning.</li>
+        <li>The ambiguous gray bubble is gone — the cart only exists while an order does. Starting an order stays on the Orders tab.</li>
+        <li class="con">The bubble still floats over content — a smaller window for collisions, but the same idea.</li>
+        <li class="con">Order info still lives at the top of the page, far from the cart you tap.</li>
+        <li class="fx">Effort: smallest — CSS on the action row plus one render condition on the FAB.</li>
+      </ul>
+    </div>
+
+    <!-- ============ OPTION B ============ -->
+    <div class="option">
+      <div class="opt-head">
+        <span class="opt-tag pick">Option B · recommended</span>
+        <h2>Mini-player cart</h2>
+      </div>
+      <p class="opt-sub">Same big buttons as A, but the floating bubble is deleted. The active order docks into the bar as an iOS-Music-style mini strip: client, count and total one glance and one tap away.</p>
+      <div class="state-toggle" role="group" aria-label="Order state">
+        <button data-state="no">No order</button>
+        <button class="on" data-state="yes">Active order</button>
+      </div>
+      <div class="phone has-order">
+        <div class="pcontent">
+          <div class="greet">
+            <div class="greet-title">საღამო მშვიდობისა, ნინო</div>
+            <div class="greet-sub">აი შენი დღევანდელი აქტივობა</div>
+          </div>
+          <div class="kpis">
+            <div class="kpi blue">
+              <div class="kpi-label"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 5v14M8 5v14M12 5v9M16 5v14M20 5v14"/></svg> დღევანდელი სკანერები</div>
+              <div class="kpi-value">24</div>
+              <div class="kpi-meta">18 ნაპოვნი · 6 ვერ მოიძებნა</div>
+            </div>
+            <div class="kpi green">
+              <div class="kpi-label"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 7h12l1 14H5L6 7z"/><path d="M9 7a3 3 0 0 1 6 0"/></svg> დღევანდელი შეკვეთები</div>
+              <div class="kpi-value">3</div>
+              <div class="kpi-meta">145.50 ₾ ჯამი</div>
+            </div>
+          </div>
+          <div class="rs-head">ბოლო სკანერები</div>
+          <div class="rs-row">
+            <div class="rs-ic"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 5v14M8 5v14M12 5v9M16 5v14M20 5v14"/></svg></div>
+            <div class="rs-body"><div class="rs-name">სამზარეულოს ონკანი ქრომი</div><div class="rs-meta">14:32</div></div>
+            <div class="rs-price">129.00 ₾</div>
+          </div>
+          <div class="rs-row">
+            <div class="rs-ic"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 5v14M8 5v14M12 5v9M16 5v14M20 5v14"/></svg></div>
+            <div class="rs-body"><div class="rs-name">LED პანელი 24W ნეიტრალური</div><div class="rs-meta">14:18</div></div>
+            <div class="rs-price">45.50 ₾</div>
+          </div>
+          <div class="rs-row">
+            <div class="rs-ic miss"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></div>
+            <div class="rs-body"><div class="rs-name">კუთხის პროფილი 2.7მ</div><div class="rs-meta">13:55</div></div>
+            <div class="rs-price miss">ვერ მოიძებნა</div>
+          </div>
+        </div>
+
+        <div class="bar">
+          <button class="ministrip">
+            <span class="ms-chip">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="21" r="1.5"/><circle cx="19" cy="21" r="1.5"/><path d="M2 3h3l2.7 12.4a2 2 0 0 0 2 1.6h8.7a2 2 0 0 0 2-1.6L23 7H6"/></svg>
+              <i class="badge">3</i>
+            </span>
+            <span class="ms-label">
+              <span class="ms-title">შეკვეთა #142 · გ. ბერიძე</span>
+              <span class="ms-sub">3 პროდუქტი</span>
+            </span>
+            <span class="ms-total">145.50 ₾</span>
+            <svg class="chev" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+          </button>
+          <div class="actions">
+            <button class="big-scan">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2M3 12h18"/></svg>
+              დასკანერება
+            </button>
+            <button class="sq" aria-label="ძებნა">
+              <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+            </button>
+          </div>
+          <div class="tabrow">
+            <div class="tab on"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg><span>პროდუქტი</span></div>
+            <div class="tab"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01"/></svg><span>შეკვეთები</span></div>
+          </div>
+        </div>
+      </div>
+      <ul class="notes">
+        <li>The mini strip is iOS's native home for "something is in progress" — Music's now-playing bar, Maps' route bar, the timer pill.</li>
+        <li>Client, item count and running total are glanceable right above the thumb; one tap opens the order drawer.</li>
+        <li>Deletes both the floating bubble and the duplicate blue strip at the top — nothing covers content anymore.</li>
+        <li>No order → the strip simply isn't there. No gray-cart ambiguity; the bar is just two big buttons.</li>
+        <li class="con">The bar grows ~46&nbsp;px taller while an order is active.</li>
+        <li class="con">The fly-to-cart animation needs a new landing target (the strip's cart chip).</li>
+        <li class="fx">Effort: moderate — bar JSX plus folding <code>m-order-indicator</code> into the strip.</li>
+      </ul>
+    </div>
+
+    <!-- ============ OPTION C ============ -->
+    <div class="option">
+      <div class="opt-head">
+        <span class="opt-tag">Option C</span>
+        <h2>Floating glass dock</h2>
+      </div>
+      <p class="opt-sub">The boldest cut: tabs, scan, search and cart merge into one detached liquid-glass capsule. The scan orb protrudes from the dock as the screen's biggest target.</p>
+      <div class="state-toggle" role="group" aria-label="Order state">
+        <button data-state="no">No order</button>
+        <button class="on" data-state="yes">Active order</button>
+      </div>
+      <div class="phone opt-c has-order">
+        <div class="pcontent">
+          <div class="greet">
+            <div class="greet-title">საღამო მშვიდობისა, ნინო</div>
+            <div class="greet-sub">აი შენი დღევანდელი აქტივობა</div>
+          </div>
+          <div class="kpis">
+            <div class="kpi blue">
+              <div class="kpi-label"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 5v14M8 5v14M12 5v9M16 5v14M20 5v14"/></svg> დღევანდელი სკანერები</div>
+              <div class="kpi-value">24</div>
+              <div class="kpi-meta">18 ნაპოვნი · 6 ვერ მოიძებნა</div>
+            </div>
+            <div class="kpi green">
+              <div class="kpi-label"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 7h12l1 14H5L6 7z"/><path d="M9 7a3 3 0 0 1 6 0"/></svg> დღევანდელი შეკვეთები</div>
+              <div class="kpi-value">3</div>
+              <div class="kpi-meta">145.50 ₾ ჯამი</div>
+            </div>
+          </div>
+          <div class="rs-head">ბოლო სკანერები</div>
+          <div class="rs-row">
+            <div class="rs-ic"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 5v14M8 5v14M12 5v9M16 5v14M20 5v14"/></svg></div>
+            <div class="rs-body"><div class="rs-name">სამზარეულოს ონკანი ქრომი</div><div class="rs-meta">14:32</div></div>
+            <div class="rs-price">129.00 ₾</div>
+          </div>
+          <div class="rs-row">
+            <div class="rs-ic"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 5v14M8 5v14M12 5v9M16 5v14M20 5v14"/></svg></div>
+            <div class="rs-body"><div class="rs-name">LED პანელი 24W ნეიტრალური</div><div class="rs-meta">14:18</div></div>
+            <div class="rs-price">45.50 ₾</div>
+          </div>
+          <div class="rs-row">
+            <div class="rs-ic miss"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></div>
+            <div class="rs-body"><div class="rs-name">კუთხის პროფილი 2.7მ</div><div class="rs-meta">13:55</div></div>
+            <div class="rs-price miss">ვერ მოიძებნა</div>
+          </div>
+          <div class="rs-row">
+            <div class="rs-ic"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 5v14M8 5v14M12 5v9M16 5v14M20 5v14"/></svg></div>
+            <div class="rs-body"><div class="rs-name">ჰერმეტიკი უნივერსალური 280მლ</div><div class="rs-meta">13:41</div></div>
+            <div class="rs-price">12.90 ₾</div>
+          </div>
+        </div>
+
+        <div class="dock">
+          <div class="slot on">
+            <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+            <span>პროდუქტი</span>
+          </div>
+          <div class="slot">
+            <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01"/></svg>
+            <span>შეკვეთები</span>
+          </div>
+          <button class="scan-orb" aria-label="დასკანერება">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2M3 12h18"/></svg>
+          </button>
+          <div class="slot">
+            <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+            <span>ძებნა</span>
+          </div>
+          <div class="slot cartslot">
+            <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="21" r="1.5"/><circle cx="19" cy="21" r="1.5"/><path d="M2 3h3l2.7 12.4a2 2 0 0 0 2 1.6h8.7a2 2 0 0 0 2-1.6L23 7H6"/></svg>
+            <i class="badge">3</i>
+            <span class="lbl-idle">კალათა</span>
+            <span class="lbl-total">145.50₾</span>
+          </div>
+        </div>
+      </div>
+      <ul class="notes">
+        <li>One floating capsule holds every action — no separate bubble, no stacked rows, content scrolls behind glass.</li>
+        <li>The protruding scan orb is the biggest, most central target on the screen — unmistakably the app's main verb.</li>
+        <li>The cart lives in a fixed slot: always the same place, never covering content, badge plus running total.</li>
+        <li class="con">Five targets in one dock — Georgian labels get tight at 390&nbsp;px and drop to 9.5&nbsp;px.</li>
+        <li class="con">Cart shrinks back to icon-plus-badge; client name no longer visible without opening the drawer.</li>
+        <li class="con">Biggest rewrite: tab bar, action row and FAB all merge into one new component.</li>
+        <li class="fx">Effort: largest — new dock component replaces <code>m-bottom-bar</code> and <code>m-cart-fab</code>.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="verdict">
+    <h2>Recommendation</h2>
+    <p><b>Option B.</b> It is the only direction that answers both complaints at once: the buttons become genuinely big (full-width 56&nbsp;px scan, square glass search), and the cart stops being a bubble that floats over content — it becomes a mini-player strip that shows the client, the count and the total exactly where the thumb already is. It also removes the duplicated order indicator at the top of the page instead of keeping two homes for one fact.</p>
+    <p>If you want the smallest possible diff first, <b>A</b> ships the big buttons alone and can grow into B later. <b>C</b> is the most striking and most "native" silhouette, but it trades away the visible client name and total, and costs the biggest rewrite.</p>
+  </div>
+</div>
+
+<script>
+  document.querySelectorAll('.state-toggle').forEach(function (tg) {
+    var phone = tg.closest('.option').querySelector('.phone');
+    tg.querySelectorAll('button').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        tg.querySelectorAll('button').forEach(function (b) { b.classList.toggle('on', b === btn); });
+        phone.classList.toggle('has-order', btn.dataset.state === 'yes');
+      });
+    });
+  });
+</script>
