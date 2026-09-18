@@ -142,6 +142,13 @@ test("BarcodeScanner.css hard-codes no colour beyond the camera overlay's blacks
     expect(literals.filter((literal) => !SCANNER_ALLOWED_LITERALS.some((rule) => rule.test(literal)))).toEqual([]);
 });
 
+// F7: the literal-colour check above only catches hex/rgb/hsl forms — a
+// named colour like `color: red` would sail through it undetected. ios.css
+// has had this companion check since early on; BarcodeScanner.css didn't.
+test('BarcodeScanner.css uses no named colours', () => {
+    expect(scannerCss.match(/(?<![-\w])(white|black|gray|grey|red|green|blue|orange)(?![-\w])/gi)).toBeNull();
+});
+
 test('every token BarcodeScanner.css reads exists in the palette', () => {
     const used = [...new Set([...scannerCss.matchAll(/var\((--if-[\w-]+)/g)].map((match) => match[1]))];
     expect(used.length).toBeGreaterThan(0);

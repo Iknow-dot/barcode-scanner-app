@@ -231,6 +231,21 @@
     transform: scale(1.05);
 }
 
+/* Icon colours for the top-bar controls (torch, flip) — moved here from
+   inline `style={{color: ...}}` in BarcodeScanner.js (F7) so the palette
+   guard below can see them. `.scanner-icon` stays on the camera-overlay's
+   sanctioned white; the torch's "on" state uses the same green accent the
+   rest of the app uses for interactive/selected state (--if-tint) rather
+   than antd's gold, which was a literal this file's own allowlist doesn't
+   (and shouldn't) cover. */
+.scanner-icon {
+    color: #fff;
+}
+
+.scanner-icon-active {
+    color: var(--if-tint);
+}
+
 /* Glass pill, matching the navbar buttons' dark-glass language rather than
    the light `--if-glass` tokens ios.css defines for controls over the themed
    page — this sits over a live camera feed, so it keeps the same literal

@@ -306,8 +306,8 @@ const BarcodeScanner = ({open, onScan, onClose, onManualSearch}) => {
                             data-testid="scanner-torch-btn"
                         >
                             {torchOn
-                                ? <BulbFilled style={{fontSize: 22, color: '#fadb14'}}/>
-                                : <BulbOutlined style={{fontSize: 22, color: '#fff'}}/>
+                                ? <BulbFilled className="scanner-icon-active" style={{fontSize: 22}}/>
+                                : <BulbOutlined className="scanner-icon" style={{fontSize: 22}}/>
                             }
                         </button>
                     )}
@@ -318,7 +318,7 @@ const BarcodeScanner = ({open, onScan, onClose, onManualSearch}) => {
                         aria-label={t.flipCamera}
                         data-testid="scanner-flip-btn"
                     >
-                        <SwapOutlined style={{fontSize: 22, color: '#fff'}}/>
+                        <SwapOutlined className="scanner-icon" style={{fontSize: 22}}/>
                     </button>
                 </div>
             </div>
@@ -327,16 +327,21 @@ const BarcodeScanner = ({open, onScan, onClose, onManualSearch}) => {
             <div className="scanner-video-container">
                 <div ref={containerRef} id={SCANNER_ELEMENT_ID} className="scanner-video-element"/>
 
-                {/* Viewfinder overlay */}
-                <div className="scanner-viewfinder">
-                    <div className="viewfinder-box">
-                        <div className="viewfinder-corner viewfinder-corner-tl"/>
-                        <div className="viewfinder-corner viewfinder-corner-tr"/>
-                        <div className="viewfinder-corner viewfinder-corner-bl"/>
-                        <div className="viewfinder-corner viewfinder-corner-br"/>
-                        <div className="viewfinder-scan-line"/>
+                {/* Viewfinder overlay — hidden while an error is showing (F6):
+                    the camera is dead at that point, so an animating scan
+                    line and "point camera at a barcode" hint would tell the
+                    consultant the opposite of what's true. */}
+                {!cameraError && (
+                    <div className="scanner-viewfinder">
+                        <div className="viewfinder-box">
+                            <div className="viewfinder-corner viewfinder-corner-tl"/>
+                            <div className="viewfinder-corner viewfinder-corner-tr"/>
+                            <div className="viewfinder-corner viewfinder-corner-bl"/>
+                            <div className="viewfinder-corner viewfinder-corner-br"/>
+                            <div className="viewfinder-scan-line"/>
+                        </div>
                     </div>
-                </div>
+                )}
 
                 {/* Camera error */}
                 {cameraError && (
@@ -357,7 +362,9 @@ const BarcodeScanner = ({open, onScan, onClose, onManualSearch}) => {
 
             {/* Bottom controls */}
             <div className="scanner-bottom-bar">
-                <span className="scanner-glass-pill scanner-hint">{t.scanHint}</span>
+                {/* F6: same reasoning as the viewfinder above — "point camera
+                    at a barcode" doesn't apply once the camera has failed. */}
+                {!cameraError && <span className="scanner-glass-pill scanner-hint">{t.scanHint}</span>}
                 {onManualSearch && (
                     <button
                         type="button"

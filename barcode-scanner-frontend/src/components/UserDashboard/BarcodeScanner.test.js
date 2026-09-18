@@ -314,6 +314,22 @@ describe('BarcodeScanner', () => {
         expect(screen.queryByRole('button', {name: en.retry})).toBeNull();
     });
 
+    // F6: the viewfinder (animated scan line, corner brackets) and the
+    // "point camera at a barcode" hint both imply a live feed. Rendering
+    // them behind the error panel tells the consultant the scanner is
+    // working at the exact moment it isn't. Would fail if the `!cameraError
+    // &&` guards around either block in BarcodeScanner.js were removed.
+    it('hides the viewfinder and the scan hint while a camera error is showing', async () => {
+        __mock.start.mockImplementationOnce(() =>
+            Promise.reject({name: 'NotReadableError', message: 'Device is busy'})
+        );
+        renderScanner();
+
+        expect(await screen.findByText(en.cameraBusy)).toBeInTheDocument();
+        expect(screen.queryByText(en.scanHint)).toBeNull();
+        expect(document.querySelector('.viewfinder-box')).toBeNull();
+    });
+
     it('calls onScan once for the first decode even when the library fires the callback again', async () => {
         __mock.start.mockImplementationOnce((cameraIdOrConfig, config, onSuccess) => {
             onSuccess('4860112028140');
