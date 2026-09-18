@@ -21,7 +21,7 @@ describe('IosIcon', () => {
     });
 
     it('draws the order-sheet glyphs', () => {
-        const stroked = ['back', 'calendar', 'clock', 'close', 'cloud', 'gift', 'info', 'minus', 'person', 'pin', 'trash'];
+        const stroked = ['back', 'calendar', 'clock', 'close', 'cloud', 'gift', 'info', 'minus', 'person', 'pin', 'print', 'trash'];
         stroked.forEach((name) => {
             const {container, unmount} = render(<IosIcon name={name}/>);
             expect(container.querySelector(`svg[data-icon="${name}"]`)).toHaveAttribute('stroke', 'currentColor');

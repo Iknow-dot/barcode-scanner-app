@@ -1,0 +1,17 @@
+/* Orders view (iOS redesign phase 5a, task 3): small row-specific tweaks
+   layered over the shared .if-row / .if-avatar / .if-stepper-btn primitives
+   from theme/ios.css. Colours come from src/theme/tokens.css. */
+
+/* A long customer name (or the retail label) stays on one line instead of
+   pushing the trailing total/time column off the row. */
+.m-order-row-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Same red used by the cart's own delete action (index.css
+   .m-cart-item-controls .if-stepper-btn.m-cart-item-delete). */
+.m-order-row-delete {
+    color: var(--if-red-text);
+}

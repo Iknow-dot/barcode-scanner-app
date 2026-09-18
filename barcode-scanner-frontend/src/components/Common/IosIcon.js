@@ -74,6 +74,14 @@ const STROKE = {
         </>
     ),
     plus: <path d="M12 5v14M5 12h14"/>,
+    print: (
+        <>
+            <path d="M7 8.5V4a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1v4.5"/>
+            <rect x="2.5" y="8.5" width="19" height="8" rx="2"/>
+            <path d="M7 15.5v4a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1v-4"/>
+            <rect x="8.5" y="12.5" width="7" height="4"/>
+        </>
+    ),
     scan: <path d="M3 8V6a3 3 0 0 1 3-3h2M16 3h2a3 3 0 0 1 3 3v2M21 16v2a3 3 0 0 1-3 3h-2M8 21H6a3 3 0 0 1-3-3v-2M7 12h10"/>,
     search: (
         <>
