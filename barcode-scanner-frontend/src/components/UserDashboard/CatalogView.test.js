@@ -622,6 +622,34 @@ describe('lifted state survives a tab switch (F1/F2)', () => {
 
     expect(queryInput().value).toBe('cola');
   });
+
+  // index.js renders the whole app inside React.StrictMode, which in
+  // development mounts every effect, tears it down and mounts it again. A
+  // reset guard written as a run-once flag is consumed by the first of those
+  // two invocations, so the second falls through and wipes the lifted state —
+  // on every entry into the tab. The tests above cannot see that, because RTL
+  // renders without StrictMode; this one renders with it, which is what the
+  // consultant's browser actually does. Verified by hand first: before the
+  // fix, drilling in, tabbing away and back landed on the root tile wall.
+  test('the drill-down survives a StrictMode double-invoked mount', async () => {
+    const snacks = deferred();
+    catalogService.listProducts.mockReturnValueOnce(snacks.promise);
+    const {rerender} = render(
+      <React.StrictMode><CatalogViewHarness resetToken={3} visible/></React.StrictMode>
+    );
+    await act(async () => {});
+
+    fireEvent.click(screen.getByText('Snacks'));
+    await act(async () => snacks.resolve(browsePage(['Chips'])));
+    expect(document.querySelector('.cv-crumbtitle').textContent).toBe('Snacks');
+
+    catalogService.listProducts.mockResolvedValueOnce(browsePage(['Chips']));
+    rerender(<React.StrictMode><CatalogViewHarness resetToken={3} visible={false}/></React.StrictMode>);
+    rerender(<React.StrictMode><CatalogViewHarness resetToken={3} visible/></React.StrictMode>);
+    await act(async () => {});
+
+    expect(document.querySelector('.cv-crumbtitle').textContent).toBe('Snacks');
+  });
 });
 
 describe('autofocus (replaces the drawer\'s afterOpenChange)', () => {

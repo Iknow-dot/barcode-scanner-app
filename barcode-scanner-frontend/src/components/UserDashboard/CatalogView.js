@@ -186,13 +186,23 @@ const CatalogView = ({
     // Pop back to the category root, clear the search and refocus the field
     // — but only on a re-tap of the already-active tab, not on the mount
     // that follows a plain switch into it (see the docblock above).
-    const skippedMountResetRef = useRef(false);
+    //
+    // This tracks the last resetToken VALUE rather than "have I run once".
+    // A run-once flag looks equivalent and is not: index.js renders the app
+    // inside React.StrictMode, which in development mounts, tears down and
+    // remounts every effect, so the flag is consumed by the first invocation
+    // and the second one falls straight through to the reset — wiping the
+    // lifted stack/query on every entry into the tab, i.e. silently undoing
+    // the fix this effect exists to deliver. Comparing the token is
+    // idempotent: a repeated run with an unchanged token does nothing, and
+    // only a genuine bump resets.
+    const lastResetTokenRef = useRef(resetToken);
     useEffect(() => {
-        if (!skippedMountResetRef.current) {
-            skippedMountResetRef.current = true;
+        if (lastResetTokenRef.current === resetToken) {
             inputRef.current?.focus();
             return;
         }
+        lastResetTokenRef.current = resetToken;
         onStackChange([]);
         onQueryChange('');
         inputRef.current?.focus();
