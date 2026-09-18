@@ -9,26 +9,13 @@ import {
     emptyCopyKey,
 } from './ordersListView';
 
-// relativeTime/groupByDay bucket by the *local* calendar day (R1 fix — see
-// ordersListView.js's dayKeyOf), so their tests need a fixed local time zone
-// to be deterministic across machines/CI. Pinned to Tbilisi (UTC+4, no DST —
-// the one real consultant zone this app ships for) here, scoped to this file
-// only: set in beforeAll rather than src/setupTests.js so it can't perturb
-// any other suite's Date handling, and restored in afterAll (deleting the
-// var, not re-assigning `undefined`, which Node would stringify to "undefined"
-// and break TZ resolution) so it doesn't leak into whichever test file this
-// Jest worker runs next.
-const ORIGINAL_TZ = process.env.TZ;
-beforeAll(() => {
-    process.env.TZ = 'Asia/Tbilisi';
-});
-afterAll(() => {
-    if (ORIGINAL_TZ === undefined) {
-        delete process.env.TZ;
-    } else {
-        process.env.TZ = ORIGINAL_TZ;
-    }
-});
+// relativeTime/groupByDay bucket by the *local* calendar day (see
+// ordersListView.js's dayKeyOf), so the assertions below are local-time
+// results and need a known zone. It is pinned for the whole run in
+// jest.globalSetup.js — NOT here: assigning process.env.TZ from a beforeAll
+// is too late, because Node has already resolved the zone by then, and the
+// assignment is silently ignored. An earlier version of this file did exactly
+// that and the suite passed in Tbilisi while failing in CI's UTC.
 
 const NOW = new Date('2026-09-18T12:00:00Z'); // Tbilisi local: 2026-09-18 16:00
 

@@ -27,24 +27,10 @@ beforeAll(() => {
     };
 });
 
-// relativeTime/groupByDay (ordersListView.js) bucket by the *local* calendar
-// day, so this suite needs a fixed local time zone to be deterministic across
-// machines/CI — same reasoning and same pin as ordersListView.test.js.
-// Scoped to this file only (set in beforeAll, not src/setupTests.js) and
-// restored in afterAll by deleting the var rather than assigning `undefined`
-// (which Node would stringify to the literal string "undefined" and break TZ
-// resolution for whichever suite this Jest worker runs next).
-const ORIGINAL_TZ = process.env.TZ;
-beforeAll(() => {
-    process.env.TZ = 'Asia/Tbilisi';
-});
-afterAll(() => {
-    if (ORIGINAL_TZ === undefined) {
-        delete process.env.TZ;
-    } else {
-        process.env.TZ = ORIGINAL_TZ;
-    }
-});
+// The rendered times come from relativeTime/groupByDay (ordersListView.js),
+// which bucket by the *local* calendar day, so this suite asserts local-time
+// text. The zone is pinned for the whole run in jest.globalSetup.js — see the
+// note in ordersListView.test.js for why it cannot be done from a beforeAll.
 
 // Fixed "now" for relativeTime/groupByDay — same reference point
 // ordersListView.test.js uses (Tbilisi local: 2026-09-18 16:00), so

@@ -53,6 +53,7 @@
     ]
   },
   "jest": {
+    "globalSetup": "<rootDir>/jest.globalSetup.js",
     "moduleNameMapper": {
       "^@rc-component/([^/]+)/(?!lib/|es/|assets/)(.*)$": "@rc-component/$1/lib/$2",
       "^react-router-dom$": "<rootDir>/node_modules/react-router-dom/dist/index.js",
