@@ -536,29 +536,9 @@ body {
   min-width: 0;
 }
 
-/* Orders tab list: white ground now that /dashboard has no content card */
-.m-orders-list {
-  background: var(--if-bg);
-  border-radius: 14px;
-  overflow: hidden;
-}
-
 /* Incomplete orders card */
 .m-incomplete-orders-card {
   border-radius: 12px !important;
-}
-
-/* Incomplete order rows */
-.m-incomplete-order-row {
-  padding: 10px 12px !important;
-  cursor: pointer;
-  border-radius: 10px !important;
-  transition: background-color 0.2s ease;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.m-incomplete-order-row:active {
-  background-color: var(--if-tint-soft);
 }
 
 /* ===== Search Drawer ===== */

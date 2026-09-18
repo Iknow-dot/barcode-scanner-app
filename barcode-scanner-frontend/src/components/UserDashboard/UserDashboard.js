@@ -23,6 +23,7 @@ import {printInvoice} from '../../utils/printInvoice';
 import {recordScan as logScanHistory} from '../../utils/scanLog';
 import useDailySnapshot from '../../hooks/useDailySnapshot';
 import HomeView from './HomeView';
+import OrdersView from './OrdersView';
 import TabBar from './TabBar';
 import ActiveOrderBar, {ACTIVE_ORDER_ICON_SELECTOR} from './ActiveOrderBar';
 import {nextTabAction} from './tabSelection';
@@ -37,8 +38,6 @@ import {pickUnit} from './warehouseRowView';
 import {unitLabel} from './productSheetView';
 import {ADD_FLOW_IDLE, lookupClosed, orderStartFailed, orderStarted, startAdd} from './addFlow';
 import {catalogFeatureEnabled} from '../../utils/features';
-import {orderStatusColor} from '../../utils/orderStatusColor';
-import displayCustomerName from '../../utils/orderDisplay';
 import OfflineBanner, {useOfflineStatus} from './OfflineBanner';
 import {startSyncLoop} from '../../utils/offlineOrderSync';
 import {
@@ -52,32 +51,16 @@ import {
 } from '../../utils/offlineOrderQueue';
 import {isOffline} from '../../utils/connectivity';
 import {
-    Button,
     Collapse,
-    Empty,
-    Flex,
-    Input,
-    List,
     Modal,
-    Popconfirm,
     Result,
-    Spin,
-    Tag,
-    Typography,
     theme
 } from "antd";
 import {
     ShoppingOutlined,
     InboxOutlined,
-    PrinterOutlined,
-    DeleteOutlined,
-    UserOutlined,
-    CalendarOutlined,
-    RightOutlined,
     CheckCircleFilled,
 } from "@ant-design/icons";
-
-const {Text} = Typography;
 
 const UserDashboard = ({isDark = false, onToggleTheme}) => {
     const [drawerVisible, setDrawerVisible] = useState(false);
@@ -105,16 +88,14 @@ const UserDashboard = ({isDark = false, onToggleTheme}) => {
     const [customerModalOpen, setCustomerModalOpen] = useState(false);
     const [changeCustomerOpen, setChangeCustomerOpen] = useState(false);
 
-    // Incomplete orders state
-    const [incompleteOrders, setIncompleteOrders] = useState([]);
-    const [incompleteOrdersLoading, setIncompleteOrdersLoading] = useState(false);
-
-    // Customer search across all orders (any status) — used to find a past
-    // order to reprint its invoice. Empty input keeps the tab in its
-    // default "my drafts" view.
-    const [customerSearch, setCustomerSearch] = useState('');
-    const [searchResults, setSearchResults] = useState([]);
-    const [searchLoading, setSearchLoading] = useState(false);
+    // Orders tab: OrdersView owns its own fetch/segment/search state and has
+    // no exposed refresh handle. Bumping this remounts it (via `key` below),
+    // forcing a refetch — used after actions elsewhere in the dashboard
+    // (save-for-later, confirm, delete) change order data that OrdersView may
+    // already hold in its local state. See handleSaveForLater /
+    // handleProceedToPayment / handleDeleteActiveOrder / handleDeleteIncompleteOrder.
+    const [ordersViewKey, setOrdersViewKey] = useState(0);
+    const refreshOrdersView = useCallback(() => setOrdersViewKey((key) => key + 1), []);
 
     // Mobile tab state: 'scan' (product), 'current' (active order workflow),
     // or 'orders' (incomplete / draft orders).
@@ -195,7 +176,7 @@ const UserDashboard = ({isDark = false, onToggleTheme}) => {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    // Scoped to current user; the customer-search effect below omits this filter on purpose so colleagues' drafts stay findable.
+    // Feeds the daily snapshot and OrdersView's own draft-segment fetch below.
     const currentUserId = authData?.user?.id;
     const {
         scansSummary: snapshotScans,
@@ -203,55 +184,6 @@ const UserDashboard = ({isDark = false, onToggleTheme}) => {
         ordersSummary: snapshotOrders,
         refresh: refreshSnapshot,
     } = useDailySnapshot(currentUserId);
-    const fetchIncompleteOrders = useCallback(async () => {
-        if (!currentUserId) return;
-        setIncompleteOrdersLoading(true);
-        try {
-            const result = await orderService.getOrders({created_by: currentUserId});
-            if (result.success) {
-                const currentOrder = activeOrderRef.current;
-                const drafts = (result.data || []).filter(
-                    (o) => o.status === 'draft' && (!currentOrder || o.id !== currentOrder.id)
-                );
-                setIncompleteOrders(drafts);
-            }
-        } catch (err) {
-            console.error("Failed to fetch orders:", err);
-        } finally {
-            setIncompleteOrdersLoading(false);
-        }
-    }, [currentUserId]);
-
-    // Fetch incomplete drafts when switching to the Orders tab
-    useEffect(() => {
-        if (activeTab === 'orders') {
-            fetchIncompleteOrders();
-        }
-    }, [activeTab, fetchIncompleteOrders]);
-
-    // Debounced customer search across all org orders. Only runs while the
-    // Orders tab is active and the input is non-empty.
-    useEffect(() => {
-        const trimmed = customerSearch.trim();
-        if (activeTab !== 'orders' || !trimmed) {
-            return;
-        }
-        const handle = setTimeout(async () => {
-            setSearchLoading(true);
-            try {
-                const result = await orderService.getOrders({customer_search: trimmed});
-                if (result.success) {
-                    setSearchResults(Array.isArray(result.data) ? result.data : result.data?.results || []);
-                } else {
-                    setSearchResults([]);
-                }
-            } finally {
-                setSearchLoading(false);
-            }
-        }, 300);
-        return () => clearTimeout(handle);
-    }, [activeTab, customerSearch]);
-
     const isSearchingRef = useRef(false);
     // Remembers the last successful search so the "show other warehouses"
     // button can re-run it with the warehouse filter dropped.
@@ -517,7 +449,6 @@ const UserDashboard = ({isDark = false, onToggleTheme}) => {
             // they're continuing rather than starting fresh.
             if (result.status === 200) {
                 notify.info(t.activeOrder, t.orderResumedExisting);
-                setIncompleteOrders((prev) => prev.filter((o) => o.id !== result.data.id));
                 playOrderResumedSound();
             } else {
                 playOrderCreatedSound();
@@ -554,7 +485,7 @@ const UserDashboard = ({isDark = false, onToggleTheme}) => {
         activeOrderRef.current = null;
         setActiveOrder(null);
         setOrderDrawerVisible(false);
-        fetchIncompleteOrders();
+        refreshOrdersView();
     };
 
     const handleProceedToPayment = async () => {
@@ -600,7 +531,7 @@ const UserDashboard = ({isDark = false, onToggleTheme}) => {
         activeOrderRef.current = null;
         setActiveOrder(null);
         setOrderDrawerVisible(false);
-        fetchIncompleteOrders();
+        refreshOrdersView();
         refreshSnapshot();
         Modal.confirm({
             title: t.orderConfirmedSuccess,
@@ -622,7 +553,7 @@ const UserDashboard = ({isDark = false, onToggleTheme}) => {
             activeOrderRef.current = null;
             setActiveOrder(null);
             setOrderDrawerVisible(false);
-            fetchIncompleteOrders();
+            refreshOrdersView();
         } else {
             notify.error(t.orderError, result.error);
         }
@@ -652,13 +583,16 @@ const UserDashboard = ({isDark = false, onToggleTheme}) => {
         }
     };
 
-    const handleDeleteIncompleteOrder = async (e, orderId) => {
-        e.stopPropagation();
+    // OrdersView's own row already stops the confirm-popup's propagation
+    // before calling onDelete (see OrdersView.js's OrderRow), so this takes
+    // just the id. It has no setter into OrdersView's local `orders` state,
+    // so it asks the view to refetch via refreshOrdersView instead of
+    // pruning a list in place.
+    const handleDeleteIncompleteOrder = async (orderId) => {
         const result = await orderService.deleteOrder(orderId);
         if (result.success) {
             notify.success(t.success, t.orderDeleted);
-            setIncompleteOrders((prev) => prev.filter((o) => o.id !== orderId));
-            setSearchResults((prev) => prev.filter((o) => o.id !== orderId));
+            refreshOrdersView();
         } else {
             notify.error(t.orderError, result.error);
         }
@@ -869,148 +803,6 @@ const UserDashboard = ({isDark = false, onToggleTheme}) => {
         </div>
     );
 
-    // ===== Orders Tab — incomplete drafts + customer search across all orders =====
-    const renderOrderRow = (order) => {
-        const isDraft = order.status === 'draft';
-        const statusLabelMap = {
-            draft: t.orderDraft,
-            confirmed: t.orderConfirmed,
-            completed: t.orderCompleted,
-            cancelled: t.orderCancelled,
-        };
-        return (
-            <List.Item
-                className="m-incomplete-order-row"
-                onClick={isDraft ? () => handleContinueOrder(order.id) : undefined}
-                style={!isDraft ? {cursor: 'default'} : undefined}
-            >
-                <List.Item.Meta
-                    title={
-                        <Flex align="center" gap={6} wrap="wrap">
-                            <Text strong style={{fontSize: 14}}>
-                                #{order.id}
-                            </Text>
-                            <Tag color={orderStatusColor(order.status)} style={{fontSize: 11}}>
-                                {statusLabelMap[order.status] || order.status}
-                            </Tag>
-                        </Flex>
-                    }
-                    description={
-                        <Flex vertical gap={2}>
-                            <Flex align="center" gap={4}>
-                                <UserOutlined style={{fontSize: 11, opacity: 0.5}}/>
-                                <Text type="secondary" style={{fontSize: 13}}>
-                                    {displayCustomerName(order, t)}
-                                </Text>
-                            </Flex>
-                            <Flex align="center" gap={4} wrap="wrap">
-                                <CalendarOutlined style={{fontSize: 11, opacity: 0.5}}/>
-                                <Text type="secondary" style={{fontSize: 12}}>
-                                    {order.created_at && new Date(order.created_at).toLocaleDateString()}
-                                </Text>
-                                {order.items_count > 0 && (
-                                    <Tag style={{fontSize: 11, marginLeft: 4}}>
-                                        {order.items_count} {t.items}
-                                    </Tag>
-                                )}
-                            </Flex>
-                            {order.total != null && (
-                                <Text strong style={{fontSize: 13, color: 'var(--if-label)'}}>
-                                    {t.orderTotal}: {order.total} ₾
-                                </Text>
-                            )}
-                        </Flex>
-                    }
-                />
-                <Flex align="center" gap={8}>
-                    <Button
-                        type="text"
-                        size="small"
-                        icon={<PrinterOutlined/>}
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            printInvoice(order.id, t, notify);
-                        }}
-                        title={t.printInvoice}
-                    />
-                    {isDraft && (
-                        <Popconfirm
-                            title={t.confirmDelete}
-                            onConfirm={(e) => handleDeleteIncompleteOrder(e, order.id)}
-                            onCancel={(e) => e.stopPropagation()}
-                            okText={t.yes}
-                            cancelText={t.no}
-                        >
-                            <Button
-                                type="text"
-                                danger
-                                size="small"
-                                icon={<DeleteOutlined/>}
-                                onClick={(e) => e.stopPropagation()}
-                            />
-                        </Popconfirm>
-                    )}
-                    {isDraft && <RightOutlined style={{fontSize: 12, opacity: 0.3}}/>}
-                </Flex>
-            </List.Item>
-        );
-    };
-
-    const renderOrdersTab = () => {
-        const isSearching = customerSearch.trim().length > 0;
-        const displayedOrders = isSearching ? searchResults : incompleteOrders;
-        const isLoading = isSearching ? searchLoading : incompleteOrdersLoading;
-        const emptyText = isSearching ? t.noOrders : t.noIncompleteOrders;
-
-        return (
-            <div className="m-tab-content">
-                <div className="if-navbar is-end">
-                    <button
-                        type="button"
-                        className="if-glass-btn is-prominent"
-                        aria-label={t.newOrder}
-                        onClick={handleStartFreshOrder}
-                    >
-                        <IosIcon name="plus" size={22} stroke={2.4}/>
-                    </button>
-                </div>
-                <div className="if-large-header">
-                    <h1 className="if-large-title">{t.orders}</h1>
-                </div>
-                <Input
-                    placeholder={t.searchByCustomer}
-                    value={customerSearch}
-                    onChange={(e) => setCustomerSearch(e.target.value)}
-                    prefix={<UserOutlined style={{opacity: 0.4}}/>}
-                    allowClear
-                    style={{marginBottom: 12}}
-                    size="large"
-                />
-                <div className="m-orders-list">
-                    <Spin spinning={isLoading} size="large">
-                        {displayedOrders.length === 0 && !isLoading ? (
-                            <Empty
-                                image={Empty.PRESENTED_IMAGE_SIMPLE}
-                                description={
-                                    <Text type="secondary" style={{fontSize: 13}}>
-                                        {emptyText}
-                                    </Text>
-                                }
-                                style={{margin: '32px 0'}}
-                            />
-                        ) : (
-                            <List
-                                size="small"
-                                dataSource={displayedOrders}
-                                renderItem={renderOrderRow}
-                            />
-                        )}
-                    </Spin>
-                </div>
-            </div>
-        );
-    };
-
     return (
         <>
             {contextHolder}
@@ -1106,7 +898,17 @@ const UserDashboard = ({isDark = false, onToggleTheme}) => {
                 {/* Tab Content */}
                 <div className="m-dashboard-body">
                     {activeTab === 'scan' && renderScanTab()}
-                    {activeTab === 'orders' && renderOrdersTab()}
+                    {activeTab === 'orders' && (
+                        <OrdersView
+                            key={ordersViewKey}
+                            userId={currentUserId}
+                            activeOrderId={activeOrder?.id}
+                            onOpenOrder={handleContinueOrder}
+                            onPrint={(orderId) => printInvoice(orderId, t, notify)}
+                            onDelete={handleDeleteIncompleteOrder}
+                            onNewOrder={handleStartFreshOrder}
+                        />
+                    )}
                 </div>
 
                 {/* ===== Floating glass bars: the active order above the tab bar.
