@@ -1195,3 +1195,29 @@ button.if-row:disabled .if-check {
     color: var(--if-tint-text);
 }
 .if-banner-text { color: var(--if-label); font-size: 15px; }
+
+/* ---------- Orders canvas rows (iOS redesign, phase 5a) ---------- */
+
+/* Round monogram at the head of a row (an order's customer). */
+.if-avatar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    flex: none;
+    border-radius: 20px;
+    background: var(--if-fill);
+    color: var(--if-label-2);
+    font-size: 15px;
+    font-weight: 600;
+}
+
+/* Separators start past the avatar rather than at the row's edge. */
+.if-group.is-avatar-inset > * + *::before { left: 68px; }
+
+/* The right-hand column of a row: a value over a quiet caption. */
+.if-row-trailing {
+    flex: none;
+    text-align: right;
+}

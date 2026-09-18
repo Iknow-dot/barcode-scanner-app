@@ -76,3 +76,17 @@ test('the search field and info banner primitives exist with no literal colours'
     });
     expect(block.match(/#[0-9a-f]{3,8}\b/gi)).toBeNull();
 });
+
+// F5a task 2: the orders canvas row primitives (avatar, inset separator, trailing column).
+test('the orders-row avatar, inset separator and trailing column exist with no literal colours', () => {
+    const avatarStart = css.indexOf('.if-avatar {');
+    const trailingStart = css.indexOf('.if-row-trailing {');
+    expect(avatarStart).toBeGreaterThan(-1);
+    expect(trailingStart).toBeGreaterThan(avatarStart);
+    const block = css.slice(avatarStart, css.indexOf('}', trailingStart) + 1);
+
+    ['.if-avatar', '.if-group.is-avatar-inset', '.if-row-trailing'].forEach((selector) => {
+        expect(block).toContain(selector);
+    });
+    expect(block.match(/#[0-9a-f]{3,8}\b/gi)).toBeNull();
+});
