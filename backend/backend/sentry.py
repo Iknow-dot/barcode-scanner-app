@@ -182,8 +182,9 @@ _CLIENT_CREATE_PATH = "/api/v1/clients/create/"
 # Trailing slashes are load-bearing: a bare "/admin" prefix would also swallow
 # a future "/administration/" route. The health probe is here because uptime
 # monitoring hits it on a fixed schedule forever — tracing those pings buys no
-# signal and consumes quota indefinitely.
-_UNSAMPLED_PREFIXES = ("/admin/", "/static/", "/api/v1/health/")
+# signal and consumes quota indefinitely. "/django-static/" is STATIC_URL in the
+# single-origin install (deploy/onprem/), where the frontend owns "/static/".
+_UNSAMPLED_PREFIXES = ("/admin/", "/static/", "/django-static/", "/api/v1/health/")
 
 
 def make_traces_sampler(base_rate: float) -> Callable[[dict], float]:

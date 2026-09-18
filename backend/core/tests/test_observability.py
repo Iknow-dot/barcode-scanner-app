@@ -229,6 +229,9 @@ class TracesSamplerTests(SimpleTestCase):
     def test_static_is_never_sampled(self):
         self.assertEqual(self.sampler(self._ctx("/static/admin/css/base.css")), 0.0)
 
+    def test_onprem_static_is_never_sampled(self):
+        self.assertEqual(self.sampler(self._ctx("/django-static/admin/css/base.css")), 0.0)
+
     def test_health_probe_is_never_sampled(self):
         # An uptime monitor hits this on a fixed schedule forever; at the base
         # rate those pings would quietly consume trace quota for no signal.

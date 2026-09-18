@@ -1,6 +1,6 @@
-__pycache__
-*.pyc
-*.pyo
+**/__pycache__
+**/*.pyc
+**/*.pyo
 *.sqlite3
 .env
 .venv
@@ -9,3 +9,6 @@ venv
 .gitignore
 *.md
 staticfiles/
+# Release images carry the application, not its test suite. Tests run in CI
+# from the checkout, and docker-compose.yml bind-mounts the source anyway.
+**/tests/

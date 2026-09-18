@@ -24,11 +24,18 @@ RUN uv sync --locked --no-dev
 # Copy project files
 COPY . .
 
-# Expose port (DigitalOcean App Platform uses 8080 by default)
+# The release number, from the git tag (see docs/releasing.md). Read by
+# settings.APP_VERSION; empty for a local build.
+ARG APP_VERSION=
+ENV APP_VERSION="$APP_VERSION"
+LABEL org.opencontainers.image.title="iflow-backend" \
+      org.opencontainers.image.version="$APP_VERSION"
+
 EXPOSE 8080
 
-# The single definition of how the backend container starts: migrate,
-# collect static files (at run time, where the env exists and a failure is
-# loud), then serve. DigitalOcean runs this as-is; docker-compose.yml
-# overrides it with runserver for development.
+# How the release image starts (deploy/onprem/): migrate, collect static files
+# (at run time, where the env exists and a failure is loud), then serve.
+# Running migrations on start is what makes an upgrade a plain image swap.
+# NOT used by the live DigitalOcean app, which is a Python buildpack deploy
+# with its own run command; docker-compose.yml overrides it with runserver.
 CMD ["sh", "-c", "python manage.py migrate --noinput && python manage.py collectstatic --noinput && exec gunicorn --bind 0.0.0.0:8080 --workers 2 --threads 4 --timeout 120 backend.wsgi:application"]

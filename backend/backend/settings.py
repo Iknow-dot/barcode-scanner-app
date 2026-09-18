@@ -32,6 +32,11 @@ DEBUG = os.environ.get('DEBUG', 'False').lower() in ('true', '1', 'yes')
 
 ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
 
+# Release number (e.g. "1.4.0"). Baked into release images from the git tag
+# (see docs/releasing.md); empty for anything not built as a release, which
+# includes the DigitalOcean buildpack deploy unless its spec sets it.
+APP_VERSION = os.environ.get('APP_VERSION', '')
+
 # Application definition
 
 INSTALLED_APPS = [
@@ -164,7 +169,9 @@ APPEND_SLASH = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
-STATIC_URL = '/static/'
+# Overridable because a single-origin install (deploy/onprem/) serves the
+# built frontend from the same host, and CRA's bundles already own /static/.
+STATIC_URL = os.environ.get('STATIC_URL', '/static/')
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 # WhiteNoise serves STATIC_ROOT as-is (default STORAGES). Do not switch to
 # whitenoise.storage.CompressedManifestStaticFilesStorage: jazzmin's vendored
@@ -238,7 +245,8 @@ SENTRY_DSN = os.environ.get('SENTRY_DSN', '')
 init_sentry(
     dsn=SENTRY_DSN,
     environment=os.environ.get('SENTRY_ENVIRONMENT', 'production'),
-    release=os.environ.get('SENTRY_RELEASE', ''),
+    # An explicit release (the DO commit hash) wins over the release number.
+    release=os.environ.get('SENTRY_RELEASE') or APP_VERSION,
     # Parsed defensively: a typo'd value must not raise mid-settings-import and
     # stop the container booting over a monitoring knob.
     traces_sample_rate=parse_sample_rate(os.environ.get('SENTRY_TRACES_SAMPLE_RATE')),
@@ -302,7 +310,8 @@ JAZZMIN_SETTINGS = {
     'site_header': 'Barcode Scanner',
     'site_brand': 'Barcode Scanner',
     'welcome_sign': 'Welcome to Barcode Scanner Admin',
-    'copyright': 'Barcode Scanner App',
+    # The admin footer is where an install's operator reads which release runs.
+    'copyright': f'Barcode Scanner App {APP_VERSION or "(unreleased build)"}',
     'search_model': ['users.User'],
     'topmenu_links': [
         {'name': 'Home', 'url': 'admin:index', 'permissions': ['auth.view_user']},
