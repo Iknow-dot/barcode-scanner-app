@@ -275,6 +275,7 @@ const OrderSheet = ({
         <IosActionSheet
             open={menuOpen}
             onClose={() => setMenuOpen(false)}
+            title={t.moreActions}
             actions={menuActions}
             level={1}
         />

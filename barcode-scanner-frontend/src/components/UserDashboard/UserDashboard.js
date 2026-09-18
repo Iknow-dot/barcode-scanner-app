@@ -29,6 +29,7 @@ import ActiveOrderBar, {ACTIVE_ORDER_ICON_SELECTOR} from './ActiveOrderBar';
 import {nextTabAction, openCatalogSearchActions} from './tabSelection';
 import IosIcon from '../Common/IosIcon';
 import IosSheet from '../Common/IosSheet';
+import {LAYER_RESULT_SHEET} from '../../theme/layers';
 import groupItemsBySku from './groupItemsBySku';
 import {hasProductResult} from './stockStatus';
 import inheritFromGroup from './inheritFromGroup';
@@ -985,12 +986,18 @@ const UserDashboard = ({isDark = false, onToggleTheme}) => {
 
             {/* Order-confirmed result: a native sheet, not a Modal.confirm —
                 it's a result with a follow-up action rather than something to
-                accept or cancel out of, so it keeps both Print and Done. */}
+                accept or cancel out of, so it keeps both Print and Done.
+                F4: raised to LAYER_RESULT_SHEET (above the full-screen
+                scanner) rather than the ordinary sheet band — a confirm that
+                resolves after the consultant has closed this sheet and
+                opened the camera for the next customer must still reach
+                them, not render hidden underneath it. */}
             <IosSheet
                 open={confirmedOrderSheetOpen}
                 onClose={closeConfirmedOrderSheet}
                 afterClose={clearConfirmedOrder}
                 title={t.orderConfirmedSuccess}
+                zIndex={LAYER_RESULT_SHEET}
                 bottomBarLayout="row"
                 bottomBar={(
                     <>

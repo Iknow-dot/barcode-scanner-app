@@ -1160,6 +1160,13 @@ button.if-row:disabled .if-check {
     .if-pill {
         transition: none;
     }
+
+    /* transition: none above only removes the timing — the press itself
+       (.if-pill:active's 6% shrink) would still happen, just instantly.
+       The constraint is no movement, so the transform itself resets too. */
+    .if-pill:active {
+        transform: none;
+    }
 }
 
 /* ---------- Form rows (label above an inline, borderless field) ---------- */
@@ -1366,7 +1373,16 @@ button.if-row:disabled .if-check {
    with Cancel set apart in its own group below — the iOS UIActionSheet
    layout). Rows reuse .if-row/.if-group (44px min-height, active/focus
    states) rather than redeclaring them; only alignment and colour differ
-   from a plain list row, since actions read as centred tinted commands. ---------- */
+   from a plain list row, since actions read as centred tinted commands.
+   Sized to its content (IosSheet's `size="auto"`, set inline) rather than
+   the near-full-height default every other sheet uses — the max-height
+   here is a safety net so an unusually long action list still stops short
+   of the status bar/notch instead of overflowing past the screen edge,
+   the same ceiling SHEET_HEIGHT itself uses for a full sheet. ---------- */
+.if-sheet.is-action-sheet .ant-drawer-content-wrapper {
+    max-height: calc(100% - max(24px, env(safe-area-inset-top, 0px) + 10px));
+}
+
 .if-action-sheet-cancel-group {
     margin-top: 8px;
 }

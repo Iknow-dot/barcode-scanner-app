@@ -16,6 +16,10 @@ import IosSheet from './IosSheet';
  * `level` (default 0) passes straight through to IosSheet, for a caller that
  * opens this over a sheet already on screen (see IosSheet.js's own `level`
  * doc) — e.g. an order's own ⋯ menu, opened while the order sheet is up.
+ *
+ * Sized to its content (`size="auto"`), not IosSheet's near-full-height
+ * default — a handful of rows plus Cancel shouldn't render as a near-empty
+ * full-screen sheet — and marked with its own `is-action-sheet` root class.
  */
 const IosActionSheet = ({open, onClose, title, actions = [], cancelLabel, level = 0}) => {
     const {t} = useLanguage();
@@ -26,7 +30,14 @@ const IosActionSheet = ({open, onClose, title, actions = [], cancelLabel, level 
     };
 
     return (
-        <IosSheet open={open} onClose={onClose} title={title} level={level}>
+        <IosSheet
+            open={open}
+            onClose={onClose}
+            title={title}
+            level={level}
+            size="auto"
+            rootClassName="is-action-sheet"
+        >
             <ul className="if-group if-action-sheet-group">
                 {actions.map((action) => {
                     const hintId = action.destructive ? `if-action-sheet-hint-${action.key}` : undefined;

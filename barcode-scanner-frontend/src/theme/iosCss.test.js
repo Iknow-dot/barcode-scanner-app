@@ -66,6 +66,17 @@ test('the spring timing function exists and every toggle that uses it disables i
     ['.ant-segmented-thumb', '.ant-segmented-item-selected', '.ant-switch-handle', '.if-pill'].forEach((selector) => {
         expect(disablesTransitionFor(selector)).toBe(true);
     });
+
+    // F6: `.if-pill:active { transform: scale(0.94); }` is a real movement,
+    // not merely a timed one — `transition: none` on `.if-pill` alone still
+    // lets that 6% shrink happen instantly under reduced motion, which
+    // violates the "no movement" constraint even though it's untimed. This
+    // is the part the test's own name already claimed ("disables it") but
+    // never actually checked. Fails against the pre-fix stylesheet, whose
+    // reduced-motion block has no rule at all mentioning `.if-pill:active`.
+    const pillActiveBlock = reducedMotionBlocks.find((block) => block.includes('.if-pill:active'));
+    expect(pillActiveBlock).toBeDefined();
+    expect(pillActiveBlock).toMatch(/\.if-pill:active\s*\{[^}]*transform:\s*none;/);
 });
 
 // z-index of the first rule whose selector is exactly `selector`, read out of

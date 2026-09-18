@@ -24,6 +24,17 @@ export const SHEET_HEIGHT = 'calc(100% - max(24px, env(safe-area-inset-top, 0px)
  * it — each level adds LAYER_SHEET_STEP, clamped below every antd overlay
  * (src/theme/layers.js::sheetZIndex). `push={false}` on the Drawer keeps a
  * lower sheet from being shoved sideways when a higher one opens on top.
+ *
+ * `zIndex`, when given, overrides the level-based calculation outright —
+ * for the one caller (the order-confirmed result) that must sit above the
+ * full-screen scanner rather than in the ordinary sheet band, which is
+ * capped well below it (src/theme/layers.js::LAYER_RESULT_SHEET).
+ *
+ * `size` overrides the near-full-height default (SHEET_HEIGHT) — used by
+ * IosActionSheet, whose compact row list should size to its content instead.
+ * `rootClassName`, when given, is appended to the Drawer's own "if-sheet" so
+ * a variant (again, the action sheet) can be targeted in CSS without a
+ * prop of its own for every visual tweak.
  */
 const IosSheet = ({
     open,
@@ -38,6 +49,9 @@ const IosSheet = ({
     bottomBarLayout = 'column',
     swipeToClose = true,
     level = 0,
+    zIndex,
+    size = SHEET_HEIGHT,
+    rootClassName,
     children,
 }) => {
     const {t} = useLanguage();
@@ -72,12 +86,12 @@ const IosSheet = ({
                 if (!visible && afterClose) afterClose();
             }}
             placement="bottom"
-            size={SHEET_HEIGHT}
-            zIndex={sheetZIndex(level)}
+            size={size}
+            zIndex={zIndex ?? sheetZIndex(level)}
             push={false}
             closable={false}
             destroyOnHidden
-            rootClassName="if-sheet"
+            rootClassName={`if-sheet${rootClassName ? ` ${rootClassName}` : ''}`}
             aria-labelledby={titleId}
         >
             <div

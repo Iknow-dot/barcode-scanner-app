@@ -86,7 +86,6 @@ export const cartRowView = (row) => {
         hasDiscount: Boolean(anchor.effective_price)
             && parseFloat(anchor.effective_price) !== parseFloat(anchor.price),
         discountPercent: parseFloat(anchor.discount_percent || 0),
-        priceCap: parseFloat(anchor.price || 0),
         lineTotal: (Number(row.paid?.line_total || 0) + Number(row.gift?.line_total || 0)).toFixed(2),
         pending: isPendingLine(row.paid) || isPendingLine(row.gift),
         minQuantity: row.paid ? row.giftQty + 1 : 1,

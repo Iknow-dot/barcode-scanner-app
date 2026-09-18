@@ -106,7 +106,6 @@ describe('cartRowView', () => {
             effectivePrice: '80.91',
             hasDiscount: true,
             discountPercent: 10,
-            priceCap: 89.9,
             lineTotal: '161.82',
             pending: false,
             minQuantity: 2,

@@ -95,7 +95,19 @@ const CartItemRow = ({
 
     const saveDiscount = async (event) => {
         const value = parseFloat(event.target.value);
-        const next = Number.isFinite(value) ? value : null;
+        let next = Number.isFinite(value) ? value : null;
+        // F7: InputNumber's min={0} (and the already-ruled-out max) went with
+        // it when it was removed — unlike price, the server sets no
+        // min_value on discount_percent either, so a negative value would
+        // otherwise persist untouched. Clamp to [0, maxDiscountPercent]
+        // before sending; only the over-the-cap direction has a real server
+        // error to mirror (core/views/orders.py's DISCOUNT_EXCEEDS_LIMIT), so
+        // only that direction shows a message — flooring a negative value to
+        // 0 is just the natural minimum, not a limit being hit.
+        if (next !== null) {
+            if (next > maxDiscountPercent) notify.error(t.orderError, t.discountExceedsLimit(maxDiscountPercent));
+            next = Math.min(Math.max(next, 0), maxDiscountPercent);
+        }
         if ((next ?? 0) === view.discountPercent) return;
         report(await orderService.updateOrderItem(orderId, view.anchor.id, discountPatch(next)));
     };

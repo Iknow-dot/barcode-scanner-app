@@ -32,18 +32,31 @@ export const ANTD_STATIC_MODAL = 2000;
 // left open behind it — because it is a true full-screen takeover: nothing
 // short of antd's own static dialogs should show through it.
 //
-// It deliberately stays *below* ANTD_STATIC_MODAL/notifications. Those
-// interrupt the consultant regardless of what else is on screen (e.g. an
-// async order push completing, or a print-prompt confirm, while the camera
-// is still up), so a confirm or toast raised while scanning must still reach
-// the consultant on top of the camera feed rather than be trapped behind it.
+// It deliberately stays *below* ANTD_STATIC_MODAL/notifications, so antd's
+// own confirm/notification raised while scanning still reaches the
+// consultant on top of the camera feed rather than being trapped behind it.
 // BarcodeScanner.css used to hard-code the overlay itself at 2000, tying it
 // with Modal.confirm — an indeterminate stack order broken only by DOM
 // append order. Picking a value strictly between ANTD_OVERLAY_BASE and
 // ANTD_STATIC_MODAL resolves that collision instead of matching either band.
+//
+// This is NOT how the order-confirmed print-prompt reaches the consultant
+// over the scanner any more (see LAYER_RESULT_SHEET below) — that result is
+// our own IosSheet, not an antd static Modal, so ANTD_STATIC_MODAL's
+// placement is no longer what keeps it visible while scanning.
 export const LAYER_SCANNER = 1900;
 // The scanner's own top/bottom bars (BarcodeScanner.css's
 // .scanner-top-bar / .scanner-bottom-bar), which must sit above its own
 // video surface — defined relative to LAYER_SCANNER, not a second magic
 // number, and still comfortably below ANTD_STATIC_MODAL.
 export const LAYER_SCANNER_CHROME = LAYER_SCANNER + 10;
+
+// The order-confirmed result sheet (UserDashboard.js): unlike every other
+// sheet, it must reach the consultant even if they've since closed the order
+// sheet and opened the full-screen scanner for the next customer while the
+// confirm was still resolving — it is a result that must be seen, not a
+// sheet the camera should be able to cover. So it sits in its own band above
+// LAYER_SCANNER_CHROME (defined relative to it, not a second magic number),
+// while staying strictly below ANTD_STATIC_MODAL like every other sheet, so
+// antd's own confirm/notification still lands on top of it too.
+export const LAYER_RESULT_SHEET = LAYER_SCANNER_CHROME + 10;

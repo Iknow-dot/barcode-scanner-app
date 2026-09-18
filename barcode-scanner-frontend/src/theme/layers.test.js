@@ -2,6 +2,7 @@ import {
     ANTD_OVERLAY_BASE,
     ANTD_STATIC_MODAL,
     LAYER_BARS,
+    LAYER_RESULT_SHEET,
     LAYER_SCANNER,
     LAYER_SCANNER_CHROME,
     LAYER_SHEET,
@@ -31,5 +32,18 @@ describe('layers', () => {
         expect(LAYER_SCANNER_CHROME).toBeGreaterThan(LAYER_SCANNER);
         expect(LAYER_SCANNER_CHROME).toBe(LAYER_SCANNER + 10);
         expect(LAYER_SCANNER_CHROME).toBeLessThan(ANTD_STATIC_MODAL);
+    });
+
+    // F4: the order-confirmed result sheet used to sit at the ordinary sheet
+    // band (900), entirely hidden if the consultant closed the order sheet
+    // and opened the full-screen scanner for the next customer while the
+    // confirm was still resolving. It needs its own layer above the
+    // scanner — a "must be seen" result, not a sheet the camera should be
+    // able to cover — while staying below antd's own static Modal/toast band
+    // like every other sheet.
+    it('puts the order-confirmed result sheet above the scanner, still below antd\'s static overlays', () => {
+        expect(LAYER_RESULT_SHEET).toBeGreaterThan(LAYER_SCANNER);
+        expect(LAYER_RESULT_SHEET).toBeGreaterThan(LAYER_SCANNER_CHROME);
+        expect(LAYER_RESULT_SHEET).toBeLessThan(ANTD_STATIC_MODAL);
     });
 });

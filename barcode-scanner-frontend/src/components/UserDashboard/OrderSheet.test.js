@@ -246,6 +246,17 @@ describe('OrderSheet', () => {
         await waitFor(() => expect(onProceedToPayment).toHaveBeenCalledTimes(2));
     });
 
+    // F5 (Minor): the ⋯ menu passed no `title` to IosActionSheet, so its
+    // aria-labelledby pointed at an empty <h2> — a screen-reader user
+    // entered an unnamed dialog. Fails against the pre-fix code because no
+    // dialog with an accessible name is found at all (getByRole below
+    // throws instead of matching the untitled one).
+    it('names the ⋯ menu dialog, for screen readers', async () => {
+        renderSheet();
+        fireEvent.click(screen.getByRole('button', {name: en.moreActions}));
+        expect(await screen.findByRole('dialog', {name: en.moreActions})).toBeInTheDocument();
+    });
+
     // Task: the ⋯ menu is now an IosActionSheet (rows are plain buttons, not
     // antd menuitems). Fails if the sheet doesn't open, or if selecting the
     // row doesn't call the handler.

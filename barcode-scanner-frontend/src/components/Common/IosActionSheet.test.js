@@ -113,4 +113,19 @@ describe('IosActionSheet', () => {
         expect(screen.getByRole('button', {name: 'Never mind'})).toBeInTheDocument();
         expect(screen.queryByRole('button', {name: en.cancel})).not.toBeInTheDocument();
     });
+
+    // F5 (Minor): IosSheet hardcodes SHEET_HEIGHT (calc(100% - ...)), so a
+    // three-row ⋯ menu used to render as a near-full-screen sheet with a
+    // large empty expanse below it — the opposite of the compact idiom this
+    // component's own docstring describes. It now carries its own root class
+    // and sizes to its content instead. Fails against the pre-fix component,
+    // which passes neither `className` nor `size` through to IosSheet, so
+    // the wrapper keeps IosSheet's full-height default and carries no
+    // `is-action-sheet` class at all.
+    it('sizes to its content instead of the near-full-height default, marked by its own root class', () => {
+        renderSheet();
+        const drawer = document.querySelector('.if-sheet.ant-drawer');
+        expect(drawer).toHaveClass('is-action-sheet');
+        expect(document.querySelector('.ant-drawer-content-wrapper').style.height).toBe('auto');
+    });
 });

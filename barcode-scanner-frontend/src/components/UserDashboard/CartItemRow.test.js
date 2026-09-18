@@ -16,7 +16,10 @@ jest.mock('../../api', () => ({
 
 const en = translations.en;
 
-// jsdom lacks these browser APIs that antd's Popconfirm and InputNumber touch.
+// F8 (stale comment): neither Popconfirm nor InputNumber is used by this
+// component any more (delete is instant, and the price/discount editor is a
+// plain borderless antd Input) — jsdom just lacks these browser APIs that
+// antd's Input still touches.
 beforeAll(() => {
     window.matchMedia = window.matchMedia || ((query) => ({
         matches: false, media: query, onchange: null,
@@ -216,6 +219,51 @@ describe('CartItemRow', () => {
         fireEvent.blur(discount);
         await waitFor(() => expect(onOrderUpdate).toHaveBeenCalledWith(UPDATED));
         expect(orderService.updateOrderItem).toHaveBeenCalledWith(7, 11, {discount_percent: 10, discounted_price: null});
+    });
+
+    // F7 (Minor): removing antd's InputNumber also removed its implicit
+    // `min={0}` clamp — a negative discount percent became typeable and,
+    // unlike price, the server doesn't reject it either
+    // (core/serializers/orders.py sets no min_value on discount_percent), so
+    // it would persist and the invoice's item_discount token would render
+    // it. Fails against the pre-fix code, which sends the typed -5 through
+    // unchanged instead of flooring it to 0.
+    it('clamps a negative discount to 0 before sending, with no message (there is no server error to mirror for the floor)', async () => {
+        // Starts from an existing 10% discount so clamping to 0 is a real
+        // change to persist — starting from 0 would clamp to the same
+        // already-current value and, correctly, send nothing at all (same
+        // "skip an unchanged field" rule the test above exercises).
+        const {onOrderUpdate, notify} = renderRow({
+            canApplyDiscount: true,
+            maxDiscountPercent: 20,
+            row: rowFor([line({discount_percent: '10.00', effective_price: '80.91', line_total: '161.82'})]),
+        });
+        fireEvent.click(screen.getByRole('button', {name: new RegExp(en.overridePrice)}));
+        fireEvent.blur(screen.getByRole('textbox', {name: en.price}));
+        const discount = screen.getByRole('textbox', {name: en.discountPercent});
+        fireEvent.change(discount, {target: {value: '-5'}});
+        fireEvent.blur(discount);
+        await waitFor(() => expect(onOrderUpdate).toHaveBeenCalledWith(UPDATED));
+        expect(orderService.updateOrderItem).toHaveBeenCalledWith(7, 11, {discount_percent: 0, discounted_price: null});
+        expect(notify.error).not.toHaveBeenCalled();
+    });
+
+    // A discount typed above the user's cap used to round-trip to the server
+    // and come back as a 403 DISCOUNT_EXCEEDS_LIMIT — this catches it
+    // client-side instead, clamping to the cap and showing the same message
+    // the server would have (core/views/orders.py's
+    // f"Discount exceeds your limit ({cap}%)."). Fails against the pre-fix
+    // code, which sends 80 through unclamped and shows no message at all.
+    it('clamps a discount above the cap to the limit, with the same message the server would return', async () => {
+        const {onOrderUpdate, notify} = renderRow({canApplyDiscount: true, maxDiscountPercent: 20});
+        fireEvent.click(screen.getByRole('button', {name: new RegExp(en.overridePrice)}));
+        fireEvent.blur(screen.getByRole('textbox', {name: en.price}));
+        const discount = screen.getByRole('textbox', {name: en.discountPercent});
+        fireEvent.change(discount, {target: {value: '80'}});
+        fireEvent.blur(discount);
+        await waitFor(() => expect(onOrderUpdate).toHaveBeenCalledWith(UPDATED));
+        expect(orderService.updateOrderItem).toHaveBeenCalledWith(7, 11, {discount_percent: 20, discounted_price: null});
+        expect(notify.error).toHaveBeenCalledWith(en.orderError, en.discountExceedsLimit(20));
     });
 
     it('warns in words when the row exceeds the warehouse stock', () => {

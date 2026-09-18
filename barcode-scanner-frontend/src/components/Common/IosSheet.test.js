@@ -4,7 +4,7 @@ import {render, screen, fireEvent, waitFor} from '@testing-library/react';
 import IosSheet from './IosSheet';
 import {LanguageProvider} from '../../i18n/LanguageContext';
 import translations from '../../i18n/translations';
-import {LAYER_SHEET, LAYER_SHEET_STEP} from '../../theme/layers';
+import {LAYER_RESULT_SHEET, LAYER_SHEET, LAYER_SHEET_STEP} from '../../theme/layers';
 
 const en = translations.en;
 
@@ -60,6 +60,18 @@ describe('IosSheet', () => {
         renderSheet({level: 1});
         expect(document.querySelector('.if-sheet.ant-drawer').style.zIndex)
             .toBe(String(LAYER_SHEET + LAYER_SHEET_STEP));
+    });
+
+    // F4: the order-confirmed result sheet needs to sit above the full-screen
+    // scanner (LAYER_RESULT_SHEET, src/theme/layers.js) rather than in the
+    // ordinary level-based sheet band, which is capped below every antd
+    // overlay and can never reach that high. An explicit `zIndex` prop
+    // overrides the level-based calculation for that one caller. Fails
+    // against the pre-fix component, which has no `zIndex` prop at all —
+    // sheetZIndex(level) always wins regardless of what's passed.
+    it('lets an explicit zIndex override the level-based one, for the one sheet that must sit above the scanner', () => {
+        renderSheet({zIndex: LAYER_RESULT_SHEET});
+        expect(document.querySelector('.if-sheet.ant-drawer').style.zIndex).toBe(String(LAYER_RESULT_SHEET));
     });
 
     it('closes from the round close button', () => {
