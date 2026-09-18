@@ -39,20 +39,31 @@ export const initialsOf = (name) => (
 
 const pad2 = (n) => String(n).padStart(2, '0');
 
-// UTC calendar-day key ("2026-09-18"), used both to decide "same day as now"
-// for relativeTime and to bucket rows in groupByDay. UTC (not the viewer's
-// local zone) keeps this pure and consistent between the two functions.
-const dayKeyOf = (iso) => new Date(iso).toISOString().slice(0, 10);
+// Calendar-day key ("2026-09-18") in the *viewer's* local time zone, used
+// both to decide "same day as now" for relativeTime and to bucket rows in
+// groupByDay. Deliberately local rather than UTC: the API returns Z-suffixed
+// timestamps, and a fixed UTC cut-off mis-groups (and mis-labels the clock
+// fallback for) any consultant east or west of UTC — Tbilisi is UTC+4, so a
+// same-local-day order created after ~20:00 local reads as tomorrow's UTC
+// date. Local getters (not toISOString) are exactly what the consultant's
+// own device already shows, and stay pure — this still only reads `value`,
+// never the system clock.
+const dayKeyOf = (value) => {
+    const d = new Date(value);
+    return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+};
 
 /**
  * A row's timestamp as an i18n key + optional value, never a finished
  * string — the caller looks the key up in `t`. `now` is passed in rather
- * than read from the clock, so this is deterministic:
+ * than read from the clock, so this is deterministic (given a fixed time
+ * zone — see the test file for how the suite pins one):
  *   - under a minute: {key: 'justNow'}
- *   - same UTC day, under an hour: {key: 'minutesAgo', value: n}
- *   - same UTC day, an hour or more: {key: 'hoursAgo', value: n}
- *   - an earlier day: {key: 'clock', value: 'HH:MM'} (that day's own time,
- *     not a duration — a day boundary always wins over the hour count)
+ *   - same local day, under an hour: {key: 'minAgo', value: n}
+ *   - same local day, an hour or more: {key: 'hoursAgo', value: n}
+ *   - an earlier local day: {key: 'clock', value: 'HH:MM'} (that day's own
+ *     local time, not a duration — a day boundary always wins over the hour
+ *     count)
  *   - no timestamp: {key: 'none'}
  */
 export const relativeTime = (iso, now) => {
@@ -60,13 +71,13 @@ export const relativeTime = (iso, now) => {
     const date = new Date(iso);
     if (Number.isNaN(date.getTime())) return {key: 'none'};
 
-    if (dayKeyOf(iso) === dayKeyOf(now)) {
+    if (dayKeyOf(date) === dayKeyOf(now)) {
         const diffMin = Math.floor((now.getTime() - date.getTime()) / 60000);
         if (diffMin < 1) return {key: 'justNow'};
-        if (diffMin < 60) return {key: 'minutesAgo', value: diffMin};
+        if (diffMin < 60) return {key: 'minAgo', value: diffMin};
         return {key: 'hoursAgo', value: Math.floor(diffMin / 60)};
     }
-    return {key: 'clock', value: `${pad2(date.getUTCHours())}:${pad2(date.getUTCMinutes())}`};
+    return {key: 'clock', value: `${pad2(date.getHours())}:${pad2(date.getMinutes())}`};
 };
 
 /**
@@ -104,11 +115,12 @@ const headingValueForDate = (dayKey) => {
 };
 
 /**
- * Orders bucketed by UTC calendar day, in first-seen order (the API already
- * returns orders newest-first, so this naturally comes out today → yesterday
- * → older). Today/yesterday head by name (`headingKey: 'today'|'yesterday'`,
- * looked up in `t`); older days head by their own date, carried as literal
- * text in `headingValue` since there is no i18n key per calendar date.
+ * Orders bucketed by the viewer's local calendar day, in first-seen order
+ * (the API already returns orders newest-first, so this naturally comes out
+ * today → yesterday → older). Today/yesterday head by name
+ * (`headingKey: 'today'|'yesterday'`, looked up in `t`); older days head by
+ * their own date, carried as literal text in `headingValue` since there is
+ * no i18n key per calendar date.
  */
 export const groupByDay = (orders, now) => {
     const todayKey = dayKeyOf(now);

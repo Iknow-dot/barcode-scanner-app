@@ -589,9 +589,9 @@ const translations = {
         minAgo: (n) => `${n} წუთის წინ`,
         // groupByDay's own "yesterday" heading — a distinct key from dayAgo
         // below (same word) because dayAgo is the admin "last login" column's
-        // duration phrasing, not a day-group heading.
+        // duration phrasing, not a day-group heading. relativeTime's minutes
+        // bucket reuses minAgo above rather than a second, identical key.
         yesterday: 'გუშინ',
-        minutesAgo: (n) => `${n} წუთის წინ`,
         hoursAgo: (n) => `${n} სთ წინ`,
         // Used by the admin panels' "last login" column. The dayjs ka locale
         // produces awkward strings ("3 დღის განმავლობაში წინ", "თვის წინ" with
@@ -1276,9 +1276,9 @@ const translations = {
         minAgo: (n) => `${n} min ago`,
         // groupByDay's own "yesterday" heading — a distinct key from dayAgo
         // below (same word) because dayAgo is the admin "last login" column's
-        // duration phrasing, not a day-group heading.
+        // duration phrasing, not a day-group heading. relativeTime's minutes
+        // bucket reuses minAgo above rather than a second, identical key.
         yesterday: 'Yesterday',
-        minutesAgo: (n) => `${n} min ago`,
         hoursAgo: (n) => `${n}h ago`,
         dayAgo: 'yesterday',
         daysAgo: (n) => `${n} days ago`,
