@@ -66,6 +66,31 @@ describe('TabBar', () => {
         expect(search).not.toHaveAttribute('aria-current');
     });
 
+    // The selected pill is one sliding element, not a background each button
+    // turns on and off — so its position, not its existence, is what says
+    // which tab is selected.
+    it('parks the sliding pill over the selected tab', () => {
+        const {rerender} = renderBar({activeTab: 'scan'});
+        expect(screen.getByTestId('tab-thumb')).toHaveStyle({transform: 'translateX(0%)'});
+
+        rerender(
+            <LanguageProvider>
+                <TabBar activeTab="orders" onSelectTab={jest.fn()} showSearch/>
+            </LanguageProvider>
+        );
+        // Same element moved rather than a second pill appearing: two pills
+        // would mean the background is still per-button.
+        expect(screen.getAllByTestId('tab-thumb')).toHaveLength(1);
+        expect(screen.getByTestId('tab-thumb')).toHaveStyle({transform: 'translateX(100%)'});
+    });
+
+    it('shows no pill in the track while the catalog is the active screen', () => {
+        renderBar({activeTab: 'catalog'});
+        // The catalog's tab is the trailing round button, outside this track;
+        // a pill parked over Products would say the wrong thing.
+        expect(screen.queryByTestId('tab-thumb')).toBeNull();
+    });
+
     it('leaves out the search tab when the catalog is off', () => {
         renderBar({showSearch: false});
         expect(screen.queryByRole('button', {name: en.catalog})).toBeNull();

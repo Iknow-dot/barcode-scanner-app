@@ -15,9 +15,32 @@ const TABS = [
 // when the catalog is the active screen.
 const TabBar = ({activeTab, onSelectTab, showSearch}) => {
     const {t} = useLanguage();
+    // The selected pill is one element that slides between the tabs, rather
+    // than a background that switches instantly from one button to the other
+    // — the same spring the segmented controls use. -1 while the catalog (the
+    // trailing round tab, outside this track) is the active screen, where no
+    // pill should show at all.
+    const activeIndex = TABS.findIndex(({key}) => key === activeTab);
     return (
         <nav className="if-tabbar" aria-label={t.tabBarLabel}>
-            <div className="if-tabs">
+            <div className="if-tabs" style={{'--if-tab-count': TABS.length}}>
+                {activeIndex >= 0 && (
+                    <span
+                        className="if-tab-thumb"
+                        aria-hidden="true"
+                        data-testid="tab-thumb"
+                        // The offset is written here rather than handed to CSS
+                        // as a custom property for the stylesheet to feed into
+                        // calc(). Both render correctly; this way the declared
+                        // value itself changes per tab, which is the shape
+                        // every transition engine is built around, and it
+                        // keeps the arithmetic next to the index it comes
+                        // from. Note no test can cover the position: jsdom
+                        // computes no transforms, so only a browser check
+                        // tells you where this pill actually sits.
+                        style={{transform: `translateX(${activeIndex * 100}%)`}}
+                    />
+                )}
                 {TABS.map(({key, icon, label}) => {
                     const on = activeTab === key;
                     return (

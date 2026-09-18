@@ -404,6 +404,7 @@ button.if-row:active,
 }
 
 .if-tabs {
+    position: relative;
     flex: 1;
     min-width: 0;
     height: 64px;
@@ -414,7 +415,28 @@ button.if-row:active,
     grid-auto-columns: minmax(0, 1fr);
 }
 
+/* The selected tab's pill. One element that slides between the tabs on the
+   shared spring, rather than each button swapping its own background on and
+   off instantly — the same motion as the segmented thumb. Out of flow, so it
+   creates no grid track of its own; --if-tab-count comes from TabBar.js,
+   which knows how many tabs there are. */
+.if-tab-thumb {
+    position: absolute;
+    top: 4px;
+    bottom: 4px;
+    left: 4px;
+    width: calc((100% - 8px) / var(--if-tab-count, 2));
+    border-radius: 28px;
+    background: var(--if-tint-soft);
+    /* The per-tab offset is an inline transform from TabBar.js, which knows
+       the active index; this rule only supplies the motion. */
+    transition: transform var(--if-spring-fast) var(--if-spring);
+    pointer-events: none;
+}
+
 .if-tab {
+    /* Above the sliding pill, which is an earlier sibling. */
+    position: relative;
     min-width: 0;
     padding: 0 6px;
     border: 0;
@@ -441,10 +463,22 @@ button.if-row:active,
     white-space: nowrap;
 }
 
+/* The pill itself is .if-tab-thumb now; the selected tab only changes its
+   ink, which cross-fades rather than snapping as the pill slides under it. */
 .if-tab.is-on {
-    background: var(--if-tint-soft);
     color: var(--if-tint-text);
     font-weight: 600;
+}
+
+.if-tab {
+    transition: color 160ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .if-tab-thumb,
+    .if-tab {
+        transition: none;
+    }
 }
 
 .if-search-tab {

@@ -35,11 +35,13 @@ test('ios.css uses no named colours', () => {
     expect(css.match(/(?<![-\w])(white|black|gray|grey|red|green|blue|orange)(?![-\w])/gi)).toBeNull();
 });
 
-// --if-spring / --if-spring-fast are the shared toggle timing function, not
-// a colour, so — unlike every other --if-* custom property — they don't
-// belong in tokens.css/palette.js (the antd colour mirror; see palette.js's
-// own header comment) and are exempt from the membership check below.
-const NON_PALETTE_TOKENS = ['--if-spring', '--if-spring-fast'];
+// --if-spring / --if-spring-fast are the shared toggle timing function and
+// --if-tab-index / --if-tab-count position the tab bar's sliding pill: all
+// four are motion or layout values set from JS, not colours, so — unlike
+// every other --if-* custom property — they don't belong in
+// tokens.css/palette.js (the antd colour mirror) and are exempt from the
+// membership check below.
+const NON_PALETTE_TOKENS = ['--if-spring', '--if-spring-fast', '--if-tab-index', '--if-tab-count'];
 
 test('every token ios.css reads exists in the palette', () => {
     const used = [...new Set([...css.matchAll(/var\((--if-[\w-]+)/g)].map((match) => match[1]))];
