@@ -42,3 +42,6 @@ backend/staticfiles/
 # Local editor/tool scratch
 .claude/launch.json
 .playwright-mcp/
+
+# Database CA certificates for local SQL clients (never commit)
+certs/
