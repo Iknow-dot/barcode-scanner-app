@@ -1,4 +1,5 @@
 import {orderService} from '../api';
+import wireInvoicePrintButton from './invoicePrintButton';
 
 /**
  * Fetch the invoice HTML for an order through the authenticated axios
@@ -28,6 +29,7 @@ export async function printInvoice(orderId, t, notify) {
         URL.revokeObjectURL(url);
         return;
     }
+    wireInvoicePrintButton(win);
     // Backstop revoke — most users will print-and-close well before this fires.
     setTimeout(() => URL.revokeObjectURL(url), 30_000);
 }

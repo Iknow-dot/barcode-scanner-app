@@ -171,6 +171,14 @@ class InvoiceRendererTests(TestCase):
         wrapped = wrap_in_skeleton('<p>body</p>', draft=False)
         self.assertNotIn('class="draft-watermark"', wrapped)
 
+    def test_skeleton_print_button_needs_no_inline_script(self):
+        # The page opens as a same-origin blob document, which inherits the
+        # app's CSP; that blocks inline handlers (verified in Chrome). The
+        # frontend attaches the click handler to this marker instead.
+        wrapped = wrap_in_skeleton('<p>body</p>', draft=False)
+        self.assertIn('data-invoice-print', wrapped)
+        self.assertNotRegex(wrapped, r'\son[a-z]+\s*=')
+
 
 
 @override_settings(SECURE_SSL_REDIRECT=False)

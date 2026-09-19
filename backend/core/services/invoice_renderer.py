@@ -214,7 +214,12 @@ def render_invoice_template(template_html: str, *, org, order) -> str:
 
 def wrap_in_skeleton(body_html: str, *, draft: bool, logo_data_url: str = '') -> str:
     """Wrap body HTML in the print skeleton (<html>/<head>/<body>, print CSS,
-    print button, optional DRAFT + organization-logo watermarks)."""
+    print button, optional DRAFT + organization-logo watermarks).
+
+    The page carries no script at all. The frontend opens it as a same-origin
+    blob document, which inherits the app's Content-Security-Policy, so
+    utils/invoicePrintButton.js attaches the Print click from the app side.
+    """
     draft_html = '<div class="draft-watermark">DRAFT</div>' if draft else ''
     watermark_html = (
         f'<div class="logo-watermark"><img alt="" src="{escape(logo_data_url)}"></div>'
@@ -230,7 +235,7 @@ def wrap_in_skeleton(body_html: str, *, draft: bool, logo_data_url: str = '') ->
 <body>
 {watermark_html}
 {draft_html}
-<div class="no-print"><button onclick="window.print()">Print</button></div>
+<div class="no-print"><button type="button" data-invoice-print>Print</button></div>
 {body_html}
 </body>
 </html>"""

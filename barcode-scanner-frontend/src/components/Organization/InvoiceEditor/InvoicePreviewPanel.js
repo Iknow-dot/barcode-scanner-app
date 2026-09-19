@@ -2,6 +2,7 @@ import React, {useEffect, useRef, useState} from 'react';
 import {Select, Spin, Empty} from 'antd';
 import * as orderService from '../../../api/services/orderService';
 import {useLanguage} from '../../../i18n/LanguageContext';
+import wireInvoicePrintButton from '../../../utils/invoicePrintButton';
 
 // Debounced re-fetch when `templateHtml` changes; iframe receives a
 // blob URL so we don't need to set custom headers on the <iframe src>.
@@ -68,7 +69,12 @@ const InvoicePreviewPanel = ({templateHtml}) => {
       <div style={{flex: 1, position: 'relative', background: '#f5f5f5'}}>
         {loading && <Spin style={{position: 'absolute', top: '50%', left: '50%'}} />}
         {previewUrl ? (
-          <iframe title="invoice-preview" src={previewUrl} style={{width: '100%', height: '100%', border: 0}} />
+          <iframe
+            title="invoice-preview"
+            src={previewUrl}
+            onLoad={(event) => wireInvoicePrintButton(event.currentTarget.contentWindow)}
+            style={{width: '100%', height: '100%', border: 0}}
+          />
         ) : (
           <Empty description={t.selectOrderForPreview} style={{paddingTop: 60}} />
         )}
