@@ -1,6 +1,16 @@
 from __future__ import annotations
 
 from django.test import TestCase, override_settings
+from rest_framework.test import APIClient
+from core.models import Organization
+from users.models import User
+
+
+def _staff():
+    return User.objects.create_user(
+        username='root', password='Adm1n-Strong-Pass',
+        role=User.Role.INTERNAL_ADMIN, is_staff=True, is_superuser=True,
+    )
 
 
 @override_settings(SECURE_SSL_REDIRECT=False)
@@ -45,6 +55,45 @@ class IntegrationDocsTests(TestCase):
         self.assertEqual(self.client.get("/api/integration/redoc/").status_code, 200)
 
     def test_main_schema_is_not_filtered(self):
+        self.client.force_login(_staff())
         paths = self.client.get("/api/schema/?format=json").json()["paths"]
         # an internal, non-ingest endpoint stays in the full schema
         self.assertIn("/api/v1/product/search/", paths)
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
+class InternalDocsAccessTests(TestCase):
+    """The full internal API map is for staff. 1C's integration docs stay public."""
+
+    INTERNAL = ("/api/schema/", "/api/docs/", "/api/redoc/")
+
+    def test_anonymous_callers_are_refused(self):
+        for url in self.INTERNAL:
+            with self.subTest(url):
+                self.assertIn(self.client.get(url).status_code, (401, 403))
+
+    def test_a_consultants_token_is_refused(self):
+        consultant = User.objects.create_user(
+            username="consultant", password="Str0ng-Pass-9", role=User.Role.COMPANY_USER,
+            organization=Organization.objects.create(
+                name="DocsOrg", identification_number="303030303",
+                web_service_url="http://example.com/db", employees_count=5,
+            ),
+        )
+        client = APIClient()
+        client.force_authenticate(consultant)
+        for url in self.INTERNAL:
+            with self.subTest(url):
+                self.assertEqual(client.get(url).status_code, 403)
+
+    def test_staff_signed_into_the_admin_can_read_them(self):
+        # Jazzmin's "API Docs" link opens /api/docs/ in the admin's session.
+        self.client.force_login(_staff())
+        for url in self.INTERNAL:
+            with self.subTest(url):
+                self.assertEqual(self.client.get(url).status_code, 200)
+
+    def test_integration_docs_stay_public(self):
+        for url in ("/api/integration/schema/", "/api/integration/redoc/"):
+            with self.subTest(url):
+                self.assertEqual(self.client.get(url).status_code, 200)

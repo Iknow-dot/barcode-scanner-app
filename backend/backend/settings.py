@@ -336,6 +336,14 @@ SPECTACULAR_SETTINGS = {
     'DESCRIPTION': 'API documentation for the Barcode Scanner application',
     'VERSION': '1.0.0',
     'SERVE_INCLUDE_SCHEMA': False,
+    # The full internal API map is staff-only (drf-spectacular's default is
+    # AllowAny). Session auth lets an admin signed into /admin/ open Jazzmin's
+    # "API Docs" link; the /api/integration/ views in urls.py stay public.
+    'SERVE_PERMISSIONS': ['rest_framework.permissions.IsAdminUser'],
+    'SERVE_AUTHENTICATION': [
+        'rest_framework.authentication.SessionAuthentication',
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    ],
     'TAGS': [
         {'name': 'Auth', 'description': 'Authentication endpoints (login, logout, token refresh/verify)'},
         {'name': 'Users', 'description': 'User management endpoints'},

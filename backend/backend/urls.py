@@ -5,6 +5,7 @@ from drf_spectacular.views import (
     SpectacularRedocView,
     SpectacularSwaggerView,
 )
+from rest_framework.permissions import AllowAny
 
 from core.schema import INTEGRATION_DESCRIPTION
 
@@ -15,17 +16,21 @@ urlpatterns = [
     path('api/v1/', include('core.urls')),
     path('api/v1/users/', include('users.urls')),
 
-    # Swagger / OpenAPI — full internal API (JWT), consumed by our own frontend
+    # Swagger / OpenAPI — full internal API. Staff only (SPECTACULAR_SETTINGS
+    # SERVE_PERMISSIONS): it maps every endpoint, parameter and error code.
     path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
     path('api/docs/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
     path('api/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),
 
     # Integration API — the focused contract external systems (1C) call: catalog
     # push + order-completion webhook. Same SpectacularAPIView, filtered to the
-    # integration endpoints via a preprocessing hook.
+    # integration endpoints via a preprocessing hook. Public on purpose: the
+    # partner reads it without an account.
     path(
         'api/integration/schema/',
         SpectacularAPIView.as_view(
+            permission_classes=[AllowAny],
+            authentication_classes=[],
             custom_settings={
                 'TITLE': 'Barcode Scanner — Integration API',
                 'DESCRIPTION': INTEGRATION_DESCRIPTION,
@@ -41,5 +46,11 @@ urlpatterns = [
         ),
         name='integration-schema',
     ),
-    path('api/integration/redoc/', SpectacularRedocView.as_view(url_name='integration-schema'), name='integration-redoc'),
+    path(
+        'api/integration/redoc/',
+        SpectacularRedocView.as_view(
+            url_name='integration-schema', permission_classes=[AllowAny], authentication_classes=[],
+        ),
+        name='integration-redoc',
+    ),
 ]
