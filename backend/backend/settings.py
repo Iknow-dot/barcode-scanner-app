@@ -132,6 +132,13 @@ else:
         }
     }
 
+# Since 2026-09-19 production reaches Postgres through DigitalOcean's PgBouncer
+# pool in transaction mode, which hands each transaction whatever server
+# connection is free. A server-side cursor (QuerySet.iterator()) would outlive
+# its transaction there, so Django uses client-side ones. Harmless without a
+# pool. migrate and createcachetable connect directly, as doadmin.
+DATABASES['default']['DISABLE_SERVER_SIDE_CURSORS'] = True
+
 
 # Password validation
 # https://docs.djangoproject.com/en/6.0/ref/settings/#auth-password-validators
