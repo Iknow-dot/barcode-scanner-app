@@ -137,6 +137,27 @@ else:
 
 AUTH_USER_MODEL = 'users.User'
 
+# Adds the failed-login lockout (users/login_throttle.py) to every password
+# check: the JWT login and the Django admin.
+AUTHENTICATION_BACKENDS = ['users.auth_backends.ThrottledModelBackend']
+
+CACHES = {
+    # Per-process, as before: the Photon geocoding cache in core/views/clients.py.
+    'default': {'BACKEND': 'django.core.cache.backends.locmem.LocMemCache'},
+    # Rate-limit counters must be shared by every worker and instance, and must
+    # survive a deploy. The database is the one store they all share.
+    # The table is created by `manage.py createcachetable`, which, like
+    # migrations, never runs on a DigitalOcean deploy; until someone runs it
+    # there, throttling logs errors and lets requests through.
+    'throttle': {
+        'BACKEND': 'django.core.cache.backends.db.DatabaseCache',
+        'LOCATION': 'throttle_cache',
+        # Culling deletes a fraction of rows once the table is full; keep it
+        # far above what an attack from many addresses creates in a window.
+        'OPTIONS': {'MAX_ENTRIES': 100_000},
+    },
+}
+
 AUTH_PASSWORD_VALIDATORS = [
     {
         'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
@@ -272,6 +293,11 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',
     ],
+    # Scopes for core.throttling.ClientIPScopedRateThrottle. The login lockout
+    # is separate: users/login_throttle.py counts only failed attempts.
+    'DEFAULT_THROTTLE_RATES': {
+        'rs_ge_lookup': '30/min',
+    },
 }
 
 # Simple JWT settings

@@ -126,14 +126,15 @@ resource "digitalocean_app" "loadtest" {
     }
 
     # Pre-deploy: the backend never serves a request against an unmigrated or
-    # unseeded database.
+    # unseeded database, or without the rate-limit cache table (without it
+    # every login logs an error, which would skew a login-storm measurement).
     job {
       name               = "seed"
       kind               = "PRE_DEPLOY"
       source_dir         = "backend"
       environment_slug   = "python"
       instance_size_slug = var.instance_size
-      run_command        = "python manage.py migrate --noinput && python manage.py seed_loadtest --password \"$LOADTEST_PASSWORD\" --web-service-url \"$FAKE_1C_URL\""
+      run_command        = "python manage.py migrate --noinput && python manage.py createcachetable && python manage.py seed_loadtest --password \"$LOADTEST_PASSWORD\" --web-service-url \"$FAKE_1C_URL\""
 
       github {
         repo           = local.repo

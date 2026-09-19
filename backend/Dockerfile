@@ -33,9 +33,10 @@ LABEL org.opencontainers.image.title="iflow-backend" \
 
 EXPOSE 8080
 
-# How the release image starts (deploy/onprem/): migrate, collect static files
+# How the release image starts (deploy/onprem/): migrate, create the rate-limit
+# cache table (settings.CACHES['throttle']; idempotent), collect static files
 # (at run time, where the env exists and a failure is loud), then serve.
 # Running migrations on start is what makes an upgrade a plain image swap.
 # NOT used by the live DigitalOcean app, which is a Python buildpack deploy
 # with its own run command; docker-compose.yml overrides it with runserver.
-CMD ["sh", "-c", "python manage.py migrate --noinput && python manage.py collectstatic --noinput && exec gunicorn --bind 0.0.0.0:8080 --workers 2 --threads 4 --timeout 120 backend.wsgi:application"]
+CMD ["sh", "-c", "python manage.py migrate --noinput && python manage.py createcachetable && python manage.py collectstatic --noinput && exec gunicorn --bind 0.0.0.0:8080 --workers 2 --threads 4 --timeout 120 backend.wsgi:application"]

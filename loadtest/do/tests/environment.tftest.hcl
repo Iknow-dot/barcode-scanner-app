@@ -160,8 +160,8 @@ run "seed_job_migrates_then_seeds_against_the_fake" {
   }
 
   assert {
-    condition     = startswith(digitalocean_app.loadtest.spec[0].job[0].run_command, "python manage.py migrate --noinput && python manage.py seed_loadtest ")
-    error_message = "The seed job must migrate before seeding."
+    condition     = startswith(digitalocean_app.loadtest.spec[0].job[0].run_command, "python manage.py migrate --noinput && python manage.py createcachetable && python manage.py seed_loadtest ")
+    error_message = "The seed job must migrate and create the rate-limit cache table before seeding."
   }
 
   assert {

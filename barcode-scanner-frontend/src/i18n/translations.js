@@ -34,6 +34,7 @@ const translations = {
         // ===== Login Errors =====
         ipNotAllowed: 'თქვენი IP მისამართი არ არის დაშვებული. გთხოვთ, დაუკავშირდით ადმინისტრატორს.',
         deviceNotAllowed: 'ეს ანგარიში მიბმულია სხვა მოწყობილობაზე. გთხოვთ, დაუკავშირდით ადმინისტრატორს.',
+        loginThrottled: (minutes) => `ძალიან ბევრი წარუმატებელი მცდელობა. სცადეთ ხელახლა ${minutes} წუთში.`,
 
         // ===== Dashboard / Product Search =====
         productSearchSubtitle: 'მოძებნეთ პროდუქტი შტრიხკოდის ან არტიკულის მიხედვით',
@@ -723,6 +724,7 @@ const translations = {
         // ===== Login Errors =====
         ipNotAllowed: 'Your IP address is not allowed. Please contact the administrator.',
         deviceNotAllowed: 'This account is locked to a different device. Please contact your administrator.',
+        loginThrottled: (minutes) => `Too many failed attempts. Try again in ${minutes} min.`,
 
         // ===== Dashboard / Product Search =====
         productSearchSubtitle: 'Search for a product by barcode or article number',

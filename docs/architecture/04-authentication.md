@@ -19,8 +19,13 @@ sequenceDiagram
     FE->>LS: read device_id (survives logout)
     FE->>API: POST /api/v1/users/auth/login/ {username, password, device_id?}
 
+    alt 0. username + IP ≥ 5 failures, or IP ≥ 30, this 15-min window
+        API-->>FE: 429 LOGIN_THROTTLED {retry_after}<br/>(password never checked)
+    end
+
     API->>DB: 1. check credentials
     alt invalid
+        API->>DB: count the failure (user_login_failed)
         API-->>FE: 401
     end
 
@@ -45,6 +50,12 @@ sequenceDiagram
 A new top-level key in the login response is dropped by the frontend unless it is
 threaded through `Login.js` → `AuthContext.login(...)` → its localStorage write →
 state restore → `logout()` cleanup.
+
+**Failed-login lockout** (`users/login_throttle.py`): only failures count, and a
+correct password clears the username + IP counter. The Django admin login goes
+through the same check (`users.auth_backends.ThrottledModelBackend`). Counters live
+in the `throttle` database cache table, which `manage.py createcachetable` creates;
+without it the lockout fails open and logs errors.
 
 **Client IP** (`core/ip_utils.py::get_client_ip`, shared with the push-token
 allowlist and `GET /users/ip/`) comes from exactly one source per deployment:

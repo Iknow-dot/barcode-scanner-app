@@ -15,6 +15,7 @@ from rest_framework_simplejwt.exceptions import TokenError
 from core.ip_utils import get_client_ip
 from core.models import Organization
 from core.permissions import CompanyUserPermission
+from users import login_throttle
 from users.exceptions import DeviceNotAllowedError, IPNotAllowedError
 from users.models import User
 from users.serializers import (
@@ -43,9 +44,24 @@ class CustomTokenObtainPairView(TokenObtainPairView):
     Custom login view that catches IPNotAllowedError and DeviceNotAllowedError
     raised during token validation and returns a structured JSON error response
     with a ``code`` field the frontend can use for translation.
+
+    A username + address locked out by ``users.login_throttle`` gets a 429
+    before the password is looked at, whatever the password.
     """
 
     def post(self, request: Request, *args, **kwargs) -> Response:
+        username = request.data.get('username') if hasattr(request.data, 'get') else None
+        wait = login_throttle.retry_after(request, username or '')
+        if wait:
+            return Response(
+                {
+                    "code": "LOGIN_THROTTLED",
+                    "detail": "Too many failed login attempts. Try again later.",
+                    "retry_after": wait,
+                },
+                status=status.HTTP_429_TOO_MANY_REQUESTS,
+                headers={'Retry-After': str(wait)},
+            )
         try:
             return super().post(request, *args, **kwargs)
         except IPNotAllowedError:

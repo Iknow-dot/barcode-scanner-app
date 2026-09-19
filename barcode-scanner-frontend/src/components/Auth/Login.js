@@ -2,6 +2,7 @@ import React, {useContext, useEffect, useState} from 'react';
 import {useNavigate} from 'react-router-dom';
 import {authService} from '../../api';
 import AuthContext from '../Auth/AuthContext';
+import loginErrorMessage from './loginErrorMessage';
 import {Alert, Button, Card, Dropdown, Flex, Form, Input, Layout, Space, Spin, theme, Typography} from "antd";
 import {Content} from "antd/es/layout/layout";
 import {GlobalOutlined, LockOutlined, LoginOutlined, UserOutlined} from "@ant-design/icons";
@@ -41,13 +42,7 @@ const Login = ({isDark = false}) => {
         const result = await authService.login(username, password);
 
         if (!result.success) {
-            const errorMessages = {
-                'IP_NOT_ALLOWED': t.ipNotAllowed,
-                'DEVICE_NOT_ALLOWED': t.deviceNotAllowed,
-            };
-
-            const errorCode = result.code;
-            setError(errorMessages[errorCode] || result.error || t.invalidCredentials);
+            setError(loginErrorMessage(result, t));
             setLoading(false);
             return;
         }

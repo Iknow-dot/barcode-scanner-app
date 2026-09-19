@@ -221,6 +221,31 @@ class SearchAddressesAPIViewTests(TestCase):
 
 
 @override_settings(SECURE_SSL_REDIRECT=False)
+class RSGeLookupRateLimitTests(TestCase):
+    """The lookup is public and proxies to RS.ge, so each address gets a budget."""
+
+    PER_MINUTE = 30
+
+    def _lookup(self, ip):
+        return APIClient().post(
+            reverse('rs-ge-lookup'), {'identification_number': '01001000001'},
+            format='json', REMOTE_ADDR=ip,
+        )
+
+    def test_address_over_budget_is_rate_limited(self):
+        body = _rs_ge_record(FullName='გიორგი ბერიძე')
+        with mock.patch('httpx.post', return_value=_mock_httpx_response(200, body)):
+            for _ in range(self.PER_MINUTE):
+                self.assertEqual(self._lookup('198.51.100.7').status_code, 200)
+            limited = self._lookup('198.51.100.7')
+            other_address = self._lookup('203.0.113.50')
+        self.assertEqual(limited.status_code, 429)
+        self.assertEqual(limited.data['code'], 'RATE_LIMITED')
+        self.assertIn('Retry-After', limited)
+        self.assertEqual(other_address.status_code, 200)
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
 class RSGeLookupAPIViewTests(TestCase):
     def setUp(self):
         self.client_api = APIClient()

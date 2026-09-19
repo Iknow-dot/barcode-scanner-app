@@ -29,6 +29,7 @@ from core.services.consult_web_exchange import (
 )
 from core.services.photon import PhotonError, reverse_geocode, search_addresses
 from core.services.rs_ge import RSGeError, lookup_taxpayer
+from core.throttling import ClientIPScopedRateThrottle, RateLimited
 from core.views.common import external_error_response
 
 logger = logging.getLogger(__name__)
@@ -38,8 +39,14 @@ logger = logging.getLogger(__name__)
 class RSGeLookupAPIView(APIView):
     """Look up a taxpayer's name from RS.ge by identification number."""
     permission_classes = []
+    # Public and proxied to RS.ge, so each caller gets a budget.
+    throttle_classes = [ClientIPScopedRateThrottle]
+    throttle_scope = 'rs_ge_lookup'
     serializer_class = RSGeLookupSerializer
     http_method_names = ["post"]
+
+    def throttled(self, request, wait):
+        raise RateLimited(wait)
 
     def post(self, request: Request) -> Response:
         serializer = self.serializer_class(data=request.data)
