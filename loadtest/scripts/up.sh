@@ -31,5 +31,5 @@ if [ "$DB_LATENCY_MS" -gt 0 ]; then
 fi
 
 echo "waiting for the backend..."
-until curl -sf http://localhost:8280/api/schema/ >/dev/null; do sleep 2; done
+until curl -sf http://localhost:8280/api/v1/health/ >/dev/null; do sleep 2; done
 echo "stack up: backend :8280  fake-1c :8099  toxiproxy :8474  postgres :5533"
