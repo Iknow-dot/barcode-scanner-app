@@ -150,6 +150,22 @@ class ScrubEventTests(SimpleTestCase):
         self.assertEqual(data["http.query"], REDACTED)
         self.assertEqual(data["url.query"], REDACTED)
 
+    def test_redacts_the_push_token_header(self):
+        # 1C sends its push token as X-Webhook-Token. The SDK's own header
+        # filter only knows Authorization/Cookie-style names, so an exception
+        # during a push would otherwise ship the token in clear.
+        event = {
+            "request": {"headers": {
+                "X-Webhook-Token": "push-secret",
+                "Content-Type": "application/json",
+            }},
+            "extra": {"webhook_token": "push-secret"},
+        }
+        scrubbed = scrub_event(event)
+        self.assertEqual(scrubbed["request"]["headers"]["X-Webhook-Token"], REDACTED)
+        self.assertEqual(scrubbed["request"]["headers"]["Content-Type"], "application/json")
+        self.assertEqual(scrubbed["extra"]["webhook_token"], REDACTED)
+
     def test_keeps_sdk_metadata(self):
         # `sdk` is Sentry protocol metadata, not our data: redacting its `name`
         # (which SENSITIVE_KEYS contains) breaks SDK attribution in the UI.

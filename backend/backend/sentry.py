@@ -66,6 +66,12 @@ _URL_KEYS = ("url", "url.full", "http.url")
 # interface, and stays correct if the SDK adds a fifth site.
 _QUERY_KEYS = frozenset({"http.query", "url.query", "http.fragment", "query_string"})
 
+# Keys whose value is one of our own credentials. Like `_QUERY_KEYS`, a separate
+# concern from the person-identifying names in `SENSITIVE_KEYS`. The SDK's
+# header filter masks `Authorization` but not the push token 1C sends as
+# `X-Webhook-Token` (see `core/ingest_auth.py`).
+_CREDENTIAL_KEYS = frozenset({"x-webhook-token", "webhook_token"})
+
 # Sentry protocol metadata, not our data: `sdk.name` ("sentry.python.django")
 # would otherwise be redacted by the `name` key and break SDK attribution in
 # the UI. The subtree is skipped whole rather than descended into.
@@ -84,7 +90,7 @@ def scrub_text(value: Any) -> Any:
 def _redacts(key: Any, sensitive_keys: frozenset) -> bool:
     """True if this key's value must be replaced wholesale."""
     lowered = str(key).lower()
-    return lowered in sensitive_keys or lowered in _QUERY_KEYS
+    return lowered in sensitive_keys or lowered in _QUERY_KEYS or lowered in _CREDENTIAL_KEYS
 
 
 def _scrub_value(value: Any, sensitive_keys: frozenset) -> Any:
