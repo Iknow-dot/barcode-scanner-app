@@ -4,6 +4,7 @@ from users.models import AllowedIP
 from django.contrib.auth import get_user_model
 from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
 from users.admin_forms import AdminUserChangeForm, AdminUserCreationForm
+from users.serializers import end_sessions
 
 User = get_user_model()
 
@@ -37,6 +38,13 @@ class UserAdmin(DjangoUserAdmin):
     inlines = [AllowedIPInline]
     add_form = AdminUserCreationForm
     form = AdminUserChangeForm
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        # Clearing or replacing the bound device must end the old device's
+        # sessions, as POST /users/{id}/reset-device/ does.
+        if change and 'bound_device_id' in form.changed_data and form.initial.get('bound_device_id'):
+            end_sessions(obj)
 
     list_display = DjangoUserAdmin.list_display + ('role', 'organization')
     list_filter = DjangoUserAdmin.list_filter + ('organization', 'warehouses', 'role', AllowedIPFilter)

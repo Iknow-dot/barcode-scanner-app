@@ -1,5 +1,8 @@
 from core.models import Organization
-from django.test import TestCase, override_settings
+from django.contrib import admin
+from django.forms.models import model_to_dict
+from django.test import RequestFactory, TestCase, override_settings
+from users.admin import UserAdmin
 from rest_framework.test import APIClient
 from rest_framework_simplejwt.settings import api_settings
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -89,6 +92,41 @@ class SessionRevocationTests(TestCase):
         AllowedIP.objects.create(user=self.user, ip_or_network='198.51.100.7')
         refused = self._refresh(tokens['refresh_token'], ip='203.0.113.50')
         self.assertEqual(refused.status_code, 403)
+
+    def _save_in_admin(self, **changes):
+        # The admin's own save path: its form and UserAdmin.save_model.
+        request = RequestFactory().post('/admin/')
+        request.user = self.admin
+        model_admin = UserAdmin(User, admin.site)
+        data = model_to_dict(self.user)
+        data.update(changes)
+        form = model_admin.form(data=data, instance=self.user)
+        self.assertTrue(form.is_valid(), form.errors)
+        model_admin.save_model(request, form.save(commit=False), form, change=True)
+
+    def test_clearing_the_device_in_django_admin_ends_existing_sessions(self):
+        # The admin's Device lock section tells admins to clear bound_device_id;
+        # that must end the old device's sessions like the API reset does.
+        self.user.device_lock_enabled = True
+        self.user.save()
+        tokens = self._login()
+        self.user.refresh_from_db()
+        self._save_in_admin(bound_device_id='')
+        self.assertEqual(self._refresh(tokens['refresh_token']).status_code, 401)
+
+    def test_refresh_for_a_deleted_user_is_401_not_500(self):
+        # simplejwt 5.5.1 looks the user up with .get() and let DoesNotExist
+        # escape as a server error.
+        tokens = self._login()
+        self.user.delete()
+        response = self._refresh(tokens['refresh_token'])
+        self.assertEqual(response.status_code, 401)
+
+    def test_other_admin_edits_keep_sessions(self):
+        tokens = self._login()
+        self.user.refresh_from_db()
+        self._save_in_admin(first_name='Renamed')
+        self.assertEqual(self._refresh(tokens['refresh_token']).status_code, 200)
 
     def test_device_reset_ends_existing_sessions(self):
         self.user.device_lock_enabled = True

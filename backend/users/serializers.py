@@ -208,8 +208,11 @@ class CustomTokenRefreshSerializer(TokenRefreshSerializer):
 
     The *incoming* token's own expiry is what enforces the timeout — the
     re-stamp only ensures the next token in the rotation chain carries the
-    org lifetime too. If the user lookup fails (deleted mid-session), stock
-    behavior applies.
+    org lifetime too. A token whose user was deleted mid-session is a 401.
+
+    With CHECK_REVOKE_TOKEN, Django re-hashing a password on login (after a
+    hasher-iteration bump in a Django upgrade) changes the claim too, so that
+    user's other devices log out once. Accepted: it is rare and harmless.
     """
 
     def validate(self, attrs):
@@ -217,19 +220,23 @@ class CustomTokenRefreshSerializer(TokenRefreshSerializer):
         user = User.objects.select_related('organization').filter(
             pk=incoming.get(jwt_settings.USER_ID_CLAIM),
         ).first()
-        if user is not None:
-            if jwt_settings.CHECK_REVOKE_TOKEN and incoming.get(
-                    jwt_settings.REVOKE_TOKEN_CLAIM) != get_md5_hash_password(user.password):
-                raise AuthenticationFailed(
-                    "The user's password has been changed.", code='password_changed',
-                )
-            enforce_ip_allowlist(user, self.context.get('request'), 'Refresh')
+        if user is None:
+            # simplejwt's own lookup uses .get() and would 500 on a deleted user.
+            raise AuthenticationFailed(
+                'No active account found for the given token.', code='no_active_account',
+            )
+        if jwt_settings.CHECK_REVOKE_TOKEN and incoming.get(
+                jwt_settings.REVOKE_TOKEN_CLAIM) != get_md5_hash_password(user.password):
+            raise AuthenticationFailed(
+                "The user's password has been changed.", code='password_changed',
+            )
+        enforce_ip_allowlist(user, self.context.get('request'), 'Refresh')
         data = super().validate(attrs)
         rotated = data.get('refresh')
         if not rotated:
             return data
         token = RefreshToken(rotated)
-        lifetime = org_refresh_lifetime(user) if user else None
+        lifetime = org_refresh_lifetime(user)
         if lifetime is not None:
             token.set_exp(lifetime=lifetime)
             _sync_outstanding_expiry(token)
