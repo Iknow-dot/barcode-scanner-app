@@ -1,3 +1,4 @@
+import hashlib
 import secrets
 
 from cryptography.fernet import Fernet
@@ -15,6 +16,21 @@ User = get_user_model()
 
 
 
+def hash_push_token(token: str) -> str:
+    """The stored form of a 1C push token: its SHA-256 hex digest.
+
+    Push tokens are 256 random bits, so an unsalted digest is safe to compare
+    and reveals nothing; a keyed hash would tie every token to SECRET_KEY.
+    """
+    return hashlib.sha256(token.encode('utf-8')).hexdigest()
+
+
+def _unrevealed_push_token_hash() -> str:
+    """A new org's default: the hash of a token nobody ever sees, so the first
+    working token is one a company admin generates."""
+    return hash_push_token(secrets.token_urlsafe(32))
+
+
 def _fernet() -> Fernet:
     key = settings.FERNET_KEY
     if not key:
@@ -29,8 +45,13 @@ class Organization(models.Model):
     web_service_url = models.URLField(max_length=255)
     web_service_username = models.CharField(max_length=255, null=True, blank=True)
     web_service_password = models.CharField(max_length=255, null=True, blank=True)
-    webhook_token = models.CharField(
-        max_length=64, unique=True, db_index=True, default=secrets.token_urlsafe,
+    # SHA-256 of the org's 1C push token (see core/ingest_auth.py). The token
+    # itself exists only in the one response issue_push_token() feeds. The
+    # column keeps its old name, and tokens issued before hashing sit here in
+    # plaintext until migration 0033 or their first push hashes them.
+    webhook_token_hash = models.CharField(
+        max_length=64, unique=True, db_index=True, db_column='webhook_token',
+        default=_unrevealed_push_token_hash, editable=False,
     )
     # ClientIDPhone (ID or phone) of the org's 1C retail counterparty
     # (საცალო კონტრაგენტი). Used by the CreateOrder push for retail /
@@ -97,9 +118,16 @@ class Organization(models.Model):
         """Decrypt and return the stored web-service password."""
         return _fernet().decrypt(self.web_service_password.encode()).decode()
 
-    def rotate_webhook_token(self) -> None:
-        self.webhook_token = secrets.token_urlsafe()
-        self.save(update_fields=["webhook_token"])
+    def issue_push_token(self) -> str:
+        """Replace the org's push token and return the new one.
+
+        This is the only time the token exists in the clear: only its hash is
+        stored, so it can be shown once and after that only replaced.
+        """
+        token = secrets.token_urlsafe(32)
+        self.webhook_token_hash = hash_push_token(token)
+        self.save(update_fields=["webhook_token_hash"])
+        return token
 
     def __str__(self):
         return self.name

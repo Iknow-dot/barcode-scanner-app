@@ -33,6 +33,7 @@ from core.models import (
     PurchaseOrder,
     PurchaseOrderItem,
     Warehouse,
+    hash_push_token,
 )
 from users.models import User
 
@@ -117,7 +118,8 @@ class Command(BaseCommand):
                 "employees_count": max(options["users_per_org"], 1) * 10,
                 "product_catalog_enabled": True,
                 "gift_marking_enabled": True,
-                "webhook_token": f"loadtest-push-token-{index}",
+                # k6 sends the plaintext; only its hash is stored.
+                "webhook_token_hash": hash_push_token(f"loadtest-push-token-{index}"),
             },
         )
         org.encrypt_password(DEFAULT_1C_PASSWORD)

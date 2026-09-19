@@ -600,7 +600,7 @@ round these into more confidence than they carry.
 | `BASE_URL` | `http://backend:8080` inside `scripts/k6.sh`, `http://localhost:8280` for a native `k6` | Target. Change this for Phase 2. |
 | `DB_LATENCY_MS` | `2` | `up.sh`'s toxiproxy downstream latency modelling managed Postgres. `0` disables it. |
 | `DJANGO_SECRET_KEY` | the compose value | Must match the target's, or every image-proxy request 403s (signatures won't verify). |
-| `PUSH_TOKEN` | `loadtest-push-token-1` | Must match the seeded org's `webhook_token`. |
+| `PUSH_TOKEN` | `loadtest-push-token-1` | The plaintext of the seeded org's token (the seed stores only its SHA-256 in `webhook_token_hash`). |
 | `USER_COUNT` / `PRODUCT_COUNT` | `50` / `5000` | Must match what was actually seeded (`seed.sh`'s `USERS`/`PRODUCTS`) — a mismatch doesn't fail loudly on its own outside of `smoke.js`'s own guard; every later scenario's working set just silently narrows. |
 | `IMAGE_EXPECT_STATUS` | `502` | Status `entry/smoke.js`'s `catalog_image` check and `scenarios/images.js`'s `imageGrid` assert. Locally always `502` (the SSRF guard rejects every seeded `fake-1c` image URL — see "The image proxy cannot be measured locally"). **Phase 2 must set this to `200`**: pointed at a deployment with real public-HTTPS images, the same request legitimately succeeds, and a hard-coded `502` would fail smoke/images (and breach their thresholds) at the exact moment the proxy starts working for real. |
 | `ORG_ID` | `1` | Fallback only — real code paths read the org id from the login response (`session.organizationId`), since Postgres sequences don't reset on delete and a hard-coded id mints signatures for the wrong org after any `--reset` + reseed. |

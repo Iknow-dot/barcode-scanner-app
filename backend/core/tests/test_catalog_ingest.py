@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from core.ingest_auth import organization_from_push
+from core.models import hash_push_token
 from core.models import CatalogIngestState, Organization, OrganizationPushAllowedIP, Product, ProductAttribute, PurchaseOrder
 from django.test import TestCase, override_settings
 from django.urls import reverse
@@ -17,21 +18,44 @@ class PushAuthTests(TestCase):
             name="Org", identification_number="ORG1", web_service_url="https://x", employees_count=5,
             product_catalog_enabled=True,
         )
+        self.push_token = self.org.issue_push_token()
 
     def _req(self, headers):
         return SimpleNamespace(headers=headers)
 
     def test_resolves_org_from_x_webhook_token(self):
-        got = organization_from_push(self._req({"X-Webhook-Token": self.org.webhook_token}))
+        got = organization_from_push(self._req({"X-Webhook-Token": self.push_token}))
         self.assertEqual(got, self.org)
 
     def test_resolves_org_from_bearer(self):
-        got = organization_from_push(self._req({"Authorization": f"Bearer {self.org.webhook_token}"}))
+        got = organization_from_push(self._req({"Authorization": f"Bearer {self.push_token}"}))
         self.assertEqual(got, self.org)
 
     def test_missing_token_raises(self):
         with self.assertRaises(AuthenticationFailed):
             organization_from_push(self._req({}))
+
+    def test_only_a_hash_of_the_token_is_stored(self):
+        self.org.refresh_from_db()
+        self.assertEqual(self.org.webhook_token_hash, hash_push_token(self.push_token))
+        self.assertFalse(Organization.objects.filter(webhook_token_hash=self.push_token).exists())
+
+    def test_a_stored_hash_is_not_a_token(self):
+        # Whoever can read the table must not be able to push with what they read.
+        self.org.refresh_from_db()
+        with self.assertRaises(AuthenticationFailed):
+            organization_from_push(self._req({"X-Webhook-Token": self.org.webhook_token_hash}))
+
+    def test_a_token_issued_before_hashing_still_works_and_is_hashed_on_use(self):
+        # Tokens stored in plaintext before this change keep working, so no
+        # 1C integration breaks at deploy; the first push replaces the
+        # plaintext with its hash (the migration does the rest).
+        legacy = "Kx9PpDq4lZ7mT2vB8nW1yR6uE3sA0cF5hJ-_gLbN4oQ"
+        Organization.objects.filter(pk=self.org.pk).update(webhook_token_hash=legacy)
+        self.assertEqual(organization_from_push(self._req({"X-Webhook-Token": legacy})), self.org)
+        self.org.refresh_from_db()
+        self.assertEqual(self.org.webhook_token_hash, hash_push_token(legacy))
+        self.assertEqual(organization_from_push(self._req({"X-Webhook-Token": legacy})), self.org)
 
     def test_invalid_token_raises(self):
         with self.assertRaises(AuthenticationFailed):
@@ -46,12 +70,13 @@ class IngestUpsertTests(TestCase):
             name="Org", identification_number="ORG1", web_service_url="https://x", employees_count=5,
             product_catalog_enabled=True,
         )
+        self.push_token = self.org.issue_push_token()
         self.url = "/api/v1/catalog/products/"
 
     def _push(self, products, is_full=False):
         return self.client.post(
             self.url, {"products": products, "is_full": is_full},
-            format="json", HTTP_X_WEBHOOK_TOKEN=self.org.webhook_token,
+            format="json", HTTP_X_WEBHOOK_TOKEN=self.push_token,
         )
 
     def test_upsert_creates_rows_and_barcodes(self):
@@ -88,13 +113,14 @@ class IngestUpsertTests(TestCase):
             name="Other", identification_number="ORG2", web_service_url="https://y", employees_count=5,
             product_catalog_enabled=True,
         )
+        other_token = other.issue_push_token()
         self.client.post(
             self.url, {"products": [{"sku": "S1", "name": "A-candle"}]},
-            format="json", HTTP_X_WEBHOOK_TOKEN=self.org.webhook_token,
+            format="json", HTTP_X_WEBHOOK_TOKEN=self.push_token,
         )
         self.client.post(
             self.url, {"products": [{"sku": "S1", "name": "B-candle"}]},
-            format="json", HTTP_X_WEBHOOK_TOKEN=other.webhook_token,
+            format="json", HTTP_X_WEBHOOK_TOKEN=other_token,
         )
         self.assertEqual(Product.objects.get(organization=self.org, sku="S1").name, "A-candle")
         self.assertEqual(Product.objects.get(organization=other, sku="S1").name, "B-candle")
@@ -117,12 +143,13 @@ class IngestDeactivateTests(TestCase):
             name="Org", identification_number="ORG1", web_service_url="https://x", employees_count=5,
             product_catalog_enabled=True,
         )
+        self.push_token = self.org.issue_push_token()
         Product.objects.create(organization=self.org, sku="S1", name="Candle")
 
     def test_deactivate_sets_flags(self):
         r = self.client.post(
             "/api/v1/catalog/products/deactivate/", {"skus": ["S1"]},
-            format="json", HTTP_X_WEBHOOK_TOKEN=self.org.webhook_token,
+            format="json", HTTP_X_WEBHOOK_TOKEN=self.push_token,
         )
         self.assertEqual(r.status_code, 200)
         self.assertEqual(r.json(), {"deactivated": 1})
@@ -135,10 +162,11 @@ class IngestDeactivateTests(TestCase):
             name="Other", identification_number="ORG2", web_service_url="https://y", employees_count=5,
             product_catalog_enabled=True,
         )
+        other_token = other.issue_push_token()
         Product.objects.create(organization=other, sku="S1", name="Other Candle")
         r = self.client.post(
             "/api/v1/catalog/products/deactivate/", {"skus": ["S1"]},
-            format="json", HTTP_X_WEBHOOK_TOKEN=self.org.webhook_token,
+            format="json", HTTP_X_WEBHOOK_TOKEN=self.push_token,
         )
         self.assertEqual(r.json(), {"deactivated": 1})
         self.assertTrue(Product.objects.get(organization=other, sku="S1").is_active)
@@ -153,6 +181,7 @@ class OrderCompleteWebhookTests(TestCase):
             name="Org", identification_number="ORG1", web_service_url="https://x", employees_count=5,
             product_catalog_enabled=True,
         )
+        self.push_token = self.org.issue_push_token()
         self.url = "/api/v1/webhooks/orders/complete/"
 
     def _order(self, status="confirmed", org=None):
@@ -163,7 +192,7 @@ class OrderCompleteWebhookTests(TestCase):
     def _complete(self, body, token=None):
         return self.client.post(
             self.url, body, format="json",
-            HTTP_X_WEBHOOK_TOKEN=token if token is not None else self.org.webhook_token,
+            HTTP_X_WEBHOOK_TOKEN=token if token is not None else self.push_token,
         )
 
     def test_confirmed_order_becomes_completed(self):
@@ -202,6 +231,7 @@ class OrderCompleteWebhookTests(TestCase):
             name="Other", identification_number="ORG2", web_service_url="https://y", employees_count=5,
             product_catalog_enabled=True,
         )
+        other_token = other.issue_push_token()
         foreign_order = self._order(org=other)
         r = self._complete({"order_id": foreign_order.id})  # self.org's token
         self.assertEqual(r.status_code, 404)
@@ -248,7 +278,7 @@ class OrderCompleteWebhookTests(TestCase):
         order = self._order()
         r = self.client.post(
             self.url, {"order_id": order.id}, format="json",
-            HTTP_AUTHORIZATION=f"Bearer {self.org.webhook_token}",
+            HTTP_AUTHORIZATION=f"Bearer {self.push_token}",
         )
         self.assertEqual(r.status_code, 200)
         order.refresh_from_db()
@@ -267,12 +297,13 @@ class PushIPAllowlistTests(TestCase):
             name="Org", identification_number="ORG1", web_service_url="https://x", employees_count=5,
             product_catalog_enabled=True,
         )
+        self.push_token = self.org.issue_push_token()
         self.url = "/api/v1/catalog/products/"
 
     def _push(self, remote_addr):
         return self.client.post(
             self.url, {"products": []}, format="json",
-            HTTP_X_WEBHOOK_TOKEN=self.org.webhook_token, REMOTE_ADDR=remote_addr,
+            HTTP_X_WEBHOOK_TOKEN=self.push_token, REMOTE_ADDR=remote_addr,
         )
 
     def test_no_allowlist_allows_any_ip(self):
@@ -290,7 +321,7 @@ class PushIPAllowlistTests(TestCase):
         OrganizationPushAllowedIP.objects.create(organization=self.org, ip_or_network="203.0.113.9")
         r = self.client.post(
             self.url, {"products": []}, format="json",
-            HTTP_X_WEBHOOK_TOKEN=self.org.webhook_token,
+            HTTP_X_WEBHOOK_TOKEN=self.push_token,
             HTTP_X_FORWARDED_FOR="203.0.113.9, 198.51.100.7", REMOTE_ADDR="198.51.100.7",
         )
         self.assertEqual(r.status_code, 403)
@@ -348,13 +379,14 @@ class CatalogIngestCategoryAttributeTests(TestCase):
             web_service_url="https://a.example", employees_count=5,
             product_catalog_enabled=True,
         )
+        self.push_token = self.org.issue_push_token()
         self.api = APIClient()
         self.url = reverse("catalog-product-ingest")
 
     def _push(self, products, is_full=False):
         return self.api.post(
             self.url, {"products": products, "is_full": is_full},
-            format="json", HTTP_X_WEBHOOK_TOKEN=self.org.webhook_token,
+            format="json", HTTP_X_WEBHOOK_TOKEN=self.push_token,
         )
 
     def test_push_creates_category_and_stores_attributes(self):
@@ -404,12 +436,13 @@ class CatalogFeatureIngestTests(TestCase):
             web_service_url="https://x", employees_count=5,
             product_catalog_enabled=True,
         )
+        self.push_token = self.org.issue_push_token()
         self.url = "/api/v1/catalog/products/"
 
     def _push(self, products, is_full=False):
         return self.client.post(
             self.url, {"products": products, "is_full": is_full},
-            format="json", HTTP_X_WEBHOOK_TOKEN=self.org.webhook_token,
+            format="json", HTTP_X_WEBHOOK_TOKEN=self.push_token,
         )
 
     def _disable(self):
@@ -432,7 +465,7 @@ class CatalogFeatureIngestTests(TestCase):
         self._disable()
         r = self.client.post(
             "/api/v1/catalog/products/deactivate/", {"skus": ["S1"]},
-            format="json", HTTP_X_WEBHOOK_TOKEN=self.org.webhook_token,
+            format="json", HTTP_X_WEBHOOK_TOKEN=self.push_token,
         )
         self.assertEqual(r.status_code, 403)
         self.assertEqual(r.json()["code"], "CATALOG_NOT_ENABLED")

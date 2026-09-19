@@ -22,12 +22,15 @@ from users.models import AllowedIP, User
 
 
 def _external_service_payload(organization: Organization) -> dict:
-    """Shape shared by GET and PATCH of my-organization/external-service."""
+    """Shape shared by GET and PATCH of my-organization/external-service.
+
+    Never includes the push token: only its hash is stored, and the token is
+    shown once, by rotate-token.
+    """
     return {
         'web_service_url': organization.web_service_url,
         'web_service_username': organization.web_service_username,
         'has_password': bool(organization.web_service_password),
-        'webhook_token': organization.webhook_token,
         'push_allowed_ips': list(
             organization.push_allowed_ips.values_list('ip_or_network', flat=True)
         ),
@@ -124,17 +127,18 @@ class OrganizationViewSet(ModelViewSet):
 
     @action(detail=False, methods=['post'], url_path='my-organization/external-service/rotate-token')
     def rotate_external_service_token(self, request: Request) -> Response:
-        """POST: Rotate (regenerate) the organization's catalog-push token.
+        """POST: Generate a new catalog-push token and show it, this once.
 
         Company-admin only (OrganizationPermission). Invalidates the previous token — the
-        org's 1C must be reconfigured with the new value before it can push again.
+        org's 1C must be reconfigured with the new value before it can push again. Only
+        the token's hash is stored, so this response is the only place it ever appears.
         """
         user = request.user
         if not user.organization:
             return no_organization_response()
-        organization = user.organization
-        organization.rotate_webhook_token()
-        return Response({"webhook_token": organization.webhook_token})
+        token = user.organization.issue_push_token()
+        # The only time the token is ever shown; keep it out of every cache.
+        return Response({"webhook_token": token}, headers={'Cache-Control': 'no-store'})
 
     @action(detail=False, methods=['get', 'patch'], url_path='my-organization/invoice-template')
     def invoice_template(self, request: Request) -> Response:

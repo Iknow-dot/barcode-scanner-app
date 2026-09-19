@@ -19,7 +19,7 @@ erDiagram
 
 | Model | Key fields |
 |-------|------------|
-| **Organization** | `name`, `identification_number` (both unique) · 1C: `web_service_url`, `web_service_username`, `web_service_password` (Fernet-encrypted), `webhook_token` (push token), `retail_client_id_phone` · limits: `employees_count` (caps company users), `product_limit` (active products, null = unlimited) · switches: `gift_marking_enabled`, `product_catalog_enabled` · `session_timeout_minutes` (30–43200, null = 1 day) · invoice branding + `invoice_template_html` |
+| **Organization** | `name`, `identification_number` (both unique) · 1C: `web_service_url`, `web_service_username`, `web_service_password` (Fernet-encrypted), `webhook_token_hash` (SHA-256 of the push token; the token is shown once, when a company admin generates it), `retail_client_id_phone` · limits: `employees_count` (caps company users), `product_limit` (active products, null = unlimited) · switches: `gift_marking_enabled`, `product_catalog_enabled` · `session_timeout_minutes` (30–43200, null = 1 day) · invoice branding + `invoice_template_html` |
 | **User** | `role` (internal_admin / company_admin / company_user), `organization` (null only for internal admin) · discounts: `can_apply_discount`, `max_discount_percent` · device lock: `device_lock_enabled`, `bound_device_id` (secret, admin-only), `device_bound_at` |
 | **Warehouse** | `name`, `code` (unique per org; the 1C stock id) |
 | **AllowedIP** / **OrganizationPushAllowedIP** | `ip_or_network` (IP or CIDR). No rows = unrestricted |

@@ -1,5 +1,6 @@
 import React, {useEffect, useState} from 'react';
 import {
+    Alert,
     Button,
     Card,
     Divider,
@@ -51,7 +52,8 @@ const ExternalServiceSettings = () => {
                         push_allowed_ips: result.data.push_allowed_ips || [],
                     });
                     setHasPassword(result.data.has_password);
-                    setPushToken(result.data.webhook_token || '');
+                    // The push token is never fetched: the backend keeps only
+                    // its hash and shows the token once, when generated.
                 } else {
                     notify.error(t.error, t.externalServiceFetchError);
                 }
@@ -253,16 +255,23 @@ const ExternalServiceSettings = () => {
 
                     <p style={{fontSize: 12, opacity: 0.6, marginTop: 0}}>{t.pushTokenHelp}</p>
 
-                    <Input
-                        readOnly
-                        value={pushToken}
-                        prefix={<KeyOutlined style={{opacity: 0.4}}/>}
-                        addonAfter={
-                            <Tooltip title={t.pushTokenCopy}>
-                                <CopyOutlined style={{cursor: 'pointer'}} onClick={handleCopyToken}/>
-                            </Tooltip>
-                        }
-                    />
+                    {pushToken ? (
+                        <>
+                            <Alert type="warning" showIcon message={t.pushTokenShownOnce} style={{marginBottom: 8}}/>
+                            <Input
+                                readOnly
+                                value={pushToken}
+                                prefix={<KeyOutlined style={{opacity: 0.4}}/>}
+                                addonAfter={
+                                    <Tooltip title={t.pushTokenCopy}>
+                                        <CopyOutlined style={{cursor: 'pointer'}} onClick={handleCopyToken}/>
+                                    </Tooltip>
+                                }
+                            />
+                        </>
+                    ) : (
+                        <p style={{fontSize: 13, opacity: 0.8, margin: 0}}>{t.pushTokenHidden}</p>
+                    )}
 
                     <Popconfirm
                         title={t.pushTokenRotate}

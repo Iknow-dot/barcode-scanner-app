@@ -33,8 +33,9 @@ Every request must carry your organization's **push token**, sent as either:
 - `Authorization: Bearer <token>`
 
 The token *identifies your organization* — you never send an organization id in
-the body, and a token can only ever write your own catalog. Keep it secret; it
-can be rotated on request.
+the body, and a token can only ever write your own catalog. Keep it secret: your
+company admin sees it only once, when generating it, and we store only a hash.
+If it is lost, the admin generates a new one and the old one stops working.
 
 Your organization may optionally restrict pushes to a **source-IP allowlist**. If
 configured, pushes are accepted only from the listed IP addresses or CIDR networks
@@ -112,7 +113,9 @@ non-integer `order_id`).
 
 token **განსაზღვრავს თქვენს ორგანიზაციას** — თქვენ არასდროს აგზავნით ორგანიზაციის
 იდენტიფიკატორს მოთხოვნის სხეულში, და token-ს შეუძლია მხოლოდ თქვენივე კატალოგში ჩაწერა.
-შეინახეთ ის საიდუმლოდ; საჭიროებისამებრ მისი განახლება (rotate) შესაძლებელია.
+შეინახეთ ის საიდუმლოდ: თქვენი კომპანიის ადმინისტრატორი მას მხოლოდ ერთხელ ხედავს —
+გენერირებისას, ჩვენ კი ვინახავთ მხოლოდ მის hash-ს. თუ ის დაიკარგა, ადმინისტრატორი
+აგენერირებს ახალს და ძველი ტოკენი წყვეტს მუშაობას.
 
 თქვენს ორგანიზაციას სურვილისამებრ შეუძლია ატვირთვის შეზღუდვა **IP-მისამართების
 სიით**. თუ კონფიგურირებულია, ატვირთვა დაიშვება მხოლოდ მითითებული IP-მისამართებიდან ან

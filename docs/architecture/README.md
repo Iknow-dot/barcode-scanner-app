@@ -87,4 +87,4 @@ and the blind spots: [06 — Monitoring](06-monitoring.md).
   This app keeps a local *replica* of the catalog (pushed by 1C) and denormalized
   client fields on orders, so history and search survive a 1C outage.
 - **Two inbound trust models:** users authenticate with JWT; 1C authenticates with
-  a per-org push token (`Organization.webhook_token`) plus an optional IP allowlist.
+  a per-org push token (only its SHA-256 is stored, as `Organization.webhook_token_hash`; the token is shown once) plus an optional IP allowlist.
