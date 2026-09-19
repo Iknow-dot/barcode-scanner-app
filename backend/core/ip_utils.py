@@ -26,21 +26,37 @@ def get_client_ip(request):
     - Neither: ``REMOTE_ADDR``.
 
     Returns ``None`` when the configured source is absent — the request did
-    not come through our proxies, so no address is known to be genuine — and
-    for a request-like object without ``META``.
+    not come through our proxies, so no address is known to be genuine — or
+    holds anything but exactly one IP address, and for a request-like object
+    without ``META``. Callers may rely on a non-None result parsing as an IP.
     """
     meta = getattr(request, 'META', None)
     if not meta:
         return None
     if settings.CLIENT_IP_HEADER:
         key = 'HTTP_' + settings.CLIENT_IP_HEADER.upper().replace('-', '_')
-        return meta.get(key, '').strip() or None
+        return _single_address(meta.get(key, ''))
     count = settings.TRUSTED_PROXY_COUNT
     if count > 0:
         entries = [e.strip() for e in meta.get('HTTP_X_FORWARDED_FOR', '').split(',')]
         entries = [e for e in entries if e]
-        return entries[-count] if len(entries) >= count else None
-    return meta.get('REMOTE_ADDR')
+        return _single_address(entries[-count]) if len(entries) >= count else None
+    return _single_address(meta.get('REMOTE_ADDR', ''))
+
+
+def _single_address(value) -> str | None:
+    """``value`` if it is exactly one IP address, else None.
+
+    A header that ever carried two addresses (an edge appending instead of
+    replacing), or anything else, must not become an allowlist match or a
+    throttle key.
+    """
+    value = (value or '').strip()
+    try:
+        ipaddress.ip_address(value)
+    except ValueError:
+        return None
+    return value
 
 
 def ip_in_allowlist(client_ip_str, entries) -> bool:

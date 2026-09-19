@@ -12,11 +12,15 @@ class ThrottledModelBackend(ModelBackend):
     """
 
     def authenticate(self, request, username=None, password=None, **kwargs):
-        if request is not None and login_throttle.retry_after(request, username or ''):
-            # Stops authenticate() before the password is hashed or compared;
-            # it then fires user_login_failed, which counts this attempt too.
+        if request is None:
+            return super().authenticate(request, username=username, password=password, **kwargs)
+        name = username or ''
+        if login_throttle.retry_after(request, name):
+            # Stops authenticate() before the password is hashed or compared.
             raise PermissionDenied
+        # Counted before the slow hash, so attempts already in flight see it.
+        login_throttle.reserve_attempt(request, name)
         user = super().authenticate(request, username=username, password=password, **kwargs)
-        if user is not None and request is not None:
-            login_throttle.clear(request, username or '')
+        if user is not None:
+            login_throttle.release_attempt(request, name)
         return user

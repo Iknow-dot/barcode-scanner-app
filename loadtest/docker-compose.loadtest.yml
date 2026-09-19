@@ -41,6 +41,8 @@ services:
       - DATABASE_URL=postgres://postgres:postgres@toxiproxy:5432/postgres
       - DATABASE_SSL_REQUIRE=False
       - DEBUG=False
+      # k6 reaches gunicorn directly; see backend/startup.py.
+      - CLIENT_IP_FROM_REMOTE_ADDR=True
       - SECURE_SSL_REDIRECT=False
       - ALLOWED_HOSTS=localhost,127.0.0.1,backend
       - CORS_ALLOWED_ORIGINS=http://localhost:3100

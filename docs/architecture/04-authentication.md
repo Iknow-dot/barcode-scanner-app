@@ -51,8 +51,10 @@ A new top-level key in the login response is dropped by the frontend unless it i
 threaded through `Login.js` → `AuthContext.login(...)` → its localStorage write →
 state restore → `logout()` cleanup.
 
-**Failed-login lockout** (`users/login_throttle.py`): only failures count, and a
-correct password clears the username + IP counter. The Django admin login goes
+**Failed-login lockout** (`users/login_throttle.py`): only failures count. Each
+attempt is reserved before the password is hashed and given back if the password
+is right, so concurrent guesses can't slip past the limit. IPv6 addresses count
+per /64. The Django admin login goes
 through the same check (`users.auth_backends.ThrottledModelBackend`). Counters live
 in the `throttle` database cache table, which `manage.py createcachetable` creates;
 without it the lockout fails open and logs errors.
@@ -114,7 +116,7 @@ sequenceDiagram
 
 | Control | Who | Effect |
 |---------|-----|--------|
-| `POST /users/{id}/reset-device/` | company admin / internal admin | Clears binding; next login re-binds; the user's refresh tokens are blacklisted |
+| `POST /users/{id}/reset-device/`, or clearing `bound_device_id` in Django admin | company admin / internal admin | Clears binding; next login re-binds; the user's refresh tokens are blacklisted |
 | Per-user `AllowedIP` | admins | Restrict login to IPs / CIDRs; re-checked at every refresh |
 | Change a user's password | admins, or the user via Django admin | Every existing token fails at once (`CHECK_REVOKE_TOKEN`) |
 | `session_timeout_minutes` | company admin (security settings) | Idle timeout for the org |

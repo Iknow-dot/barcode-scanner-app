@@ -53,6 +53,11 @@ class TrustedProxyCountTests(SimpleTestCase):
         self.assertIsNone(get_client_ip(request))
 
     @override_settings(TRUSTED_PROXY_COUNT=1)
+    def test_a_non_address_entry_is_unknown(self):
+        request = _request(HTTP_X_FORWARDED_FOR='unknown', REMOTE_ADDR='10.0.0.1')
+        self.assertIsNone(get_client_ip(request))
+
+    @override_settings(TRUSTED_PROXY_COUNT=1)
     def test_missing_forwarded_for_is_unknown(self):
         self.assertIsNone(get_client_ip(_request(REMOTE_ADDR='10.0.0.1')))
 
@@ -65,6 +70,19 @@ class TrustedHeaderTests(SimpleTestCase):
             HTTP_X_FORWARDED_FOR='198.51.100.66', REMOTE_ADDR='10.0.0.1',
         )
         self.assertEqual(get_client_ip(request), '203.0.113.9')
+
+    def test_accepts_an_ipv6_address(self):
+        request = _request(HTTP_DO_CONNECTING_IP='2001:db8::5', REMOTE_ADDR='10.0.0.1')
+        self.assertEqual(get_client_ip(request), '2001:db8::5')
+
+    def test_a_value_that_is_not_one_address_is_unknown(self):
+        # If the edge ever appended to a client-sent header instead of
+        # replacing it, the value would hold two addresses; never let the
+        # client's part become an allowlist match or a throttle key.
+        for value in ('203.0.113.9, 198.51.100.7', 'not-an-ip', '203.0.113.9 x'):
+            with self.subTest(value):
+                request = _request(HTTP_DO_CONNECTING_IP=value, REMOTE_ADDR='10.0.0.1')
+                self.assertIsNone(get_client_ip(request))
 
     def test_missing_header_is_unknown(self):
         # Without the header the request did not come through the edge proxy

@@ -1,6 +1,7 @@
 from unittest import mock
 
 from core.models import Organization
+from django.contrib.auth.backends import ModelBackend
 from django.test import Client, TestCase, override_settings
 from rest_framework.test import APIClient
 from users import login_throttle
@@ -77,6 +78,40 @@ class LoginFailureLockoutTests(_LoginThrottleCase):
         later = 1_000_000.0 + login_throttle.WINDOW_SECONDS
         with mock.patch.object(login_throttle, '_now', return_value=later):
             self.assertEqual(self._login('right-pass-1').status_code, 200)
+
+    def test_one_ipv6_network_shares_one_budget(self):
+        # A host holds a whole /64, so a fresh address per guess must not
+        # start a fresh count (review 2026-09-19: 60 guesses, no 429).
+        for i in range(login_throttle.PAIR_LIMIT):
+            self._fail(1, ip=f'2001:db8:1:2::{i + 1:x}')
+        self.assertEqual(self._login('right-pass-1', ip='2001:db8:1:2::ffff').status_code, 429)
+        self.assertEqual(self._login('right-pass-1', ip='2001:db8:1:3::1').status_code, 200)
+
+    def test_attempt_is_counted_before_its_password_is_checked(self):
+        # Counting only after the (slow) password hash let every attempt
+        # already in flight pass the check: 8 parallel guesses got 10-16
+        # tries instead of 5 (review 2026-09-19).
+        seen = []
+        real = ModelBackend.authenticate
+
+        def spy(backend, request, username=None, password=None, **kwargs):
+            key = login_throttle._pair_key(request, username)
+            seen.append(login_throttle._cache().get(key))
+            return real(backend, request, username=username, password=password, **kwargs)
+
+        with mock.patch.object(ModelBackend, 'authenticate', spy):
+            self._fail(2)
+        self.assertEqual(seen, [1, 2])
+
+    def test_successful_logins_do_not_use_the_address_budget(self):
+        # A whole shop logs in from one NAT address at shift start.
+        for i in range(login_throttle.IP_LIMIT + 5):
+            User.objects.create_user(
+                username=f'shop-{i}', password='right-pass-1',
+                role=User.Role.COMPANY_USER, organization=self.user.organization,
+                device_lock_enabled=False,
+            )
+            self.assertEqual(self._login('right-pass-1', username=f'shop-{i}').status_code, 200)
 
     def test_cache_outage_lets_logins_through(self):
         # A missing cache table must not stop a whole sales floor logging in.

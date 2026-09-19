@@ -15,6 +15,6 @@ os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'backend.settings')
 
 application = get_wsgi_application()
 
-from backend.startup import require_real_secret_key  # noqa: E402  (needs settings loaded)
+from backend.startup import run_startup_checks  # noqa: E402  (needs settings loaded)
 
-require_real_secret_key()
+run_startup_checks()
