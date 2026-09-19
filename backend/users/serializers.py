@@ -9,13 +9,15 @@ from django.db import transaction
 from django.utils import timezone
 from django.utils.crypto import constant_time_compare
 from rest_framework import serializers
+from rest_framework.exceptions import AuthenticationFailed
 from rest_framework_simplejwt.serializers import (
     TokenObtainPairSerializer,
     TokenRefreshSerializer,
 )
-from rest_framework_simplejwt.token_blacklist.models import OutstandingToken
+from rest_framework_simplejwt.settings import api_settings as jwt_settings
+from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken, OutstandingToken
 from rest_framework_simplejwt.tokens import RefreshToken
-from rest_framework_simplejwt.utils import datetime_from_epoch
+from rest_framework_simplejwt.utils import datetime_from_epoch, get_md5_hash_password
 from users.exceptions import DeviceNotAllowedError, IPNotAllowedError
 from users.models import AllowedIP
 from core.ip_utils import get_client_ip, ip_in_allowlist
@@ -41,6 +43,38 @@ def _sync_outstanding_expiry(token):
     OutstandingToken.objects.filter(jti=token['jti']).update(
         expires_at=datetime_from_epoch(token['exp']),
         token=str(token),
+    )
+
+
+def enforce_ip_allowlist(user, request, action):
+    """Raise IPNotAllowedError unless the client IP passes the user's allowlist.
+
+    No rows means unrestricted. Checked at login and again at every refresh,
+    so moving off an allowed network, or an allowlist added after login, ends
+    the session within one access-token lifetime.
+    """
+    allowed = list(user.allowed_ips.values_list('ip_or_network', flat=True))
+    if not allowed:
+        return
+    client_ip = get_client_ip(request)
+    if not ip_in_allowlist(client_ip, allowed):
+        logger.warning(
+            "%s denied for user %s: IP %s not in allowlist",
+            action, user.username, client_ip,
+        )
+        raise IPNotAllowedError(client_ip)
+
+
+def end_sessions(user):
+    """Blacklist every outstanding refresh token of this user.
+
+    Each session then ends at its next refresh, within one access-token
+    lifetime. Used when what a session was granted on no longer holds, such as
+    a device reset.
+    """
+    unrevoked = OutstandingToken.objects.filter(user=user, blacklistedtoken__isnull=True)
+    BlacklistedToken.objects.bulk_create(
+        [BlacklistedToken(token=token) for token in unrevoked], ignore_conflicts=True,
     )
 
 
@@ -120,16 +154,7 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     def validate(self, attrs):
         data = super().validate(attrs)
 
-        # --- IP allowlist check (no rows = unrestricted) ---
-        allowed = list(self.user.allowed_ips.values_list('ip_or_network', flat=True))
-        if allowed:
-            client_ip = get_client_ip(self.context.get('request'))
-            if not ip_in_allowlist(client_ip, allowed):
-                logger.warning(
-                    "Login denied for user %s: IP %s not in allowlist",
-                    self.user.username, client_ip,
-                )
-                raise IPNotAllowedError(client_ip)
+        enforce_ip_allowlist(self.user, self.context.get('request'), 'Login')
 
         # --- Device lock check ---
         device_id_to_echo = self._enforce_device_lock(
@@ -173,24 +198,37 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
 
 
 class CustomTokenRefreshSerializer(TokenRefreshSerializer):
-    """Stock refresh + rotation, then re-stamps the rotated refresh token's
-    expiry with the user's per-org idle timeout.
+    """Stock refresh + rotation, with login's grants re-checked first and the
+    rotated refresh token re-stamped with the user's per-org idle timeout.
 
-    The *incoming* token's own expiry is what enforces the timeout — this
-    only ensures the next token in the rotation chain carries the org
-    lifetime too. If the user lookup fails (deleted mid-session), stock
+    Before rotating, so a refused refresh leaves the token usable:
+    - the password must be the one the token was issued under
+      (CHECK_REVOKE_TOKEN; simplejwt itself checks it only per request);
+    - the client IP must still pass the user's allowlist.
+
+    The *incoming* token's own expiry is what enforces the timeout — the
+    re-stamp only ensures the next token in the rotation chain carries the
+    org lifetime too. If the user lookup fails (deleted mid-session), stock
     behavior applies.
     """
 
     def validate(self, attrs):
+        incoming = RefreshToken(attrs['refresh'])  # TokenError → 401 in the view
+        user = User.objects.select_related('organization').filter(
+            pk=incoming.get(jwt_settings.USER_ID_CLAIM),
+        ).first()
+        if user is not None:
+            if jwt_settings.CHECK_REVOKE_TOKEN and incoming.get(
+                    jwt_settings.REVOKE_TOKEN_CLAIM) != get_md5_hash_password(user.password):
+                raise AuthenticationFailed(
+                    "The user's password has been changed.", code='password_changed',
+                )
+            enforce_ip_allowlist(user, self.context.get('request'), 'Refresh')
         data = super().validate(attrs)
         rotated = data.get('refresh')
         if not rotated:
             return data
         token = RefreshToken(rotated)
-        user = User.objects.select_related('organization').filter(
-            pk=token.get('user_id'),
-        ).first()
         lifetime = org_refresh_lifetime(user) if user else None
         if lifetime is not None:
             token.set_exp(lifetime=lifetime)

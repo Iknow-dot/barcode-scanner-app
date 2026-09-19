@@ -23,7 +23,18 @@ from users.serializers import (
     CompanyUserSerializer,
     CustomTokenRefreshSerializer,
     InternalAdminUserSerializer,
+    end_sessions,
 )
+
+
+def _ip_not_allowed_response() -> Response:
+    return Response(
+        {
+            "code": "IP_NOT_ALLOWED",
+            "detail": "Access denied: your IP address is not allowed.",
+        },
+        status=status.HTTP_403_FORBIDDEN,
+    )
 
 
 @extend_schema(tags=['Network'])
@@ -65,13 +76,7 @@ class CustomTokenObtainPairView(TokenObtainPairView):
         try:
             return super().post(request, *args, **kwargs)
         except IPNotAllowedError:
-            return Response(
-                {
-                    "code": "IP_NOT_ALLOWED",
-                    "detail": "Access denied: your IP address is not allowed.",
-                },
-                status=status.HTTP_403_FORBIDDEN,
-            )
+            return _ip_not_allowed_response()
         except DeviceNotAllowedError:
             return Response(
                 {
@@ -83,8 +88,18 @@ class CustomTokenObtainPairView(TokenObtainPairView):
 
 
 class CustomTokenRefreshView(TokenRefreshView):
-    """Refresh view whose rotated tokens carry the per-org session timeout."""
+    """Refresh view whose rotated tokens carry the per-org session timeout.
+
+    The serializer re-checks the IP allowlist; a refusal is the same 403
+    IP_NOT_ALLOWED login gives, and the frontend then logs the user out.
+    """
     serializer_class = CustomTokenRefreshSerializer
+
+    def post(self, request: Request, *args, **kwargs) -> Response:
+        try:
+            return super().post(request, *args, **kwargs)
+        except IPNotAllowedError:
+            return _ip_not_allowed_response()
 
 
 @extend_schema(tags=['Auth'])
@@ -208,5 +223,7 @@ class UsersViewSet(ModelViewSet):
         user.device_label = ''
         user.save(
             update_fields=['bound_device_id', 'device_bound_at', 'device_label'])
+        # The old device's session was granted on the binding just cleared.
+        end_sessions(user)
         serializer = self.get_serializer(user)
         return Response(serializer.data)

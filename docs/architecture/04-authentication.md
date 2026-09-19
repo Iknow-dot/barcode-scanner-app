@@ -77,7 +77,7 @@ flowchart LR
     refresh["Refresh token<br/>Organization.session_timeout_minutes<br/>or 1 day"]
     bl[("Blacklist")]
 
-    refresh -- "POST auth/refresh/<br/>rotate: new pair, old refresh blacklisted,<br/>org timeout re-applied" --> access
+    refresh -- "POST auth/refresh/<br/>password unchanged? IP still allowed?<br/>rotate: new pair, old refresh blacklisted,<br/>org timeout re-applied" --> access
     refresh -- "POST auth/logout/" --> bl
 ```
 
@@ -114,8 +114,9 @@ sequenceDiagram
 
 | Control | Who | Effect |
 |---------|-----|--------|
-| `POST /users/{id}/reset-device/` | company admin / internal admin | Clears binding; next login re-binds |
-| Per-user `AllowedIP` | admins | Restrict login to IPs / CIDRs |
+| `POST /users/{id}/reset-device/` | company admin / internal admin | Clears binding; next login re-binds; the user's refresh tokens are blacklisted |
+| Per-user `AllowedIP` | admins | Restrict login to IPs / CIDRs; re-checked at every refresh |
+| Change a user's password | admins, or the user via Django admin | Every existing token fails at once (`CHECK_REVOKE_TOKEN`) |
 | `session_timeout_minutes` | company admin (security settings) | Idle timeout for the org |
 | `OrganizationPushAllowedIP` | company admin | Restrict 1C push token by source IP |
 | Rotate push token | company admin | Invalidates the old 1C token immediately |

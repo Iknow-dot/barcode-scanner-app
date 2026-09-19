@@ -320,6 +320,11 @@ SIMPLE_JWT = {
     'ROTATE_REFRESH_TOKENS': True,
     'BLACKLIST_AFTER_ROTATION': True,
     'UPDATE_LAST_LOGIN': True,
+    # Tokens carry a hash of the user's password hash; a password change ends
+    # every session. simplejwt checks it only in JWTAuthentication, so
+    # CustomTokenRefreshSerializer checks it too. Tokens issued before this was
+    # on lack the claim, so turning it on logged everyone out once.
+    'CHECK_REVOKE_TOKEN': True,
 
     'AUTH_HEADER_TYPES': ('Bearer',),
     'AUTH_HEADER_NAME': 'HTTP_AUTHORIZATION',
