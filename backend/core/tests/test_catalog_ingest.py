@@ -286,14 +286,14 @@ class PushIPAllowlistTests(TestCase):
         OrganizationPushAllowedIP.objects.create(organization=self.org, ip_or_network="203.0.113.0/24")
         self.assertEqual(self._push("198.51.100.7").status_code, 403)
 
-    def test_x_forwarded_for_first_hop_is_used(self):
+    def test_forged_x_forwarded_for_does_not_pass(self):
         OrganizationPushAllowedIP.objects.create(organization=self.org, ip_or_network="203.0.113.9")
         r = self.client.post(
             self.url, {"products": []}, format="json",
             HTTP_X_WEBHOOK_TOKEN=self.org.webhook_token,
-            HTTP_X_FORWARDED_FOR="203.0.113.9, 10.0.0.1", REMOTE_ADDR="10.0.0.1",
+            HTTP_X_FORWARDED_FOR="203.0.113.9, 198.51.100.7", REMOTE_ADDR="198.51.100.7",
         )
-        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.status_code, 403)
 
     def _admin(self):
         admin = User.objects.create_user(

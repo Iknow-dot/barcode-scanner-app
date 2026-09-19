@@ -9,20 +9,37 @@ strings, so callers pass a queryset ``values_list``.
 import ipaddress
 import logging
 
+from django.conf import settings
 from django.core.exceptions import ValidationError
 
 logger = logging.getLogger(__name__)
 
 
 def get_client_ip(request):
-    """First ``X-Forwarded-For`` hop, falling back to ``REMOTE_ADDR``.
+    """The client's address, from the one source this deployment trusts.
 
-    Tolerates a request-like object without ``META`` (returns ``None``).
+    - ``settings.CLIENT_IP_HEADER`` set: that header, which the edge proxy
+      overwrites.
+    - ``settings.TRUSTED_PROXY_COUNT`` > 0: the ``X-Forwarded-For`` entry that
+      many from the right. Each of our proxies appends one entry, so
+      everything to its left is whatever the client sent.
+    - Neither: ``REMOTE_ADDR``.
+
+    Returns ``None`` when the configured source is absent — the request did
+    not come through our proxies, so no address is known to be genuine — and
+    for a request-like object without ``META``.
     """
-    meta = getattr(request, 'META', None) or {}
-    xff = meta.get('HTTP_X_FORWARDED_FOR')
-    if xff:
-        return xff.split(',')[0].strip()
+    meta = getattr(request, 'META', None)
+    if not meta:
+        return None
+    if settings.CLIENT_IP_HEADER:
+        key = 'HTTP_' + settings.CLIENT_IP_HEADER.upper().replace('-', '_')
+        return meta.get(key, '').strip() or None
+    count = settings.TRUSTED_PROXY_COUNT
+    if count > 0:
+        entries = [e.strip() for e in meta.get('HTTP_X_FORWARDED_FOR', '').split(',')]
+        entries = [e for e in entries if e]
+        return entries[-count] if len(entries) >= count else None
     return meta.get('REMOTE_ADDR')
 
 

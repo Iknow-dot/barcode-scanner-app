@@ -28,6 +28,9 @@ locals {
     { key = "DATABASE_SSL_REQUIRE", value = "True", type = "GENERAL", scope = "RUN_AND_BUILD_TIME" },
     { key = "PERF_HEADERS_ENABLED", value = "True", type = "GENERAL", scope = "RUN_AND_BUILD_TIME" },
     { key = "LOG_LEVEL", value = "WARNING", type = "GENERAL", scope = "RUN_AND_BUILD_TIME" },
+    # Same client-address source as production: App Platform's X-Forwarded-For
+    # carries DO's ingress address, not the client's.
+    { key = "CLIENT_IP_HEADER", value = "DO-Connecting-IP", type = "GENERAL", scope = "RUN_AND_BUILD_TIME" },
   ]
 
   seed_env = concat(local.backend_env, [

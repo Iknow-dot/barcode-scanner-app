@@ -25,7 +25,7 @@ sequenceDiagram
     end
 
     API->>DB: 2. load user's AllowedIP rows
-    alt rows exist AND client IP (X-Forwarded-For first hop, else REMOTE_ADDR) matches none
+    alt rows exist AND client IP (see below) matches none
         API-->>FE: 403 IP_NOT_ALLOWED
     end
 
@@ -45,6 +45,18 @@ sequenceDiagram
 A new top-level key in the login response is dropped by the frontend unless it is
 threaded through `Login.js` → `AuthContext.login(...)` → its localStorage write →
 state restore → `logout()` cleanup.
+
+**Client IP** (`core/ip_utils.py::get_client_ip`, shared with the push-token
+allowlist and `GET /users/ip/`) comes from exactly one source per deployment:
+
+| Deployment | Setting | Address used |
+|------------|---------|--------------|
+| DigitalOcean | `CLIENT_IP_HEADER=DO-Connecting-IP` | that header, set by DO's edge |
+| On-prem bundle | `TRUSTED_PROXY_COUNT=1` | the `X-Forwarded-For` entry our nginx wrote |
+| Neither set | — | `REMOTE_ADDR` |
+
+The first `X-Forwarded-For` entry is never trusted: the client writes it. When the
+configured source is missing, the address is unknown and an allowlisted login fails.
 
 ## Token lifetimes
 

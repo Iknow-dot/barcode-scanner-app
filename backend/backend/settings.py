@@ -222,6 +222,17 @@ LOGGING = {
     },
 }
 
+# Where the client's address comes from, for the login and push-token IP
+# allowlists (core/ip_utils.py::get_client_ip). Set exactly one per deployment;
+# with neither, the connecting address (REMOTE_ADDR) is used.
+# - CLIENT_IP_HEADER: a header the edge proxy sets and overwrites. DigitalOcean
+#   App Platform: "DO-Connecting-IP" (its X-Forwarded-For carries DO's own
+#   ingress address).
+# - TRUSTED_PROXY_COUNT: how many of our proxies append to X-Forwarded-For. The
+#   on-prem frontend's nginx rewrites it, so 1 there.
+CLIENT_IP_HEADER = os.environ.get('CLIENT_IP_HEADER', '')
+TRUSTED_PROXY_COUNT = int(os.environ.get('TRUSTED_PROXY_COUNT', '0'))
+
 # Photon (komoot) geocoder — identifying User-Agent sent on /api and /reverse.
 # NOMINATIM_USER_AGENT is honoured as a legacy alias (the pre-Photon name);
 # drop it once no deployment sets it.

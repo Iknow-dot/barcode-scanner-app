@@ -257,17 +257,40 @@ class LoginIPAllowlistTests(TestCase):
         self.assertEqual(response.status_code, 403)
         self.assertEqual(response.data['code'], 'IP_NOT_ALLOWED')
 
-    def test_first_forwarded_hop_is_honoured(self):
+    def test_forged_forwarded_for_does_not_pass(self):
         AllowedIP.objects.create(user=self.user, ip_or_network='203.0.113.9')
         response = self._login(
-            HTTP_X_FORWARDED_FOR='203.0.113.9, 10.0.0.1', REMOTE_ADDR='10.0.0.1',
+            HTTP_X_FORWARDED_FOR='203.0.113.9, 198.51.100.7', REMOTE_ADDR='198.51.100.7',
         )
-        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.data['code'], 'IP_NOT_ALLOWED')
 
-    def test_single_hop_forwarded_header_is_honoured(self):
+    @override_settings(TRUSTED_PROXY_COUNT=1)
+    def test_trusted_proxy_entry_is_used_not_the_forged_one(self):
         AllowedIP.objects.create(user=self.user, ip_or_network='203.0.113.9')
-        response = self._login(HTTP_X_FORWARDED_FOR='203.0.113.9', REMOTE_ADDR='10.0.0.1')
-        self.assertEqual(response.status_code, 200, response.data)
+        # The client forged the first entry; our proxy appended the real one.
+        allowed = self._login(
+            HTTP_X_FORWARDED_FOR='198.51.100.66, 203.0.113.9', REMOTE_ADDR='10.0.0.1',
+        )
+        self.assertEqual(allowed.status_code, 200, allowed.data)
+        forged = self._login(
+            HTTP_X_FORWARDED_FOR='203.0.113.9, 198.51.100.7', REMOTE_ADDR='10.0.0.1',
+        )
+        self.assertEqual(forged.status_code, 403)
+
+    @override_settings(CLIENT_IP_HEADER='DO-Connecting-IP')
+    def test_trusted_header_is_used(self):
+        AllowedIP.objects.create(user=self.user, ip_or_network='203.0.113.9')
+        allowed = self._login(
+            HTTP_DO_CONNECTING_IP='203.0.113.9', HTTP_X_FORWARDED_FOR='10.0.0.1',
+            REMOTE_ADDR='10.0.0.1',
+        )
+        self.assertEqual(allowed.status_code, 200, allowed.data)
+        forged = self._login(
+            HTTP_DO_CONNECTING_IP='198.51.100.7', HTTP_X_FORWARDED_FOR='203.0.113.9',
+            REMOTE_ADDR='10.0.0.1',
+        )
+        self.assertEqual(forged.status_code, 403)
 
 
 @override_settings(SECURE_SSL_REDIRECT=False)
@@ -287,18 +310,17 @@ class ClientIPEndpointTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data, {'ip': '10.0.0.1'})
 
-    def test_multi_hop_forwarded_header_returns_first_hop(self):
+    def test_forwarded_for_is_ignored_by_default(self):
         response = self.client_api.get(
             '/api/v1/users/ip/',
             HTTP_X_FORWARDED_FOR='203.0.113.9, 10.0.0.1', REMOTE_ADDR='10.0.0.1',
         )
-        self.assertEqual(response.data, {'ip': '203.0.113.9'})
+        self.assertEqual(response.data, {'ip': '10.0.0.1'})
 
-    def test_single_hop_forwarded_header_returns_that_hop(self):
-        # Behind one reverse proxy X-Forwarded-For has no comma. Login honours
-        # it (see LoginIPAllowlistTests), so this endpoint must too — otherwise
-        # it prefills the allowlist with the proxy's address.
+    @override_settings(TRUSTED_PROXY_COUNT=1)
+    def test_reports_the_entry_the_trusted_proxy_appended(self):
         response = self.client_api.get(
-            '/api/v1/users/ip/', HTTP_X_FORWARDED_FOR='203.0.113.9', REMOTE_ADDR='10.0.0.1',
+            '/api/v1/users/ip/',
+            HTTP_X_FORWARDED_FOR='198.51.100.66, 203.0.113.9', REMOTE_ADDR='10.0.0.1',
         )
         self.assertEqual(response.data, {'ip': '203.0.113.9'})

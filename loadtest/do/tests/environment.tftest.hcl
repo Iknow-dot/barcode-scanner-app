@@ -90,6 +90,7 @@ run "backend_settings" {
         DATABASE_SSL_REQUIRE = "True"
         PERF_HEADERS_ENABLED = "True"
         LOG_LEVEL            = "WARNING"
+        CLIENT_IP_HEADER     = "DO-Connecting-IP"
       }
     )
     error_message = "The backend's plain settings drifted from the design."
@@ -123,6 +124,7 @@ run "backend_settings" {
         DATABASE_SSL_REQUIRE = "RUN_AND_BUILD_TIME"
         PERF_HEADERS_ENABLED = "RUN_AND_BUILD_TIME"
         LOG_LEVEL            = "RUN_AND_BUILD_TIME"
+        CLIENT_IP_HEADER     = "RUN_AND_BUILD_TIME"
       }
     )
     error_message = "DATABASE_URL must be RUN_TIME: unresolved at build time, the buildpack's automatic collectstatic imports settings and dj_database_url raises on the literal '$${db.DATABASE_URL}'. Every other backend env var must stay RUN_AND_BUILD_TIME."

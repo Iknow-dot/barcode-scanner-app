@@ -38,6 +38,9 @@ services:
       SECURE_SSL_REDIRECT: ${SECURE_SSL_REDIRECT:-True}
       # CRA's bundles own /static/ on this origin; the frontend proxies this path.
       STATIC_URL: /django-static/
+      # The frontend's nginx rewrites X-Forwarded-For to the one address it
+      # trusts, so the IP allowlists read exactly that entry.
+      TRUSTED_PROXY_COUNT: "1"
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       PHOTON_USER_AGENT: ${PHOTON_USER_AGENT:-}
       # Optional monitoring: blank means off.
