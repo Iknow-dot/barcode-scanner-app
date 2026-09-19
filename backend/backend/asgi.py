@@ -14,3 +14,7 @@ from django.core.asgi import get_asgi_application
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'backend.settings')
 
 application = get_asgi_application()
+
+from backend.startup import require_real_secret_key  # noqa: E402  (needs settings loaded)
+
+require_real_secret_key()

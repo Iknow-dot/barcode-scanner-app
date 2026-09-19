@@ -22,10 +22,11 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.environ.get(
-    'DJANGO_SECRET_KEY',
-    'django-insecure-*$gz3*%4nd!!1c31xh2#qokb^o3%apy-iz#u13#kb&fkt+u2@k',
-)
+# The fallback only lets tests and the buildpack's build-time collectstatic
+# import settings without the secret. backend/startup.py refuses to serve with
+# it, because it signs every JWT and image-proxy URL.
+INSECURE_DEV_SECRET_KEY = 'django-insecure-*$gz3*%4nd!!1c31xh2#qokb^o3%apy-iz#u13#kb&fkt+u2@k'
+SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY') or INSECURE_DEV_SECRET_KEY
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get('DEBUG', 'False').lower() in ('true', '1', 'yes')
