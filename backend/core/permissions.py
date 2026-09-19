@@ -16,7 +16,9 @@ class OrganizationPermission(BasePermission):
       (external service, push token, invoice template, security), which are
       company-admin only — an internal admin has no organization to manage.
     - Company admins: those sub-resources on their own org, otherwise read-only.
-    - Company users: read-only on their own organization.
+    - Company users: no access. The consultant UI never reads the organization,
+      and the record carries colleagues' IP allowlists and the 1C address and
+      username; what a consultant needs arrives in the login payload.
     """
 
     def has_permission(self, request, view):
@@ -26,7 +28,9 @@ class OrganizationPermission(BasePermission):
             return request.user.role == User.Role.COMPANY_ADMIN
         if request.user.role == User.Role.INTERNAL_ADMIN:
             return True
-        return view.action in ('retrieve', 'list', 'get_user_organization', 'used_ips')
+        if request.user.role == User.Role.COMPANY_ADMIN:
+            return view.action in ('retrieve', 'list', 'get_user_organization', 'used_ips')
+        return False
 
     def has_object_permission(self, request, view, obj):
         if request.user.role == User.Role.INTERNAL_ADMIN:

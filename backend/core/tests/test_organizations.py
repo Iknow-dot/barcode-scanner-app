@@ -274,6 +274,96 @@ class ExternalServiceTokenTests(TestCase):
         self.assertEqual(self.client.post(self.ROTATE).status_code, 403)
 
 
+@override_settings(SECURE_SSL_REDIRECT=False)
+class OrganizationEndpointOmitsWebhookTokenTests(TestCase):
+    """The push token is a bearer secret for the 1C-facing endpoints. The
+    external-service sub-resource is its only reader, so the general
+    organization endpoints neither return it nor accept it."""
+
+    def setUp(self):
+        self.org = _make_organization()
+        self.internal_admin = User.objects.create_user(
+            username='root', password='pw12345',
+            role=User.Role.INTERNAL_ADMIN, is_staff=True, is_superuser=True,
+        )
+        self.company_admin = User.objects.create_user(
+            username='org-admin', password='pw12345',
+            role=User.Role.COMPANY_ADMIN, organization=self.org,
+        )
+
+    def _get(self, user, url):
+        client = APIClient()
+        client.force_authenticate(user=user)
+        response = client.get(url)
+        self.assertEqual(response.status_code, 200)
+        return response.json()
+
+    def test_responses_omit_webhook_token(self):
+        detail = f'/api/v1/organizations/{self.org.id}/'
+        bodies = {
+            'internal admin list': self._get(self.internal_admin, '/api/v1/organizations/')[0],
+            'internal admin retrieve': self._get(self.internal_admin, detail),
+            'company admin retrieve': self._get(self.company_admin, detail),
+            'company admin my-organization': self._get(
+                self.company_admin, '/api/v1/organizations/my-organization/'),
+        }
+        for label, body in bodies.items():
+            with self.subTest(label):
+                self.assertNotIn('webhook_token', body)
+                self.assertNotIn(self.org.webhook_token, str(body))
+
+    def test_update_cannot_set_webhook_token(self):
+        original = self.org.webhook_token
+        client = APIClient()
+        client.force_authenticate(user=self.internal_admin)
+        response = client.patch(
+            f'/api/v1/organizations/{self.org.id}/',
+            {'webhook_token': 'chosen-by-caller'}, format='json',
+        )
+        self.assertEqual(response.status_code, 200)
+        self.org.refresh_from_db()
+        self.assertEqual(self.org.webhook_token, original)
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
+class OrganizationReadAccessTests(TestCase):
+    """Admins read organizations; consultants don't. Nothing in the consultant
+    UI reads these endpoints, and the record carries colleagues' IP allowlists
+    and the org's 1C address and username."""
+
+    def setUp(self):
+        self.org = _make_organization()
+
+    def _urls(self):
+        return (
+            '/api/v1/organizations/',
+            f'/api/v1/organizations/{self.org.id}/',
+            '/api/v1/organizations/my-organization/',
+            f'/api/v1/organizations/{self.org.id}/used-ips/',
+        )
+
+    def _client_for(self, role):
+        user = User.objects.create_user(
+            username=role, password='pw12345', role=role, organization=self.org,
+        )
+        client = APIClient()
+        client.force_authenticate(user=user)
+        return client
+
+    def test_company_user_is_forbidden(self):
+        client = self._client_for(User.Role.COMPANY_USER)
+        for url in self._urls():
+            with self.subTest(url=url):
+                self.assertEqual(client.get(url).status_code, 403)
+
+    def test_company_admin_keeps_read_access(self):
+        # The user and warehouse forms load organizations and used-ips.
+        client = self._client_for(User.Role.COMPANY_ADMIN)
+        for url in self._urls():
+            with self.subTest(url=url):
+                self.assertEqual(client.get(url).status_code, 200)
+
+
 @override_settings(FERNET_KEY=_TEST_FERNET_KEY)
 class OrganizationPasswordTests(TestCase):
     """The web-service password round-trips through the two serializers that

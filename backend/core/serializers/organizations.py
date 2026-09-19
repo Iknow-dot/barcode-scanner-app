@@ -54,9 +54,25 @@ class OrganizationSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Organization
-        fields = '__all__'
+        # Explicit, never '__all__': a new model field must be opted in here.
+        # webhook_token is deliberately absent — it authenticates 1C pushes, and
+        # my-organization/external-service/ (company admins) is its only reader.
+        fields = [
+            'id', 'users', 'has_password', 'clear_password',
+            'name', 'identification_number',
+            'web_service_url', 'web_service_username', 'web_service_password',
+            'retail_client_id_phone', 'employees_count',
+            'invoice_logo', 'invoice_display_name', 'invoice_address',
+            'invoice_phone', 'invoice_email', 'invoice_footer_text',
+            'invoice_template_html',
+            'gift_marking_enabled', 'product_catalog_enabled', 'product_limit',
+            'session_timeout_minutes',
+        ]
         extra_kwargs = {
             'web_service_password': {'write_only': True, 'required': False},
+            # Only OrganizationInvoiceTemplateSerializer sanitizes this, so it
+            # is the only writer; the stored HTML is rendered unescaped.
+            'invoice_template_html': {'read_only': True},
         }
 
     def get_has_password(self, obj):

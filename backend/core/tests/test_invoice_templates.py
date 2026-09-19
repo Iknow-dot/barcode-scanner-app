@@ -319,3 +319,25 @@ class InvoiceTemplateSaveTests(TestCase):
             format='json',
         )
         self.assertEqual(resp.status_code, 400)
+
+    def test_organization_endpoint_cannot_bypass_the_sanitizer(self):
+        # The stored template is rendered unescaped, and printInvoice.js opens it
+        # as a same-origin blob page where a script could read the session
+        # tokens — so the sanitizing invoice-template endpoint must be its only
+        # writer. The internal-admin org editor sends the whole record back.
+        self.org.invoice_template_html = '<p>hi</p>'
+        self.org.save()
+        root = User.objects.create_user(
+            username='root', password='pw', role=User.Role.INTERNAL_ADMIN,
+            is_staff=True, is_superuser=True,
+        )
+        client = APIClient()
+        client.force_authenticate(root)
+        resp = client.patch(
+            f'/api/v1/organizations/{self.org.id}/',
+            data={'invoice_template_html': '<p>hi</p><script>alert(1)</script>'},
+            format='json',
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.org.refresh_from_db()
+        self.assertEqual(self.org.invoice_template_html, '<p>hi</p>')
