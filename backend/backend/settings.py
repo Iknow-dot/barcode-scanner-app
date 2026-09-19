@@ -138,6 +138,11 @@ else:
 # its transaction there, so Django uses client-side ones. Harmless without a
 # pool. migrate and createcachetable connect directly, as doadmin.
 DATABASES['default']['DISABLE_SERVER_SIDE_CURSORS'] = True
+# conn_max_age keeps each thread's connection for 10 minutes. Check it before
+# reusing it, and reconnect if the server side dropped it: a pool restart or a
+# database-user switch otherwise fails the next query with "server closed the
+# connection unexpectedly". Costs one round trip per request.
+DATABASES['default']['CONN_HEALTH_CHECKS'] = True
 
 
 # Password validation
