@@ -3,6 +3,7 @@ from datetime import timedelta
 from uuid import uuid4
 
 from django.contrib.auth import get_user_model
+from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
 from django.utils import timezone
@@ -335,6 +336,33 @@ class _BaseUserSerializer(serializers.ModelSerializer):
 
     def get_has_bound_device(self, obj):
         return bool(obj.bound_device_id)
+
+    def validate(self, attrs):
+        """Apply AUTH_PASSWORD_VALIDATORS, as the Django admin forms do.
+
+        Runs here rather than in validate_password so the similarity check
+        sees the username and names this request is about to save. The error
+        is a {code, detail} envelope under `password`, like
+        invoice_template_html's, and `reasons` carries Django's validator
+        codes for the frontend to translate.
+        """
+        attrs = super().validate(attrs)
+        password = attrs.get('password')
+        if password:
+            # Unsaved stand-in: never mutate self.instance before validation passes.
+            candidate = User(**{
+                field: attrs.get(field, getattr(self.instance, field, ''))
+                for field in ('username', 'email', 'first_name', 'last_name')
+            })
+            try:
+                validate_password(password, candidate)
+            except DjangoValidationError as exc:
+                raise serializers.ValidationError({'password': {
+                    'code': 'WEAK_PASSWORD',
+                    'detail': ' '.join(exc.messages),
+                    'reasons': [error.code for error in exc.error_list],
+                }})
+        return attrs
 
     # -- helpers shared by both serializers --
 

@@ -5,6 +5,7 @@ import DataTab from "../DataTab";
 import AuthContext from "../Auth/AuthContext";
 import AddUserModal from "../User/AddUserModal";
 import EditUserModal from "../User/EditUser";
+import weakPasswordMessage from "../User/weakPasswordMessage";
 import {CheckOutlined, CloseOutlined, ClearOutlined, SearchOutlined} from "@ant-design/icons";
 import useAppNotification from "../../hooks/useAppNotification";
 import {useLanguage} from '../../i18n/LanguageContext';
@@ -229,7 +230,7 @@ const UsersTab = ({initialUsers, initialLoading = false, addModalExtraProps, han
         if (result.code === 'USER_LIMIT_REACHED') {
             notify.error(t.error, t.userLimitReached);
         } else {
-            notify.error(t.error, result.error);
+            notify.error(t.error, weakPasswordMessage(result, t) || result.error);
         }
         return false;
     };
@@ -283,7 +284,7 @@ const UsersTab = ({initialUsers, initialLoading = false, addModalExtraProps, han
             return true;
         }
 
-        notify.error(t.error, result.error);
+        notify.error(t.error, weakPasswordMessage(result, t) || result.error);
         return false;
     };
 

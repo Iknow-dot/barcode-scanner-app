@@ -530,3 +530,70 @@ class UserAdminChangeFormTests(TestCase):
         form = self._form(organization='')
         self.assertFalse(form.is_valid())
         self.assertIn('warehouses', str(form.errors))
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
+class UserPasswordStrengthTests(TestCase):
+    """The API applies AUTH_PASSWORD_VALIDATORS, as the Django admin already
+    does. The error names Django's validator codes so the frontend can
+    translate each reason."""
+
+    def setUp(self):
+        self.org = Organization.objects.create(
+            name='PwOrg', identification_number='121212121',
+            web_service_url='http://example.com/db', employees_count=5,
+        )
+        admin = User.objects.create_user(
+            username='pw-admin', password='Adm1n-Strong-Pass',
+            role=User.Role.COMPANY_ADMIN, organization=self.org,
+        )
+        self.client_api = APIClient()
+        self.client_api.force_authenticate(admin)
+
+    def _create(self, username, password):
+        return self.client_api.post('/api/v1/users/', {
+            'username': username, 'password': password,
+            'role': User.Role.COMPANY_USER,
+        }, format='json')
+
+    def _assert_weak(self, response, *reasons):
+        self.assertEqual(response.status_code, 400)
+        error = response.data['password']
+        self.assertEqual(error['code'], 'WEAK_PASSWORD')
+        self.assertTrue(error['detail'])
+        for reason in reasons:
+            self.assertIn(reason, error['reasons'])
+
+    def test_create_rejects_an_all_digit_common_password(self):
+        response = self._create('nino', '12345678')
+        self._assert_weak(response, 'password_entirely_numeric', 'password_too_common')
+        self.assertFalse(User.objects.filter(username='nino').exists())
+
+    def test_create_rejects_a_password_like_the_username(self):
+        self._assert_weak(self._create('consultant77', 'consultant77!'), 'password_too_similar')
+
+    def test_create_accepts_a_strong_password(self):
+        self.assertEqual(self._create('nino', 'Tbilisi-Rustaveli-7').status_code, 201)
+
+    def test_update_rejects_a_weak_password_and_keeps_the_old_one(self):
+        user = User.objects.create_user(
+            username='giorgi', password='Old-Strong-Pass-1',
+            role=User.Role.COMPANY_USER, organization=self.org,
+        )
+        response = self.client_api.patch(
+            f'/api/v1/users/{user.id}/', {'password': 'password1'}, format='json',
+        )
+        self._assert_weak(response, 'password_too_common')
+        user.refresh_from_db()
+        self.assertTrue(user.check_password('Old-Strong-Pass-1'))
+
+    def test_update_checks_similarity_against_the_new_username(self):
+        user = User.objects.create_user(
+            username='giorgi', password='Old-Strong-Pass-1',
+            role=User.Role.COMPANY_USER, organization=self.org,
+        )
+        response = self.client_api.patch(
+            f'/api/v1/users/{user.id}/',
+            {'username': 'beridze2024', 'password': 'beridze2024!'}, format='json',
+        )
+        self._assert_weak(response, 'password_too_similar')
