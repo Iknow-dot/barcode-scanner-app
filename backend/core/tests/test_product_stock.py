@@ -538,3 +538,107 @@ class ProductStockEndpointTests(TestCase):
         response = self._post({"items": [{"sku": "NOM-1", "is_barcode": False}]}, fake=fake)
         [entry] = response.data["results"][0]["stock"]
         self.assertEqual(str(entry["quantity"]), "2.500")
+
+
+# ---------------------------------------------------------------------------
+# Moved from test_products.py (Task 5): these two classes test the stock row
+# shape and the `unit` field, which now live at POST /api/v1/product/stock/
+# rather than on the (now 1C-free) product-search endpoint. Repointed at
+# reverse("product-stock"), reading response.data["results"][0][...] instead
+# of the old response.data[...]. `test_fractional_quantity_is_not_truncated`
+# and `test_reserve_is_returned_per_stock_row` were dropped as exact
+# duplicates of ProductStockEndpointTests.test_fractional_quantity_survives
+# and .test_discount_fields_surface_under_snake_case_names, which already
+# pin the same guarantees at this endpoint.
+# ---------------------------------------------------------------------------
+
+@override_settings(SECURE_SSL_REDIRECT=False)
+class StockQuantityPrecisionTests(TestCase):
+    """1C types quantity/reserve as Number, and goods sold by weight really do
+    come back fractional. An IntegerField silently floored 2.5 kg to 2, which
+    understates stock and — at 0.5 — reads as out of stock entirely."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.org = _make_organization()
+        cls.user = User.objects.create_user(
+            username="precision_user", password="pw12345!", role=User.Role.COMPANY_USER,
+            organization=cls.org,
+        )
+        Product.objects.create(
+            organization=cls.org, sku="NOM-1", article="ART-1", name="Held", is_active=True,
+        )
+
+    def setUp(self):
+        self.client_api = APIClient()
+        self.client_api.force_authenticate(user=self.user)
+        self.url = reverse("product-stock")
+
+    def _row(self, **row):
+        stock_row = {"warehouse": "W1", "warehouse_name": "Main", "price": "1.00"}
+        stock_row.update(row)
+        fake = _FakeClient({"ART-1": {"stock": [stock_row]}})
+        with patch("core.services.stock_batch.ConsultWebExchangeClient", return_value=fake):
+            response = self.client_api.post(
+                self.url, {"items": [{"sku": "NOM-1", "is_barcode": False}]}, format="json",
+            )
+        return response.data["results"][0]["stock"][0]
+
+    def test_fractional_reserve_is_not_truncated(self):
+        row = self._row(quantity=10, reserve=1.5)
+        self.assertEqual(Decimal(row["reserve"]), Decimal("1.5"))
+
+    def test_a_half_unit_does_not_collapse_to_out_of_stock(self):
+        row = self._row(quantity=0.5)
+        self.assertNotEqual(Decimal(row["quantity"]), Decimal("0"))
+
+    def test_whole_numbers_survive_the_round_trip(self):
+        row = self._row(quantity=65)
+        self.assertEqual(Decimal(row["quantity"]), Decimal("65"))
+
+    def test_negative_quantity_is_preserved(self):
+        # 1C really does return negative on-hand figures (observed live: -11).
+        row = self._row(quantity=-11)
+        self.assertEqual(Decimal(row["quantity"]), Decimal("-11"))
+
+    def test_null_reserve_stays_null(self):
+        row = self._row(quantity=1, reserve=None)
+        self.assertIsNone(row["reserve"])
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
+class ProductSearchResponseFieldTests(TestCase):
+    """`unit` is a documented per-result field that must reach the client, and
+    must be omitted rather than erroring when 1C does not send it."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.org = _make_organization()
+        cls.user = User.objects.create_user(
+            username="field_user", password="pw12345!", role=User.Role.COMPANY_USER,
+            organization=cls.org,
+        )
+        Product.objects.create(
+            organization=cls.org, sku="NOM-1", article="ART-1", name="Held", is_active=True,
+        )
+
+    def setUp(self):
+        self.client_api = APIClient()
+        self.client_api.force_authenticate(user=self.user)
+        self.url = reverse("product-stock")
+
+    def _result(self, live_body):
+        fake = _FakeClient({"ART-1": live_body})
+        with patch("core.services.stock_batch.ConsultWebExchangeClient", return_value=fake):
+            response = self.client_api.post(
+                self.url, {"items": [{"sku": "NOM-1", "is_barcode": False}]}, format="json",
+            )
+        return response.data["results"][0]
+
+    def test_unit_is_returned(self):
+        result = self._result({"unit": "ცალი", "stock": []})
+        self.assertEqual(result["unit"], "ცალი")
+
+    def test_missing_unit_is_omitted_not_an_error(self):
+        result = self._result({"stock": []})
+        self.assertNotIn("unit", result)

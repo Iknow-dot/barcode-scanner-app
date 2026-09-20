@@ -1,12 +1,8 @@
 from __future__ import annotations
 
-import httpx
-
 from core.catalog.category_ingest import CategoryResolver
 from core.catalog.image_urls import signed_image_path
 from core.models import Organization, Product, ProductAttribute, ProductBarcode, ScanEvent, Warehouse
-from core.serializers import ProductSearchSerializer
-from core.services.consult_web_exchange import ConsultWebExchangeError
 from decimal import Decimal
 from django.db import DatabaseError
 from django.test import TestCase, override_settings
@@ -16,71 +12,6 @@ from unittest import mock
 from unittest.mock import patch
 from users.models import User
 from core.tests.common import _TEST_FERNET_KEY, _make_organization
-
-
-@override_settings(SECURE_SSL_REDIRECT=False, FERNET_KEY=_TEST_FERNET_KEY)
-class ProductSearchIncludeImagesTests(TestCase):
-    """Scan-miss path never inlines images anymore — it always returns proxy paths,
-    regardless of the (now-inert) include_images flag, and never calls httpx.get."""
-
-    def setUp(self):
-        self.org = _make_organization()
-        self.org.encrypt_password('s3cret')
-        self.org.save()
-        self.user = User.objects.create_user(
-            username='ps_user', password='p',
-            role=User.Role.COMPANY_USER, organization=self.org,
-        )
-        warehouse = Warehouse.objects.create(
-            organization=self.org, code='W1', name='Main',
-        )
-        warehouse.users.add(self.user)
-        self.client_api = APIClient()
-        self.client_api.force_authenticate(self.user)
-        self.url = reverse('product-search')
-
-
-    def _stock_response(self):
-        return {
-            'sku': 'SKU1',
-            'sku_name': 'Name',
-            'article': 'A1',
-            'price': '10.00',
-            'stock': [{
-                'warehouse': 'W1',
-                'warehouse_name': 'Main',
-                'quantity': 5,
-                'price': '10.00',
-            }],
-            'img_url': ['https://example.invalid/img.jpg'],
-        }
-
-    def test_include_images_false_still_returns_proxy_paths(self):
-        with mock.patch('core.views.products.ConsultWebExchangeClient') as cls:
-            cls.return_value.get_stock_and_prices.return_value = self._stock_response()
-            with mock.patch('httpx.get') as httpx_get:
-                response = self.client_api.post(
-                    self.url,
-                    {'sku': 'SKU1', 'is_barcode': True, 'warehouses': ['W1'],
-                     'include_images': False},
-                    format='json',
-                )
-        self.assertEqual(response.status_code, 200, response.data)
-        self.assertEqual(response.data['images'], [signed_image_path(self.org.id, 'SKU1', 0)])
-        httpx_get.assert_not_called()
-
-    def test_include_images_default_true_returns_proxy_paths_without_fetching(self):
-        with mock.patch('core.views.products.ConsultWebExchangeClient') as cls:
-            cls.return_value.get_stock_and_prices.return_value = self._stock_response()
-            with mock.patch('httpx.get') as httpx_get:
-                response = self.client_api.post(
-                    self.url,
-                    {'sku': 'SKU1', 'is_barcode': True, 'warehouses': ['W1']},
-                    format='json',
-                )
-        self.assertEqual(response.status_code, 200, response.data)
-        self.assertEqual(len(response.data['images']), 1)
-        httpx_get.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -130,76 +61,6 @@ class NameSearchTests(TestCase):
 
 
 @override_settings(SECURE_SSL_REDIRECT=False)
-class ScanFastPathTests(TestCase):
-    def setUp(self):
-        self.client = APIClient()
-        self.org = Organization.objects.create(
-            name="Org", identification_number="ORG1", web_service_url="https://x", employees_count=5,
-            product_catalog_enabled=True,
-        )
-        self.user = User.objects.create_user(
-            username="c", password="p", role=User.Role.COMPANY_USER, organization=self.org,
-        )
-        self.client.force_authenticate(self.user)
-        p = Product.objects.create(
-            organization=self.org, sku="S1", name="Candle", price="9.90", image_urls=["http://1c/a.jpg"],
-        )
-        ProductBarcode.objects.create(product=p, barcode="123")
-
-    @mock.patch("core.services.consult_web_exchange.ConsultWebExchangeClient.get_stock_and_prices")
-    def test_replica_hit_returns_proxy_images_and_live_stock(self, mstock):
-        mstock.return_value = {"stock": [{"warehouse": "W1", "warehouse_name": "Main", "quantity": 3, "price": "9.90"}]}
-        r = self.client.post(
-            "/api/v1/product/search/", {"sku": "123", "is_barcode": True, "warehouses": ["W1"]}, format="json",
-        )
-        self.assertEqual(r.status_code, 200)
-        body = r.json()
-        self.assertEqual(body["sku_name"], "Candle")
-        self.assertEqual(body["images"], [signed_image_path(self.org.id, "S1", 0)])
-        # Serialized as a decimal string so fractional 1C quantities survive.
-        self.assertEqual(Decimal(body["stock"][0]["quantity"]), Decimal(3))
-
-    @mock.patch("core.services.consult_web_exchange.ConsultWebExchangeClient.get_stock_and_prices")
-    def test_stock_failure_degrades_gracefully(self, mstock):
-        mstock.side_effect = ConsultWebExchangeError(code="EXTERNAL_SERVICE_TIMEOUT", detail="t", http_status=504)
-        r = self.client.post(
-            "/api/v1/product/search/", {"sku": "123", "is_barcode": True, "warehouses": ["W1"]}, format="json",
-        )
-        self.assertEqual(r.status_code, 200)
-        self.assertEqual(r.json()["stock_status"], "unavailable")
-
-    @mock.patch("core.services.consult_web_exchange.ConsultWebExchangeClient.get_stock_and_prices")
-    def test_stock_rows_carry_1c_automatic_discount_fields(self, mstock):
-        # 1C sends the program-side automatic discount per stock row as
-        # (undocumented) `discountpercent` / `discountedprice` — they must
-        # reach the frontend under our snake_case names (ClickUp 86capt0cg).
-        mstock.return_value = {"stock": [{
-            "warehouse": "W1", "warehouse_name": "Main", "quantity": 3, "reserve": 1,
-            "price": "31.00", "discountpercent": 5, "discountedprice": "29.45",
-        }]}
-        r = self.client.post(
-            "/api/v1/product/search/", {"sku": "123", "is_barcode": True, "warehouses": ["W1"]}, format="json",
-        )
-        self.assertEqual(r.status_code, 200)
-        row = r.json()["stock"][0]
-        self.assertEqual(Decimal(row["discount_percent"]), Decimal(5))
-        self.assertEqual(Decimal(row["discounted_price"]), Decimal("29.45"))
-
-    @mock.patch("core.services.consult_web_exchange.ConsultWebExchangeClient.get_stock_and_prices")
-    def test_stock_rows_omit_discount_fields_when_1c_does_not_send_them(self, mstock):
-        # Bases that predate the discount fields simply omit the keys — the
-        # row must serialize without them rather than erroring.
-        mstock.return_value = {"stock": [{"warehouse": "W1", "warehouse_name": "Main", "quantity": 3, "price": "9.90"}]}
-        r = self.client.post(
-            "/api/v1/product/search/", {"sku": "123", "is_barcode": True, "warehouses": ["W1"]}, format="json",
-        )
-        self.assertEqual(r.status_code, 200)
-        row = r.json()["stock"][0]
-        self.assertNotIn("discount_percent", row)
-        self.assertNotIn("discounted_price", row)
-
-
-@override_settings(SECURE_SSL_REDIRECT=False)
 class ScanResponseCategoryAttributeTests(TestCase):
     def setUp(self):
         self.org = Organization.objects.create(
@@ -224,11 +85,10 @@ class ScanResponseCategoryAttributeTests(TestCase):
         self.api = APIClient()
         self.api.force_authenticate(self.user)
 
-    @patch("core.services.consult_web_exchange.ConsultWebExchangeClient.get_stock_and_prices", return_value={"stock": []})
-    def test_scan_returns_breadcrumb_and_only_visible_attributes(self, _mock):
+    def test_scan_returns_breadcrumb_and_only_visible_attributes(self):
         resp = self.api.post(
             reverse("product-search"),
-            {"sku": "A-1", "is_barcode": False, "warehouses": ["W1"]}, format="json",
+            {"sku": "A-1", "is_barcode": False}, format="json",
         )
         self.assertEqual(resp.status_code, 200)
         data = resp.json()
@@ -242,284 +102,74 @@ class ScanResponseCategoryAttributeTests(TestCase):
         self.assertEqual(rows[0]["category_path"], ["Cookware", "Pans"])
 
 
-class ProductSearchResponseFieldTests(TestCase):
-    """`unit` and `stock[].reserve` are documented fields that must reach the client."""
+@override_settings(SECURE_SSL_REDIRECT=False)
+class CatalogReadOnlyTests(TestCase):
+    """POST /api/v1/product/search/ is a pure local replica read — no 1C call,
+    no PRODUCT_NOT_FOUND. A miss means only "not in the replica"; the weaker
+    PRODUCT_NOT_IN_CATALOG is deliberate (see core/views/products.py)."""
 
-    def _serialize(self, payload):
-        base = {'sku': 'S1', 'sku_name': 'N', 'article': 'A',
-                'images': [], 'category_path': [], 'attributes': []}
-        base.update(payload)
-        return ProductSearchSerializer(base).data
-
-    def test_unit_is_returned(self):
-        data = self._serialize({'unit': 'ცალი', 'stock': []})
-        self.assertEqual(data['unit'], 'ცალი')
-
-    def test_reserve_is_returned_per_stock_row(self):
-        data = self._serialize({'stock': [{
-            'warehouse': '000000003', 'warehouse_name': 'ქავთარაძის #5',
-            'quantity': -11, 'reserve': 12, 'price': '38.04',
-        }]})
-        self.assertEqual(Decimal(data['stock'][0]['reserve']), Decimal('12'))
-
-    def test_missing_unit_and_reserve_are_omitted_not_errors(self):
-        data = self._serialize({'stock': [{
-            'warehouse': 'W1', 'warehouse_name': 'Main',
-            'quantity': 1, 'price': '1.00',
-        }]})
-        self.assertNotIn('unit', data)
-        self.assertNotIn('reserve', data['stock'][0])
-
-
-@override_settings(SECURE_SSL_REDIRECT=False, FERNET_KEY=_TEST_FERNET_KEY)
-class ProductSearchNoStockUpsertTests(TestCase):
-    """A 201 'No Stock' body that carries no product identity must not seed the
-    catalog replica with a nameless row."""
+    @classmethod
+    def setUpTestData(cls):
+        cls.org = _make_organization()
+        cls.user = User.objects.create_user(
+            username="cat-reader", password="pw12345!", role=User.Role.COMPANY_USER,
+            organization=cls.org,
+        )
+        cls.product = Product.objects.create(
+            organization=cls.org, sku="NOM-1", article="ART-1", name="Held",
+            price=Decimal("9.99"), image_urls=["http://1c/a.png"], is_active=True,
+        )
 
     def setUp(self):
-        self.org = _make_organization()
-        self.org.encrypt_password('s3cret')
-        self.org.save()
-        self.user = User.objects.create_user(
-            username='nostock_user', password='p',
-            role=User.Role.COMPANY_USER, organization=self.org,
-        )
-        warehouse = Warehouse.objects.create(
-            organization=self.org, code='W1', name='Main',
-        )
-        warehouse.users.add(self.user)
-        self.client_api = APIClient()
-        self.client_api.force_authenticate(self.user)
-        self.url = reverse('product-search')
+        self.api = APIClient()
+        self.api.force_authenticate(user=self.user)
+        self.url = reverse("product-search")
 
+    def test_hit_returns_the_replica_row(self):
+        response = self.api.post(self.url, {"sku": "NOM-1", "is_barcode": False}, format="json")
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.data["found"])
+        self.assertEqual(response.data["sku_name"], "Held")
+        self.assertEqual(response.data["article"], "ART-1")
+        self.assertEqual(len(response.data["images"]), 1)
 
-    def _search(self, upstream_body):
-        with mock.patch('core.views.products.ConsultWebExchangeClient') as cls:
-            cls.return_value.get_stock_and_prices.return_value = upstream_body
-            return self.client_api.post(
-                self.url,
-                {'sku': 'UNKNOWN1', 'is_barcode': True, 'warehouses': ['W1']},
-                format='json',
-            )
+    def test_hit_reports_stock_as_pending(self):
+        response = self.api.post(self.url, {"sku": "NOM-1", "is_barcode": False}, format="json")
+        self.assertEqual(response.data["stock"], [])
+        self.assertEqual(response.data["stock_status"], "pending")
 
-    def test_bodyless_no_stock_is_reported_as_not_found(self):
-        # Verified against the live 1C service: a 201 "No Stock" always carries a
-        # plain-text body and never any product data, and 1C returns it both for
-        # an unknown barcode and for a known item that is out of stock. With
-        # nothing identifiable to render, the only useful answer is "not found".
-        response = self._search({'stock': []})
-        self.assertEqual(response.status_code, 404, response.data)
-        self.assertEqual(response.data['code'], 'PRODUCT_NOT_FOUND')
-        self.assertFalse(Product.objects.filter(organization=self.org).exists())
+    def test_miss_is_not_in_catalog_never_product_not_found(self):
+        response = self.api.post(self.url, {"sku": "GHOST", "is_barcode": False}, format="json")
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.data["code"], "PRODUCT_NOT_IN_CATALOG")
 
-    def test_no_stock_with_product_identity_still_upserts(self):
-        response = self._search({
-            'sku': 'S9', 'sku_name': 'Real product', 'article': 'A9', 'stock': [],
-        })
-        self.assertEqual(response.status_code, 200, response.data)
-        self.assertEqual(
-            Product.objects.get(organization=self.org, sku='S9').name,
-            'Real product',
-        )
+    def test_another_orgs_product_is_a_miss(self):
+        other = _make_organization(name="Other3", identification_number="903")
+        Product.objects.create(organization=other, sku="FOREIGN", name="Foreign", is_active=True)
+        response = self.api.post(self.url, {"sku": "FOREIGN", "is_barcode": False}, format="json")
+        self.assertEqual(response.status_code, 404)
 
+    def test_inactive_product_is_a_miss(self):
+        Product.objects.create(organization=self.org, sku="GONE", name="Gone", is_active=False)
+        response = self.api.post(self.url, {"sku": "GONE", "is_barcode": False}, format="json")
+        self.assertEqual(response.status_code, 404)
 
-@override_settings(SECURE_SSL_REDIRECT=False, FERNET_KEY=_TEST_FERNET_KEY)
-class ProductSearchStockStatusTests(TestCase):
-    """A cached product that is merely out of stock must not be reported with
-    stock_status='unavailable' — that value means 1C could not be reached."""
+    def test_barcode_lookup_resolves_through_product_barcode(self):
+        ProductBarcode.objects.create(product=self.product, barcode="BC-1")
+        response = self.api.post(self.url, {"sku": "BC-1", "is_barcode": True}, format="json")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["sku"], "NOM-1")
 
-    def setUp(self):
-        self.org = _make_organization()
-        self.org.encrypt_password('s3cret')
-        self.org.save()
-        self.user = User.objects.create_user(
-            username='ss_user', password='p',
-            role=User.Role.COMPANY_USER, organization=self.org,
-        )
-        warehouse = Warehouse.objects.create(
-            organization=self.org, code='W1', name='Main',
-        )
-        warehouse.users.add(self.user)
-        Product.objects.create(
-            organization=self.org, sku='CACHED1', name='Cached', article='A1',
-        )
-        self.client_api = APIClient()
-        self.client_api.force_authenticate(self.user)
-        self.url = reverse('product-search')
+    def test_legacy_request_keys_are_accepted_and_ignored(self):
+        response = self.api.post(self.url, {
+            "sku": "NOM-1", "is_barcode": False,
+            "warehouses": ["W1"], "include_images": True,
+        }, format="json")
+        self.assertEqual(response.status_code, 200)
 
-
-    def _search(self):
-        return self.client_api.post(
-            self.url,
-            {'sku': 'CACHED1', 'is_barcode': False, 'warehouses': ['W1']},
-            format='json',
-        )
-
-    def test_no_stock_is_not_reported_as_unavailable(self):
-        with mock.patch('httpx.request') as req:
-            resp = mock.Mock()
-            resp.status_code = 201
-            resp.json.return_value = {'sku': 'CACHED1', 'stock': []}
-            resp.text = ''
-            req.return_value = resp
-            response = self._search()
-        self.assertEqual(response.status_code, 200, response.data)
-        self.assertEqual(response.data['stock'], [])
-        self.assertNotIn('stock_status', response.data)
-
-    def test_upstream_failure_still_reports_unavailable(self):
-        with mock.patch('httpx.request', side_effect=httpx.ConnectError('down')):
-            response = self._search()
-        self.assertEqual(response.status_code, 200, response.data)
-        self.assertEqual(response.data['stock_status'], 'unavailable')
-
-
-@override_settings(SECURE_SSL_REDIRECT=False, FERNET_KEY=_TEST_FERNET_KEY)
-class ProductSearchReplicaLookupKeyTests(TestCase):
-    """1C's GetStockAndPrices matches a barcode or an article — never the 1C
-    nomenclature code. Verified live: sending the code with IsBarcode=false
-    returns 421, so the cached-product path must send something 1C can match."""
-
-    def setUp(self):
-        self.org = _make_organization()
-        self.org.encrypt_password('s3cret')
-        self.org.save()
-        self.user = User.objects.create_user(
-            username='rk_user', password='p',
-            role=User.Role.COMPANY_USER, organization=self.org,
-        )
-        warehouse = Warehouse.objects.create(
-            organization=self.org, code='W1', name='Main',
-        )
-        warehouse.users.add(self.user)
-        self.product = Product.objects.create(
-            organization=self.org, sku='000000007126', name='GASTRO', article='09130',
-        )
-        ProductBarcode.objects.create(product=self.product, barcode='2000000078649')
-        self.client_api = APIClient()
-        self.client_api.force_authenticate(self.user)
-        self.url = reverse('product-search')
-
-
-    def _search(self, sku, is_barcode):
-        with mock.patch('core.views.products.ConsultWebExchangeClient') as cls:
-            cls.return_value.get_stock_and_prices.return_value = {'stock': []}
-            response = self.client_api.post(
-                self.url,
-                {'sku': sku, 'is_barcode': is_barcode, 'warehouses': ['W1']},
-                format='json',
-            )
-            return response, cls.return_value.get_stock_and_prices
-
-    def test_barcode_scan_looks_up_by_the_scanned_barcode(self):
-        _, called = self._search('2000000078649', True)
-        called.assert_called_once()
-        self.assertEqual(called.call_args.args[0], '2000000078649')
-        self.assertIs(called.call_args.kwargs['is_barcode'], True)
-
-    def test_code_search_looks_up_by_article_not_the_1c_code(self):
-        _, called = self._search('000000007126', False)
-        called.assert_called_once()
-        self.assertEqual(called.call_args.args[0], '09130')
-        self.assertIs(called.call_args.kwargs['is_barcode'], False)
-
-    def test_article_less_product_falls_back_to_a_known_barcode(self):
-        self.product.article = ''
-        self.product.save()
-        _, called = self._search('000000007126', False)
-        called.assert_called_once()
-        self.assertEqual(called.call_args.args[0], '2000000078649')
-        self.assertIs(called.call_args.kwargs['is_barcode'], True)
-
-    def test_unmatchable_product_reports_no_lookup_key_not_unavailable(self):
-        # "unavailable" means 1C could not be reached and a retry may help.
-        # Here we never asked it — the replica simply holds no identifier 1C
-        # can resolve — so the two must not share a status.
-        self.product.article = ''
-        self.product.save()
-        self.product.barcodes.all().delete()
-        response, called = self._search('000000007126', False)
-        called.assert_not_called()
-        self.assertEqual(response.data['stock_status'], 'no_lookup_key')
-
-
-@override_settings(SECURE_SSL_REDIRECT=False, FERNET_KEY=_TEST_FERNET_KEY)
-class ProductSearchCachedUnitTests(TestCase):
-    """The replica does not store `unit`, and 1C reports it per lookup key (a
-    package barcode and the product's article can disagree), so the cached path
-    must take `unit` from the live stock response rather than drop it."""
-
-    def setUp(self):
-        self.org = _make_organization()
-        self.org.encrypt_password('s3cret')
-        self.org.save()
-        self.user = User.objects.create_user(
-            username='cu_user', password='p',
-            role=User.Role.COMPANY_USER, organization=self.org,
-        )
-        warehouse = Warehouse.objects.create(organization=self.org, code='W1', name='Main')
-        warehouse.users.add(self.user)
-        product = Product.objects.create(
-            organization=self.org, sku='000000007126', name='GASTRO', article='09130',
-        )
-        ProductBarcode.objects.create(product=product, barcode='2000000078649')
-        self.client_api = APIClient()
-        self.client_api.force_authenticate(self.user)
-        self.url = reverse('product-search')
-
-
-    def _search(self, live_body):
-        with mock.patch('core.views.products.ConsultWebExchangeClient') as cls:
-            cls.return_value.get_stock_and_prices.return_value = live_body
-            return self.client_api.post(
-                self.url,
-                {'sku': '2000000078649', 'is_barcode': True, 'warehouses': ['W1']},
-                format='json',
-            )
-
-    def test_cached_product_surfaces_unit_from_live_response(self):
-        response = self._search({'unit': 'შეკვრა', 'stock': []})
-        self.assertEqual(response.status_code, 200, response.data)
-        self.assertEqual(response.data['unit'], 'შეკვრა')
-
-    def test_absent_unit_is_omitted(self):
-        response = self._search({'stock': []})
-        self.assertEqual(response.status_code, 200, response.data)
-        self.assertNotIn('unit', response.data)
-
-
-class StockQuantityPrecisionTests(TestCase):
-    """1C types quantity/reserve as Number, and goods sold by weight really do
-    come back fractional. An IntegerField silently floored 2.5 kg to 2, which
-    understates stock and — at 0.5 — reads as out of stock entirely."""
-
-    def _rows(self, **row):
-        base = {'sku': 'S1', 'sku_name': 'N', 'article': 'A',
-                'images': [], 'category_path': [], 'attributes': []}
-        stock_row = {'warehouse': 'W1', 'warehouse_name': 'Main', 'price': '1.00'}
-        stock_row.update(row)
-        base['stock'] = [stock_row]
-        return ProductSearchSerializer(base).data['stock'][0]
-
-    def test_fractional_quantity_is_not_truncated(self):
-        self.assertEqual(Decimal(self._rows(quantity=2.5)['quantity']), Decimal('2.5'))
-
-    def test_fractional_reserve_is_not_truncated(self):
-        row = self._rows(quantity=10, reserve=1.5)
-        self.assertEqual(Decimal(row['reserve']), Decimal('1.5'))
-
-    def test_a_half_unit_does_not_collapse_to_out_of_stock(self):
-        self.assertNotEqual(Decimal(self._rows(quantity=0.5)['quantity']), Decimal('0'))
-
-    def test_whole_numbers_survive_the_round_trip(self):
-        self.assertEqual(Decimal(self._rows(quantity=65)['quantity']), Decimal('65'))
-
-    def test_negative_quantity_is_preserved(self):
-        # 1C really does return negative on-hand figures (observed live: -11).
-        self.assertEqual(Decimal(self._rows(quantity=-11)['quantity']), Decimal('-11'))
-
-    def test_null_reserve_stays_null(self):
-        self.assertIsNone(self._rows(quantity=1, reserve=None)['reserve'])
+    def test_the_view_never_imports_the_1c_client(self):
+        import core.views.products as module
+        self.assertFalse(hasattr(module, "ConsultWebExchangeClient"))
 
 
 @override_settings(SECURE_SSL_REDIRECT=False, FERNET_KEY=_TEST_FERNET_KEY)
@@ -545,16 +195,11 @@ class ProductSearchRecordScanTests(TestCase):
         self.client_api.force_authenticate(self.user)
         self.url = reverse('product-search')
 
-    def _search(self, body, live=None, live_error=None):
-        with mock.patch('core.views.products.ConsultWebExchangeClient') as cls:
-            if live_error is not None:
-                cls.return_value.get_stock_and_prices.side_effect = live_error
-            else:
-                cls.return_value.get_stock_and_prices.return_value = live or {'stock': []}
-            return self.client_api.post(self.url, body, format='json')
+    def _search(self, body):
+        return self.client_api.post(self.url, body, format='json')
 
     def test_replica_hit_records_one_scan(self):
-        response = self._search({'sku': '4000', 'is_barcode': True, 'warehouses': ['W1'], 'record_scan': True})
+        response = self._search({'sku': '4000', 'is_barcode': True, 'record_scan': True})
         self.assertEqual(response.status_code, 200, response.data)
         event = ScanEvent.objects.get()
         self.assertEqual(event.organization, self.org)
@@ -563,38 +208,31 @@ class ProductSearchRecordScanTests(TestCase):
         self.assertIs(event.is_barcode, True)
 
     def test_not_found_lookup_is_still_recorded(self):
-        response = self._search({'sku': 'UNKNOWN', 'is_barcode': True, 'warehouses': ['W1'], 'record_scan': True})
+        # A miss is recorded too -- record_scan counts the lookup, not the
+        # outcome. This endpoint no longer calls 1C, so there is no separate
+        # "upstream failure" outcome to distinguish from a plain miss.
+        response = self._search({'sku': 'UNKNOWN', 'is_barcode': True, 'record_scan': True})
         self.assertEqual(response.status_code, 404, response.data)
         self.assertEqual(ScanEvent.objects.count(), 1)
 
-    def test_upstream_failure_is_still_recorded(self):
-        error = ConsultWebExchangeError(code='EXTERNAL_SERVICE_TIMEOUT', detail='t', http_status=504)
-        response = self._search(
-            {'sku': 'UNKNOWN', 'is_barcode': False, 'warehouses': ['W1'], 'record_scan': True},
-            live_error=error,
-        )
-        self.assertEqual(response.status_code, 504, response.data)
-        event = ScanEvent.objects.get()
-        self.assertIs(event.is_barcode, False)
-
     def test_absent_flag_records_nothing(self):
-        response = self._search({'sku': '4000', 'is_barcode': True, 'warehouses': ['W1']})
+        response = self._search({'sku': '4000', 'is_barcode': True})
         self.assertEqual(response.status_code, 200, response.data)
         self.assertFalse(ScanEvent.objects.exists())
 
     def test_false_flag_records_nothing(self):
-        response = self._search({'sku': '4000', 'is_barcode': True, 'warehouses': ['W1'], 'record_scan': False})
+        response = self._search({'sku': '4000', 'is_barcode': True, 'record_scan': False})
         self.assertEqual(response.status_code, 200, response.data)
         self.assertFalse(ScanEvent.objects.exists())
 
     def test_invalid_request_records_nothing(self):
         # No `sku`: validation fails before any lookup happens.
-        response = self._search({'is_barcode': True, 'warehouses': ['W1'], 'record_scan': True})
+        response = self._search({'is_barcode': True, 'record_scan': True})
         self.assertEqual(response.status_code, 400, response.data)
         self.assertFalse(ScanEvent.objects.exists())
 
     def test_record_scan_is_not_echoed_in_the_response(self):
-        response = self._search({'sku': '4000', 'is_barcode': True, 'warehouses': ['W1'], 'record_scan': True})
+        response = self._search({'sku': '4000', 'is_barcode': True, 'record_scan': True})
         self.assertNotIn('record_scan', response.data)
 
     def test_failed_insert_does_not_block_the_lookup(self):
@@ -602,21 +240,19 @@ class ProductSearchRecordScanTests(TestCase):
         # cost an analytics count, never a consultant's scan.
         with mock.patch.object(ScanEvent.objects, 'create', side_effect=DatabaseError('no table')):
             with self.assertLogs('core.views.products', level='ERROR'):
-                response = self._search(
-                    {'sku': '4000', 'is_barcode': True, 'warehouses': ['W1'], 'record_scan': True},
-                )
+                response = self._search({'sku': '4000', 'is_barcode': True, 'record_scan': True})
         self.assertEqual(response.status_code, 200, response.data)
         self.assertEqual(response.data['sku_name'], 'Cached')
 
     def test_null_record_scan_does_not_block_the_lookup(self):
         # `record_scan` is decided leniently in the view, not validated: a
         # malformed value must never fail the consultant's lookup.
-        response = self._search({'sku': '4000', 'is_barcode': True, 'warehouses': ['W1'], 'record_scan': None})
+        response = self._search({'sku': '4000', 'is_barcode': True, 'record_scan': None})
         self.assertEqual(response.status_code, 200, response.data)
         self.assertFalse(ScanEvent.objects.exists())
 
     def test_non_boolean_record_scan_does_not_block_the_lookup(self):
-        response = self._search({'sku': '4000', 'is_barcode': True, 'warehouses': ['W1'], 'record_scan': 'maybe'})
+        response = self._search({'sku': '4000', 'is_barcode': True, 'record_scan': 'maybe'})
         self.assertEqual(response.status_code, 200, response.data)
         self.assertFalse(ScanEvent.objects.exists())
 
@@ -627,7 +263,7 @@ class ProductSearchRecordScanTests(TestCase):
         # doesn't match the cached barcode ('4000'), so the lookup itself
         # 404s (unchanged, out-of-scope behaviour) -- the scan is still
         # recorded, using the trimmed value.
-        response = self._search({'sku': '  4000  ', 'is_barcode': True, 'warehouses': ['W1'], 'record_scan': True})
+        response = self._search({'sku': '  4000  ', 'is_barcode': True, 'record_scan': True})
         self.assertEqual(response.status_code, 404, response.data)
         event = ScanEvent.objects.get()
         self.assertEqual(event.value, '4000')

@@ -22,6 +22,7 @@ class ProductSearchSerializer(serializers.Serializer):
             max_digits=10, decimal_places=2, read_only=True, source='discountedprice',
         )
 
+    found = serializers.BooleanField(read_only=True, required=False)
     is_barcode = serializers.BooleanField(write_only=True)
     # Set by the dashboard only for lookups the consultant started, so cart
     # stock refreshes and re-runs are not counted as scans. The view reads
@@ -31,7 +32,12 @@ class ProductSearchSerializer(serializers.Serializer):
     # to document the request shape in the OpenAPI schema.
     record_scan = serializers.BooleanField(required=False, default=False, write_only=True)
     sku = serializers.CharField(max_length=255)
-    warehouses = serializers.ListField(child=serializers.CharField(max_length=255), write_only=True)
+    # Left in the request shape only so an old client's body still validates
+    # during a deploy. The catalog read does not use it — warehouses belong to
+    # POST /api/v1/product/stock/.
+    warehouses = serializers.ListField(
+        child=serializers.CharField(max_length=255), write_only=True, required=False,
+    )
     article = serializers.CharField(max_length=255, read_only=True)
     price = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
     sku_name = serializers.CharField(max_length=255, read_only=True)
