@@ -22,6 +22,7 @@ from dataclasses import dataclass
 
 import httpx
 from django.conf import settings
+from django.db import transaction
 from django.utils import timezone
 
 from core.catalog.fingerprint import row_hash
@@ -256,6 +257,13 @@ def apply_self_heal(organization, resolved: list[ResolvedItem], outcomes: dict[s
     ``requested`` -- so healing it once and skipping the rest is enough:
     the mutation on the shared outcome is visible to every duplicate
     already, this only avoids redundant identical DB round trips.
+
+    Each heal is guarded on its own, the way phase B guards each fetch: the
+    endpoint's contract is that it ALWAYS answers 200 with a per-item status,
+    and one unusable 1C payload -- a non-numeric ``price`` against a
+    ``DecimalField``, say -- must not 500 the other 49 items of a cart
+    refresh. A failed heal downgrades that item to ``unavailable``, which is
+    exactly what it is: we could not turn 1C's answer into something usable.
     """
     healed: set[str] = set()
     for item in resolved:
@@ -265,16 +273,33 @@ def apply_self_heal(organization, resolved: list[ResolvedItem], outcomes: dict[s
         if item.requested in healed:
             continue
         healed.add(item.requested)
-        payload = outcome.data or {}
-        resolved_sku = payload.get("sku") or item.requested
-        img_urls = payload.get("img_url") or []
-        fields = {
-            "article": payload.get("article") or "",
-            "name": payload.get("sku_name") or "",
-            "price": payload.get("price"),
-            "image_urls": img_urls,
-            "barcodes": [item.requested] if item.is_barcode else [],
-        }
+        try:
+            _heal_one(organization, item, outcome)
+        except Exception:  # one bad payload must never fail the batch
+            logger.exception("Self-heal failed for %s", item.requested)
+            outcome.status = STATUS_UNAVAILABLE
+            outcome.data = None
+            outcome.product = None
+
+
+def _heal_one(organization, item: ResolvedItem, outcome: StockOutcome) -> None:
+    """Upsert one replica miss and fill in its identity echo.
+
+    Wrapped in its own transaction so a write that fails part-way (the
+    ``Product`` upsert lands, the ``ProductBarcode`` insert does not) leaves
+    nothing half-written behind for the next push to trip over.
+    """
+    payload = outcome.data or {}
+    resolved_sku = payload.get("sku") or item.requested
+    img_urls = payload.get("img_url") or []
+    fields = {
+        "article": payload.get("article") or "",
+        "name": payload.get("sku_name") or "",
+        "price": payload.get("price"),
+        "image_urls": img_urls,
+        "barcodes": [item.requested] if item.is_barcode else [],
+    }
+    with transaction.atomic():
         product, _ = Product.objects.update_or_create(
             organization=organization,
             sku=resolved_sku,
@@ -291,13 +316,13 @@ def apply_self_heal(organization, resolved: list[ResolvedItem], outcomes: dict[s
         )
         if item.is_barcode:
             ProductBarcode.objects.get_or_create(product=product, barcode=item.requested)
-        outcome.product = {
-            "sku": resolved_sku,
-            "article": fields["article"],
-            "sku_name": fields["name"],
-            "price": fields["price"],
-            "images": signed_image_paths(organization.id, resolved_sku, len(img_urls)),
-        }
+    outcome.product = {
+        "sku": resolved_sku,
+        "article": fields["article"],
+        "sku_name": fields["name"],
+        "price": fields["price"],
+        "images": signed_image_paths(organization.id, resolved_sku, len(img_urls)),
+    }
 
 
 def fetch_stock_batch(user, items: list[RequestedItem], warehouse_codes: list[str]) -> list[dict]:

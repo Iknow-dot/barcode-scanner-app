@@ -405,6 +405,45 @@ class SelfHealTests(TestCase):
         fake = _FakeClient()
         self.assertEqual(self._batch(fake, []), [])
 
+    def test_an_unusable_payload_downgrades_only_that_item(self):
+        # Phase B turns every exception into a per-item status; phase C used
+        # to have no guard at all, so one bad 1C payload -- a non-numeric
+        # `price` against Product.price's DecimalField, here -- raised out of
+        # the view and 500'd the whole batch, breaking the always-200
+        # contract for the other 49 items of a cart refresh.
+        Product.objects.create(
+            organization=self.org, sku="NOM-1", article="ART-1", name="Held", is_active=True,
+        )
+        fake = _FakeClient({
+            "GHOST": {"sku_name": "Broken", "article": "A9", "price": "not-a-decimal", "stock": []},
+            "ART-1": {"stock": [{"warehouse": "W1", "quantity": 3}]},
+        })
+        rows = self._batch(fake, [
+            RequestedItem(sku="GHOST", is_barcode=False),
+            RequestedItem(sku="NOM-1", is_barcode=False),
+        ])
+        self.assertEqual(rows[0]["status"], STATUS_UNAVAILABLE)
+        self.assertNotIn("product", rows[0])
+        self.assertEqual(rows[0]["stock"], [])
+        # The item beside it is untouched.
+        self.assertEqual(rows[1]["status"], STATUS_OK)
+        self.assertEqual(rows[1]["stock"], [{"warehouse": "W1", "quantity": 3}])
+        # And the failed heal left nothing half-written behind.
+        self.assertFalse(Product.objects.filter(organization=self.org, sku="GHOST").exists())
+
+    def test_a_failed_barcode_heal_leaves_no_half_written_product(self):
+        # The Product upsert succeeds and the ProductBarcode insert then
+        # fails: without the transaction around both, the replica would be
+        # left holding a product the next push has to reconcile.
+        fake = _FakeClient({"BC-NEW": {"sku_name": "Discovered", "article": "A9", "stock": []}})
+        with patch(
+            "core.services.stock_batch.ProductBarcode.objects.get_or_create",
+            side_effect=RuntimeError("boom"),
+        ):
+            [row] = self._batch(fake, [RequestedItem(sku="BC-NEW", is_barcode=True)])
+        self.assertEqual(row["status"], STATUS_UNAVAILABLE)
+        self.assertFalse(Product.objects.filter(organization=self.org, sku="BC-NEW").exists())
+
     def test_duplicate_miss_is_healed_once(self):
         # Two RequestedItems for the same missed sku share one StockOutcome
         # (phase B already dedupes the upstream call); apply_self_heal must
