@@ -340,16 +340,12 @@ def fetch_stock_batch(user, items: list[RequestedItem], warehouse_codes: list[st
     organization = user.organization
 
     # Scoping the codes through the user's own warehouses is a tenancy
-    # control, not just a 1C parameter: an empty request means "all
-    # warehouses". Sharp edge, preserved deliberately from the pre-split
-    # view rather than a considered design: the guard below is on the
-    # REQUESTED codes, not on `selected` (the tenancy-filtered queryset), so
-    # a request naming ONLY codes the user lacks also filters `selected`
-    # down to empty -- the join is still "" and therefore ALSO widens to
-    # every warehouse instead of none. See
-    # test_requesting_only_inaccessible_warehouses_currently_widens_to_all,
-    # which pins this as a known quirk, not an endorsement; it is tracked as
-    # its own ticket rather than fixed silently inside this refactor.
+    # control, not just a 1C parameter. Exactly two modes: an EMPTY
+    # `warehouse_codes` is the only path that widens ("" means "all
+    # warehouses" to 1C); a non-empty one is narrowed to the user's own.
+    # A non-empty list that narrows to nothing never reaches here --
+    # ProductStockRequestSerializer.validate rejects it with
+    # NO_ACCESSIBLE_WAREHOUSES, because joining it would also yield "".
     selected = user.warehouses.filter(code__in=warehouse_codes)
     warehouses = ",".join(selected.values_list("code", flat=True)) if warehouse_codes else ""
 

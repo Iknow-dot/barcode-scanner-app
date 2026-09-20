@@ -28,7 +28,9 @@ class ProductStockAPIView(APIView):
     http_method_names = ["post"]
 
     def post(self, request: Request) -> Response:
-        serializer = self.serializer_class(data=request.data)
+        # The request context is load-bearing, not boilerplate: the serializer
+        # checks the requested warehouses against this user's own.
+        serializer = self.serializer_class(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
 

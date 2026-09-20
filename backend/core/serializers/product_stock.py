@@ -31,6 +31,27 @@ class ProductStockRequestSerializer(serializers.Serializer):
             })
         return value
 
+    def validate(self, attrs):
+        """Reject a warehouse list that names nothing this user can reach.
+
+        Warehouse scoping has exactly two modes: an empty list means "all
+        warehouses", and a non-empty one is narrowed to the user's own
+        warehouses. A list that narrows to nothing is neither -- letting it
+        through would join to "", which 1C reads as "all warehouses", so a
+        request naming only warehouses the user is not assigned to would
+        WIDEN instead of returning none.
+        """
+        codes = attrs.get("warehouses") or []
+        if not codes:
+            return attrs
+        user = self.context["request"].user
+        if not user.warehouses.filter(code__in=codes).exists():
+            raise serializers.ValidationError({"warehouses": {
+                "code": "NO_ACCESSIBLE_WAREHOUSES",
+                "detail": "None of the requested warehouses are assigned to this user.",
+            }})
+        return attrs
+
 
 class StockRowSerializer(serializers.Serializer):
     warehouse = serializers.CharField(max_length=255)

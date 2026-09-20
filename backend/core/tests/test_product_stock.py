@@ -377,24 +377,6 @@ class SelfHealTests(TestCase):
         self._batch(fake, [RequestedItem(sku="NOM-1", is_barcode=False)], [])
         self.assertEqual(fake.calls[0][2], "")
 
-    def test_requesting_only_inaccessible_warehouses_currently_widens_to_all(self):
-        # Pins a known quirk inherited verbatim from the pre-split view
-        # (core/views/products.py, which has the same "" fallback guarded on
-        # the requested codes rather than the tenancy-filtered queryset): a
-        # request naming ONLY warehouse codes this user is not assigned to
-        # filters `selected` down to empty too, so the join is still "" --
-        # and "" means "all warehouses" to 1C. That is a genuine intra-org
-        # authorization weakness, tracked as its own ticket. This test is
-        # not an endorsement of the behaviour -- it exists so a future
-        # change to it is a conscious, reviewed one, not an accidental
-        # side effect of some other refactor.
-        Product.objects.create(
-            organization=self.org, sku="NOM-1", article="ART-1", name="Held", is_active=True,
-        )
-        fake = _FakeClient({"ART-1": {"stock": []}})
-        self._batch(fake, [RequestedItem(sku="NOM-1", is_barcode=False)], ["NOT-MINE"])
-        self.assertEqual(fake.calls[0][2], "")
-
     def test_results_follow_request_order(self):
         fake = _FakeClient()
         items = [RequestedItem(sku=f"G{i}", is_barcode=False) for i in range(3)]
@@ -478,6 +460,8 @@ class ProductStockEndpointTests(TestCase):
         Product.objects.create(
             organization=cls.org, sku="NOM-1", article="ART-1", name="Held", is_active=True,
         )
+        cls.warehouse = Warehouse.objects.create(organization=cls.org, code="W1", name="Main")
+        cls.warehouse.users.add(cls.user)
 
     def setUp(self):
         self.client_api = APIClient()
@@ -488,6 +472,31 @@ class ProductStockEndpointTests(TestCase):
         fake = fake or _FakeClient({"ART-1": {"stock": [{"warehouse": "W1", "quantity": 4}]}})
         with patch("core.services.stock_batch.ConsultWebExchangeClient", return_value=fake):
             return self.client_api.post(self.url, body, format="json")
+
+    def test_requesting_only_inaccessible_warehouses_is_rejected(self):
+        # The companion to test_empty_warehouse_list_means_all_warehouses:
+        # "" is what tells 1C "all warehouses", so a list that narrows to
+        # nothing must be refused rather than joined. Letting it through
+        # widened an intra-org request to every warehouse in the org.
+        fake = _FakeClient({"ART-1": {"stock": []}})
+        response = self._post(
+            {"items": [{"sku": "NOM-1"}], "warehouses": ["NOT-MINE"]}, fake=fake,
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.data["warehouses"]["code"], "NO_ACCESSIBLE_WAREHOUSES")
+        self.assertIn("detail", response.data["warehouses"])
+        # Rejected before anything was asked upstream -- so it cannot have
+        # widened on the way out either.
+        self.assertEqual(fake.calls, [])
+
+    def test_a_partly_accessible_warehouse_list_is_accepted(self):
+        # One reachable code is enough; the service drops the rest.
+        fake = _FakeClient({"ART-1": {"stock": []}})
+        response = self._post(
+            {"items": [{"sku": "NOM-1"}], "warehouses": ["W1", "NOT-MINE"]}, fake=fake,
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(fake.calls[0][2], "W1")
 
     def test_single_item_returns_one_result(self):
         response = self._post({"items": [{"sku": "NOM-1", "is_barcode": False}], "warehouses": []})
