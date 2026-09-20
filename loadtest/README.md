@@ -581,6 +581,13 @@ round these into more confidence than they carry.
   one of the 8 slots, so at ~1 s of 1C latency the ceiling is about 8 scans/s
   whatever our own speed. Expect roughly 8–11 scans/s in production, with 1C
   deciding where in that range.
+- **These numbers pre-date the catalog/stock split.** `journey.js` still posts
+  only to `product/search/`, which no longer calls 1C — it is now a pure local
+  replica read — so a run today profiles a strictly smaller journey than the
+  one measured here and will look faster. The real consultant scan is two
+  calls now (`product/search/` plus `product/stock/`, fired in parallel), and
+  only the second waits on 1C. Do not compare a new run against the table
+  above until the journey posts both.
 - **Not measured yet:** the old single sync worker for a before/after, and a
   `ceiling` run with a slow fake 1C (`slow_5s`).
 

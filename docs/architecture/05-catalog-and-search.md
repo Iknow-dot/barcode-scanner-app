@@ -1,7 +1,8 @@
 # 05 — Catalog replica & product search
 
 Source: `backend/core/views/catalog_ingest.py`, `backend/core/views/catalog_read.py`,
-`backend/core/views/products.py`, `backend/core/catalog/`.
+`backend/core/views/products.py`, `backend/core/views/product_stock.py`,
+`backend/core/services/stock_batch.py`, `backend/core/catalog/`.
 
 The catalog is a per-org **replica** of 1C's nomenclature, pushed by 1C. It is
 enabled per org (`product_catalog_enabled`). Price, name, images, category and
@@ -45,43 +46,66 @@ sequenceDiagram
 `CatalogIngestState.is_stale` turns true when no push has arrived for 2 days;
 company admins see it on the catalog sync-status view.
 
-## Scan → product card (replica-first)
+## Scan → product card (two endpoints, in parallel)
+
+One scan is two independent requests, fired together. The catalog read is a
+pure local query that renders the card in milliseconds; the stock call is the
+only half that waits on 1C. Neither can answer "this product does not exist" on
+its own — the catalog only knows it is not in the replica, and 1C's data-less
+201 only becomes a verdict once the replica has also missed — so the verdict is
+assembled on the client (`components/UserDashboard/scanLookup.js::scanVerdict`).
 
 ```mermaid
 sequenceDiagram
     autonumber
     actor C as Consultant
-    participant FE as BarcodeScanner / FindProductDrawer
+    participant FE as UserDashboard.handleSearch
     participant PS as ProductSearchAPIView
+    participant ST as ProductStockAPIView<br/>(stock_batch)
     participant DB as Replica (Product, ProductBarcode)
     participant OneC as 1C
 
     C->>FE: scan barcode or type SKU
-    FE->>PS: POST /product/search/ {sku, is_barcode, record_scan}
-    opt record_scan = true (user-started lookup)
-        PS->>DB: insert ScanEvent (failure logged, never blocks)
-    end
-    PS->>DB: lookup in org, is_active=true<br/>(barcode → ProductBarcode, else Product.sku)
-
-    alt replica hit
-        PS->>OneC: get_stock_and_prices(article or barcode)
-        alt 1C error
-            PS-->>FE: replica fields + stock_status=unavailable
-        else no identifier 1C can resolve
-            PS-->>FE: replica fields + stock_status=no_lookup_key
-        else ok
-            PS-->>FE: replica name/price/images/category/attributes<br/>+ live stock & unit
+    par catalog — local only, never fails on 1C
+        FE->>PS: POST /product/search/ {sku, is_barcode, record_scan}
+        opt record_scan = true (user-started lookup)
+            PS->>DB: insert ScanEvent (failure logged, never blocks)
         end
-    else replica miss
-        PS->>OneC: get_stock_and_prices(value)
-        alt 201 "No Stock" (no data)
-            PS-->>FE: 404 PRODUCT_NOT_FOUND
-        else found
-            PS->>DB: lazily upsert Product (self-heal)
-            PS-->>FE: live product
+        PS->>DB: lookup in org, is_active=true<br/>(barcode → ProductBarcode, else Product.sku)
+        alt replica hit
+            PS-->>FE: name/price/images/category/attributes<br/>+ stock_status=pending (vestigial)
+        else replica miss
+            PS-->>FE: 404 PRODUCT_NOT_IN_CATALOG<br/>("not in the replica", NOT "does not exist")
         end
+    and stock — the only 1C caller, always 200
+        FE->>ST: POST /product/stock/ {items[], warehouses}
+        ST->>DB: phase A: requested value → replica row → 1C lookup key
+        alt the replica row holds no article and no barcode
+            ST->>ST: status=no_lookup_key (1C is never asked)
+        else
+            ST->>OneC: phase B: get_stock_and_prices per item<br/>(pool threads, no ORM, 25 s deadline)
+            alt 1C answered
+                ST->>ST: status=ok (an empty stock list = out of stock)
+                opt replica missed AND 1C returned identity
+                    ST->>DB: phase C: upsert Product (self-heal)
+                    ST->>ST: echo it back as product
+                end
+            else replica missed AND 1C could not resolve it
+                ST->>ST: status=not_found
+            else 1C error, timeout, or past the deadline
+                ST->>ST: status=unavailable<br/>(a replica HIT is never not_found)
+            end
+        end
+        ST-->>FE: 200 {results: [{sku, status, stock, unit?, product?}]}
     end
+    FE->>C: card as soon as the catalog answers;<br/>stock rows when the stock call lands
 ```
+
+The card renders on whichever answer is useful first: a catalog hit paints it
+immediately with a stock skeleton; a catalog miss holds "checking 1C…" until the
+stock call either echoes an identity (render it) or reports `not_found` (only
+then, `PRODUCT_NOT_FOUND` to the consultant). Anything else is "the service is
+unreachable", never "no such product".
 
 ## Product images (signed proxy)
 

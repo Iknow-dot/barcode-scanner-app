@@ -1,9 +1,15 @@
 /**
  * Why a product's warehouse balances could not be shown.
  *
- * The backend sends `stock_status` on a product search only when the balance
- * list is not trustworthy. The two cases need different wording because only
- * one of them is worth retrying.
+ * Since the catalog/stock split there is no `stock_status` to read from the
+ * catalog answer: it always sends the vestigial `"pending"` (deploy-window
+ * padding — see core/views/products.py) and never talks to 1C at all. The real
+ * value is the stock call's per-item `status`, which UserDashboard copies onto
+ * this state once that answer lands, mapping `ok` to `''`. `pending` is the
+ * frontend's own in-flight marker for the window between the two answers.
+ *
+ * The cases need different wording because only some of them are worth
+ * retrying, and the in-flight one is not a failure at all.
  */
 
 /** The live 1C lookup failed — a retry may succeed. */
