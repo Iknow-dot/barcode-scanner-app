@@ -1,29 +1,59 @@
 import api from '../request';
 import API_ENDPOINTS from '../endpoints';
-import {searchProduct} from './productService';
+import {searchProduct, fetchStock} from './productService';
 
-jest.mock('../request', () => ({
-    __esModule: true,
-    default: {post: jest.fn(() => Promise.resolve({success: true, data: {}}))},
-}));
+jest.mock('../request', () => ({post: jest.fn(() => Promise.resolve({success: true, data: {}}))}));
+
+beforeEach(() => api.post.mockClear());
 
 describe('searchProduct', () => {
-    beforeEach(() => api.post.mockClear());
-
-    test('omits record_scan unless asked, so background lookups are not counted', () => {
-        searchProduct({sku: '4000', searchType: 'barcode', warehouseCodes: []});
-        expect(api.post).toHaveBeenCalledTimes(1);
-        expect(api.post.mock.calls[0][1]).not.toHaveProperty('record_scan');
+    test('omits record_scan unless the lookup was user-started', () => {
+        searchProduct({sku: 'A1', searchType: 'article'});
+        expect(api.post).toHaveBeenCalledWith(API_ENDPOINTS.product_search, {
+            sku: 'A1', is_barcode: false,
+        });
     });
 
-    test('sends record_scan: true for a user-started lookup', () => {
-        searchProduct({sku: '4000', searchType: 'barcode', warehouseCodes: ['W1'], recordScan: true});
+    test('a user-started barcode lookup counts as a scan', () => {
+        searchProduct({sku: '4870001', searchType: 'barcode', recordScan: true});
         expect(api.post).toHaveBeenCalledWith(API_ENDPOINTS.product_search, {
-            sku: '4000',
-            is_barcode: true,
-            warehouses: ['W1'],
-            include_images: true,
-            record_scan: true,
+            sku: '4870001', is_barcode: true, record_scan: true,
         });
+    });
+
+    test('no longer sends warehouses or include_images', () => {
+        searchProduct({sku: 'A1', searchType: 'article'});
+        const [, body] = api.post.mock.calls[0];
+        expect(body).not.toHaveProperty('warehouses');
+        expect(body).not.toHaveProperty('include_images');
+    });
+});
+
+describe('fetchStock', () => {
+    test('posts the batch to the stock endpoint', () => {
+        fetchStock({items: [{sku: 'ART-1', isBarcode: false}], warehouseCodes: ['W1']});
+        expect(api.post).toHaveBeenCalledWith(API_ENDPOINTS.product_stock, {
+            items: [{sku: 'ART-1', is_barcode: false}],
+            warehouses: ['W1'],
+        });
+    });
+
+    test('sends several SKUs in one request', () => {
+        fetchStock({items: [{sku: 'A'}, {sku: 'B'}], warehouseCodes: []});
+        expect(api.post).toHaveBeenCalledTimes(1);
+        expect(api.post.mock.calls[0][1].items).toEqual([
+            {sku: 'A', is_barcode: false},
+            {sku: 'B', is_barcode: false},
+        ]);
+    });
+
+    test('a comma string of warehouse codes is split', () => {
+        fetchStock({items: [{sku: 'A'}], warehouseCodes: 'W1, W2'});
+        expect(api.post.mock.calls[0][1].warehouses).toEqual(['W1', 'W2']);
+    });
+
+    test('an absent warehouse list means all warehouses', () => {
+        fetchStock({items: [{sku: 'A'}]});
+        expect(api.post.mock.calls[0][1].warehouses).toEqual([]);
     });
 });

@@ -21,6 +21,7 @@ const API_ENDPOINTS = {
     warehouses: "api/v1/warehouses/",
     warehouse: warehouseId => `api/v1/warehouses/${warehouseId}/`,
     product_search: "api/v1/product/search/",
+    product_stock: "api/v1/product/stock/",
     catalogProductSearch: "api/v1/catalog/products/search/",
     catalogSyncStatus: "api/v1/catalog/sync-status/",
     catalogProductList: "api/v1/catalog/products/list/",
