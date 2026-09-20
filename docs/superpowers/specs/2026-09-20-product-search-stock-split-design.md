@@ -241,10 +241,20 @@ sees.
 
 Two limits, both settings rather than literals:
 
-- `STOCK_FANOUT_CONCURRENCY`, default 4. This multiplies against the 8 request
-  slots — worst case 32 concurrent calls into a customer's 1C. It is the main risk
-  in this design and must be tunable without a deploy.
+- `STOCK_FANOUT_CONCURRENCY`, default 8. Sized so a typical cart (5–20 distinct
+  SKUs) clears in one or two waves rather than many.
 - `STOCK_BATCH_MAX_ITEMS`, default 50. Beyond it, 400.
+
+The cap exists to bound **our** resources, not 1C's. 1C is expected to absorb
+whatever concurrency we send it, so the constraint that decides this number is
+thread growth inside the gthread workers: the setting multiplies against the 8
+request slots, so a default of 8 means up to 64 in-flight HTTP threads per
+instance. That is comfortable for I/O-bound work but is the number to lower if an
+instance comes under memory pressure.
+
+The assumption is per-deployment, not universal — on-premise installs each face a
+different customer's 1C. Keeping this a setting is what makes a slower upstream a
+configuration change rather than a code change.
 
 ### One additive change to the 1C client
 
