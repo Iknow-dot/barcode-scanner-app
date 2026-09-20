@@ -72,10 +72,21 @@ const AUTH = {
     product_catalog_enabled: true,
 };
 
+// The consultant is assigned one warehouse. That matters beyond realism:
+// `userWarehouseNames` empty makes productSheetView's `groupedByMine` false,
+// which hides the "See all warehouses" toggle outright — and with it every
+// path through handleShowOtherWarehouses.
+const MY_WAREHOUSE = {id: 1, code: 'W1', name: 'Main'};
+
 const CATALOG_HIT = {
     success: true,
     status: 200,
     data: {sku: 'NOM-1', sku_name: 'Held', article: 'A1', price: '9.99', images: []},
+};
+const CATALOG_HIT_SECOND = {
+    success: true,
+    status: 200,
+    data: {sku: 'NOM-2', sku_name: 'Second', article: 'A2', price: '4.50', images: []},
 };
 const CATALOG_MISS = {success: false, status: 404, code: 'PRODUCT_NOT_IN_CATALOG'};
 // The replica was never reached — not an answer about the product.
@@ -121,6 +132,14 @@ const settle = async () => {
     });
 };
 
+// Mount, then let the warehouse fetch land before anything is scanned:
+// `userWarehouses` is loaded in an effect, and a scan fired before it
+// resolves would send no warehouse codes and render an ungrouped sheet.
+const mountDashboard = async () => {
+    renderDashboard();
+    await settle();
+};
+
 const scanAndSettleCatalog = async () => {
     fireEvent.click(screen.getByTestId('scan-trigger'));
     await settle();
@@ -132,7 +151,7 @@ describe('UserDashboard scan fan-out', () => {
         localStorage.setItem('language', 'en');
         jest.clearAllMocks();
         const {warehouseService, orderService, catalogService} = require('../../api');
-        warehouseService.getWarehouses.mockResolvedValue({success: true, data: []});
+        warehouseService.getWarehouses.mockResolvedValue({success: true, data: [MY_WAREHOUSE]});
         orderService.getOrders.mockResolvedValue({success: true, data: []});
         catalogService.categoryTree.mockResolvedValue({success: true, data: []});
     });
@@ -146,7 +165,7 @@ describe('UserDashboard scan fan-out', () => {
         productService.searchProduct.mockResolvedValue(CATALOG_HIT);
         productService.fetchStock.mockReturnValue(stock.promise);
 
-        renderDashboard();
+        await mountDashboard();
         await scanAndSettleCatalog();
 
         // Stock is still in flight, yet the product is already on screen.
@@ -169,7 +188,7 @@ describe('UserDashboard scan fan-out', () => {
         productService.searchProduct.mockResolvedValue(CATALOG_HIT);
         productService.fetchStock.mockReturnValue(stock.promise);
 
-        renderDashboard();
+        await mountDashboard();
         fireEvent.click(screen.getByTestId('scan-trigger'));
 
         // Both requests are issued in the same synchronous pass — no await on
@@ -179,8 +198,10 @@ describe('UserDashboard scan fan-out', () => {
         expect(productService.searchProduct).toHaveBeenCalledWith(
             {sku: '4870001', searchType: 'barcode', recordScan: true},
         );
+        // Scoped to the consultant's own warehouses; the "See all warehouses"
+        // re-run is the only call that widens to [].
         expect(productService.fetchStock).toHaveBeenCalledWith(
-            {items: [{sku: '4870001', isBarcode: true}], warehouseCodes: []},
+            {items: [{sku: '4870001', isBarcode: true}], warehouseCodes: ['W1']},
         );
 
         await act(async () => {
@@ -192,7 +213,7 @@ describe('UserDashboard scan fan-out', () => {
         productService.searchProduct.mockResolvedValue(CATALOG_HIT);
         productService.fetchStock.mockResolvedValue({success: false, status: null});
 
-        renderDashboard();
+        await mountDashboard();
         await scanAndSettleCatalog();
 
         expect(await screen.findByRole('heading', {name: 'Held'})).toBeInTheDocument();
@@ -206,7 +227,7 @@ describe('UserDashboard scan fan-out', () => {
         productService.searchProduct.mockResolvedValue(CATALOG_MISS);
         productService.fetchStock.mockReturnValue(stock.promise);
 
-        renderDashboard();
+        await mountDashboard();
         await scanAndSettleCatalog();
 
         // The sheet is open on a MISS too, or this notice has nowhere to go.
@@ -236,7 +257,7 @@ describe('UserDashboard scan fan-out', () => {
         productService.searchProduct.mockResolvedValue(CATALOG_MISS);
         productService.fetchStock.mockReturnValue(stock.promise);
 
-        renderDashboard();
+        await mountDashboard();
         await scanAndSettleCatalog();
         expect(screen.getByText(en.catalogMissSearchingUpstream)).toBeInTheDocument();
 
@@ -256,7 +277,7 @@ describe('UserDashboard scan fan-out', () => {
         productService.searchProduct.mockResolvedValue(CATALOG_DOWN);
         productService.fetchStock.mockResolvedValue(STOCK_DOWN);
 
-        renderDashboard();
+        await mountDashboard();
         await scanAndSettleCatalog();
 
         expect(await screen.findByText(en.productSearchError)).toBeInTheDocument();
@@ -274,7 +295,7 @@ describe('UserDashboard scan fan-out', () => {
         productService.searchProduct.mockResolvedValue(CATALOG_MISS);
         productService.fetchStock.mockResolvedValue(STOCK_DOWN);
 
-        renderDashboard();
+        await mountDashboard();
         await scanAndSettleCatalog();
 
         expect(await screen.findByText(en.productSearchError)).toBeInTheDocument();
@@ -288,11 +309,75 @@ describe('UserDashboard scan fan-out', () => {
             success: false, status: 503, code: 'EXTERNAL_SERVICE_UNAVAILABLE',
         });
 
-        renderDashboard();
+        await mountDashboard();
         await scanAndSettleCatalog();
 
         expect(await screen.findByText(en.externalServiceUnavailable)).toBeInTheDocument();
         expect(screen.getByText(en.webServiceError)).toBeInTheDocument();
         expect(screen.queryByText(en.productNotFound)).toBeNull();
+    });
+
+    test('a late "other warehouses" answer never lands on a newer product', async () => {
+        // handleShowOtherWarehouses runs OUTSIDE isSearchingRef, so nothing
+        // stops the consultant scanning the next product while its batch call
+        // is still out (the backend gives that call up to 25 s). When the old
+        // answer lands it must be dropped: writing it would put product A's
+        // warehouse rows under product B's card with no warning shown, and
+        // ProductSheet would then auto-select one of them — so B could be
+        // added to the order from a quantity that belongs to A.
+        const others = deferred();
+        const secondScanStock = deferred();
+        productService.searchProduct
+            .mockResolvedValueOnce(CATALOG_HIT)
+            .mockResolvedValueOnce(CATALOG_HIT_SECOND);
+        productService.fetchStock
+            .mockResolvedValueOnce(stockOk([{warehouse: 'W1', warehouse_name: 'Main', quantity: 4}]))
+            .mockReturnValueOnce(others.promise)
+            .mockReturnValueOnce(secondScanStock.promise);
+
+        await mountDashboard();
+        await scanAndSettleCatalog();
+        expect(await screen.findByRole('radio', {name: /Main/})).toBeInTheDocument();
+
+        // "See all warehouses" — the request that is about to be outlived.
+        fireEvent.click(screen.getByRole('button', {name: en.seeAllWarehouses}));
+        await settle();
+        expect(productService.fetchStock).toHaveBeenCalledTimes(2);
+        expect(productService.fetchStock).toHaveBeenLastCalledWith(
+            {items: [{sku: '4870001', isBarcode: true}], warehouseCodes: []},
+        );
+
+        // The consultant gives up waiting and scans the next product.
+        await scanAndSettleCatalog();
+        expect(await screen.findByRole('heading', {name: 'Second'})).toBeInTheDocument();
+        expect(screen.getByText(en.stockPending)).toBeInTheDocument();
+
+        // Only now does the first product's answer come back.
+        await act(async () => {
+            others.resolve(stockOk([
+                {warehouse: 'W1', warehouse_name: 'Main', quantity: 99},
+                {warehouse: 'W9', warehouse_name: 'Digomi', quantity: 42},
+            ]));
+        });
+
+        // Nothing of product A's answer reached product B's card: the stock
+        // leg is still pending (its `finally` did not steal the spinner
+        // either), and no warehouse row was written.
+        expect(screen.getByRole('heading', {name: 'Second'})).toBeInTheDocument();
+        expect(screen.getByText(en.stockPending)).toBeInTheDocument();
+        expect(screen.queryByText('Digomi')).toBeNull();
+        expect(screen.queryByRole('radio', {name: /Main/})).toBeNull();
+        // The stale run's `finally` must not clear the spinner either: the
+        // toggle stays disabled because B's own lookup still owns `loading`.
+        expect(screen.getByRole('button', {name: en.seeAllWarehouses})).toBeDisabled();
+
+        // B's own answer still renders normally.
+        await act(async () => {
+            secondScanStock.resolve(
+                stockOk([{warehouse: 'W1', warehouse_name: 'Main', quantity: 2}]),
+            );
+        });
+        expect(screen.getByRole('radio', {name: /Main/})).toHaveTextContent(en.stockFree(2));
+        expect(screen.queryByText('Digomi')).toBeNull();
     });
 });

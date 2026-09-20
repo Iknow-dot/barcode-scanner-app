@@ -273,19 +273,22 @@ const UserDashboard = ({isDark = false, onToggleTheme}) => {
         refresh: refreshSnapshot,
     } = useDailySnapshot(currentUserId);
     const isSearchingRef = useRef(false);
-    // Counts scans so a late answer from an earlier one can be recognised and
-    // dropped. `isStale()` in handleSearch is UNREACHABLE today, and that is
-    // worth stating plainly: this ref is only bumped after the isSearchingRef
-    // guard above, and that guard is only released in handleSearch's finally,
-    // so no second generation can exist while a first is in flight. It is kept
-    // because the guard is the only thing making it unreachable, and the
-    // catalog read and the stock call now settle independently: relax that
-    // guard — to let a new scan pre-empt an in-flight one, say, which is
-    // arguably what a consultant tapping twice wants — and without this a
-    // stale scan's stock answer lands on the newer scan's card. Revisit the
-    // finally's `if (!isStale())` at the same time: today it always runs, but
-    // once staleness is reachable it would skip setLoading(false) and leave a
-    // pre-empted scan spinning.
+    // Counts product lookups so a late answer from an earlier one can be
+    // recognised and dropped. This is a live guard, not a theoretical one:
+    // `handleShowOtherWarehouses` runs OUTSIDE `isSearchingRef` (it never sets
+    // it, and `handleSearch` therefore does not refuse to start while it is in
+    // flight), so its batch call — which may take the full
+    // STOCK_BATCH_DEADLINE_SECONDS — can still be out when the consultant
+    // dismisses the sheet and scans the next product. Without the generation
+    // check, that answer would replace the NEW product's balances with the old
+    // product's warehouse rows, with `stockStatus` cleared so nothing warns:
+    // ProductSheet's reconcileSelection then auto-picks one of them and the
+    // consultant adds the new product from a quantity that belongs to the old
+    // one. Both consumers therefore capture the generation before their await
+    // and re-check it after — including in their `finally`, so a stale run does
+    // not steal `setLoading(false)` from the live one. `handleBackToDashboard`
+    // bumps it too: closing the sheet without a new scan must invalidate an
+    // in-flight answer just as firmly.
     const searchGenerationRef = useRef(0);
     // Catalog answered "not in the replica" while the 1C lookup is still out.
     const [catalogMissed, setCatalogMissed] = useState(false);
@@ -351,6 +354,14 @@ const UserDashboard = ({isDark = false, onToggleTheme}) => {
             }
             setActiveTab('scan');
             setProductSheetOpen(true);
+        }).catch((error) => {
+            // `Promise.all` below awaits catalogPromise, NOT this derived one,
+            // so a throw inside the callback above would never reach the try
+            // block — it would surface as an unhandled rejection. The await
+            // still renders the card, so swallowing it here loses nothing but
+            // the early paint.
+            // eslint-disable-next-line no-console
+            console.error('[scan] early catalog render failed', error);
         });
 
         try {
@@ -456,12 +467,17 @@ const UserDashboard = ({isDark = false, onToggleTheme}) => {
     const handleShowOtherWarehouses = useCallback(async () => {
         if (!lastSearchRef.current) return;
         const {search, searchType} = lastSearchRef.current;
+        // This runs outside isSearchingRef, so a newer scan (or a close) can
+        // start while it is still out — see searchGenerationRef above.
+        const generation = searchGenerationRef.current;
+        const isStale = () => generation !== searchGenerationRef.current;
         setLoading(true);
         try {
             const result = await productService.fetchStock({
                 items: [{sku: search, isBarcode: searchType === 'barcode'}],
                 warehouseCodes: [],
             });
+            if (isStale()) return;
             const entry = firstStockEntry(result);
             if (entry.status !== 'ok') {
                 notify.error(t.webServiceError, t.externalServiceUnavailable);
@@ -472,7 +488,8 @@ const UserDashboard = ({isDark = false, onToggleTheme}) => {
             setSearchedAllWarehouses(true);
             setOthersCollapsed(false);
         } finally {
-            setLoading(false);
+            // A stale run must not clear the spinner the live lookup owns.
+            if (!isStale()) setLoading(false);
         }
     }, [notify, t]);
 
@@ -500,6 +517,10 @@ const UserDashboard = ({isDark = false, onToggleTheme}) => {
     // Clears the product result. Runs once the product sheet has finished
     // closing, and on the pop-to-Home tab re-tap.
     const handleBackToDashboard = useCallback(() => {
+        // Closing the result invalidates anything still in flight for it — an
+        // "other warehouses" batch can outlive the sheet by up to the backend's
+        // 25 s deadline, and must not repopulate a view the consultant left.
+        searchGenerationRef.current += 1;
         setProductSheetOpen(false);
         setBalances([]);
         setProductInfo({sku_name: '', article: '', price: '', images: []});
