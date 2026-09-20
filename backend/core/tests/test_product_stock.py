@@ -549,7 +549,10 @@ class ProductStockEndpointTests(TestCase):
 # and `test_reserve_is_returned_per_stock_row` were dropped as exact
 # duplicates of ProductStockEndpointTests.test_fractional_quantity_survives
 # and .test_discount_fields_surface_under_snake_case_names, which already
-# pin the same guarantees at this endpoint.
+# pin the same guarantees at this endpoint. The second class was renamed
+# from its test_products.py name, ProductSearchResponseFieldTests, to
+# StockResultFieldTests (Task 5 review, Finding 7) now that it lives here and
+# posts to product-stock rather than product-search.
 # ---------------------------------------------------------------------------
 
 @override_settings(SECURE_SSL_REDIRECT=False)
@@ -607,7 +610,7 @@ class StockQuantityPrecisionTests(TestCase):
 
 
 @override_settings(SECURE_SSL_REDIRECT=False)
-class ProductSearchResponseFieldTests(TestCase):
+class StockResultFieldTests(TestCase):
     """`unit` is a documented per-result field that must reach the client, and
     must be omitted rather than erroring when 1C does not send it."""
 

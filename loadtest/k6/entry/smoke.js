@@ -23,7 +23,7 @@ export const options = {
     // A smoke run with any failure is a broken setup, not a slow backend.
     endpoint_failures: ['rate==0'],
     // Belt-and-braces on top of endpoint_failures: this task landed three
-    // bare check()s (the two product_search body assertions below, plus the
+    // bare check()s (the two product_stock body assertions below, plus the
     // catalog_image body-code check) that go straight to k6's built-in
     // `checks` metric and never touch endpoint_failures at all, since they
     // aren't routed through expectStatus. Without this, one of those could
@@ -145,29 +145,34 @@ export default function () {
   expectStatus(authGet(session, PATHS.orders, 'orders_list'), 'orders_list');
 
   // LT-SKU-1's seeded barcode (seed_loadtest.py: f"48600{sku_number:08d}").
-  // warehouseCodes (not session.warehouses) is what ProductSearchAPIView
-  // actually matches against (`user.warehouses.filter(code__in=...)`).
+  // warehouseCodes (not session.warehouses) is what fetch_stock_batch
+  // actually matches against (`user.warehouses.filter(code__in=...)`,
+  // core/services/stock_batch.py) — moved there from ProductSearchAPIView
+  // when the product-search / product-stock split landed (see
+  // core/views/products.py's module docstring): product_search is now a
+  // pure local-replica read with no live stock at all, so this probe moved
+  // to product_stock, the only endpoint left that calls 1C.
   //
   // Body assertions here, not just the status code, on purpose: a clean 200
   // with `stock: []` is EXACTLY what this endpoint returns when the
   // warehouse list is empty or wrong — which is precisely how both the R11
   // warehouse-codes bug and the fake-1C's missing warehouse_name field (see
   // the earlier report addendum) stayed hidden for as long as they did: an
-  // empty/wrong warehouse list means StockSerializer never runs on a real
+  // empty/wrong warehouse list means StockRowSerializer never runs on a real
   // row, so the status-only check kept passing while quietly re-measuring a
   // truncated code path. Asserting a non-empty `stock` array with at least
   // one row carrying a non-empty `warehouse_name` means a repeat of either
   // bug fails this check instead of passing it.
-  const productRes = authPost(
-    session, PATHS.productSearch,
-    { sku: '4860000000001', is_barcode: true, warehouses: session.warehouseCodes },
-    'product_search',
+  const stockRes = authPost(
+    session, PATHS.productStock,
+    { items: [{ sku: '4860000000001', is_barcode: true }], warehouses: session.warehouseCodes },
+    'product_stock',
   );
-  expectStatus(productRes, 'product_search');
-  check(productRes, {
-    'product_search stock is non-empty': (r) => (r.json().stock || []).length > 0,
-    'product_search stock row has warehouse_name': (r) =>
-      (r.json().stock || []).some((row) => !!row.warehouse_name),
+  expectStatus(stockRes, 'product_stock');
+  check(stockRes, {
+    'product_stock stock is non-empty': (r) => (r.json().results[0].stock || []).length > 0,
+    'product_stock stock row has warehouse_name': (r) =>
+      (r.json().results[0].stock || []).some((row) => !!row.warehouse_name),
   });
 
   // Push-token authenticated (core/ingest_auth.py), not JWT — a raw call, not
@@ -254,27 +259,48 @@ export default function () {
     }
   }
 
-  // Upstream-error pass-through probe. 1C mostly answers errors with 500, which
-  // the backend turns into its own 502 {"code": "EXTERNAL_SERVICE_ERROR"}, and
-  // the frontend translates errors by that code. A SKU that was never seeded
-  // misses the replica and takes the live 1C path, so with the fake in
-  // http_500 mode this reproduces that production case exactly, and shows
-  // whether the 502 and its JSON body reach the client or something in front
-  // of the app replaces them. Plain check()s, not expectStatus: the probe is
-  // not an endpoint being measured.
+  // Upstream-error pass-through probe. NOT part of the coordinator's Task 5
+  // review findings — found and repointed on the same "map 1:1 onto the new
+  // endpoint" principle applied to failure-modes.js below, because leaving
+  // it as product_search would fail by default (see the disclosure in the
+  // fix report for why this was judged in-scope rather than left broken).
+  //
+  // A raw 1C failure no longer surfaces as an HTTP 502 anywhere in this
+  // split: ProductSearchAPIView never calls 1C at all (product/search is a
+  // pure local-replica read), and ProductStockAPIView / fetch_stock_batch
+  // (core/services/stock_batch.py) deliberately swallows a
+  // ConsultWebExchangeError into a per-item status="unavailable" at 200
+  // rather than letting it escape as our own 502 — "one unreachable SKU
+  // never costs the caller the rest of the batch." So this now probes
+  // product/stock/ instead, with the new contract's own assertion: a 1C 500
+  // must degrade to status="unavailable" at 200, never reach the client as a
+  // raw 5xx. A SKU that was never seeded misses the replica and sends the
+  // raw scanned value upstream (core/services/stock_batch.py::_lookup_key),
+  // so with the fake in http_500 mode this reproduces the production case.
+  // Still gated on EDGE_REWRITES_5XX, same as before: a proxy in front of
+  // the app could in principle still replace this 200 with its own error
+  // page, so this is skipped (not asserted against) wherever that is known
+  // to be in effect (see config.js / README.md). Plain check()s, not
+  // expectStatus: the probe is not an endpoint being measured.
   setFake1cMode('http_500');
   const probeRes = authPost(
-    session, PATHS.productSearch,
-    { sku: 'LT-EDGE-PROBE', is_barcode: false, warehouses: session.warehouseCodes },
+    session, PATHS.productStock,
+    { items: [{ sku: 'LT-EDGE-PROBE', is_barcode: false }], warehouses: session.warehouseCodes },
     'upstream_error_probe',
   );
   setFake1cMode('fast');
-  const probeCode = jsonCode(probeRes);
-  console.log(`upstream_error_probe: ${describeResponse(probeRes)} code=${probeCode || '-'}`);
+  const probeItemStatus = (() => {
+    try {
+      return probeRes.json().results[0].status;
+    } catch (e) {
+      return undefined;
+    }
+  })();
+  console.log(`upstream_error_probe: ${describeResponse(probeRes)} item_status=${probeItemStatus || '-'}`);
   if (!EDGE_REWRITES_5XX) {
     check(probeRes, {
-      'upstream 1C 500 reaches the client as 502': (r) => r.status === 502,
-      'upstream 1C 500 keeps its JSON code EXTERNAL_SERVICE_ERROR': () => probeCode === 'EXTERNAL_SERVICE_ERROR',
+      'upstream 1C 500 degrades to unavailable at 200, not a raw 5xx': (r) =>
+        r.status === 200 && probeItemStatus === 'unavailable',
     });
   }
 

@@ -70,6 +70,16 @@ export function sweepEndpoint(name, iterationIndex) {
     case 'analytics_orders':
       return expectStatus(authGet(ensureAdminSession(), PATHS.analytics, name), name);
     case 'product_search':
+      // Coordinator Task 5 review, Finding 2: since the product-search /
+      // product-stock split, this no longer touches 1C — product_search is
+      // now a pure local-replica read (backend/core/views/products.py), and
+      // the live stock call this sweep used to profile here now lives
+      // behind POST /api/v1/product/stock/. Left in place rather than
+      // repointed: this scenario profiles ONE endpoint at a time with
+      // nothing else competing for the 8 slots, and product_search (still a
+      // real, frequently-hit endpoint) is worth its own attribution row
+      // regardless — adding a product_stock case is a deliberate scenario
+      // change, not a mechanical fix.
       return expectStatus(
         authPost(s, PATHS.productSearch, {
           sku: `48600${String(n).padStart(8, '0')}`,

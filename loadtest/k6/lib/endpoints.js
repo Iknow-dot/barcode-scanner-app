@@ -5,6 +5,7 @@ export const PATHS = {
   login: '/api/v1/users/auth/login/',
   refresh: '/api/v1/users/auth/refresh/',
   productSearch: '/api/v1/product/search/',
+  productStock: '/api/v1/product/stock/',
   catalogSearch: '/api/v1/catalog/products/search/',
   catalogList: '/api/v1/catalog/products/list/',
   categoryTree: '/api/v1/catalog/categories/tree/',

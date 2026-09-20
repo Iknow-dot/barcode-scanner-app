@@ -1,4 +1,8 @@
-"""Live product-search response shape."""
+"""Product-search response shape — a local replica read, not a live 1C call.
+
+See core/views/products.py: ProductSearchAPIView never calls 1C; live stock
+is POST /api/v1/product/stock/ instead.
+"""
 
 from rest_framework import serializers
 
@@ -32,8 +36,14 @@ class ProductSearchSerializer(serializers.Serializer):
     # to document the request shape in the OpenAPI schema.
     record_scan = serializers.BooleanField(required=False, default=False, write_only=True)
     sku = serializers.CharField(max_length=255)
-    # Left in the request shape only so an old client's body still validates
-    # during a deploy. The catalog read does not use it — warehouses belong to
+    # `required=False` here is mandatory, not backward-compat cosmetic: the
+    # view calls `self.serializer_class(data={"sku": sku, "is_barcode":
+    # is_barcode})` (core/views/products.py) and never forwards `warehouses`
+    # -- or any other request key -- into that dict, so a required ListField
+    # would fail validation on every single request, whether or not the
+    # client actually sends one. The field stays in the request shape only
+    # to document, via the OpenAPI schema, that an old client may still send
+    # it; it is otherwise unused here -- live warehouse scoping belongs to
     # POST /api/v1/product/stock/.
     warehouses = serializers.ListField(
         child=serializers.CharField(max_length=255), write_only=True, required=False,

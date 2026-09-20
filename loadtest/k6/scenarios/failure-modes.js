@@ -3,13 +3,26 @@
 // misbehaves, or whether it holds one of the 8 concurrent slots until the
 // router gives up at 60 s.
 //
+// Repointed from product/search to product/stock (coordinator Task 5
+// review, Finding 2): the product-search / product-stock split moved the
+// live 1C call wholesale onto POST /api/v1/product/stock/ —
+// ProductSearchAPIView is now a pure local-replica read that never talks to
+// 1C at all (backend/core/views/products.py), so this scenario's whole
+// premise only exists on the new endpoint now. The mechanical repoint below
+// changes only the request/response shape; the calibrated rates, VU pools
+// and BUDGET_MS below are UNCHANGED — they were measured against the old
+// single-call shape and need re-measuring as their own piece of work, not
+// as a side effect of this repoint.
+//
 // A replica hit (every barcode scanUnderMode uses is seeded, so it always
 // is one — see journey.js/seed_loadtest.py's shared "48600<n:08d>" scheme)
-// degrades gracefully: ProductSearchAPIView.post catches ANY
-// ConsultWebExchangeError from the live stock overlay and still returns 200
-// with stock=[] / stock_status="unavailable" (backend/core/views/products.py).
-// So a non-200 here means OUR backend broke, not that 1C did — expectStatus
-// below asserts exactly 200 for that reason, not a looser "200 or 404".
+// degrades gracefully: ProductStockAPIView / fetch_stock_batch
+// (core/services/stock_batch.py) catches ANY ConsultWebExchangeError from
+// the live stock call and still returns 200, with that one item's
+// status="unavailable" in `results` ("Always answers 200. Failure is
+// reported per item," per fetch_stock_batch's own docstring). So a non-200
+// here means OUR backend broke, not that 1C did — expectStatus below
+// asserts exactly 200 for that reason, not a looser "200 or 404".
 import http from 'k6/http';
 import { check } from 'k6';
 import exec from 'k6/execution';
@@ -48,17 +61,16 @@ export function scanUnderMode(mode) {
     // RULING R11 — real warehouse CODES, not the login payload's display
     // names; session.warehouses only ever carries Warehouse.name strings.
     // See journey.js's own comment for the full rationale — an empty/wrong
-    // warehouse list makes ProductSearchAPIView return a clean 200 with
-    // stock: [] without ever exercising StockSerializer, which would make
+    // warehouse list makes fetch_stock_batch return a clean 200 with
+    // stock: [] without ever exercising StockRowSerializer, which would make
     // every mode here look identically "fine" for the wrong reason.
     session.warehouseCodes = loadWarehouseCodes(session);
   }
   const n = (__ITER % PRODUCT_COUNT) + 1;
-  const tag = `product_search_${mode}`;
+  const tag = `product_stock_${mode}`;
 
-  const res = authPost(session, PATHS.productSearch, {
-    sku: `48600${String(n).padStart(8, '0')}`,
-    is_barcode: true,
+  const res = authPost(session, PATHS.productStock, {
+    items: [{ sku: `48600${String(n).padStart(8, '0')}`, is_barcode: true }],
     warehouses: session.warehouseCodes,
   }, tag);
 

@@ -499,13 +499,18 @@ every run starts from an identically seeded environment.
 - **Images still answer `502`** — seeded image URLs point at the private
   `fake-1c` host, which the SSRF guard rejects, exactly as locally.
 - **`upstream_error_probe:` line in the smoke output.** Smoke switches the fake
-  1C to `http_500`, searches a SKU that was never seeded (forcing the live 1C
-  path), and prints what reached the client: status, content type, `Server`
-  header, HTML `<title>` and JSON `code`. The backend answers
-  `502 {"code": "EXTERNAL_SERVICE_ERROR"}` — the production response to 1C's
-  usual 500 — so anything else on that line means something in front of the
-  app replaced it. `catalog_image unexpected response:` prints the same fields
-  when the image check fails. Response bodies are never printed.
+  1C to `http_500`, posts a SKU that was never seeded to `product/stock/`
+  (forcing the live 1C path), and prints what reached the client: status,
+  content type, `Server` header, HTML `<title>` and the item's own `status`
+  field from the response body. Since the product-search / product-stock
+  split (Task 5), the backend never lets an upstream 1C failure escape as its
+  own 5xx here — `fetch_stock_batch` (`core/services/stock_batch.py`) reports
+  it as `200 {"results": [{..., "status": "unavailable"}]}` instead, so
+  anything else on that line (a non-200, or an item status other than
+  `unavailable`) means something in front of the app replaced the response,
+  or the backend itself broke. `catalog_image unexpected response:` prints
+  the same fields when the image check fails. Response bodies are never
+  printed.
 - **DigitalOcean's edge replaces backend 5xx responses.** Proven on
   2026-09-15: the backend logged `502` with its JSON body, and the client got
   `504 text/html server=cloudflare` with no `code`. The workflow therefore

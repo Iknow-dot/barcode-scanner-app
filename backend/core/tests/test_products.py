@@ -131,7 +131,13 @@ class CatalogReadOnlyTests(TestCase):
         self.assertTrue(response.data["found"])
         self.assertEqual(response.data["sku_name"], "Held")
         self.assertEqual(response.data["article"], "ART-1")
-        self.assertEqual(len(response.data["images"]), 1)
+        # Exact path, not just a length check: pins that the view feeds the
+        # signer (organization_id, sku) in that order -- swapping in the
+        # product's own pk (or any other value) here would still leave
+        # len(images) == 1 while every product-card image 403s in production.
+        self.assertEqual(
+            response.data["images"], [signed_image_path(self.org.id, "NOM-1", 0)],
+        )
 
     def test_hit_reports_stock_as_pending(self):
         response = self.api.post(self.url, {"sku": "NOM-1", "is_barcode": False}, format="json")
@@ -154,18 +160,46 @@ class CatalogReadOnlyTests(TestCase):
         response = self.api.post(self.url, {"sku": "GONE", "is_barcode": False}, format="json")
         self.assertEqual(response.status_code, 404)
 
+    def test_another_orgs_barcode_is_a_miss(self):
+        # The barcode branch filters on `product__organization=...,
+        # product__is_active=True` separately from the sku branch above --
+        # its own filter, its own test. Drop `product__organization` from it
+        # and this is the test that catches a cross-org barcode scan leaking
+        # another organization's product (test_product_stock.py:84-93 pins
+        # the same case for the sibling resolve_lookup_keys code path).
+        other = _make_organization(name="Other4", identification_number="904")
+        foreign = Product.objects.create(organization=other, sku="FOREIGN-BC", name="Foreign", is_active=True)
+        ProductBarcode.objects.create(product=foreign, barcode="BC-FOREIGN")
+        response = self.api.post(self.url, {"sku": "BC-FOREIGN", "is_barcode": True}, format="json")
+        self.assertEqual(response.status_code, 404)
+
+    def test_inactive_products_barcode_is_a_miss(self):
+        inactive = Product.objects.create(organization=self.org, sku="GONE-BC", name="Gone", is_active=False)
+        ProductBarcode.objects.create(product=inactive, barcode="BC-GONE")
+        response = self.api.post(self.url, {"sku": "BC-GONE", "is_barcode": True}, format="json")
+        self.assertEqual(response.status_code, 404)
+
     def test_barcode_lookup_resolves_through_product_barcode(self):
         ProductBarcode.objects.create(product=self.product, barcode="BC-1")
         response = self.api.post(self.url, {"sku": "BC-1", "is_barcode": True}, format="json")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["sku"], "NOM-1")
 
-    def test_legacy_request_keys_are_accepted_and_ignored(self):
-        response = self.api.post(self.url, {
+    def test_legacy_request_keys_do_not_affect_the_response(self):
+        # The view builds its own {"sku", "is_barcode"} dict for validation
+        # (core/views/products.py) and never forwards anything else out of
+        # request.data, so an old client's `warehouses` / `include_images`
+        # cannot fail validation by construction -- a body without them would
+        # 200 exactly the same way. The real claim worth pinning is that they
+        # cannot silently change the answer either: the response is
+        # byte-for-byte identical with or without them.
+        with_extras = self.api.post(self.url, {
             "sku": "NOM-1", "is_barcode": False,
             "warehouses": ["W1"], "include_images": True,
         }, format="json")
-        self.assertEqual(response.status_code, 200)
+        without_extras = self.api.post(self.url, {"sku": "NOM-1", "is_barcode": False}, format="json")
+        self.assertEqual(with_extras.status_code, 200)
+        self.assertEqual(with_extras.data, without_extras.data)
 
     def test_the_view_never_imports_the_1c_client(self):
         import core.views.products as module
@@ -206,6 +240,16 @@ class ProductSearchRecordScanTests(TestCase):
         self.assertEqual(event.user, self.user)
         self.assertEqual(event.value, '4000')
         self.assertIs(event.is_barcode, True)
+
+    def test_non_barcode_hit_records_is_barcode_false(self):
+        # Every other test in this class scans by barcode; without this one,
+        # a regression to a hardcoded `True` in _record_scan would go
+        # unnoticed by the whole suite.
+        response = self._search({'sku': 'CACHED1', 'is_barcode': False, 'record_scan': True})
+        self.assertEqual(response.status_code, 200, response.data)
+        event = ScanEvent.objects.get()
+        self.assertEqual(event.value, 'CACHED1')
+        self.assertIs(event.is_barcode, False)
 
     def test_not_found_lookup_is_still_recorded(self):
         # A miss is recorded too -- record_scan counts the lookup, not the

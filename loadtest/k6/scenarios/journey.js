@@ -48,6 +48,17 @@ export function consultantJourney() {
   const barcode = `48600${String(n).padStart(8, '0')}`;
 
   // A consultant scans far more often than they do anything else.
+  //
+  // Coordinator Task 5 review, Finding 2: since the product-search /
+  // product-stock split, this call no longer touches 1C at all —
+  // ProductSearchAPIView is now a pure local-replica read
+  // (backend/core/views/products.py), and the live stock call this
+  // journey used to exercise here now lives behind POST
+  // /api/v1/product/stock/. Still 200s and still worth scanning (it's the
+  // consultant's actual highest-frequency call), so left as-is rather than
+  // repointed — folding a second network call into this per-iteration hot
+  // path would change what this journey measures, which is its own piece
+  // of work, not a mechanical fix.
   expectStatus(
     authPost(session, PATHS.productSearch,
       { sku: barcode, is_barcode: true, warehouses: session.warehouseCodes }, 'product_search'),
