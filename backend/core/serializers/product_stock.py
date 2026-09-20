@@ -55,7 +55,7 @@ class ProductStockRequestSerializer(serializers.Serializer):
         if not accessible_warehouses(user).filter(code__in=codes).exists():
             raise serializers.ValidationError({"warehouses": {
                 "code": "NO_ACCESSIBLE_WAREHOUSES",
-                "detail": "None of the requested warehouses are assigned to this user.",
+                "detail": "None of the requested warehouses are reachable by this user.",
             }})
         return attrs
 

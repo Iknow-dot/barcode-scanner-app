@@ -377,6 +377,21 @@ class SelfHealTests(TestCase):
         self._batch(fake, [RequestedItem(sku="NOM-1", is_barcode=False)], [])
         self.assertEqual(fake.calls[0][2], "")
 
+    def test_requesting_only_inaccessible_warehouses_raises_rather_than_widening(self):
+        # The SERVICE half of the guard, which has no other home. The API
+        # cannot reach this -- ProductStockRequestSerializer.validate answers
+        # 400 NO_ACCESSIBLE_WAREHOUSES first -- but a second caller of
+        # fetch_stock_batch would, and joining an empty result gives "",
+        # which is "all warehouses" to 1C. So the narrowest possible request
+        # must fail loudly here rather than become the widest possible one.
+        Product.objects.create(
+            organization=self.org, sku="NOM-1", article="ART-1", name="Held", is_active=True,
+        )
+        fake = _FakeClient({"ART-1": {"stock": []}})
+        with self.assertRaises(ValueError):
+            self._batch(fake, [RequestedItem(sku="NOM-1", is_barcode=False)], ["NOT-MINE"])
+        self.assertEqual(fake.calls, [])
+
     def test_results_follow_request_order(self):
         fake = _FakeClient()
         items = [RequestedItem(sku=f"G{i}", is_barcode=False) for i in range(3)]

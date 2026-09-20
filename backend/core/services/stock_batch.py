@@ -52,10 +52,13 @@ def accessible_warehouses(user):
     filters it away would leave `",".join([])`, i.e. `""`, which is the
     widen-to-all bug this guard exists to prevent.
 
-    internal_admin is deliberately absent: `IsCompanyUserOrAdmin` keeps them off
-    this endpoint, and `fetch_stock_batch` needs `user.organization` anyway, so
-    they fall through to their own (empty) M2M and are refused rather than
-    handed a cross-org queryset.
+    internal_admin is deliberately absent and MUST STAY absent: mirroring
+    `get_queryset`'s `Warehouse.objects.all()` branch here would hand the stock
+    path a cross-org queryset. `IsCompanyUserOrAdmin` keeps internal admins off
+    this endpoint anyway, so they fall through to their own (empty) M2M, which
+    refuses any non-empty list. An empty one is not refused -- it reaches
+    `fetch_stock_batch` with `organization = None` and degrades to every item
+    `unavailable`, a 200. Either way, never cross-org access.
     """
     if user.role == User.Role.COMPANY_ADMIN:
         return user.organization.warehouses.all()
@@ -372,13 +375,30 @@ def fetch_stock_batch(user, items: list[RequestedItem], warehouse_codes: list[st
     # control, not just a 1C parameter. Exactly two modes: an EMPTY
     # `warehouse_codes` is the only path that widens ("" means "all
     # warehouses" to 1C); a non-empty one is narrowed to what
-    # accessible_warehouses() allows. A non-empty list that narrows to nothing
-    # never reaches here -- ProductStockRequestSerializer.validate rejects it
-    # with NO_ACCESSIBLE_WAREHOUSES, because joining it would also yield "".
-    # Use the SAME helper the serializer uses; a narrower rule here silently
-    # turns an accepted request back into that "" widening.
-    selected = accessible_warehouses(user).filter(code__in=warehouse_codes)
-    warehouses = ",".join(selected.values_list("code", flat=True)) if warehouse_codes else ""
+    # accessible_warehouses() allows -- the SAME helper the serializer's
+    # check uses, because a narrower rule here would turn a request it
+    # accepted back into that "" widening.
+    #
+    # The raise is what makes this function safe ON ITS OWN. Nothing can trip
+    # it through the API: ProductStockRequestSerializer.validate answers the
+    # one caller that exists with a 400 first. It is here for the SECOND
+    # caller -- order_push.py::insufficient_stock_lines shows that a second
+    # caller of get_stock_and_prices in this area is a normal thing to add --
+    # who would otherwise join an empty result to "" and silently ask 1C
+    # about every warehouse in the org. A comment asserting the invariant is
+    # not the same as enforcing it.
+    codes = list(
+        accessible_warehouses(user)
+        .filter(code__in=warehouse_codes)
+        .values_list("code", flat=True)
+    )
+    if warehouse_codes and not codes:
+        raise ValueError(
+            "Refusing to widen: none of the requested warehouses are reachable "
+            "by this user. Callers must reject this case (the API does, with "
+            "NO_ACCESSIBLE_WAREHOUSES) rather than pass it on."
+        )
+    warehouses = ",".join(codes)
 
     resolved = resolve_lookup_keys(organization, items)
     # A shared httpx.Client so the fan-out reuses one connection pool instead
