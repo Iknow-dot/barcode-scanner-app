@@ -26,6 +26,13 @@ class WarehouseViewSet(ModelViewSet):
         return WarehouseSerializer
 
     def get_queryset(self):
+        """Which warehouses this user has.
+
+        This list is what the consultant dashboard sends back as the stock
+        call's `warehouses`, so `core/services/stock_batch.py::accessible_warehouses`
+        mirrors the company_admin/company_user rule below. Change one and change
+        the other, or an admin's scan is refused (or worse, widened).
+        """
         user = self.request.user
         if user.role == User.Role.INTERNAL_ADMIN:
             return Warehouse.objects.all()

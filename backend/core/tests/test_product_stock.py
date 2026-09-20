@@ -588,6 +588,80 @@ class ProductStockEndpointTests(TestCase):
         self.assertEqual(str(entry["quantity"]), "2.500")
 
 
+@override_settings(SECURE_SSL_REDIRECT=False)
+class WarehouseAccessScopeTests(TestCase):
+    """"Reachable" means what the user can SEE, not what they are assigned to.
+
+    Those coincide for a company_user and diverge for a company_admin, whose
+    `/warehouses/` list -- which the dashboard sends straight back here -- is
+    the whole org while their own M2M is usually empty. Both halves of the
+    request path must agree on that (`accessible_warehouses`): the serializer
+    decides whether to reject, and `fetch_stock_batch` separately builds the
+    join, so a narrower rule in the service turns an accepted admin request
+    into `",".join([])` == "" -- the widen-to-all bug, back again.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.org = _make_organization()
+        cls.other_org = _make_organization(name="Other", identification_number="902")
+        cls.admin = User.objects.create_user(
+            username="orgadmin", password="pw12345!", role=User.Role.COMPANY_ADMIN,
+            organization=cls.org,
+        )
+        cls.consultant = User.objects.create_user(
+            username="consultant3", password="pw12345!", role=User.Role.COMPANY_USER,
+            organization=cls.org,
+        )
+        # Deliberately NO cls.admin membership anywhere: a company_admin
+        # normally holds no users<->warehouses rows at all.
+        cls.assigned = Warehouse.objects.create(organization=cls.org, code="W1", name="Main")
+        cls.assigned.users.add(cls.consultant)
+        cls.unassigned = Warehouse.objects.create(organization=cls.org, code="W2", name="Annex")
+        Warehouse.objects.create(organization=cls.other_org, code="FOREIGN", name="Theirs")
+        Product.objects.create(
+            organization=cls.org, sku="NOM-1", article="ART-1", name="Held", is_active=True,
+        )
+
+    def setUp(self):
+        self.url = reverse("product-stock")
+
+    def _post(self, user, warehouses, fake):
+        client = APIClient()
+        client.force_authenticate(user=user)
+        with patch("core.services.stock_batch.ConsultWebExchangeClient", return_value=fake):
+            return client.post(
+                self.url,
+                {"items": [{"sku": "NOM-1"}], "warehouses": warehouses},
+                format="json",
+            )
+
+    def test_company_admin_may_ask_for_an_org_warehouse_they_are_not_assigned_to(self):
+        fake = _FakeClient({"ART-1": {"stock": []}})
+        response = self._post(self.admin, ["W2"], fake)
+        self.assertEqual(response.status_code, 200)
+        # The half that catches a service-layer rule narrower than the
+        # serializer's: an accepted request whose join filters to nothing
+        # sends "", which is "all warehouses" to 1C.
+        self.assertEqual(fake.calls[0][2], "W2")
+
+    def test_company_admin_is_still_refused_another_orgs_warehouse(self):
+        fake = _FakeClient({"ART-1": {"stock": []}})
+        response = self._post(self.admin, ["FOREIGN"], fake)
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.data["warehouses"]["code"], "NO_ACCESSIBLE_WAREHOUSES")
+        self.assertEqual(fake.calls, [])
+
+    def test_company_user_is_still_refused_an_unassigned_warehouse_of_their_own_org(self):
+        # The consultant rule does NOT widen to the org: W2 is theirs by
+        # organization but not by assignment, and that is still a refusal.
+        fake = _FakeClient({"ART-1": {"stock": []}})
+        response = self._post(self.consultant, ["W2"], fake)
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.data["warehouses"]["code"], "NO_ACCESSIBLE_WAREHOUSES")
+        self.assertEqual(fake.calls, [])
+
+
 # ---------------------------------------------------------------------------
 # Moved from test_products.py (Task 5): these two classes test the stock row
 # shape and the `unit` field, which now live at POST /api/v1/product/stock/

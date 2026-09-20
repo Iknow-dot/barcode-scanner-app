@@ -29,8 +29,37 @@ from core.catalog.fingerprint import row_hash
 from core.catalog.image_urls import signed_image_paths
 from core.models import Product, ProductBarcode
 from core.services.consult_web_exchange import ConsultWebExchangeClient, ConsultWebExchangeError
+from users.models import User
 
 logger = logging.getLogger(__name__)
+
+
+def accessible_warehouses(user):
+    """The warehouses this user may ask 1C about — what they can SEE, not what
+    they are assigned to.
+
+    **Must stay in step with `core/views/warehouses.py::WarehouseViewSet.get_queryset`**,
+    which is this codebase's existing answer to "which warehouses does this user
+    have?" and which is what the dashboard actually sends back here: it lists a
+    company_admin the whole org, so scoping their stock request to
+    `user.warehouses` (usually empty for an admin) would reject every scan they
+    make. The two rules are duplicated rather than shared, and that duplication
+    is exactly what produced the bug -- keep them together.
+
+    Both callers -- this module's join and
+    `ProductStockRequestSerializer.validate` -- go through here, because they
+    must agree: the serializer deciding a code is reachable while the join
+    filters it away would leave `",".join([])`, i.e. `""`, which is the
+    widen-to-all bug this guard exists to prevent.
+
+    internal_admin is deliberately absent: `IsCompanyUserOrAdmin` keeps them off
+    this endpoint, and `fetch_stock_batch` needs `user.organization` anyway, so
+    they fall through to their own (empty) M2M and are refused rather than
+    handed a cross-org queryset.
+    """
+    if user.role == User.Role.COMPANY_ADMIN:
+        return user.organization.warehouses.all()
+    return user.warehouses.all()
 
 
 @dataclass
@@ -339,14 +368,16 @@ def fetch_stock_batch(user, items: list[RequestedItem], warehouse_codes: list[st
     # to fill in the missing field — exactly what phases A/C exist to avoid.
     organization = user.organization
 
-    # Scoping the codes through the user's own warehouses is a tenancy
+    # Scoping the codes through the user's reachable warehouses is a tenancy
     # control, not just a 1C parameter. Exactly two modes: an EMPTY
     # `warehouse_codes` is the only path that widens ("" means "all
-    # warehouses" to 1C); a non-empty one is narrowed to the user's own.
-    # A non-empty list that narrows to nothing never reaches here --
-    # ProductStockRequestSerializer.validate rejects it with
-    # NO_ACCESSIBLE_WAREHOUSES, because joining it would also yield "".
-    selected = user.warehouses.filter(code__in=warehouse_codes)
+    # warehouses" to 1C); a non-empty one is narrowed to what
+    # accessible_warehouses() allows. A non-empty list that narrows to nothing
+    # never reaches here -- ProductStockRequestSerializer.validate rejects it
+    # with NO_ACCESSIBLE_WAREHOUSES, because joining it would also yield "".
+    # Use the SAME helper the serializer uses; a narrower rule here silently
+    # turns an accepted request back into that "" widening.
+    selected = accessible_warehouses(user).filter(code__in=warehouse_codes)
     warehouses = ",".join(selected.values_list("code", flat=True)) if warehouse_codes else ""
 
     resolved = resolve_lookup_keys(organization, items)

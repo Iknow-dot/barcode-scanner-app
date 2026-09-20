@@ -10,6 +10,8 @@ the replica's article, not the scanned nomenclature code.
 from django.conf import settings
 from rest_framework import serializers
 
+from core.services.stock_batch import accessible_warehouses
+
 
 class StockItemSerializer(serializers.Serializer):
     sku = serializers.CharField(max_length=255)
@@ -35,17 +37,22 @@ class ProductStockRequestSerializer(serializers.Serializer):
         """Reject a warehouse list that names nothing this user can reach.
 
         Warehouse scoping has exactly two modes: an empty list means "all
-        warehouses", and a non-empty one is narrowed to the user's own
-        warehouses. A list that narrows to nothing is neither -- letting it
-        through would join to "", which 1C reads as "all warehouses", so a
-        request naming only warehouses the user is not assigned to would
-        WIDEN instead of returning none.
+        warehouses", and a non-empty one is narrowed to what the user can
+        reach. A list that narrows to nothing is neither -- letting it through
+        would join to "", which 1C reads as "all warehouses", so a request
+        naming only warehouses the user cannot reach would WIDEN instead of
+        returning none.
+
+        "Reachable" is `accessible_warehouses`, the same helper the join in
+        `fetch_stock_batch` uses -- org-wide for a company_admin, assigned-only
+        for a company_user. Accepting here on a rule the join does not share
+        would re-open that "" widening for whichever role the two disagree on.
         """
         codes = attrs.get("warehouses") or []
         if not codes:
             return attrs
         user = self.context["request"].user
-        if not user.warehouses.filter(code__in=codes).exists():
+        if not accessible_warehouses(user).filter(code__in=codes).exists():
             raise serializers.ValidationError({"warehouses": {
                 "code": "NO_ACCESSIBLE_WAREHOUSES",
                 "detail": "None of the requested warehouses are assigned to this user.",
