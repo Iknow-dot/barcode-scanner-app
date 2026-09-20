@@ -286,15 +286,22 @@ existing caller is untouched.
 
 ## Rollout
 
-On DigitalOcean the static frontend and the buildpack backend deploy separately, so
-for a few minutes an old frontend can call the new backend. The contract is shaped
-so that window degrades rather than breaks:
+On DigitalOcean the static frontend and the buildpack backend deploy separately,
+though from the same push — **a gap of at most about two minutes**. During it an
+old frontend can call the new backend. The contract is shaped so that window
+degrades rather than breaks:
 
 - An old client's gate is `if (result.success && result.data.stock)`, and `[]` is
   truthy in JavaScript. It passes, sets no balances, and `isStockBlocked("pending")`
   renders "stock temporarily unavailable" over a fully populated product card.
 - A catalog miss returning 404 rather than `{found: false}` means an old client
   shows a generic error toast instead of opening a blank sheet.
+
+Two minutes of degraded stock on an otherwise working product card is acceptable,
+so the two halves ship together and no compatibility bridge is built. The
+alternative considered and rejected was shipping the frontend first against the old
+backend by calling `product/search/` twice and discarding one half — it removes the
+window but leaves dead code behind for a release.
 
 No migration is required. No new environment variables beyond the two tunables,
 which have working defaults.
