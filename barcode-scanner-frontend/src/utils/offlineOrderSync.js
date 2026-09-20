@@ -1,7 +1,8 @@
 // Replays queued offline order edits against the backend, FIFO, and
 // refetches the order afterwards so the server stays the source of truth.
 import * as orderService from '../api/services/orderService';
-import {searchProduct} from '../api/services/productService';
+import {searchProduct, fetchStock} from '../api/services/productService';
+import {firstStockEntry} from '../components/UserDashboard/scanLookup';
 import {
     getOps, removeOp, clearOrder, getQueuedOrderIds, saveSnapshot,
 } from './offlineOrderQueue';
@@ -10,23 +11,34 @@ import {markOffline, markOnline, subscribe, isOffline} from './connectivity';
 const isNetworkError = (result) => !result.success && result.status === null;
 
 const resolveBarcode = async (op, userWarehouses) => {
-    const lookup = await searchProduct({
-        sku: op.barcode, searchType: 'barcode', warehouseCodes: [],
-    });
-    if (!lookup.success || !lookup.data?.sku) return {error: lookup.error || 'not found', network: isNetworkError(lookup)};
-    const stock = (lookup.data.stock || []).filter((b) => (Number(b.quantity) || 0) > 0);
+    // Both halves are needed here, so fire them together rather than in series.
+    const [lookup, stockResult] = await Promise.all([
+        searchProduct({sku: op.barcode, searchType: 'barcode'}),
+        fetchStock({items: [{sku: op.barcode, isBarcode: true}], warehouseCodes: []}),
+    ]);
+    const entry = firstStockEntry(stockResult);
+    const product = lookup.success ? lookup.data : entry.product;
+    if (!product?.sku) {
+        return {
+            error: lookup.error || 'not found',
+            network: isNetworkError(lookup) || isNetworkError(stockResult),
+        };
+    }
+    const stock = (entry.stock || []).filter((b) => (Number(b.quantity) || 0) > 0);
     const mine = new Set((userWarehouses || []).map((w) => w.code));
-    const row = stock.find((b) => mine.has(b.warehouse_code)) || stock[0];
+    // `warehouse` is the code and `warehouse_name` the display name — the
+    // backend has never sent a `warehouse_code` on these rows.
+    const row = stock.find((b) => mine.has(b.warehouse)) || stock[0];
     if (!row) return {error: 'no sellable stock'};
     return {
         payload: {
-            sku: lookup.data.sku,
-            sku_name: lookup.data.sku_name || '',
-            article: lookup.data.article || '',
-            price: lookup.data.price ?? 0,
+            sku: product.sku,
+            sku_name: product.sku_name || '',
+            article: product.article || '',
+            price: product.price ?? 0,
             quantity: op.quantity,
-            warehouse_code: row.warehouse_code || '',
-            warehouse_name: row.warehouse || '',
+            warehouse_code: row.warehouse || '',
+            warehouse_name: row.warehouse_name || '',
         },
     };
 };

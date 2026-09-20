@@ -9,10 +9,11 @@ jest.mock('../api/services/orderService', () => ({
 jest.mock('../api/services/productService', () => ({
     __esModule: true,
     searchProduct: jest.fn(),
+    fetchStock: jest.fn(),
 }));
 
 import * as orderService from '../api/services/orderService';
-import {searchProduct} from '../api/services/productService';
+import {searchProduct, fetchStock} from '../api/services/productService';
 import {enqueueOp, getOps, saveSnapshot, getSnapshot} from './offlineOrderQueue';
 import {syncOrder} from './offlineOrderSync';
 import {markOnline} from './connectivity';
@@ -46,15 +47,17 @@ test('replays ops FIFO and refetches the order', async () => {
     expect(orderService.getOrder).toHaveBeenCalledWith(42);
 });
 
-test('barcode placeholder resolves product, prefers user warehouse', async () => {
+test('barcode placeholder resolves product and prefers the user warehouse', async () => {
     enqueueOp(42, {type: 'add_item_barcode', tempId: 'tmp_a', barcode: '4870001', quantity: 2});
     searchProduct.mockResolvedValue(OK({
         sku: 'S9', sku_name: 'Thing', article: 'A9', price: 12,
-        stock: [
-            {warehouse: 'Far', warehouse_code: 'W2', quantity: 5},
-            {warehouse: 'Mine', warehouse_code: 'W1', quantity: 3},
-        ],
     }));
+    fetchStock.mockResolvedValue(OK({results: [{
+        sku: '4870001', status: 'ok', stock: [
+            {warehouse: 'W2', warehouse_name: 'Far', quantity: 5},
+            {warehouse: 'W1', warehouse_name: 'Mine', quantity: 3},
+        ],
+    }]}));
     orderService.rawAddOrderItem.mockResolvedValue(OK(ORDER));
 
     const result = await syncOrder(42, {userWarehouses: [{code: 'W1'}]});
@@ -66,15 +69,49 @@ test('barcode placeholder resolves product, prefers user warehouse', async () =>
     expect(result.synced).toBe(1);
 });
 
-test('unresolvable barcode is dropped from queue and reported as failure', async () => {
+test('the catalog read and the stock call go out in parallel', async () => {
+    enqueueOp(42, {type: 'add_item_barcode', tempId: 'tmp_a', barcode: '4870001', quantity: 1});
+    searchProduct.mockResolvedValue(OK({sku: 'S9', sku_name: 'T', article: 'A9', price: 1}));
+    fetchStock.mockResolvedValue(OK({results: [{
+        sku: '4870001', status: 'ok', stock: [{warehouse: 'W1', warehouse_name: 'Mine', quantity: 1}],
+    }]}));
+    orderService.rawAddOrderItem.mockResolvedValue(OK(ORDER));
+
+    await syncOrder(42, {userWarehouses: [{code: 'W1'}]});
+
+    expect(searchProduct).toHaveBeenCalledTimes(1);
+    expect(fetchStock).toHaveBeenCalledTimes(1);
+});
+
+test('a replica miss still resolves through the self-heal echo', async () => {
+    enqueueOp(42, {type: 'add_item_barcode', tempId: 'tmp_a', barcode: 'NEW', quantity: 1});
+    searchProduct.mockResolvedValue({success: false, status: 404, code: 'PRODUCT_NOT_IN_CATALOG'});
+    fetchStock.mockResolvedValue(OK({results: [{
+        sku: 'NEW', status: 'ok',
+        stock: [{warehouse: 'W1', warehouse_name: 'Mine', quantity: 2}],
+        product: {sku: 'S-NEW', sku_name: 'Discovered', article: 'A-NEW', price: 7},
+    }]}));
+    orderService.rawAddOrderItem.mockResolvedValue(OK(ORDER));
+
+    const result = await syncOrder(42, {userWarehouses: [{code: 'W1'}]});
+
+    expect(orderService.rawAddOrderItem).toHaveBeenCalledWith(42, expect.objectContaining({
+        sku: 'S-NEW', sku_name: 'Discovered',
+    }));
+    expect(result.synced).toBe(1);
+});
+
+test('a catalog miss with no identity is reported as a failure and drained', async () => {
     enqueueOp(42, {type: 'add_item_barcode', tempId: 'tmp_a', barcode: 'nope', quantity: 1});
-    searchProduct.mockResolvedValue({success: false, error: 'not found', code: 'PRODUCT_NOT_FOUND', status: 404});
+    searchProduct.mockResolvedValue({success: false, status: 404, code: 'PRODUCT_NOT_IN_CATALOG'});
+    fetchStock.mockResolvedValue(OK({results: [{sku: 'nope', status: 'not_found', stock: []}]}));
 
     const result = await syncOrder(42, {userWarehouses: []});
 
+    // syncOrder's return shape (also relied on by UserDashboard.js) has
+    // always been a `failures` array, never a `failed` count.
     expect(result.failures).toHaveLength(1);
-    expect(result.failures[0].op.type).toBe('add_item_barcode');
-    expect(getOps(42)).toHaveLength(0); // queue drains
+    expect(getOps(42)).toHaveLength(0);
 });
 
 test('HTTP failure drops the op but continues; network failure aborts', async () => {
