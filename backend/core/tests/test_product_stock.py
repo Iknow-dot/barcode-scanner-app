@@ -270,3 +270,104 @@ class FanOutStatusTests(TestCase):
         out = self._run(client, items)
         self.assertEqual(len(client.calls), 1)
         self.assertEqual(out["NOM-1"].status, STATUS_OK)
+
+
+from decimal import Decimal
+from unittest.mock import patch
+
+from core.services.stock_batch import fetch_stock_batch
+from core.models import Warehouse
+from users.models import User
+
+
+class SelfHealTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.org = _make_organization()
+        cls.user = User.objects.create_user(
+            username="consultant", password="pw12345!", role=User.Role.COMPANY_USER,
+            organization=cls.org,
+        )
+        cls.warehouse = Warehouse.objects.create(organization=cls.org, code="W1", name="Main")
+        cls.warehouse.users.add(cls.user)
+
+    def _batch(self, fake, items, warehouse_codes=None):
+        with patch("core.services.stock_batch.ConsultWebExchangeClient", return_value=fake):
+            return fetch_stock_batch(self.user, items, warehouse_codes or [])
+
+    def test_miss_with_identity_upserts_the_product(self):
+        fake = _FakeClient({"GHOST": {
+            "sku_name": "Discovered", "article": "A9", "price": "12.50",
+            "img_url": ["http://1c/a.png"], "stock": [], "unit": "pcs",
+        }})
+        [row] = self._batch(fake, [RequestedItem(sku="GHOST", is_barcode=False)])
+        self.assertEqual(row["status"], STATUS_OK)
+        self.assertEqual(row["product"]["sku_name"], "Discovered")
+        self.assertEqual(row["product"]["article"], "A9")
+        self.assertEqual(len(row["product"]["images"]), 1)
+        saved = Product.objects.get(organization=self.org, sku="GHOST")
+        self.assertEqual(saved.name, "Discovered")
+        self.assertTrue(saved.is_active)
+
+    def test_barcode_miss_records_the_scanned_barcode(self):
+        fake = _FakeClient({"BC-NEW": {"sku_name": "By barcode", "article": "A8", "stock": []}})
+        self._batch(fake, [RequestedItem(sku="BC-NEW", is_barcode=True)])
+        saved = Product.objects.get(organization=self.org, sku="BC-NEW")
+        self.assertTrue(ProductBarcode.objects.filter(product=saved, barcode="BC-NEW").exists())
+
+    def test_replica_hit_is_not_echoed_as_a_product(self):
+        Product.objects.create(
+            organization=self.org, sku="NOM-1", article="ART-1", name="Held", is_active=True,
+        )
+        fake = _FakeClient({"ART-1": {"stock": [{"warehouse": "W1", "quantity": 2}]}})
+        [row] = self._batch(fake, [RequestedItem(sku="NOM-1", is_barcode=False)])
+        self.assertEqual(row["status"], STATUS_OK)
+        self.assertNotIn("product", row)
+
+    def test_not_found_writes_nothing(self):
+        fake = _FakeClient({"GHOST": {"stock": []}})
+        [row] = self._batch(fake, [RequestedItem(sku="GHOST", is_barcode=False)])
+        self.assertEqual(row["status"], STATUS_NOT_FOUND)
+        self.assertFalse(Product.objects.filter(organization=self.org, sku="GHOST").exists())
+
+    def test_unit_is_passed_through_when_1c_sends_one(self):
+        Product.objects.create(
+            organization=self.org, sku="NOM-1", article="ART-1", name="Held", is_active=True,
+        )
+        fake = _FakeClient({"ART-1": {"stock": [], "unit": "kg"}})
+        [row] = self._batch(fake, [RequestedItem(sku="NOM-1", is_barcode=False)])
+        self.assertEqual(row["unit"], "kg")
+
+    def test_absent_unit_is_omitted(self):
+        Product.objects.create(
+            organization=self.org, sku="NOM-1", article="ART-1", name="Held", is_active=True,
+        )
+        fake = _FakeClient({"ART-1": {"stock": []}})
+        [row] = self._batch(fake, [RequestedItem(sku="NOM-1", is_barcode=False)])
+        self.assertNotIn("unit", row)
+
+    def test_only_the_users_own_warehouses_are_sent_upstream(self):
+        Product.objects.create(
+            organization=self.org, sku="NOM-1", article="ART-1", name="Held", is_active=True,
+        )
+        fake = _FakeClient({"ART-1": {"stock": []}})
+        self._batch(fake, [RequestedItem(sku="NOM-1", is_barcode=False)], ["W1", "NOT-MINE"])
+        self.assertEqual(fake.calls[0][2], "W1")
+
+    def test_empty_warehouse_list_means_all_warehouses(self):
+        Product.objects.create(
+            organization=self.org, sku="NOM-1", article="ART-1", name="Held", is_active=True,
+        )
+        fake = _FakeClient({"ART-1": {"stock": []}})
+        self._batch(fake, [RequestedItem(sku="NOM-1", is_barcode=False)], [])
+        self.assertEqual(fake.calls[0][2], "")
+
+    def test_results_follow_request_order(self):
+        fake = _FakeClient()
+        items = [RequestedItem(sku=f"G{i}", is_barcode=False) for i in range(3)]
+        rows = self._batch(fake, items)
+        self.assertEqual([r["sku"] for r in rows], ["G0", "G1", "G2"])
+
+    def test_empty_item_list_returns_no_results(self):
+        fake = _FakeClient()
+        self.assertEqual(self._batch(fake, []), [])

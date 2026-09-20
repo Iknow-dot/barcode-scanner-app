@@ -20,8 +20,13 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from concurrent.futures import TimeoutError as FuturesTimeoutError
 from dataclasses import dataclass
 
+from django.conf import settings
+from django.utils import timezone
+
+from core.catalog.fingerprint import row_hash
+from core.catalog.image_urls import signed_image_paths
 from core.models import Product, ProductBarcode
-from core.services.consult_web_exchange import ConsultWebExchangeError
+from core.services.consult_web_exchange import ConsultWebExchangeClient, ConsultWebExchangeError
 
 logger = logging.getLogger(__name__)
 
@@ -236,3 +241,93 @@ def fetch_stock_concurrently(
     for item in submittable:
         outcomes.setdefault(item.requested, StockOutcome(status=STATUS_UNAVAILABLE))
     return outcomes
+
+
+def apply_self_heal(organization, resolved: list[ResolvedItem], outcomes: dict[str, StockOutcome]) -> None:
+    """Phase C: upsert replica misses that 1C could identify, on the request thread.
+
+    ``get_stock_and_prices`` is what returns the data the heal writes, which is
+    why this belongs to the stock path rather than the catalog one.
+    """
+    for item in resolved:
+        outcome = outcomes.get(item.requested)
+        if item.product is not None or outcome is None or outcome.status != STATUS_OK:
+            continue
+        payload = outcome.data or {}
+        resolved_sku = payload.get("sku") or item.requested
+        img_urls = payload.get("img_url") or []
+        fields = {
+            "article": payload.get("article") or "",
+            "name": payload.get("sku_name") or "",
+            "price": payload.get("price"),
+            "image_urls": img_urls,
+            "barcodes": [item.requested] if item.is_barcode else [],
+        }
+        product, _ = Product.objects.update_or_create(
+            organization=organization,
+            sku=resolved_sku,
+            defaults={
+                "article": fields["article"],
+                "name": fields["name"],
+                "price": fields["price"],
+                "image_urls": img_urls,
+                "row_hash": row_hash(fields),
+                "is_active": True,
+                "deactivated_at": None,
+                "pushed_at": timezone.now(),
+            },
+        )
+        if item.is_barcode:
+            ProductBarcode.objects.get_or_create(product=product, barcode=item.requested)
+        outcome.product = {
+            "sku": resolved_sku,
+            "article": fields["article"],
+            "sku_name": fields["name"],
+            "price": fields["price"],
+            "images": signed_image_paths(organization.id, resolved_sku, len(img_urls)),
+        }
+
+
+def fetch_stock_batch(user, items: list[RequestedItem], warehouse_codes: list[str]) -> list[dict]:
+    """Phases A → B → C. Returns the response ``results`` list, in request order."""
+    # `user.organization` is a plain FK access, so it loads every column on
+    # first touch. Pass exactly this object to ConsultWebExchangeClient: the
+    # pool threads call organization.decrypt_password() (-> FERNET_KEY) inside
+    # _auth(), which only works without a query because the instance is
+    # already fully loaded. Narrowing this with .only()/.defer() (or fetching
+    # a fresh Organization that way) would make a worker thread hit the ORM
+    # to fill in the missing field — exactly what phases A/C exist to avoid.
+    organization = user.organization
+    if not items:
+        return []
+
+    # Scoping the codes through the user's own warehouses is a tenancy control,
+    # not just a 1C parameter. An empty selection means "all warehouses".
+    selected = user.warehouses.filter(code__in=warehouse_codes)
+    warehouses = ",".join(selected.values_list("code", flat=True)) if warehouse_codes else ""
+
+    resolved = resolve_lookup_keys(organization, items)
+    client = ConsultWebExchangeClient(organization, timeout=settings.STOCK_BATCH_READ_TIMEOUT_SECONDS)
+    outcomes = fetch_stock_concurrently(
+        client,
+        resolved,
+        warehouses,
+        deadline_seconds=settings.STOCK_BATCH_DEADLINE_SECONDS,
+        max_workers=settings.STOCK_FANOUT_CONCURRENCY,
+    )
+    apply_self_heal(organization, resolved, outcomes)
+
+    results = []
+    for item in resolved:
+        outcome = outcomes[item.requested]
+        row = {"sku": item.requested, "status": outcome.status}
+        payload = outcome.data or {}
+        row["stock"] = payload.get("stock") or []
+        # The replica has no `unit` column and 1C reports it per lookup key —
+        # a package barcode and the article can differ.
+        if payload.get("unit"):
+            row["unit"] = payload["unit"]
+        if outcome.product is not None:
+            row["product"] = outcome.product
+        results.append(row)
+    return results
