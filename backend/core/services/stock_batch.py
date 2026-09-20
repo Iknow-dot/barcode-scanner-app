@@ -144,6 +144,9 @@ def _fetch_one(client, item: ResolvedItem, warehouses: str) -> StockOutcome:
         payload = client.get_stock_and_prices(
             item.lookup_key, is_barcode=item.lookup_is_barcode, warehouses=warehouses,
         )
+        if item.product is None and not _has_identity(payload):
+            return StockOutcome(status=STATUS_NOT_FOUND)
+        return StockOutcome(status=STATUS_OK, data=payload)
     except ConsultWebExchangeError as exc:
         if exc.code == "PRODUCT_NOT_FOUND" and item.product is None:
             return StockOutcome(status=STATUS_NOT_FOUND)
@@ -151,10 +154,9 @@ def _fetch_one(client, item: ResolvedItem, warehouses: str) -> StockOutcome:
         # calling it "not found" sends the consultant hunting for something
         # that exists.
         return StockOutcome(status=STATUS_UNAVAILABLE)
-
-    if item.product is None and not _has_identity(payload):
-        return StockOutcome(status=STATUS_NOT_FOUND)
-    return StockOutcome(status=STATUS_OK, data=payload)
+    except Exception:  # one item must never fail the batch
+        logger.exception("Stock lookup failed for %s", item.requested)
+        return StockOutcome(status=STATUS_UNAVAILABLE)
 
 
 def fetch_stock_concurrently(
@@ -170,14 +172,22 @@ def fetch_stock_concurrently(
     Anything unfinished when the deadline expires is reported ``unavailable``
     rather than failing the request: partial results beat a router 502, whose
     body the browser never sees.
+
+    The result is keyed by ``ResolvedItem.requested``. When ``resolved``
+    holds the same requested value more than once (a duplicate in the
+    request's ``items``), it is fetched upstream only once — the duplicates
+    collapse onto a single submitted item and every one of them reads that
+    same outcome from the returned dict.
     """
     outcomes: dict[str, StockOutcome] = {}
-    submittable = []
+    submittable: list[ResolvedItem] = []
+    queued: set[str] = set()
     for item in resolved:
         if item.lookup_key is None:
             outcomes[item.requested] = StockOutcome(status=STATUS_NO_LOOKUP_KEY)
-        else:
+        elif item.requested not in queued:
             submittable.append(item)
+            queued.add(item.requested)
 
     if not submittable:
         return outcomes
@@ -195,11 +205,27 @@ def fetch_stock_concurrently(
         try:
             for future in as_completed(futures, timeout=max(deadline - time.monotonic(), 0)):
                 item = futures[future]
-                outcomes[item.requested] = future.result()
+                try:
+                    outcomes[item.requested] = future.result()
+                except Exception:
+                    # _fetch_one already turns every exception into a
+                    # StockOutcome; this only guards against something
+                    # escaping that (e.g. a cancelled future). Handling it
+                    # here, separately from the deadline branch below,
+                    # matters because on Python >=3.13 concurrent.futures.
+                    # TimeoutError IS the builtin TimeoutError — an
+                    # unguarded re-raise of a worker's own TimeoutError
+                    # could otherwise be mistaken for the fan-out deadline
+                    # and abort collection of every other still-pending item.
+                    logger.exception(
+                        "Stock fan-out worker raised for %s", item.requested,
+                    )
+                    outcomes[item.requested] = StockOutcome(status=STATUS_UNAVAILABLE)
         except FuturesTimeoutError:
+            unfinished = sum(1 for item in submittable if item.requested not in outcomes)
             logger.warning(
                 "Stock fan-out hit its %.1fs deadline with %s of %s items unfinished",
-                deadline_seconds, len(submittable) - len(outcomes), len(submittable),
+                deadline_seconds, unfinished, len(submittable),
             )
     finally:
         # Never wait. shutdown(wait=True) — which the context-manager form does

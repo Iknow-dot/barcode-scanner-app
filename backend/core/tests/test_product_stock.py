@@ -1,7 +1,6 @@
 # backend/core/tests/test_product_stock.py
 import threading
 import time
-from unittest.mock import patch
 
 from django.test import TestCase
 
@@ -13,7 +12,6 @@ from core.services.stock_batch import (
     STATUS_OK,
     STATUS_UNAVAILABLE,
     RequestedItem,
-    StockOutcome,
     fetch_stock_concurrently,
     resolve_lookup_keys,
 )
@@ -122,15 +120,23 @@ class _FakeClient:
         self.delay = delay
         self.calls = []
         self._lock = threading.Lock()
+        self._in_flight = 0
+        self.peak_concurrency = 0
 
     def get_stock_and_prices(self, sku, *, is_barcode, warehouses):
         with self._lock:
             self.calls.append((sku, is_barcode, warehouses))
-        if self.delay:
-            time.sleep(self.delay)
-        if sku in self.error_by_key:
-            raise self.error_by_key[sku]
-        return self.by_key.get(sku, {"stock": []})
+            self._in_flight += 1
+            self.peak_concurrency = max(self.peak_concurrency, self._in_flight)
+        try:
+            if self.delay:
+                time.sleep(self.delay)
+            if sku in self.error_by_key:
+                raise self.error_by_key[sku]
+            return self.by_key.get(sku, {"stock": []})
+        finally:
+            with self._lock:
+                self._in_flight -= 1
 
 
 def _resolve(org, items):
@@ -228,3 +234,39 @@ class FanOutStatusTests(TestCase):
         self.assertEqual(len(out), 4)
         # Sequential would be >= 1.2s; concurrent is one delay plus overhead.
         self.assertLess(elapsed, 0.9)
+
+    def test_respects_max_workers_bound(self):
+        # An implementation that ignored max_workers and submitted all 6 at
+        # once would pass every other test in this class; only a peak
+        # in-flight count catches it.
+        client = _FakeClient(delay=0.1)
+        items = [RequestedItem(sku=f"GHOST-{i}", is_barcode=False) for i in range(6)]
+        out = self._run(client, items, max_workers=2, deadline_seconds=5)
+        self.assertEqual(len(out), 6)
+        self.assertLessEqual(client.peak_concurrency, 2)
+
+    def test_unexpected_exception_does_not_fail_the_whole_batch(self):
+        # A non-ConsultWebExchangeError (a bad JSON body, a Fernet decrypt
+        # failure, httpx.InvalidURL, ...) must degrade only the one item,
+        # never escape _fetch_one and blow up the rest of the batch.
+        client = _FakeClient(
+            by_key={"GHOST": {"sku_name": "Found upstream", "stock": []}},
+            error_by_key={"ART-1": ValueError("boom")},
+        )
+        items = [
+            RequestedItem(sku="NOM-1", is_barcode=False),
+            RequestedItem(sku="GHOST", is_barcode=False),
+        ]
+        out = self._run(client, items)
+        self.assertEqual(out["NOM-1"].status, STATUS_UNAVAILABLE)
+        self.assertEqual(out["GHOST"].status, STATUS_OK)
+
+    def test_duplicate_requested_value_is_fetched_once(self):
+        client = _FakeClient({"ART-1": {"stock": [{"warehouse": "W1", "quantity": 3}]}})
+        items = [
+            RequestedItem(sku="NOM-1", is_barcode=False),
+            RequestedItem(sku="NOM-1", is_barcode=False),
+        ]
+        out = self._run(client, items)
+        self.assertEqual(len(client.calls), 1)
+        self.assertEqual(out["NOM-1"].status, STATUS_OK)

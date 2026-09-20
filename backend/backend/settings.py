@@ -289,9 +289,15 @@ POSTHOG_DASHBOARD_URL = os.environ.get('POSTHOG_DASHBOARD_URL', '')  # admin /an
 # 1C has no batch stock call, so POST /api/v1/product/stock/ fans out one
 # upstream call per SKU. The concurrency cap bounds OUR thread growth, not
 # 1C's load: it multiplies against the 8 concurrent request slots, so 8 here
-# means up to 64 in-flight HTTP threads per instance. Lower it if an instance
-# comes under memory pressure, or if an on-premise customer's 1C is slower
-# than ours.
+# puts roughly 64 in-flight HTTP threads per instance at any instant — that
+# is a floor, not a hard ceiling. fetch_stock_concurrently abandons (does
+# not wait for) workers still running past the deadline, so a slow call's
+# thread can outlive its own request by up to a full per-call budget
+# (~25s worst case); under sustained load the transient thread count can
+# run higher than the simple product above. Abandoning is deliberate — the
+# alternative is blowing the 60s router cutoff — so lower this if an
+# instance comes under memory pressure, or if an on-premise customer's 1C
+# is slower than ours.
 STOCK_FANOUT_CONCURRENCY = int(os.environ.get('STOCK_FANOUT_CONCURRENCY', '8'))
 STOCK_BATCH_MAX_ITEMS = int(os.environ.get('STOCK_BATCH_MAX_ITEMS', '50'))
 # The DigitalOcean router abandons a request after 60s and replaces our body
