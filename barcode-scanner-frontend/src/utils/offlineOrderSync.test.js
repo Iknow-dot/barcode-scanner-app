@@ -23,6 +23,16 @@ const OK = (data) => ({success: true, data, status: 200});
 const NET_FAIL = {success: false, error: 'Network Error', code: null, status: null};
 const HTTP_FAIL = {success: false, error: 'no stock', code: 'INSUFFICIENT_STOCK', status: 400};
 
+// Drains the microtask queue without resolving any pending promise, so a
+// test can inspect "has this mock been called yet" while another mock's
+// promise is deliberately left unresolved.
+const flushMicrotasks = async () => {
+    for (let i = 0; i < 5; i += 1) {
+        // eslint-disable-next-line no-await-in-loop
+        await Promise.resolve();
+    }
+};
+
 beforeEach(() => {
     jest.clearAllMocks();
     localStorage.clear();
@@ -71,16 +81,27 @@ test('barcode placeholder resolves product and prefers the user warehouse', asyn
 
 test('the catalog read and the stock call go out in parallel', async () => {
     enqueueOp(42, {type: 'add_item_barcode', tempId: 'tmp_a', barcode: '4870001', quantity: 1});
-    searchProduct.mockResolvedValue(OK({sku: 'S9', sku_name: 'T', article: 'A9', price: 1}));
+    // Leave searchProduct pending on purpose: a sequential implementation
+    // (`await searchProduct(); ...; await fetchStock();`) would not call
+    // fetchStock until this promise resolves, so it would still show zero
+    // calls below. Only a genuinely parallel `Promise.all([...])` invokes
+    // both before either settles.
+    let resolveSearch;
+    searchProduct.mockReturnValue(new Promise((resolve) => { resolveSearch = resolve; }));
     fetchStock.mockResolvedValue(OK({results: [{
         sku: '4870001', status: 'ok', stock: [{warehouse: 'W1', warehouse_name: 'Mine', quantity: 1}],
     }]}));
     orderService.rawAddOrderItem.mockResolvedValue(OK(ORDER));
 
-    await syncOrder(42, {userWarehouses: [{code: 'W1'}]});
+    const syncPromise = syncOrder(42, {userWarehouses: [{code: 'W1'}]});
+    await flushMicrotasks();
+
+    expect(fetchStock).toHaveBeenCalledTimes(1); // already fired, searchProduct still pending
+
+    resolveSearch(OK({sku: 'S9', sku_name: 'T', article: 'A9', price: 1}));
+    await syncPromise;
 
     expect(searchProduct).toHaveBeenCalledTimes(1);
-    expect(fetchStock).toHaveBeenCalledTimes(1);
 });
 
 test('a replica miss still resolves through the self-heal echo', async () => {
@@ -112,6 +133,47 @@ test('a catalog miss with no identity is reported as a failure and drained', asy
     // always been a `failures` array, never a `failed` count.
     expect(result.failures).toHaveLength(1);
     expect(getOps(42)).toHaveLength(0);
+});
+
+test('a stock-leg transport failure with a real catalog hit retains the op', async () => {
+    // Before the catalog/stock split this combination could not happen: one
+    // HTTP call carried both identity and stock, so a transport failure
+    // failed the whole thing and retained the op. Now the catalog leg can
+    // succeed while the stock leg alone drops on the network — that must
+    // still retain, not silently drop a queued sale line.
+    enqueueOp(42, {type: 'add_item_barcode', tempId: 'tmp_a', barcode: '4870001', quantity: 1});
+    searchProduct.mockResolvedValue(OK({sku: 'S9', sku_name: 'Thing', article: 'A9', price: 12}));
+    fetchStock.mockResolvedValue(NET_FAIL);
+
+    const result = await syncOrder(42, {userWarehouses: [{code: 'W1'}]});
+
+    expect(result.aborted).toBe(true);
+    expect(getOps(42)).toHaveLength(1); // retained, not dropped
+    expect(orderService.rawAddOrderItem).not.toHaveBeenCalled();
+});
+
+test('a transport failure on the catalog leg with no stock-echoed identity retains the op', async () => {
+    enqueueOp(42, {type: 'add_item_barcode', tempId: 'tmp_a', barcode: 'X', quantity: 1});
+    searchProduct.mockResolvedValue(NET_FAIL);
+    fetchStock.mockResolvedValue(OK({results: [{sku: 'X', status: 'not_found', stock: []}]}));
+
+    const result = await syncOrder(42, {userWarehouses: []});
+
+    expect(result.aborted).toBe(true);
+    expect(getOps(42)).toHaveLength(1); // retained, not dropped
+    expect(orderService.rawAddOrderItem).not.toHaveBeenCalled();
+});
+
+test('a transport failure on the stock leg with no catalog identity retains the op', async () => {
+    enqueueOp(42, {type: 'add_item_barcode', tempId: 'tmp_a', barcode: 'Y', quantity: 1});
+    searchProduct.mockResolvedValue({success: false, status: 404, code: 'PRODUCT_NOT_IN_CATALOG'});
+    fetchStock.mockResolvedValue(NET_FAIL);
+
+    const result = await syncOrder(42, {userWarehouses: []});
+
+    expect(result.aborted).toBe(true);
+    expect(getOps(42)).toHaveLength(1); // retained, not dropped
+    expect(orderService.rawAddOrderItem).not.toHaveBeenCalled();
 });
 
 test('HTTP failure drops the op but continues; network failure aborts', async () => {

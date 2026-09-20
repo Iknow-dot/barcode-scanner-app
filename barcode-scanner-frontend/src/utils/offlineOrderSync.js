@@ -29,7 +29,19 @@ const resolveBarcode = async (op, userWarehouses) => {
     // `warehouse` is the code and `warehouse_name` the display name — the
     // backend has never sent a `warehouse_code` on these rows.
     const row = stock.find((b) => mine.has(b.warehouse)) || stock[0];
-    if (!row) return {error: 'no sellable stock'};
+    if (!row) {
+        // `entry.stock` is `[]` both when the stock call gave a real answer
+        // (a successful `unavailable`/`not_found` row) and when it never
+        // answered at all (`firstStockEntry`'s DEGRADED fallback on a
+        // transport failure) — they look identical here. They are not the
+        // same: a real answer is this op's fate and should drop it (that
+        // retry contract is tracked separately, deliberately unchanged); a
+        // transport failure is not an answer, so it must retain the op for
+        // retry, exactly as the single combined call did before the catalog
+        // and stock lookups were split in two. Only that narrow distinction
+        // — transport failure vs. a real answer — belongs here.
+        return {error: 'no sellable stock', network: isNetworkError(stockResult)};
+    }
     return {
         payload: {
             sku: product.sku,
