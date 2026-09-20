@@ -1,10 +1,11 @@
 # backend/core/tests/test_product_stock.py
 import threading
 import time
+from unittest.mock import patch
 
 from django.test import TestCase
 
-from core.models import Product, ProductBarcode
+from core.models import Product, ProductBarcode, Warehouse
 from core.services.consult_web_exchange import ConsultWebExchangeError
 from core.services.stock_batch import (
     STATUS_NO_LOOKUP_KEY,
@@ -12,10 +13,12 @@ from core.services.stock_batch import (
     STATUS_OK,
     STATUS_UNAVAILABLE,
     RequestedItem,
+    fetch_stock_batch,
     fetch_stock_concurrently,
     resolve_lookup_keys,
 )
 from core.tests.common import _make_organization
+from users.models import User
 
 
 class ResolveLookupKeysTests(TestCase):
@@ -272,14 +275,6 @@ class FanOutStatusTests(TestCase):
         self.assertEqual(out["NOM-1"].status, STATUS_OK)
 
 
-from decimal import Decimal
-from unittest.mock import patch
-
-from core.services.stock_batch import fetch_stock_batch
-from core.models import Warehouse
-from users.models import User
-
-
 class SelfHealTests(TestCase):
     @classmethod
     def setUpTestData(cls):
@@ -313,6 +308,23 @@ class SelfHealTests(TestCase):
         fake = _FakeClient({"BC-NEW": {"sku_name": "By barcode", "article": "A8", "stock": []}})
         self._batch(fake, [RequestedItem(sku="BC-NEW", is_barcode=True)])
         saved = Product.objects.get(organization=self.org, sku="BC-NEW")
+        self.assertTrue(ProductBarcode.objects.filter(product=saved, barcode="BC-NEW").exists())
+
+    def test_self_heal_uses_1cs_sku_not_the_requested_value(self):
+        # `resolved_sku = payload.get("sku") or item.requested` -- every
+        # other fixture in this class omits "sku", so only the fallback
+        # ever ran. Here 1C answers with an explicit sku that differs from
+        # the scanned barcode, which is the case the fallback exists for.
+        fake = _FakeClient({"BC-NEW": {
+            "sku": "NOM-99", "sku_name": "From 1C", "article": "A7", "stock": [],
+        }})
+        [row] = self._batch(fake, [RequestedItem(sku="BC-NEW", is_barcode=True)])
+        self.assertEqual(row["product"]["sku"], "NOM-99")
+        saved = Product.objects.get(organization=self.org, sku="NOM-99")
+        self.assertEqual(saved.name, "From 1C")
+        self.assertFalse(Product.objects.filter(organization=self.org, sku="BC-NEW").exists())
+        # The scanned value was a barcode, not 1C's sku -- the barcode row
+        # must still be attached to the product 1C actually identified.
         self.assertTrue(ProductBarcode.objects.filter(product=saved, barcode="BC-NEW").exists())
 
     def test_replica_hit_is_not_echoed_as_a_product(self):
@@ -362,6 +374,24 @@ class SelfHealTests(TestCase):
         self._batch(fake, [RequestedItem(sku="NOM-1", is_barcode=False)], [])
         self.assertEqual(fake.calls[0][2], "")
 
+    def test_requesting_only_inaccessible_warehouses_currently_widens_to_all(self):
+        # Pins a known quirk inherited verbatim from the pre-split view
+        # (core/views/products.py, which has the same "" fallback guarded on
+        # the requested codes rather than the tenancy-filtered queryset): a
+        # request naming ONLY warehouse codes this user is not assigned to
+        # filters `selected` down to empty too, so the join is still "" --
+        # and "" means "all warehouses" to 1C. That is a genuine intra-org
+        # authorization weakness, tracked as its own ticket. This test is
+        # not an endorsement of the behaviour -- it exists so a future
+        # change to it is a conscious, reviewed one, not an accidental
+        # side effect of some other refactor.
+        Product.objects.create(
+            organization=self.org, sku="NOM-1", article="ART-1", name="Held", is_active=True,
+        )
+        fake = _FakeClient({"ART-1": {"stock": []}})
+        self._batch(fake, [RequestedItem(sku="NOM-1", is_barcode=False)], ["NOT-MINE"])
+        self.assertEqual(fake.calls[0][2], "")
+
     def test_results_follow_request_order(self):
         fake = _FakeClient()
         items = [RequestedItem(sku=f"G{i}", is_barcode=False) for i in range(3)]
@@ -371,3 +401,24 @@ class SelfHealTests(TestCase):
     def test_empty_item_list_returns_no_results(self):
         fake = _FakeClient()
         self.assertEqual(self._batch(fake, []), [])
+
+    def test_duplicate_miss_is_healed_once(self):
+        # Two RequestedItems for the same missed sku share one StockOutcome
+        # (phase B already dedupes the upstream call); apply_self_heal must
+        # not repeat the update_or_create/get_or_create round trip for the
+        # second duplicate.
+        fake = _FakeClient({"GHOST": {"sku_name": "Discovered", "article": "A9", "stock": []}})
+        items = [
+            RequestedItem(sku="GHOST", is_barcode=False),
+            RequestedItem(sku="GHOST", is_barcode=False),
+        ]
+        with patch(
+            "core.services.stock_batch.Product.objects.update_or_create",
+            wraps=Product.objects.update_or_create,
+        ) as mock_upsert:
+            rows = self._batch(fake, items)
+        self.assertEqual(mock_upsert.call_count, 1)
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(rows[0]["product"]["sku_name"], "Discovered")
+        self.assertEqual(rows[1]["product"]["sku_name"], "Discovered")
+        self.assertEqual(Product.objects.filter(organization=self.org, sku="GHOST").count(), 1)

@@ -248,11 +248,22 @@ def apply_self_heal(organization, resolved: list[ResolvedItem], outcomes: dict[s
 
     ``get_stock_and_prices`` is what returns the data the heal writes, which is
     why this belongs to the stock path rather than the catalog one.
+
+    A duplicate requested value in ``resolved`` (the same handling
+    ``fetch_stock_concurrently`` already gives phase B) shares one
+    ``StockOutcome`` instance across every duplicate, keyed by
+    ``requested`` -- so healing it once and skipping the rest is enough:
+    the mutation on the shared outcome is visible to every duplicate
+    already, this only avoids redundant identical DB round trips.
     """
+    healed: set[str] = set()
     for item in resolved:
         outcome = outcomes.get(item.requested)
         if item.product is not None or outcome is None or outcome.status != STATUS_OK:
             continue
+        if item.requested in healed:
+            continue
+        healed.add(item.requested)
         payload = outcome.data or {}
         resolved_sku = payload.get("sku") or item.requested
         img_urls = payload.get("img_url") or []
@@ -301,8 +312,17 @@ def fetch_stock_batch(user, items: list[RequestedItem], warehouse_codes: list[st
     if not items:
         return []
 
-    # Scoping the codes through the user's own warehouses is a tenancy control,
-    # not just a 1C parameter. An empty selection means "all warehouses".
+    # Scoping the codes through the user's own warehouses is a tenancy
+    # control, not just a 1C parameter: an empty request means "all
+    # warehouses". Sharp edge, preserved deliberately from the pre-split
+    # view rather than a considered design: the guard below is on the
+    # REQUESTED codes, not on `selected` (the tenancy-filtered queryset), so
+    # a request naming ONLY codes the user lacks also filters `selected`
+    # down to empty -- the join is still "" and therefore ALSO widens to
+    # every warehouse instead of none. See
+    # test_requesting_only_inaccessible_warehouses_currently_widens_to_all,
+    # which pins this as a known quirk, not an endorsement; it is tracked as
+    # its own ticket rather than fixed silently inside this refactor.
     selected = user.warehouses.filter(code__in=warehouse_codes)
     warehouses = ",".join(selected.values_list("code", flat=True)) if warehouse_codes else ""
 
