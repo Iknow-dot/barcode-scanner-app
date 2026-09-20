@@ -4,10 +4,10 @@ import groupItemsBySku from './groupItemsBySku';
 
 /**
  * Live free stock per product for the cart's stock captions and warnings:
- * one lookup per SKU while the sheet is open, as each product card used to
- * make on mount. Returns {[sku]: {[warehouseCode]: quantity}}; a failed
- * lookup leaves its SKU out, so its rows show no caption. Closing the sheet
- * forgets everything, so the next opening asks again.
+ * ONE batch request covering every distinct SKU while the sheet is open.
+ * Returns {[sku]: {[warehouseCode]: quantity}}; a SKU the backend could not
+ * resolve is left out, so its rows show no caption rather than a false zero.
+ * Closing the sheet forgets everything, so the next opening asks again.
  */
 const useSkuStock = (items, active) => {
     const [stockBySku, setStockBySku] = useState({});
@@ -23,34 +23,46 @@ const useSkuStock = (items, active) => {
             }
             return;
         }
+
+        const groups = groupItemsBySku(items || [])
+            .filter((group) => !requestedRef.current.has(group.sku));
+        if (groups.length === 0) return;
+        groups.forEach((group) => requestedRef.current.add(group.sku));
+
+        // GetStockAndPrices keys off the article (or a barcode); the canonical
+        // sku is not always a valid lookup key. Results come back keyed by the
+        // value we asked for, so map that back to the cart's sku.
+        const skuByLookupKey = new Map(
+            groups.map((group) => [group.article || group.sku, group.sku]),
+        );
         const generation = generationRef.current;
-        groupItemsBySku(items || []).forEach((group) => {
-            if (requestedRef.current.has(group.sku)) return;
-            requestedRef.current.add(group.sku);
-            // GetStockAndPrices keys off the article (or a barcode); the
-            // canonical sku is not always a valid lookup key.
-            const lookupKey = group.article || group.sku;
-            productService.searchProduct({
-                sku: lookupKey,
-                searchType: 'article',
-                warehouseCodes: [],
-                includeImages: false,
-            }).then((result) => {
-                if (generation !== generationRef.current) return;
-                if (result.success && Array.isArray(result.data?.stock)) {
-                    const byWarehouse = {};
-                    // Hide negative balances, as the product lookup does.
-                    result.data.stock
-                        .filter((entry) => (Number(entry.quantity) || 0) >= 0)
-                        .forEach((entry) => {
-                            byWarehouse[entry.warehouse] = Number(entry.quantity || 0);
-                        });
-                    setStockBySku((prev) => ({...prev, [group.sku]: byWarehouse}));
-                } else {
-                    // eslint-disable-next-line no-console
-                    console.warn('[cart] stock fetch failed for', lookupKey, result);
-                }
+
+        productService.fetchStock({
+            items: [...skuByLookupKey.keys()].map((sku) => ({sku, isBarcode: false})),
+            warehouseCodes: [],
+        }).then((result) => {
+            if (generation !== generationRef.current) return;
+            if (!result.success || !Array.isArray(result.data?.results)) {
+                // eslint-disable-next-line no-console
+                console.warn('[cart] stock fetch failed', result);
+                return;
+            }
+            const next = {};
+            result.data.results.forEach((entry) => {
+                const sku = skuByLookupKey.get(entry.sku);
+                // Only `ok` carries a trustworthy list. A degraded entry is
+                // left out so its rows show no caption instead of a false zero.
+                if (!sku || entry.status !== 'ok') return;
+                const byWarehouse = {};
+                // Hide negative balances, as the product lookup does.
+                (entry.stock || [])
+                    .filter((row) => (Number(row.quantity) || 0) >= 0)
+                    .forEach((row) => {
+                        byWarehouse[row.warehouse] = Number(row.quantity || 0);
+                    });
+                next[sku] = byWarehouse;
             });
+            setStockBySku((prev) => ({...prev, ...next}));
         });
     }, [items, active]);
 

@@ -13,7 +13,7 @@ jest.mock('../../api', () => ({
         removeOrderItem: jest.fn(),
         addOrderItem: jest.fn(),
     },
-    productService: {searchProduct: jest.fn()},
+    productService: {fetchStock: jest.fn()},
 }));
 
 const en = translations.en;
@@ -92,7 +92,7 @@ describe('OrderSheet', () => {
         jest.clearAllMocks();
         // Stock lookups stay pending unless a test answers them, so no state
         // update lands after a test has finished.
-        productService.searchProduct.mockImplementation(() => new Promise(() => {}));
+        productService.fetchStock.mockImplementation(() => new Promise(() => {}));
     });
 
     afterEach(() => {
@@ -100,9 +100,14 @@ describe('OrderSheet', () => {
     });
 
     it('opens on the cart step with the client and products by warehouse', async () => {
-        productService.searchProduct.mockResolvedValue({
+        productService.fetchStock.mockResolvedValue({
             success: true,
-            data: {stock: [{warehouse: 'W1', quantity: '9'}]},
+            data: {
+                results: [
+                    {sku: 'MG-2814', status: 'ok', stock: [{warehouse: 'W1', quantity: 9}]},
+                    {sku: 'EK-1700', status: 'ok', stock: [{warehouse: 'W1', quantity: 9}]},
+                ],
+            },
         });
         renderSheet();
         const sheet = screen.getByRole('dialog', {name: en.cart});
@@ -113,9 +118,10 @@ describe('OrderSheet', () => {
         expect(within(vake).getByText('Granite pan')).toBeInTheDocument();
         expect(within(vake).getByText('Kettle')).toBeInTheDocument();
         await waitFor(() => expect(within(vake).getAllByText(`${en.stockRemaining}: 9`)).toHaveLength(2));
-        expect(productService.searchProduct).toHaveBeenCalledTimes(2);
-        expect(productService.searchProduct).toHaveBeenCalledWith({
-            sku: 'MG-2814', searchType: 'article', warehouseCodes: [], includeImages: false,
+        expect(productService.fetchStock).toHaveBeenCalledTimes(1);
+        expect(productService.fetchStock).toHaveBeenCalledWith({
+            items: [{sku: 'MG-2814', isBarcode: false}, {sku: 'EK-1700', isBarcode: false}],
+            warehouseCodes: [],
         });
     });
 

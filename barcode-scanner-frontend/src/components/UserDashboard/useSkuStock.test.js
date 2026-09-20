@@ -1,86 +1,80 @@
-import {act, renderHook} from '@testing-library/react';
-import useSkuStock from './useSkuStock';
+import {renderHook, waitFor} from '@testing-library/react';
 import {productService} from '../../api';
+import useSkuStock from './useSkuStock';
 
-jest.mock('../../api', () => ({
-    productService: {searchProduct: jest.fn()},
-}));
+jest.mock('../../api', () => ({productService: {fetchStock: jest.fn()}}));
 
-const item = (overrides) => ({
-    id: 1,
-    sku: 'PAN',
-    article: 'MG-2814',
-    sku_name: 'Granite pan',
-    warehouse_code: 'W1',
-    warehouse_name: 'Vake',
-    quantity: '2',
-    price: '89.90',
-    effective_price: '89.90',
-    discount_percent: '0.00',
-    line_total: '179.80',
-    unit: 'piece',
-    ...overrides,
+const ITEMS = [
+    {sku: 'S1', article: 'MG-2814', warehouse_code: 'W1', quantity: 1},
+    {sku: 'S1', article: 'MG-2814', warehouse_code: 'W2', quantity: 2},
+    {sku: 'S2', article: 'MG-9', warehouse_code: 'W1', quantity: 1},
+];
+
+const OK = (results) => Promise.resolve({success: true, data: {results}});
+
+beforeEach(() => productService.fetchStock.mockReset());
+
+test('asks for every distinct SKU in ONE request', async () => {
+    productService.fetchStock.mockReturnValue(OK([
+        {sku: 'MG-2814', status: 'ok', stock: [{warehouse: 'W1', quantity: 9}]},
+        {sku: 'MG-9', status: 'ok', stock: [{warehouse: 'W1', quantity: 3}]},
+    ]));
+
+    const {result} = renderHook(() => useSkuStock(ITEMS, true));
+
+    await waitFor(() => expect(result.current.S1).toBeDefined());
+    expect(productService.fetchStock).toHaveBeenCalledTimes(1);
+    expect(productService.fetchStock).toHaveBeenCalledWith({
+        items: [{sku: 'MG-2814', isBarcode: false}, {sku: 'MG-9', isBarcode: false}],
+        warehouseCodes: [],
+    });
+    expect(result.current).toEqual({S1: {W1: 9}, S2: {W1: 3}});
 });
 
-describe('useSkuStock', () => {
-    beforeEach(() => {
-        jest.clearAllMocks();
+test('maps results back by the requested article, not the sku', async () => {
+    productService.fetchStock.mockReturnValue(OK([
+        {sku: 'MG-2814', status: 'ok', stock: [{warehouse: 'W2', quantity: 4}]},
+    ]));
+    const {result} = renderHook(() => useSkuStock([ITEMS[0]], true));
+    await waitFor(() => expect(result.current.S1).toEqual({W2: 4}));
+});
+
+test('a degraded item is left undefined rather than shown as zero', async () => {
+    productService.fetchStock.mockReturnValue(OK([
+        {sku: 'MG-2814', status: 'unavailable', stock: []},
+    ]));
+    const {result} = renderHook(() => useSkuStock([ITEMS[0]], true));
+    await waitFor(() => expect(productService.fetchStock).toHaveBeenCalled());
+    expect(result.current.S1).toBeUndefined();
+});
+
+test('negative balances are hidden', async () => {
+    productService.fetchStock.mockReturnValue(OK([
+        {sku: 'MG-2814', status: 'ok', stock: [{warehouse: 'W1', quantity: -2}, {warehouse: 'W2', quantity: 5}]},
+    ]));
+    const {result} = renderHook(() => useSkuStock([ITEMS[0]], true));
+    await waitFor(() => expect(result.current.S1).toEqual({W2: 5}));
+});
+
+test('a whole-request failure leaves every sku undefined and does not throw', async () => {
+    productService.fetchStock.mockReturnValue(Promise.resolve({success: false, status: null}));
+    const {result} = renderHook(() => useSkuStock(ITEMS, true));
+    await waitFor(() => expect(productService.fetchStock).toHaveBeenCalled());
+    expect(result.current).toEqual({});
+});
+
+test('closing forgets, reopening asks again', async () => {
+    productService.fetchStock.mockReturnValue(OK([]));
+    const {rerender} = renderHook(({active}) => useSkuStock(ITEMS, active), {
+        initialProps: {active: true},
     });
+    await waitFor(() => expect(productService.fetchStock).toHaveBeenCalledTimes(1));
+    rerender({active: false});
+    rerender({active: true});
+    await waitFor(() => expect(productService.fetchStock).toHaveBeenCalledTimes(2));
+});
 
-    it('fetches each sku once while active and exposes stock by warehouse', async () => {
-        productService.searchProduct.mockResolvedValue({
-            success: true,
-            data: {stock: [{warehouse: 'W1', quantity: '9'}, {warehouse: 'W2', quantity: '3'}]},
-        });
-
-        const {result, rerender} = renderHook(
-            ({items, active}) => useSkuStock(items, active),
-            {initialProps: {items: [item()], active: true}},
-        );
-        await act(async () => {});
-
-        expect(result.current.PAN).toEqual({W1: 9, W2: 3});
-        expect(productService.searchProduct).toHaveBeenCalledTimes(1);
-        expect(productService.searchProduct).toHaveBeenCalledWith({
-            sku: 'MG-2814', searchType: 'article', warehouseCodes: [], includeImages: false,
-        });
-
-        // A re-render with the same (already-requested) sku must not refetch.
-        rerender({items: [item()], active: true});
-        await act(async () => {});
-        expect(productService.searchProduct).toHaveBeenCalledTimes(1);
-    });
-
-    it('forgets everything on close, so reopening refetches', async () => {
-        productService.searchProduct.mockResolvedValue({
-            success: true,
-            data: {stock: [{warehouse: 'W1', quantity: '5'}]},
-        });
-
-        const {result, rerender} = renderHook(
-            ({items, active}) => useSkuStock(items, active),
-            {initialProps: {items: [item()], active: true}},
-        );
-        await act(async () => {});
-        expect(result.current.PAN).toEqual({W1: 5});
-
-        rerender({items: [item()], active: false});
-        expect(result.current).toEqual({});
-
-        rerender({items: [item()], active: true});
-        await act(async () => {});
-        expect(productService.searchProduct).toHaveBeenCalledTimes(2);
-        expect(result.current.PAN).toEqual({W1: 5});
-    });
-
-    it('leaves a failed lookup with no stock for that sku, without throwing', async () => {
-        productService.searchProduct.mockResolvedValue({success: false, error: 'nope'});
-        const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
-
-        const {result} = renderHook(() => useSkuStock([item()], true));
-        await act(async () => {});
-
-        expect(result.current.PAN).toBeUndefined();
-        warn.mockRestore();
-    });
+test('an inactive sheet asks for nothing', () => {
+    renderHook(() => useSkuStock(ITEMS, false));
+    expect(productService.fetchStock).not.toHaveBeenCalled();
 });
