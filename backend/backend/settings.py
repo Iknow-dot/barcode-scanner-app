@@ -285,6 +285,20 @@ PHOTON_USER_AGENT = (
 FERNET_KEY = os.environ.get('FERNET_KEY')  # Fernet key for Organization.web_service_password
 POSTHOG_DASHBOARD_URL = os.environ.get('POSTHOG_DASHBOARD_URL', '')  # admin /analytics/ embed
 
+# --- Batch live-stock fan-out -------------------------------------------
+# 1C has no batch stock call, so POST /api/v1/product/stock/ fans out one
+# upstream call per SKU. The concurrency cap bounds OUR thread growth, not
+# 1C's load: it multiplies against the 8 concurrent request slots, so 8 here
+# means up to 64 in-flight HTTP threads per instance. Lower it if an instance
+# comes under memory pressure, or if an on-premise customer's 1C is slower
+# than ours.
+STOCK_FANOUT_CONCURRENCY = int(os.environ.get('STOCK_FANOUT_CONCURRENCY', '8'))
+STOCK_BATCH_MAX_ITEMS = int(os.environ.get('STOCK_BATCH_MAX_ITEMS', '50'))
+# The DigitalOcean router abandons a request after 60s and replaces our body
+# with its own error page, so the fan-out must finish well inside that.
+STOCK_BATCH_DEADLINE_SECONDS = float(os.environ.get('STOCK_BATCH_DEADLINE_SECONDS', '25'))
+STOCK_BATCH_READ_TIMEOUT_SECONDS = float(os.environ.get('STOCK_BATCH_READ_TIMEOUT_SECONDS', '10'))
+
 # Sentry. Absent DSN means no client is installed at all — no network calls
 # from local development, `manage.py test`, or CI, which run with a bare
 # environment on purpose. `backend.sentry` imports no Django, so calling it

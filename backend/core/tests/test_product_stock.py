@@ -1,8 +1,22 @@
 # backend/core/tests/test_product_stock.py
+import threading
+import time
+from unittest.mock import patch
+
 from django.test import TestCase
 
 from core.models import Product, ProductBarcode
-from core.services.stock_batch import RequestedItem, resolve_lookup_keys
+from core.services.consult_web_exchange import ConsultWebExchangeError
+from core.services.stock_batch import (
+    STATUS_NO_LOOKUP_KEY,
+    STATUS_NOT_FOUND,
+    STATUS_OK,
+    STATUS_UNAVAILABLE,
+    RequestedItem,
+    StockOutcome,
+    fetch_stock_concurrently,
+    resolve_lookup_keys,
+)
 from core.tests.common import _make_organization
 
 
@@ -97,3 +111,120 @@ class ResolveLookupKeysTests(TestCase):
         # prefetched barcodes — regardless of how many items are in the batch.
         with self.assertNumQueries(3):
             resolve_lookup_keys(self.org, items)
+
+
+class _FakeClient:
+    """Stands in for ConsultWebExchangeClient in the pool threads."""
+
+    def __init__(self, by_key=None, error_by_key=None, delay=0.0):
+        self.by_key = by_key or {}
+        self.error_by_key = error_by_key or {}
+        self.delay = delay
+        self.calls = []
+        self._lock = threading.Lock()
+
+    def get_stock_and_prices(self, sku, *, is_barcode, warehouses):
+        with self._lock:
+            self.calls.append((sku, is_barcode, warehouses))
+        if self.delay:
+            time.sleep(self.delay)
+        if sku in self.error_by_key:
+            raise self.error_by_key[sku]
+        return self.by_key.get(sku, {"stock": []})
+
+
+def _resolve(org, items):
+    return resolve_lookup_keys(org, items)
+
+
+class FanOutStatusTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.org = _make_organization()
+        cls.held = Product.objects.create(
+            organization=cls.org, sku="NOM-1", article="ART-1", name="Held", is_active=True,
+        )
+        cls.unmatchable = Product.objects.create(
+            organization=cls.org, sku="NOM-3", article="", name="Unmatchable", is_active=True,
+        )
+
+    def _run(self, client, items, **kwargs):
+        kwargs.setdefault("deadline_seconds", 5)
+        kwargs.setdefault("max_workers", 4)
+        return fetch_stock_concurrently(client, _resolve(self.org, items), "", **kwargs)
+
+    def test_replica_hit_with_stock_is_ok(self):
+        client = _FakeClient({"ART-1": {"stock": [{"warehouse": "W1", "quantity": 3}]}})
+        out = self._run(client, [RequestedItem(sku="NOM-1", is_barcode=False)])
+        self.assertEqual(out["NOM-1"].status, STATUS_OK)
+        self.assertEqual(out["NOM-1"].data["stock"], [{"warehouse": "W1", "quantity": 3}])
+
+    def test_empty_stock_on_a_hit_is_ok_not_not_found(self):
+        client = _FakeClient({"ART-1": {"stock": []}})
+        out = self._run(client, [RequestedItem(sku="NOM-1", is_barcode=False)])
+        self.assertEqual(out["NOM-1"].status, STATUS_OK)
+
+    def test_unmatchable_product_is_never_sent_upstream(self):
+        client = _FakeClient()
+        out = self._run(client, [RequestedItem(sku="NOM-3", is_barcode=False)])
+        self.assertEqual(out["NOM-3"].status, STATUS_NO_LOOKUP_KEY)
+        self.assertEqual(client.calls, [])
+
+    def test_replica_hit_whose_1c_lookup_is_not_found_degrades_to_unavailable(self):
+        client = _FakeClient(error_by_key={"ART-1": ConsultWebExchangeError(
+            code="PRODUCT_NOT_FOUND", detail="nope", http_status=404,
+        )})
+        out = self._run(client, [RequestedItem(sku="NOM-1", is_barcode=False)])
+        self.assertEqual(out["NOM-1"].status, STATUS_UNAVAILABLE)
+
+    def test_replica_miss_whose_1c_lookup_is_not_found_is_not_found(self):
+        client = _FakeClient(error_by_key={"GHOST": ConsultWebExchangeError(
+            code="PRODUCT_NOT_FOUND", detail="nope", http_status=404,
+        )})
+        out = self._run(client, [RequestedItem(sku="GHOST", is_barcode=False)])
+        self.assertEqual(out["GHOST"].status, STATUS_NOT_FOUND)
+
+    def test_replica_miss_with_a_data_less_201_is_not_found(self):
+        client = _FakeClient({"GHOST": {"stock": []}})
+        out = self._run(client, [RequestedItem(sku="GHOST", is_barcode=False)])
+        self.assertEqual(out["GHOST"].status, STATUS_NOT_FOUND)
+
+    def test_replica_miss_with_identity_is_ok(self):
+        client = _FakeClient({"GHOST": {"sku_name": "Found upstream", "article": "A9", "stock": []}})
+        out = self._run(client, [RequestedItem(sku="GHOST", is_barcode=False)])
+        self.assertEqual(out["GHOST"].status, STATUS_OK)
+
+    def test_transport_error_is_unavailable(self):
+        client = _FakeClient(error_by_key={"ART-1": ConsultWebExchangeError(
+            code="EXTERNAL_SERVICE_TIMEOUT", detail="slow", http_status=504,
+        )})
+        out = self._run(client, [RequestedItem(sku="NOM-1", is_barcode=False)])
+        self.assertEqual(out["NOM-1"].status, STATUS_UNAVAILABLE)
+
+    def test_every_requested_value_gets_an_outcome(self):
+        client = _FakeClient()
+        items = [
+            RequestedItem(sku="NOM-1", is_barcode=False),
+            RequestedItem(sku="NOM-3", is_barcode=False),
+            RequestedItem(sku="GHOST", is_barcode=False),
+        ]
+        out = self._run(client, items)
+        self.assertEqual(set(out), {"NOM-1", "NOM-3", "GHOST"})
+
+    def test_deadline_degrades_unfinished_items_to_unavailable(self):
+        client = _FakeClient(delay=1.0)
+        out = self._run(
+            client, [RequestedItem(sku="NOM-1", is_barcode=False)],
+            deadline_seconds=0.05,
+        )
+        self.assertEqual(out["NOM-1"].status, STATUS_UNAVAILABLE)
+
+    def test_calls_run_concurrently(self):
+        client = _FakeClient(delay=0.3)
+        items = [RequestedItem(sku=f"GHOST-{i}", is_barcode=False) for i in range(4)]
+        started = time.monotonic()
+        out = self._run(client, items, max_workers=4, deadline_seconds=5)
+        elapsed = time.monotonic() - started
+        self.assertEqual(len(out), 4)
+        # Sequential would be >= 1.2s; concurrent is one delay plus overhead.
+        self.assertLess(elapsed, 0.9)

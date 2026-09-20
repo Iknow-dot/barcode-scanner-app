@@ -93,9 +93,14 @@ class ConsultWebExchangeClient:
     PATH_PREFIX = "HS/ConsultWebExchange"
     DEFAULT_TIMEOUT = 15.0  # the read budget; core.services.timeouts fixes the rest
 
-    def __init__(self, organization, *, timeout: float | None = None):
+    def __init__(self, organization, *, timeout: float | None = None, http_client=None):
         self.organization = organization
         self.timeout = timeout if timeout is not None else self.DEFAULT_TIMEOUT
+        # Optional shared httpx.Client so a batch fan-out reuses one connection
+        # pool instead of shaking hands once per SKU. httpx.Client is
+        # thread-safe for concurrent requests. Every other caller leaves this
+        # None and keeps the previous one-shot behaviour.
+        self._http_client = http_client
 
     # -- url / auth --------------------------------------------------------
 
@@ -141,6 +146,16 @@ class ConsultWebExchangeClient:
             request_headers.update(headers)
 
         try:
+            if self._http_client is not None:
+                return self._http_client.request(
+                    method,
+                    url,
+                    auth=self._auth(),
+                    headers=request_headers,
+                    json=json,
+                    params=params,
+                    timeout=budget(self.timeout),
+                )
             return httpx.request(
                 method,
                 url,
