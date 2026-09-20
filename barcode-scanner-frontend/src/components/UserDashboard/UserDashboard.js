@@ -31,7 +31,8 @@ import IosIcon from '../Common/IosIcon';
 import IosSheet from '../Common/IosSheet';
 import {LAYER_RESULT_SHEET} from '../../theme/layers';
 import groupItemsBySku from './groupItemsBySku';
-import {hasProductResult} from './stockStatus';
+import {firstStockEntry, productInfoFrom, scanVerdict} from './scanLookup';
+import {hasProductResult, STOCK_STATUS_PENDING} from './stockStatus';
 import inheritFromGroup from './inheritFromGroup';
 import formatInsufficientStock from './insufficientStock';
 import formatConfirmError from './confirmError';
@@ -272,6 +273,12 @@ const UserDashboard = ({isDark = false, onToggleTheme}) => {
         refresh: refreshSnapshot,
     } = useDailySnapshot(currentUserId);
     const isSearchingRef = useRef(false);
+    // The catalog read and the stock call settle independently, so the
+    // re-entrancy ref above is not enough on its own: this counts scans so a
+    // late answer from an earlier one can be recognised and dropped.
+    const searchGenerationRef = useRef(0);
+    // Catalog answered "not in the replica" while the 1C lookup is still out.
+    const [catalogMissed, setCatalogMissed] = useState(false);
     // Remembers the last successful search so the "show other warehouses"
     // button can re-run it with the warehouse filter dropped.
     const lastSearchRef = useRef(null);
@@ -297,105 +304,100 @@ const UserDashboard = ({isDark = false, onToggleTheme}) => {
         }
         if (isSearchingRef.current) return;
         isSearchingRef.current = true;
+        // Two independent promises are now in flight, so a re-entrancy guard is
+        // not enough: a slow stock answer from the previous scan must not land
+        // on this one.
+        searchGenerationRef.current += 1;
+        const generation = searchGenerationRef.current;
+        const isStale = () => generation !== searchGenerationRef.current;
+
         setLoading(true);
+        setBalances([]);
+        setStockStatus(STOCK_STATUS_PENDING);
+        setCatalogMissed(false);
+        // Clear the previous product, so a replica miss cannot leave the last
+        // scan's card on screen underneath the "checking 1C" notice.
+        setProductInfo({sku_name: '', article: '', price: '', images: []});
+
+        const warehouseCodes = allWarehouses ? [] : userWarehouses.map((warehouse) => warehouse.code);
+        const catalogPromise = productService.searchProduct({sku: search, searchType, recordScan});
+        const stockPromise = productService.fetchStock({
+            items: [{sku: search, isBarcode: searchType === 'barcode'}],
+            warehouseCodes,
+        });
+
+        // Render the card the moment the replica answers — do not wait on 1C.
+        // Either way the sheet opens now: on a miss it holds the "checking 1C"
+        // notice, which would otherwise have nowhere to render, and the
+        // not-found branch below closes it again if 1C knows nothing either.
+        catalogPromise.then((catalogResult) => {
+            if (isStale()) return;
+            if (catalogResult.success) {
+                setProductInfo(productInfoFrom({
+                    catalogData: catalogResult.data, stockEntry: null, search, searchType,
+                }));
+            } else {
+                setCatalogMissed(true);
+            }
+            setActiveTab('scan');
+            setProductSheetOpen(true);
+        });
 
         try {
-            const warehouseCodes = allWarehouses
-                ? []
-                : userWarehouses.map(warehouse => warehouse.code);
+            const [catalogResult, stockResult] = await Promise.all([catalogPromise, stockPromise]);
+            if (isStale()) return;
 
-            const result = await productService.searchProduct({
-                sku: search,
-                searchType,
-                warehouseCodes,
-                recordScan,
-            });
+            const stockEntry = firstStockEntry(stockResult);
+            const verdict = scanVerdict({catalogResult, stockEntry});
 
-            if (result.success && result.data?.stock) {
-                playFoundSound();
-                // Drop warehouses with a negative balance — they're an upstream
-                // accounting artefact, not stock the user can actually sell.
-                const visibleStock = (result.data.stock || []).filter(
-                    (b) => (Number(b.quantity) || 0) >= 0
-                );
-                setBalances(visibleStock);
-                // Live 1C stock lookup failed upstream — the product itself was
-                // resolved (locally or via 1C), so still show it, just flag that
-                // the balance list can't be trusted right now.
-                setStockStatus(result.data.stock_status || '');
-                logScanHistory({
-                    search,
-                    searchType,
-                    found: true,
-                    sku: result.data.sku,
-                    sku_name: result.data.sku_name,
-                    price: result.data.price,
-                    total_qty: visibleStock.reduce(
-                        (sum, b) => sum + (Number(b.quantity) || 0), 0,
-                    ),
-                });
-                refreshSnapshot();
-                setProductInfo({
-                    sku_name: result.data.sku_name,
-                    article: result.data.article,
-                    price: result.data.price,
-                    sku: result.data.sku,
-                    // Per-lookup-key unit from 1C (a package barcode and the
-                    // article can report different units for one product).
-                    unit: result.data.unit || '',
-                    images: result.data.images || [],
-                    // Shown after the article on the product sheet.
-                    barcode: searchType === 'barcode' ? search : '',
-                });
-                lastSearchRef.current = {search, searchType};
-                setSearchedAllWarehouses(!!allWarehouses);
-                setOthersCollapsed(!allWarehouses);
-                // Show the product sheet over Home on the scan tab.
-                setActiveTab('scan');
-                setProductSheetOpen(true);
-            } else {
+            if (verdict === 'not_found') {
                 playNotFoundSound();
-                // A failed re-run (other warehouses) must not leave an empty
-                // sheet open.
                 setProductSheetOpen(false);
                 setBalances([]);
                 setProductInfo({sku_name: '', article: '', price: '', images: []});
                 setSearchedAllWarehouses(false);
                 setStockStatus('');
-
-                const isExternalServiceError = result.code && result.code.startsWith('EXTERNAL_SERVICE_');
-
-                if (!result.success) {
-                    const errorMessages = {
-                        'PRODUCT_NOT_FOUND': t.productNotFound,
-                        'EXTERNAL_SERVICE_TIMEOUT': t.externalServiceTimeout,
-                        'EXTERNAL_SERVICE_UNAVAILABLE': t.externalServiceUnavailable,
-                        'EXTERNAL_SERVICE_ERROR': t.externalServiceError,
-                        'EXTERNAL_SERVICE_UNAUTHORIZED': t.externalServiceUnauthorized,
-                    };
-
-                    const title = isExternalServiceError ? t.webServiceError : t.error;
-                    const errorMessage = errorMessages[result.code] || t.productSearchError;
-                    notify.error(title, errorMessage);
-                } else {
-                    notify.warning(t.result, t.productNotFoundOrNoBalance);
-                }
-
-                if (!isExternalServiceError) {
-                    logScanHistory({
-                        search,
-                        searchType,
-                        found: false,
-                        sku: null,
-                        sku_name: null,
-                        price: null,
-                        total_qty: null,
-                    });
-                    refreshSnapshot();
-                }
+                notify.error(t.error, t.productNotFound);
+                logScanHistory({
+                    search, searchType, found: false,
+                    sku: null, sku_name: null, price: null, total_qty: null,
+                });
+                refreshSnapshot();
+                return;
             }
+
+            playFoundSound();
+            // Drop warehouses with a negative balance — they're an upstream
+            // accounting artefact, not stock the user can actually sell.
+            const visibleStock = (stockEntry.stock || []).filter(
+                (b) => (Number(b.quantity) || 0) >= 0,
+            );
+            setBalances(visibleStock);
+            // `ok` means the list is trustworthy, empty or not. Anything else
+            // flags that the balances can't be relied on right now.
+            setStockStatus(stockEntry.status === 'ok' ? '' : stockEntry.status);
+            setProductInfo(productInfoFrom({
+                catalogData: catalogResult.success ? catalogResult.data : null,
+                stockEntry, search, searchType,
+            }));
+            logScanHistory({
+                search, searchType, found: true,
+                sku: catalogResult.success ? catalogResult.data.sku : stockEntry.product?.sku,
+                sku_name: catalogResult.success ? catalogResult.data.sku_name : stockEntry.product?.sku_name,
+                price: catalogResult.success ? catalogResult.data.price : stockEntry.product?.price,
+                total_qty: visibleStock.reduce((sum, b) => sum + (Number(b.quantity) || 0), 0),
+            });
+            refreshSnapshot();
+            lastSearchRef.current = {search, searchType};
+            setSearchedAllWarehouses(!!allWarehouses);
+            setOthersCollapsed(!allWarehouses);
+            setActiveTab('scan');
+            setProductSheetOpen(true);
         } finally {
-            setLoading(false);
+            if (!isStale()) {
+                setLoading(false);
+                setCatalogMissed(false);
+            }
             isSearchingRef.current = false;
         }
     }, [userWarehouses, t, notify, refreshSnapshot]);
@@ -403,22 +405,37 @@ const UserDashboard = ({isDark = false, onToggleTheme}) => {
     const handleScanResult = useCallback((decodedText) => {
         setScannerOpen(false);
         handleSearch({
-            search: decodedText,
-            searchType: 'barcode',
-            allWarehouses,
-            fromScan: true,
-            recordScan: true,
+            search: decodedText, searchType: 'barcode',
+            allWarehouses, fromScan: true, recordScan: true,
         });
     }, [handleSearch, allWarehouses]);
 
-    // A re-run of the lookup already counted — deliberately no recordScan.
-    const handleShowOtherWarehouses = useCallback(() => {
+    // Only the balances change, so this no longer re-runs the catalog read and
+    // no longer rebuilds the product card — a failed re-run leaves the sheet
+    // open with what it already had. It is also a re-run of a lookup already
+    // counted, so still deliberately no recordScan.
+    const handleShowOtherWarehouses = useCallback(async () => {
         if (!lastSearchRef.current) return;
-        handleSearch({
-            ...lastSearchRef.current,
-            allWarehouses: true,
-        });
-    }, [handleSearch]);
+        const {search, searchType} = lastSearchRef.current;
+        setLoading(true);
+        try {
+            const result = await productService.fetchStock({
+                items: [{sku: search, isBarcode: searchType === 'barcode'}],
+                warehouseCodes: [],
+            });
+            const entry = firstStockEntry(result);
+            if (entry.status !== 'ok') {
+                notify.error(t.webServiceError, t.externalServiceUnavailable);
+                return;
+            }
+            setBalances((entry.stock || []).filter((b) => (Number(b.quantity) || 0) >= 0));
+            setStockStatus('');
+            setSearchedAllWarehouses(true);
+            setOthersCollapsed(false);
+        } finally {
+            setLoading(false);
+        }
+    }, [notify, t]);
 
     // Selecting a product in the Catalog tab (typeahead or category browse)
     // runs the same scan flow as an exact sku lookup; handleSearch's success
@@ -970,6 +987,7 @@ const UserDashboard = ({isDark = false, onToggleTheme}) => {
                 hasLastSearch={!!lastSearchRef.current}
                 othersExpanded={!othersCollapsed}
                 othersLoading={loading}
+                searchingUpstream={catalogMissed && loading}
                 onToggleOthers={handleToggleOthers}
                 adding={addingToOrder}
                 onAdd={handleProductSheetAdd}

@@ -5,7 +5,7 @@ import IosSheet from '../Common/IosSheet';
 import ProductImage from '../Common/ProductImage';
 import QuantityStepper from '../Common/QuantityStepper';
 import OfflineBanner from './OfflineBanner';
-import {isStockBlocked, stockStatusMessageKey} from './stockStatus';
+import {isStockBlocked, STOCK_STATUS_PENDING, stockStatusMessageKey} from './stockStatus';
 import {
     canAddToOrder,
     clampQuantity,
@@ -82,6 +82,7 @@ const ProductSheet = ({
     hasLastSearch,
     othersExpanded,
     othersLoading,
+    searchingUpstream,
     onToggleOthers,
     adding,
     onAdd,
@@ -199,17 +200,36 @@ const ProductSheet = ({
                 )}
             </div>
 
-            {view.notice === 'blocked' && (
-                <div className="if-notice is-warning" role="status">
-                    <span className="if-notice-icon"><IosIcon name="warn" size={20}/></span>
-                    <span>{t[stockStatusMessageKey(stockStatus)]}</span>
-                </div>
-            )}
-            {view.notice === 'empty' && (
+            {/* Exactly one notice, never a stack. The sheet now opens while the
+                1C call is still out, so "out of stock" — which productSheetView
+                returns for an empty balance list — would otherwise render
+                beside "checking 1C" or "checking stock", contradicting them:
+                an empty list we have not received yet is not an empty list. */}
+            {searchingUpstream ? (
                 <div className="if-notice" role="status">
-                    <span className="if-notice-icon"><IosIcon name="info" size={20}/></span>
-                    <span>{t.outOfStock}</span>
+                    <span className="if-notice-icon"><IosIcon name="search" size={20}/></span>
+                    <span>{t.catalogMissSearchingUpstream}</span>
                 </div>
+            ) : stockStatus === STOCK_STATUS_PENDING ? (
+                <div className="if-notice" role="status">
+                    <span className="if-notice-icon"><IosIcon name="clock" size={20}/></span>
+                    <span>{t.stockPending}</span>
+                </div>
+            ) : (
+                <>
+                    {view.notice === 'blocked' && (
+                        <div className="if-notice is-warning" role="status">
+                            <span className="if-notice-icon"><IosIcon name="warn" size={20}/></span>
+                            <span>{t[stockStatusMessageKey(stockStatus)]}</span>
+                        </div>
+                    )}
+                    {view.notice === 'empty' && (
+                        <div className="if-notice" role="status">
+                            <span className="if-notice-icon"><IosIcon name="info" size={20}/></span>
+                            <span>{t.outOfStock}</span>
+                        </div>
+                    )}
+                </>
             )}
 
             <div role="radiogroup" aria-label={t.warehouse}>

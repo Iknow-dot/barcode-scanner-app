@@ -51,6 +51,7 @@ const renderSheet = (props = {}) => {
                 hasLastSearch
                 othersExpanded={false}
                 othersLoading={false}
+                searchingUpstream={false}
                 adding={false}
                 {...handlers}
                 {...props}
@@ -147,6 +148,26 @@ describe('ProductSheet', () => {
     it('says the product is out of stock when no balance came back', () => {
         renderSheet({balances: []});
         expect(screen.getByRole('status')).toHaveTextContent(en.outOfStock);
+    });
+
+    it('replaces the stock notices while the catalog missed and 1C is still out', () => {
+        // The sheet opens on a replica miss so this notice has somewhere to
+        // render; "out of stock" must not sit beside it saying the opposite.
+        renderSheet({balances: [], stockStatus: 'pending', searchingUpstream: true});
+        const notices = screen.getAllByRole('status');
+        expect(notices).toHaveLength(1);
+        expect(notices[0]).toHaveTextContent(en.catalogMissSearchingUpstream);
+        expect(screen.queryByText(en.outOfStock)).toBeNull();
+    });
+
+    it('says stock is still being checked rather than claiming out of stock', () => {
+        // A catalog hit renders immediately, before the stock call answers: an
+        // empty balance list we have not received yet is not an empty list.
+        renderSheet({balances: [], stockStatus: 'pending'});
+        const notices = screen.getAllByRole('status');
+        expect(notices).toHaveLength(1);
+        expect(notices[0]).toHaveTextContent(en.stockPending);
+        expect(screen.queryByText(en.outOfStock)).toBeNull();
     });
 
     it('offers to fetch other warehouses before they were requested', () => {
