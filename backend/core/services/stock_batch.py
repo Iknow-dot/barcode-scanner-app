@@ -45,7 +45,14 @@ class ResolvedItem:
 
 
 def resolve_lookup_keys(organization, items: list[RequestedItem]) -> list[ResolvedItem]:
-    """Phase A: match every requested value against the replica, in two queries."""
+    """Phase A: match every requested value against the replica.
+
+    A bounded number of queries, independent of batch size: one query for the
+    barcode items (if any), plus one for the SKU items and one for their
+    prefetched barcodes (if any) — so the count never grows with the number
+    of items. 1 query for an all-barcode batch, 2 for an all-SKU batch, 3 for
+    a batch that mixes both.
+    """
     barcodes = {item.sku for item in items if item.is_barcode}
     skus = {item.sku for item in items if not item.is_barcode}
 
@@ -55,7 +62,7 @@ def resolve_lookup_keys(organization, items: list[RequestedItem]) -> list[Resolv
             product__organization=organization,
             barcode__in=barcodes,
             product__is_active=True,
-        ).select_related("product").prefetch_related("product__barcodes")
+        ).select_related("product")
         for match in matches:
             by_barcode.setdefault(match.barcode, match.product)
 

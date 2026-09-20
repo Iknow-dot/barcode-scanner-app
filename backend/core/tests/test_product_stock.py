@@ -63,6 +63,17 @@ class ResolveLookupKeysTests(TestCase):
         ])
         self.assertEqual([r.product for r in rows], [None, None])
 
+    def test_inactive_and_foreign_barcodes_are_misses(self):
+        ProductBarcode.objects.create(product=self.inactive, barcode="BC-4")
+        ProductBarcode.objects.create(product=self.foreign, barcode="BC-5")
+        rows = resolve_lookup_keys(self.org, [
+            RequestedItem(sku="BC-4", is_barcode=True),
+            RequestedItem(sku="BC-5", is_barcode=True),
+        ])
+        self.assertEqual([r.product for r in rows], [None, None])
+        self.assertEqual([r.lookup_key for r in rows], ["BC-4", "BC-5"])
+        self.assertEqual([r.lookup_is_barcode for r in rows], [True, True])
+
     def test_order_and_requested_value_are_preserved(self):
         rows = resolve_lookup_keys(self.org, [
             RequestedItem(sku="NOM-2", is_barcode=False),
@@ -73,4 +84,16 @@ class ResolveLookupKeysTests(TestCase):
     def test_resolution_is_a_bounded_number_of_queries(self):
         items = [RequestedItem(sku=f"NOM-{i}", is_barcode=False) for i in range(1, 4)]
         with self.assertNumQueries(2):
+            resolve_lookup_keys(self.org, items)
+
+    def test_mixed_batch_query_count_does_not_grow_with_batch_size(self):
+        items = [
+            RequestedItem(sku="NOM-1", is_barcode=False),
+            RequestedItem(sku="NOM-2", is_barcode=False),
+            RequestedItem(sku="BC-2", is_barcode=True),
+            RequestedItem(sku="UNKNOWN", is_barcode=True),
+        ]
+        # 1 for the barcode items + 1 for the SKU items + 1 for their
+        # prefetched barcodes — regardless of how many items are in the batch.
+        with self.assertNumQueries(3):
             resolve_lookup_keys(self.org, items)
