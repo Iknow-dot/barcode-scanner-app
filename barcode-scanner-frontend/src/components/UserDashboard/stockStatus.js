@@ -12,12 +12,16 @@ export const STOCK_STATUS_UNAVAILABLE = 'unavailable';
 /** 1C was never asked: the catalog row has no article and no barcode to send. */
 export const STOCK_STATUS_NO_LOOKUP_KEY = 'no_lookup_key';
 
+/** Stock has been asked for but has not arrived yet — show a skeleton, not a warning. */
+export const STOCK_STATUS_PENDING = 'pending';
+
 /**
- * Whether balances must be hidden. Any non-empty status counts, so a status
- * added on the backend later degrades to the generic warning instead of
- * silently rendering an empty balance list as if it were real.
+ * Whether balances must be hidden behind a warning. Any non-empty status
+ * counts except `pending`, so a status added on the backend later degrades to
+ * the generic warning instead of silently rendering an empty balance list as
+ * if it were real — but the in-flight state does not.
  */
-export const isStockBlocked = (status) => Boolean(status);
+export const isStockBlocked = (status) => Boolean(status) && status !== STOCK_STATUS_PENDING;
 
 /** Translation key explaining the blocked balances. */
 export const stockStatusMessageKey = (status) => (

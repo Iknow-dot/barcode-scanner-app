@@ -1,5 +1,6 @@
 import {
     STOCK_STATUS_NO_LOOKUP_KEY,
+    STOCK_STATUS_PENDING,
     STOCK_STATUS_UNAVAILABLE,
     hasProductResult,
     isStockBlocked,
@@ -62,5 +63,20 @@ describe('hasProductResult', () => {
     it('tolerates a missing balances list', () => {
         expect(hasProductResult(resolved, undefined)).toBe(true);
         expect(hasProductResult(cleared, undefined)).toBe(false);
+    });
+});
+
+describe('pending', () => {
+    test('does not block the balance list', () => {
+        expect(isStockBlocked(STOCK_STATUS_PENDING)).toBe(false);
+    });
+
+    test('still blocks the genuinely bad statuses', () => {
+        expect(isStockBlocked('unavailable')).toBe(true);
+        expect(isStockBlocked('no_lookup_key')).toBe(true);
+    });
+
+    test('an unknown status still blocks', () => {
+        expect(isStockBlocked('something_new')).toBe(true);
     });
 });
