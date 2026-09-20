@@ -11,7 +11,11 @@ from core.serializers import ProductStockRequestSerializer, ProductStockResponse
 from core.services.stock_batch import RequestedItem, fetch_stock_batch
 
 
-@extend_schema(tags=['Products'])
+@extend_schema(
+    tags=['Products'],
+    request=ProductStockRequestSerializer,
+    responses={200: ProductStockResponseSerializer},
+)
 class ProductStockAPIView(APIView):
     """Batch live stock, with the replica self-heal that 1C's answer feeds.
 
@@ -31,6 +35,6 @@ class ProductStockAPIView(APIView):
         results = fetch_stock_batch(
             request.user,
             [RequestedItem(sku=i["sku"], is_barcode=i["is_barcode"]) for i in data["items"]],
-            data.get("warehouses") or [],
+            data["warehouses"],
         )
         return Response(ProductStockResponseSerializer({"results": results}).data)

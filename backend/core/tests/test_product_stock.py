@@ -1,6 +1,7 @@
 # backend/core/tests/test_product_stock.py
 import threading
 import time
+from decimal import Decimal
 from unittest.mock import patch
 
 from django.test import TestCase, override_settings
@@ -501,3 +502,39 @@ class ProductStockEndpointTests(TestCase):
         self.assertEqual(
             anon.post(self.url, {"items": []}, format="json").status_code, 401,
         )
+
+    # StockRowSerializer (product_stock.py) duplicates the field definitions
+    # of ProductSearchSerializer.StockSerializer (products.py) rather than
+    # sharing them, so the omission/source-mapping/precision tests that cover
+    # the latter (test_products.py) do not exercise this class at all. These
+    # three pin the same guarantees at the /product/stock/ endpoint level, so
+    # a regression here (e.g. reverting `quantity` to an IntegerField, or
+    # losing a `source=` mapping) fails a test targeting the actual class.
+    def test_discount_fields_surface_under_snake_case_names(self):
+        fake = _FakeClient({"ART-1": {"stock": [{
+            "warehouse": "W1", "quantity": 3, "reserve": 1, "price": "31.00",
+            "discountpercent": 5, "discountedprice": "29.45",
+        }]}})
+        response = self._post({"items": [{"sku": "NOM-1", "is_barcode": False}]}, fake=fake)
+        [entry] = response.data["results"][0]["stock"]
+        self.assertEqual(Decimal(entry["discount_percent"]), Decimal("5"))
+        self.assertEqual(Decimal(entry["discounted_price"]), Decimal("29.45"))
+        self.assertEqual(Decimal(entry["reserve"]), Decimal("1"))
+        self.assertEqual(Decimal(entry["price"]), Decimal("31.00"))
+
+    def test_absent_optional_stock_fields_are_omitted(self):
+        fake = _FakeClient({"ART-1": {"stock": [{"warehouse": "W1", "quantity": 3}]}})
+        response = self._post({"items": [{"sku": "NOM-1", "is_barcode": False}]}, fake=fake)
+        [entry] = response.data["results"][0]["stock"]
+        self.assertNotIn("discount_percent", entry)
+        self.assertNotIn("discounted_price", entry)
+        self.assertNotIn("reserve", entry)
+        self.assertNotIn("price", entry)
+
+    def test_fractional_quantity_survives(self):
+        # An earlier IntegerField bug floored 2.5 kg to 2, which understates
+        # stock and, at 0.5, reads as out of stock entirely.
+        fake = _FakeClient({"ART-1": {"stock": [{"warehouse": "W1", "quantity": 2.5}]}})
+        response = self._post({"items": [{"sku": "NOM-1", "is_barcode": False}]}, fake=fake)
+        [entry] = response.data["results"][0]["stock"]
+        self.assertEqual(str(entry["quantity"]), "2.500")

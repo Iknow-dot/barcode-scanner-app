@@ -20,6 +20,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from concurrent.futures import TimeoutError as FuturesTimeoutError
 from dataclasses import dataclass
 
+import httpx
 from django.conf import settings
 from django.utils import timezone
 
@@ -301,6 +302,9 @@ def apply_self_heal(organization, resolved: list[ResolvedItem], outcomes: dict[s
 
 def fetch_stock_batch(user, items: list[RequestedItem], warehouse_codes: list[str]) -> list[dict]:
     """Phases A → B → C. Returns the response ``results`` list, in request order."""
+    if not items:
+        return []
+
     # `user.organization` is a plain FK access, so it loads every column on
     # first touch. Pass exactly this object to ConsultWebExchangeClient: the
     # pool threads call organization.decrypt_password() (-> FERNET_KEY) inside
@@ -309,8 +313,6 @@ def fetch_stock_batch(user, items: list[RequestedItem], warehouse_codes: list[st
     # a fresh Organization that way) would make a worker thread hit the ORM
     # to fill in the missing field — exactly what phases A/C exist to avoid.
     organization = user.organization
-    if not items:
-        return []
 
     # Scoping the codes through the user's own warehouses is a tenancy
     # control, not just a 1C parameter: an empty request means "all
@@ -327,14 +329,32 @@ def fetch_stock_batch(user, items: list[RequestedItem], warehouse_codes: list[st
     warehouses = ",".join(selected.values_list("code", flat=True)) if warehouse_codes else ""
 
     resolved = resolve_lookup_keys(organization, items)
-    client = ConsultWebExchangeClient(organization, timeout=settings.STOCK_BATCH_READ_TIMEOUT_SECONDS)
-    outcomes = fetch_stock_concurrently(
-        client,
-        resolved,
-        warehouses,
-        deadline_seconds=settings.STOCK_BATCH_DEADLINE_SECONDS,
-        max_workers=settings.STOCK_FANOUT_CONCURRENCY,
-    )
+    # A shared httpx.Client so the fan-out reuses one connection pool instead
+    # of shaking hands once per SKU (up to 50 fresh TLS handshakes otherwise).
+    # httpx.Client is thread-safe for concurrent requests, which is why this
+    # can be handed to every pool thread via ConsultWebExchangeClient.
+    #
+    # Caveat: fetch_stock_concurrently calls pool.shutdown(wait=False) at its
+    # deadline, so a thread whose call is still in flight when that deadline
+    # passes may still be mid-request when this `with` block closes the
+    # client below. That in-flight call then fails inside the worker and is
+    # caught by _fetch_one's catch-all, which logs it -- but its result was
+    # already recorded as `unavailable` when the deadline hit, so the only
+    # cost is log noise on an already-exceptional path. Waiting for it
+    # instead (i.e. not closing the client until every thread finishes) would
+    # block past the 60s router cutoff, which is the whole reason the
+    # deadline exists -- so do not "fix" this by waiting here.
+    with httpx.Client() as http_client:
+        client = ConsultWebExchangeClient(
+            organization, timeout=settings.STOCK_BATCH_READ_TIMEOUT_SECONDS, http_client=http_client,
+        )
+        outcomes = fetch_stock_concurrently(
+            client,
+            resolved,
+            warehouses,
+            deadline_seconds=settings.STOCK_BATCH_DEADLINE_SECONDS,
+            max_workers=settings.STOCK_FANOUT_CONCURRENCY,
+        )
     apply_self_heal(organization, resolved, outcomes)
 
     results = []
