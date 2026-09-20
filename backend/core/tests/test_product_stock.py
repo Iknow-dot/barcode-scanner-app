@@ -3,7 +3,9 @@ import threading
 import time
 from unittest.mock import patch
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
+from django.urls import reverse
+from rest_framework.test import APIClient
 
 from core.models import Product, ProductBarcode, Warehouse
 from core.services.consult_web_exchange import ConsultWebExchangeError
@@ -422,3 +424,80 @@ class SelfHealTests(TestCase):
         self.assertEqual(rows[0]["product"]["sku_name"], "Discovered")
         self.assertEqual(rows[1]["product"]["sku_name"], "Discovered")
         self.assertEqual(Product.objects.filter(organization=self.org, sku="GHOST").count(), 1)
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
+class ProductStockEndpointTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.org = _make_organization()
+        cls.user = User.objects.create_user(
+            username="consultant2", password="pw12345!", role=User.Role.COMPANY_USER,
+            organization=cls.org,
+        )
+        Product.objects.create(
+            organization=cls.org, sku="NOM-1", article="ART-1", name="Held", is_active=True,
+        )
+
+    def setUp(self):
+        self.client_api = APIClient()
+        self.client_api.force_authenticate(user=self.user)
+        self.url = reverse("product-stock")
+
+    def _post(self, body, fake=None):
+        fake = fake or _FakeClient({"ART-1": {"stock": [{"warehouse": "W1", "quantity": 4}]}})
+        with patch("core.services.stock_batch.ConsultWebExchangeClient", return_value=fake):
+            return self.client_api.post(self.url, body, format="json")
+
+    def test_single_item_returns_one_result(self):
+        response = self._post({"items": [{"sku": "NOM-1", "is_barcode": False}], "warehouses": []})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.data["results"]), 1)
+        self.assertEqual(response.data["results"][0]["sku"], "NOM-1")
+        self.assertEqual(response.data["results"][0]["status"], "ok")
+
+    def test_stock_rows_keep_their_shape(self):
+        response = self._post({"items": [{"sku": "NOM-1", "is_barcode": False}]})
+        [entry] = response.data["results"][0]["stock"]
+        self.assertEqual(entry["warehouse"], "W1")
+        self.assertEqual(str(entry["quantity"]), "4.000")
+
+    def test_is_barcode_defaults_to_false(self):
+        response = self._post({"items": [{"sku": "NOM-1"}]})
+        self.assertEqual(response.status_code, 200)
+
+    def test_an_upstream_failure_is_still_a_200(self):
+        fake = _FakeClient(error_by_key={"ART-1": ConsultWebExchangeError(
+            code="EXTERNAL_SERVICE_TIMEOUT", detail="slow", http_status=504,
+        )})
+        response = self._post({"items": [{"sku": "NOM-1", "is_barcode": False}]}, fake=fake)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["results"][0]["status"], "unavailable")
+
+    def test_empty_items_returns_empty_results(self):
+        response = self._post({"items": []})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["results"], [])
+
+    @override_settings(SECURE_SSL_REDIRECT=False, STOCK_BATCH_MAX_ITEMS=2)
+    def test_too_many_items_is_rejected(self):
+        response = self._post({"items": [{"sku": f"S{i}"} for i in range(3)]})
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.data["items"]["code"], "STOCK_BATCH_TOO_LARGE")
+
+    def test_another_orgs_product_is_never_resolved_from_the_replica(self):
+        other = _make_organization(name="Other2", identification_number="902")
+        Product.objects.create(
+            organization=other, sku="FOREIGN", article="F-1", name="Foreign", is_active=True,
+        )
+        fake = _FakeClient({"FOREIGN": {"stock": []}})
+        response = self._post({"items": [{"sku": "FOREIGN", "is_barcode": False}]}, fake=fake)
+        # Resolved as a miss, so the raw value went upstream, not the foreign article.
+        self.assertEqual(fake.calls[0][0], "FOREIGN")
+        self.assertEqual(response.data["results"][0]["status"], "not_found")
+
+    def test_anonymous_is_rejected(self):
+        anon = APIClient()
+        self.assertEqual(
+            anon.post(self.url, {"items": []}, format="json").status_code, 401,
+        )

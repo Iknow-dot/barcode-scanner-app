@@ -29,6 +29,7 @@ from core.views.health import HealthAPIView
 from core.views.invoices import InvoiceSampleValuesAPIView, InvoiceTokensAPIView
 from core.views.orders import PurchaseOrderViewSet
 from core.views.organizations import OrganizationViewSet
+from core.views.product_stock import ProductStockAPIView
 from core.views.products import ProductSearchAPIView
 from core.views.warehouses import WarehouseViewSet
 
@@ -49,6 +50,7 @@ __all__ = [
     'OrderCompleteWebhookAPIView',
     'OrganizationViewSet',
     'ProductSearchAPIView',
+    'ProductStockAPIView',
     'PurchaseOrderViewSet',
     'RSGeLookupAPIView',
     'ReverseGeocodeAPIView',

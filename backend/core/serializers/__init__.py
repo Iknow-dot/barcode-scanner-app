@@ -44,6 +44,12 @@ from core.serializers.organizations import (
     OrganizationSecuritySerializer,
     OrganizationSerializer,
 )
+from core.serializers.product_stock import (
+    ProductStockRequestSerializer,
+    ProductStockResponseSerializer,
+    SelfHealedProductSerializer,
+    StockResultSerializer,
+)
 from core.serializers.products import ProductSearchSerializer
 from core.serializers.warehouses import (
     WarehouseReadOnlySerializer,
@@ -75,12 +81,16 @@ __all__ = [
     'OrganizationSecuritySerializer',
     'OrganizationSerializer',
     'ProductSearchSerializer',
+    'ProductStockRequestSerializer',
+    'ProductStockResponseSerializer',
     'PurchaseOrderItemSerializer',
     'PurchaseOrderListSerializer',
     'PurchaseOrderSerializer',
     'RSGeLookupSerializer',
     'ReverseGeocodeRequestSerializer',
     'SearchAddressesRequestSerializer',
+    'SelfHealedProductSerializer',
+    'StockResultSerializer',
     'WarehouseReadOnlySerializer',
     'WarehouseSerializer',
 ]
