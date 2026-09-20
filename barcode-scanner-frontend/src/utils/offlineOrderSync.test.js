@@ -176,6 +176,51 @@ test('a transport failure on the stock leg with no catalog identity retains the 
     expect(orderService.rawAddOrderItem).not.toHaveBeenCalled();
 });
 
+test('a 404 from the stock leg retains the op', async () => {
+    // The deploy-window case: on DigitalOcean the static frontend and the
+    // buildpack backend ship separately. If the frontend lands first, the new
+    // client posts to a /product/stock/ route the backend does not have yet.
+    // The stock endpoint's contract is ALWAYS 200, so a 404 is not an answer
+    // about this barcode — dropping the op here would destroy a queued sale
+    // line for a product that exists.
+    enqueueOp(42, {type: 'add_item_barcode', tempId: 'tmp_a', barcode: '4870001', quantity: 1});
+    searchProduct.mockResolvedValue(OK({sku: 'S9', sku_name: 'Thing', article: 'A9', price: 12}));
+    fetchStock.mockResolvedValue({success: false, error: 'Not Found', code: null, status: 404});
+
+    const result = await syncOrder(42, {userWarehouses: [{code: 'W1'}]});
+
+    expect(result.aborted).toBe(true);
+    expect(getOps(42)).toHaveLength(1); // retained, not dropped
+    expect(orderService.rawAddOrderItem).not.toHaveBeenCalled();
+});
+
+test('a 500 from the stock leg retains the op', async () => {
+    enqueueOp(42, {type: 'add_item_barcode', tempId: 'tmp_a', barcode: '4870001', quantity: 1});
+    searchProduct.mockResolvedValue(OK({sku: 'S9', sku_name: 'Thing', article: 'A9', price: 12}));
+    fetchStock.mockResolvedValue({success: false, error: 'boom', code: null, status: 500});
+
+    const result = await syncOrder(42, {userWarehouses: [{code: 'W1'}]});
+
+    expect(result.aborted).toBe(true);
+    expect(getOps(42)).toHaveLength(1);
+    expect(orderService.rawAddOrderItem).not.toHaveBeenCalled();
+});
+
+test('a 200 reporting unavailable is an answer and still drops the op', async () => {
+    // The boundary. Per-item failure inside a 200 IS the endpoint answering,
+    // and its retry contract is a separate, older question — widening the
+    // predicate into it would make genuinely bad ops retry forever.
+    enqueueOp(42, {type: 'add_item_barcode', tempId: 'tmp_a', barcode: '4870001', quantity: 1});
+    searchProduct.mockResolvedValue(OK({sku: 'S9', sku_name: 'Thing', article: 'A9', price: 12}));
+    fetchStock.mockResolvedValue(OK({results: [{sku: '4870001', status: 'unavailable', stock: []}]}));
+
+    const result = await syncOrder(42, {userWarehouses: [{code: 'W1'}]});
+
+    expect(result.aborted).toBe(false);
+    expect(result.failures).toHaveLength(1);
+    expect(getOps(42)).toHaveLength(0);
+});
+
 test('HTTP failure drops the op but continues; network failure aborts', async () => {
     enqueueOp(42, {type: 'update_item', itemId: 7, payload: {quantity: 5}});
     enqueueOp(42, {type: 'update_order', payload: {notes: 'x'}});

@@ -10,6 +10,18 @@ import {markOffline, markOnline, subscribe, isOffline} from './connectivity';
 
 const isNetworkError = (result) => !result.success && result.status === null;
 
+// The stock endpoint always answers 200 — failure is per item inside the body.
+// So any non-200 is not an answer at all, and the op must be retried rather
+// than dropped. A 200 that reports `unavailable`/`not_found` IS an answer and
+// keeps its existing behaviour.
+//
+// This is not hypothetical: the DO static frontend and the buildpack backend
+// deploy separately, and if the frontend lands first the new client posts to a
+// /api/v1/product/stock/ route the backend does not have yet — a 404 for every
+// queued line. A 5xx from our own server or a router 502 reads the same way.
+// The catalog leg stays on isNetworkError, because it legitimately answers 404.
+const stockGaveNoAnswer = (r) => !r.success && r.status !== 200;
+
 const resolveBarcode = async (op, userWarehouses) => {
     // Both halves are needed here, so fire them together rather than in series.
     const [lookup, stockResult] = await Promise.all([
@@ -21,7 +33,7 @@ const resolveBarcode = async (op, userWarehouses) => {
     if (!product?.sku) {
         return {
             error: lookup.error || 'not found',
-            network: isNetworkError(lookup) || isNetworkError(stockResult),
+            network: isNetworkError(lookup) || stockGaveNoAnswer(stockResult),
         };
     }
     const stock = (entry.stock || []).filter((b) => (Number(b.quantity) || 0) > 0);
@@ -32,15 +44,15 @@ const resolveBarcode = async (op, userWarehouses) => {
     if (!row) {
         // `entry.stock` is `[]` both when the stock call gave a real answer
         // (a successful `unavailable`/`not_found` row) and when it never
-        // answered at all (`firstStockEntry`'s DEGRADED fallback on a
-        // transport failure) — they look identical here. They are not the
+        // answered at all (`firstStockEntry`'s DEGRADED fallback on anything
+        // that is not a 200) — they look identical here. They are not the
         // same: a real answer is this op's fate and should drop it (that
         // retry contract is tracked separately, deliberately unchanged); a
-        // transport failure is not an answer, so it must retain the op for
-        // retry, exactly as the single combined call did before the catalog
-        // and stock lookups were split in two. Only that narrow distinction
-        // — transport failure vs. a real answer — belongs here.
-        return {error: 'no sellable stock', network: isNetworkError(stockResult)};
+        // non-answer must retain the op for retry, exactly as the single
+        // combined call did before the catalog and stock lookups were split
+        // in two. Only that narrow distinction — no answer vs. a real answer
+        // — belongs here.
+        return {error: 'no sellable stock', network: stockGaveNoAnswer(stockResult)};
     }
     return {
         payload: {
