@@ -125,6 +125,43 @@ describe('OrderSheet', () => {
         });
     });
 
+    it('warns in the cart when a product could not be resolved against 1C', async () => {
+        productService.fetchStock.mockResolvedValue({
+            success: true,
+            data: {
+                results: [
+                    {sku: 'MG-2814', status: 'ok', stock: [{warehouse: 'W1', quantity: 9}]},
+                    {sku: 'EK-1700', status: 'unavailable', stock: []},
+                ],
+            },
+        });
+        renderSheet();
+        // Not while the answer is still out — see the useSkuStock tests.
+        expect(screen.queryByText(en.cartStockIncomplete)).toBeNull();
+        expect(await screen.findByText(en.cartStockIncomplete)).toBeInTheDocument();
+    });
+
+    it('warns in the cart when the stock request fails outright', async () => {
+        productService.fetchStock.mockResolvedValue({success: false, status: 502});
+        renderSheet();
+        expect(await screen.findByText(en.cartStockIncomplete)).toBeInTheDocument();
+    });
+
+    it('says nothing when every product resolved', async () => {
+        productService.fetchStock.mockResolvedValue({
+            success: true,
+            data: {
+                results: [
+                    {sku: 'MG-2814', status: 'ok', stock: [{warehouse: 'W1', quantity: 9}]},
+                    {sku: 'EK-1700', status: 'ok', stock: [{warehouse: 'W1', quantity: 4}]},
+                ],
+            },
+        });
+        renderSheet();
+        await waitFor(() => expect(screen.getAllByText(`${en.stockRemaining}: 9`).length).toBeGreaterThan(0));
+        expect(screen.queryByText(en.cartStockIncomplete)).toBeNull();
+    });
+
     it('totals units and gifts in the bar', () => {
         renderSheet();
         expect(screen.getByText(`${en.cartTotalCount(4)} · 1 ${en.giftLabel}`)).toBeInTheDocument();

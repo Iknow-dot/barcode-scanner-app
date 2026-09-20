@@ -121,7 +121,7 @@ const OrderSheet = ({
 
     const items = localOrder?.items;
     const sections = useMemo(() => cartSections(items), [items]);
-    const stockBySku = useSkuStock(items, open);
+    const {stockBySku, degraded: stockDegraded} = useSkuStock(items, open);
 
     if (!localOrder) return null;
 
@@ -237,6 +237,17 @@ const OrderSheet = ({
                             <span className="if-chev"><IosIcon name="chev" size={16} stroke={2.4}/></span>
                         </button>
                     </div>
+                    {/* Inline rather than a toast: this is about what the cart
+                        below it shows, and a toast fired mid-cart is both
+                        disruptive and easy to miss. Only a RESOLVED request
+                        sets this (see useSkuStock), so it never contradicts a
+                        row that is simply still waiting for its caption. */}
+                    {stockDegraded && (
+                        <div className="if-notice is-warning" role="status">
+                            <span className="if-notice-icon"><IosIcon name="warn" size={20}/></span>
+                            <span>{t.cartStockIncomplete}</span>
+                        </div>
+                    )}
                     {sections.length === 0 ? (
                         <div className="if-group if-group-empty m-cart-empty">{t.scanToAddProduct}</div>
                     ) : sections.map((section) => (

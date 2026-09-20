@@ -22,13 +22,13 @@ test('asks for every distinct SKU in ONE request', async () => {
 
     const {result} = renderHook(() => useSkuStock(ITEMS, true));
 
-    await waitFor(() => expect(result.current.S1).toBeDefined());
+    await waitFor(() => expect(result.current.stockBySku.S1).toBeDefined());
     expect(productService.fetchStock).toHaveBeenCalledTimes(1);
     expect(productService.fetchStock).toHaveBeenCalledWith({
         items: [{sku: 'MG-2814', isBarcode: false}, {sku: 'MG-9', isBarcode: false}],
         warehouseCodes: [],
     });
-    expect(result.current).toEqual({S1: {W1: 9}, S2: {W1: 3}});
+    expect(result.current.stockBySku).toEqual({S1: {W1: 9}, S2: {W1: 3}});
 });
 
 test('maps results back by the requested article, not the sku', async () => {
@@ -36,7 +36,7 @@ test('maps results back by the requested article, not the sku', async () => {
         {sku: 'MG-2814', status: 'ok', stock: [{warehouse: 'W2', quantity: 4}]},
     ]));
     const {result} = renderHook(() => useSkuStock([ITEMS[0]], true));
-    await waitFor(() => expect(result.current.S1).toEqual({W2: 4}));
+    await waitFor(() => expect(result.current.stockBySku.S1).toEqual({W2: 4}));
 });
 
 test('a degraded item is left undefined rather than shown as zero', async () => {
@@ -45,7 +45,39 @@ test('a degraded item is left undefined rather than shown as zero', async () => 
     ]));
     const {result} = renderHook(() => useSkuStock([ITEMS[0]], true));
     await waitFor(() => expect(productService.fetchStock).toHaveBeenCalled());
-    expect(result.current.S1).toBeUndefined();
+    expect(result.current.stockBySku.S1).toBeUndefined();
+});
+
+test('a degraded item reports the batch as degraded', async () => {
+    // Without this the row simply has no caption, which is indistinguishable
+    // from "still loading" and from "we never asked".
+    productService.fetchStock.mockReturnValue(OK([
+        {sku: 'MG-2814', status: 'ok', stock: [{warehouse: 'W1', quantity: 9}]},
+        {sku: 'MG-9', status: 'unavailable', stock: []},
+    ]));
+    const {result} = renderHook(() => useSkuStock(ITEMS, true));
+    await waitFor(() => expect(result.current.degraded).toBe(true));
+    // The items that DID resolve are still shown.
+    expect(result.current.stockBySku.S1).toEqual({W1: 9});
+});
+
+test('a fully-ok batch is not degraded', async () => {
+    productService.fetchStock.mockReturnValue(OK([
+        {sku: 'MG-2814', status: 'ok', stock: [{warehouse: 'W1', quantity: 9}]},
+        {sku: 'MG-9', status: 'ok', stock: [{warehouse: 'W1', quantity: 3}]},
+    ]));
+    const {result} = renderHook(() => useSkuStock(ITEMS, true));
+    await waitFor(() => expect(result.current.stockBySku.S2).toBeDefined());
+    expect(result.current.degraded).toBe(false);
+});
+
+test('an in-flight request is not yet degraded', async () => {
+    // A notice that showed while the answer was still out would be worse than
+    // no notice: `degraded` may only be set by a RESOLVED request.
+    productService.fetchStock.mockReturnValue(new Promise(() => {}));
+    const {result} = renderHook(() => useSkuStock(ITEMS, true));
+    await waitFor(() => expect(productService.fetchStock).toHaveBeenCalled());
+    expect(result.current.degraded).toBe(false);
 });
 
 test('negative balances are hidden', async () => {
@@ -53,14 +85,14 @@ test('negative balances are hidden', async () => {
         {sku: 'MG-2814', status: 'ok', stock: [{warehouse: 'W1', quantity: -2}, {warehouse: 'W2', quantity: 5}]},
     ]));
     const {result} = renderHook(() => useSkuStock([ITEMS[0]], true));
-    await waitFor(() => expect(result.current.S1).toEqual({W2: 5}));
+    await waitFor(() => expect(result.current.stockBySku.S1).toEqual({W2: 5}));
 });
 
 test('a whole-request failure leaves every sku undefined and does not throw', async () => {
     productService.fetchStock.mockReturnValue(Promise.resolve({success: false, status: null}));
     const {result} = renderHook(() => useSkuStock(ITEMS, true));
-    await waitFor(() => expect(productService.fetchStock).toHaveBeenCalled());
-    expect(result.current).toEqual({});
+    await waitFor(() => expect(result.current.degraded).toBe(true));
+    expect(result.current.stockBySku).toEqual({});
 });
 
 test('closing forgets, reopening asks again', async () => {
@@ -72,6 +104,18 @@ test('closing forgets, reopening asks again', async () => {
     rerender({active: false});
     rerender({active: true});
     await waitFor(() => expect(productService.fetchStock).toHaveBeenCalledTimes(2));
+});
+
+test('closing clears the degraded flag too', async () => {
+    productService.fetchStock.mockReturnValue(OK([
+        {sku: 'MG-2814', status: 'unavailable', stock: []},
+    ]));
+    const {result, rerender} = renderHook(({active}) => useSkuStock([ITEMS[0]], active), {
+        initialProps: {active: true},
+    });
+    await waitFor(() => expect(result.current.degraded).toBe(true));
+    rerender({active: false});
+    expect(result.current.degraded).toBe(false);
 });
 
 test('a cart past the backend cap is split into several requests', async () => {
@@ -89,13 +133,13 @@ test('a cart past the backend cap is split into several requests', async () => {
 
     const {result} = renderHook(() => useSkuStock(items, true));
 
-    await waitFor(() => expect(Object.keys(result.current)).toHaveLength(overCap));
+    await waitFor(() => expect(Object.keys(result.current.stockBySku)).toHaveLength(overCap));
     expect(productService.fetchStock).toHaveBeenCalledTimes(2);
     expect(productService.fetchStock.mock.calls[0][0].items).toHaveLength(STOCK_BATCH_MAX_ITEMS);
     expect(productService.fetchStock.mock.calls[1][0].items).toHaveLength(1);
     // No request exceeds the cap, and every sku still resolves.
-    expect(result.current[`S${overCap - 1}`]).toEqual({W1: 7});
-    expect(result.current.S0).toEqual({W1: 7});
+    expect(result.current.stockBySku[`S${overCap - 1}`]).toEqual({W1: 7});
+    expect(result.current.stockBySku.S0).toEqual({W1: 7});
 });
 
 test('an inactive sheet asks for nothing', () => {

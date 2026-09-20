@@ -21,12 +21,22 @@ const chunk = (values, size) => {
  * Live free stock per product for the cart's stock captions and warnings:
  * one batch request per `STOCK_BATCH_MAX_ITEMS` distinct SKUs while the sheet
  * is open — one request for any ordinary cart.
- * Returns {[sku]: {[warehouseCode]: quantity}}; a SKU the backend could not
- * resolve is left out, so its rows show no caption rather than a false zero.
+ *
+ * Returns `{stockBySku, degraded}`. `stockBySku` is
+ * {[sku]: {[warehouseCode]: quantity}}; a SKU the backend could not resolve is
+ * left out, so its rows show no caption rather than a false zero. `degraded`
+ * says that at least one SKU came back unresolved — a per-item status other
+ * than `ok`, or a request that failed outright — so the caller can say so
+ * instead of leaving those rows indistinguishable from "still loading".
+ * It is set only from a RESOLVED request, never while one is in flight, and
+ * stays set for the rest of the sheet's life: an earlier failure still means
+ * the figures on screen are incomplete.
+ *
  * Closing the sheet forgets everything, so the next opening asks again.
  */
 const useSkuStock = (items, active) => {
     const [stockBySku, setStockBySku] = useState({});
+    const [degraded, setDegraded] = useState(false);
     const requestedRef = useRef(new Set());
     const generationRef = useRef(0);
 
@@ -36,6 +46,7 @@ const useSkuStock = (items, active) => {
                 generationRef.current += 1;
                 requestedRef.current = new Set();
                 setStockBySku({});
+                setDegraded(false);
             }
             return;
         }
@@ -64,7 +75,13 @@ const useSkuStock = (items, active) => {
                 if (!result.success || !Array.isArray(result.data?.results)) {
                     // eslint-disable-next-line no-console
                     console.warn('[cart] stock fetch failed', result);
+                    // Nothing in this chunk resolved, and console.warn is not a
+                    // user interface — tell the sheet so it can say so.
+                    setDegraded(true);
                     return;
+                }
+                if (result.data.results.some((entry) => entry.status !== 'ok')) {
+                    setDegraded(true);
                 }
                 const next = {};
                 result.data.results.forEach((entry) => {
@@ -86,7 +103,7 @@ const useSkuStock = (items, active) => {
         });
     }, [items, active]);
 
-    return stockBySku;
+    return {stockBySku, degraded};
 };
 
 export default useSkuStock;
