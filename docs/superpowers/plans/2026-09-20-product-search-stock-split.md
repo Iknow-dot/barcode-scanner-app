@@ -20,6 +20,15 @@
 - **New views need `@extend_schema(tags=['Products'])`** and must be re-exported from `core/views/__init__.py` (serializers likewise from `core/serializers/__init__.py`, both in the `__all__` lists, alphabetically).
 - **No new frontend dependencies.** If `package.json` ever changes, run `npm ci --dry-run` before committing and never use `--legacy-peer-deps`.
 - Settings defaults: `STOCK_FANOUT_CONCURRENCY=8`, `STOCK_BATCH_MAX_ITEMS=50`, `STOCK_BATCH_DEADLINE_SECONDS=25`, `STOCK_BATCH_READ_TIMEOUT_SECONDS=10`.
+- **A second `Organization` in a test needs a distinct `identification_number`** — the column is unique and `_make_organization`'s default is always `'123456789'`. There is no `code` field on `Organization`; the house pattern is `_make_organization(name='OrgB', identification_number='222')`. (`Warehouse` does have `code`.)
+- **Frontend tests do not run in this worktree via `npm test`** — Jest's `replacePathSepForGlob` turns the `\.claude` path segment into an escaped dot, so the default `testMatch` finds 0 files, and `npm test -- <flags>` silently swallows the override. Run them from `barcode-scanner-frontend/` as:
+  ```powershell
+  $env:CI = "true"
+  $tm = '**/*.test.js'
+  node .\node_modules\react-scripts\bin\react-scripts.js test --watchAll=false --testMatch=$tm
+  ```
+  Add `--testPathPattern=<Name>` to filter to one file. A "No tests found" result is this bug, never a passing run.
+- The backend suite takes ~5.5 minutes for 795 tests. Run targeted modules while iterating; run the full suite only where a task says to.
 
 ---
 
@@ -68,7 +77,7 @@ class ResolveLookupKeysTests(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.org = _make_organization()
-        cls.other = _make_organization(name="Other", code="OTHER")
+        cls.other = _make_organization(name="Other", identification_number="901")
         cls.with_article = Product.objects.create(
             organization=cls.org, sku="NOM-1", article="ART-1", name="With article", is_active=True,
         )
@@ -970,7 +979,7 @@ class ProductStockEndpointTests(TestCase):
         self.assertEqual(response.data["items"]["code"], "STOCK_BATCH_TOO_LARGE")
 
     def test_another_orgs_product_is_never_resolved_from_the_replica(self):
-        other = _make_organization(name="Other2", code="OTHER2")
+        other = _make_organization(name="Other2", identification_number="902")
         Product.objects.create(
             organization=other, sku="FOREIGN", article="F-1", name="Foreign", is_active=True,
         )
@@ -1240,7 +1249,7 @@ class CatalogReadOnlyTests(TestCase):
         self.assertEqual(response.data["code"], "PRODUCT_NOT_IN_CATALOG")
 
     def test_another_orgs_product_is_a_miss(self):
-        other = _make_organization(name="Other3", code="OTHER3")
+        other = _make_organization(name="Other3", identification_number="903")
         Product.objects.create(organization=other, sku="FOREIGN", name="Foreign", is_active=True)
         response = self.api.post(self.url, {"sku": "FOREIGN", "is_barcode": False}, format="json")
         self.assertEqual(response.status_code, 404)
