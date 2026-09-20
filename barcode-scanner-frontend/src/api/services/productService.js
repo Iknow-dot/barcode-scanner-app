@@ -34,8 +34,10 @@ export const searchProduct = ({sku, searchType, recordScan = false}) => {
  *
  * Always resolves with a 200 whose `results` carry a per-item `status`
  * (`ok` | `unavailable` | `no_lookup_key` | `not_found`), keyed by the value
- * that was requested. A result may also carry `product`, the identity the
- * backend just learned from 1C for a SKU missing from the replica.
+ * that was requested. A row may also carry `unit`, the per-lookup-key unit
+ * 1C reports, present only when 1C sent one, and `product`, the identity the
+ * backend just learned from 1C for a SKU missing from the replica — present
+ * only when that call self-healed a replica miss.
  *
  * @param {object} params
  * @param {{sku: string, isBarcode?: boolean}[]} params.items

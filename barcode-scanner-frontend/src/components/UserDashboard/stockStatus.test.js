@@ -67,8 +67,18 @@ describe('hasProductResult', () => {
 });
 
 describe('pending', () => {
+    test('the constant is pinned to the wire value the backend sends', () => {
+        expect(STOCK_STATUS_PENDING).toBe('pending');
+    });
+
     test('does not block the balance list', () => {
         expect(isStockBlocked(STOCK_STATUS_PENDING)).toBe(false);
+        // Also assert against the wire literal, not just the constant: if
+        // STOCK_STATUS_PENDING were ever typo'd (definition and every
+        // reference edited together), the constant-based assertion above
+        // would still pass while the backend's actual "pending" status
+        // would be treated as blocked, silently and permanently.
+        expect(isStockBlocked('pending')).toBe(false);
     });
 
     test('still blocks the genuinely bad statuses', () => {
