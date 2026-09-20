@@ -77,7 +77,7 @@ sequenceDiagram
         else replica miss
             PS-->>FE: 404 PRODUCT_NOT_IN_CATALOG<br/>("not in the replica", NOT "does not exist")
         end
-    and stock — the only 1C caller, always 200
+    and stock — the scan's only 1C call, always 200
         FE->>ST: POST /product/stock/ {items[], warehouses}
         ST->>DB: phase A: requested value → replica row → 1C lookup key
         alt the replica row holds no article and no barcode

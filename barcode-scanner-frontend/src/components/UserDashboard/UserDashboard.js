@@ -520,6 +520,11 @@ const UserDashboard = ({isDark = false, onToggleTheme}) => {
         // Closing the result invalidates anything still in flight for it — an
         // "other warehouses" batch can outlive the sheet by up to the backend's
         // 25 s deadline, and must not repopulate a view the consultant left.
+        // Accepted cost: this runs from the sheet's afterClose, so in a
+        // sub-second race (a tap that closes the sheet just as the answer
+        // lands) it can discard a result the consultant still wanted. That is
+        // recoverable by re-scanning; a stale answer silently replacing the
+        // next product's balances is not.
         searchGenerationRef.current += 1;
         setProductSheetOpen(false);
         setBalances([]);

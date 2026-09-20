@@ -14,7 +14,7 @@ these pages are the system-wide picture those specs plug into.
 | [02 — Domain model](02-domain-model.md) | The data in three groups: access, sales, catalog |
 | [03 — Order lifecycle](03-order-lifecycle.md) | Order states, the confirm checklist, completion |
 | [04 — Authentication](04-authentication.md) | Login (IP allowlist, device lock), token refresh, 401 retry |
-| [05 — Catalog & product search](05-catalog-and-search.md) | 1C catalog push, replica-first scan lookup, image proxy |
+| [05 — Catalog & product search](05-catalog-and-search.md) | 1C catalog push, the split scan lookup (local replica read + separate live stock call), image proxy |
 | [06 — Monitoring](06-monitoring.md) | Health probe, Sentry, logs, PostHog: which question each answers, what's live, blind spots |
 
 ## Who uses it
