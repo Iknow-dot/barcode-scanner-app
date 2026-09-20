@@ -31,7 +31,7 @@ import IosIcon from '../Common/IosIcon';
 import IosSheet from '../Common/IosSheet';
 import {LAYER_RESULT_SHEET} from '../../theme/layers';
 import groupItemsBySku from './groupItemsBySku';
-import {firstStockEntry, productInfoFrom, scanVerdict} from './scanLookup';
+import {CATALOG_MISS_CODE, firstStockEntry, productInfoFrom, scanVerdict} from './scanLookup';
 import {hasProductResult, STOCK_STATUS_PENDING} from './stockStatus';
 import inheritFromGroup from './inheritFromGroup';
 import formatInsufficientStock from './insufficientStock';
@@ -273,9 +273,19 @@ const UserDashboard = ({isDark = false, onToggleTheme}) => {
         refresh: refreshSnapshot,
     } = useDailySnapshot(currentUserId);
     const isSearchingRef = useRef(false);
-    // The catalog read and the stock call settle independently, so the
-    // re-entrancy ref above is not enough on its own: this counts scans so a
-    // late answer from an earlier one can be recognised and dropped.
+    // Counts scans so a late answer from an earlier one can be recognised and
+    // dropped. `isStale()` in handleSearch is UNREACHABLE today, and that is
+    // worth stating plainly: this ref is only bumped after the isSearchingRef
+    // guard above, and that guard is only released in handleSearch's finally,
+    // so no second generation can exist while a first is in flight. It is kept
+    // because the guard is the only thing making it unreachable, and the
+    // catalog read and the stock call now settle independently: relax that
+    // guard — to let a new scan pre-empt an in-flight one, say, which is
+    // arguably what a consultant tapping twice wants — and without this a
+    // stale scan's stock answer lands on the newer scan's card. Revisit the
+    // finally's `if (!isStale())` at the same time: today it always runs, but
+    // once staleness is reachable it would skip setLoading(false) and leave a
+    // pre-empted scan spinning.
     const searchGenerationRef = useRef(0);
     // Catalog answered "not in the replica" while the 1C lookup is still out.
     const [catalogMissed, setCatalogMissed] = useState(false);
@@ -350,19 +360,48 @@ const UserDashboard = ({isDark = false, onToggleTheme}) => {
             const stockEntry = firstStockEntry(stockResult);
             const verdict = scanVerdict({catalogResult, stockEntry});
 
-            if (verdict === 'not_found') {
+            if (verdict !== 'found') {
                 playNotFoundSound();
                 setProductSheetOpen(false);
                 setBalances([]);
                 setProductInfo({sku_name: '', article: '', price: '', images: []});
                 setSearchedAllWarehouses(false);
                 setStockStatus('');
-                notify.error(t.error, t.productNotFound);
-                logScanHistory({
-                    search, searchType, found: false,
-                    sku: null, sku_name: null, price: null, total_qty: null,
-                });
-                refreshSnapshot();
+
+                if (verdict === 'not_found') {
+                    notify.error(t.error, t.productNotFound);
+                    // A real negative answer from both halves, so it belongs in
+                    // the day's scan history as a miss.
+                    logScanHistory({
+                        search, searchType, found: false,
+                        sku: null, sku_name: null, price: null, total_qty: null,
+                    });
+                    refreshSnapshot();
+                    return;
+                }
+
+                // 'unknown': at least one half never answered. Say the service
+                // is unreachable rather than that the product does not exist —
+                // and deliberately write NO scan-history row, because a lookup
+                // that failed is not evidence the product is missing. (The
+                // pre-fan-out code drew the same line with isExternalServiceError.)
+                const failureCode = (
+                    (!catalogResult.success && catalogResult.code !== CATALOG_MISS_CODE
+                        ? catalogResult.code : null)
+                    || (!stockResult.success ? stockResult.code : null)
+                );
+                const errorMessages = {
+                    'PRODUCT_NOT_FOUND': t.productNotFound,
+                    'EXTERNAL_SERVICE_TIMEOUT': t.externalServiceTimeout,
+                    'EXTERNAL_SERVICE_UNAVAILABLE': t.externalServiceUnavailable,
+                    'EXTERNAL_SERVICE_ERROR': t.externalServiceError,
+                    'EXTERNAL_SERVICE_UNAUTHORIZED': t.externalServiceUnauthorized,
+                };
+                const isExternalServiceError = !!failureCode && failureCode.startsWith('EXTERNAL_SERVICE_');
+                notify.error(
+                    isExternalServiceError ? t.webServiceError : t.error,
+                    errorMessages[failureCode] || t.productSearchError,
+                );
                 return;
             }
 

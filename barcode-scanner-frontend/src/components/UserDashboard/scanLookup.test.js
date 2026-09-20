@@ -12,7 +12,11 @@ const NOT_FOUND_STOCK = {success: true, data: {results: [{sku: 'A1', status: 'no
 const CATALOG_HIT = {success: true, data: {
     sku: 'NOM-1', article: 'A1', sku_name: 'Held', price: '9.99', images: ['i0'],
 }};
+const UNAVAILABLE_STOCK = {success: true, data: {results: [{sku: 'A1', status: 'unavailable', stock: []}]}};
+const NO_KEY_STOCK = {success: true, data: {results: [{sku: 'A1', status: 'no_lookup_key', stock: []}]}};
 const CATALOG_MISS = {success: false, status: 404, code: 'PRODUCT_NOT_IN_CATALOG'};
+// Not an answer — the replica was never reached.
+const CATALOG_DOWN = {success: false, status: 500, code: null};
 
 describe('firstStockEntry', () => {
     test('pulls the single result out', () => {
@@ -40,22 +44,41 @@ describe('scanVerdict', () => {
             .toBe('found');
     });
 
-    test('a catalog miss with no identity from 1C is not found', () => {
+    // Both halves gave a real negative answer: the replica 404'd and 1C was
+    // reached and said it does not know the product either. Only this is a
+    // not-found.
+    test('a catalog miss plus a reachable 1C reporting not_found is not found', () => {
         expect(scanVerdict({catalogResult: CATALOG_MISS, stockEntry: firstStockEntry(NOT_FOUND_STOCK)}))
             .toBe('not_found');
     });
 
-    // The brief named this case "is NOT a not-found" while asserting
-    // 'not_found'. The assertion is the correct half: with the replica missing
-    // and 1C unreachable there is no identity to render a card from, so
-    // not-found is the only renderable verdict. What must NOT happen is the
-    // inverse — a reachable 1C reporting nothing is the only thing that makes
-    // a *degraded* stock answer look like a hard 404 (see the assertion below
-    // on the entry's status, which stays `unavailable`).
-    test('a catalog miss plus an unreachable 1C is a not-found, but the stock half still reads unavailable', () => {
+    test('a catalog miss plus an unreachable 1C is NOT a not-found', () => {
         const entry = firstStockEntry({success: false, status: null});
         expect(entry.status).toBe('unavailable');
-        expect(scanVerdict({catalogResult: CATALOG_MISS, stockEntry: entry})).toBe('not_found');
+        expect(scanVerdict({catalogResult: CATALOG_MISS, stockEntry: entry})).toBe('unknown');
+    });
+
+    test('a catalog miss plus a degraded 1C answer is unknown, not not-found', () => {
+        expect(scanVerdict({catalogResult: CATALOG_MISS, stockEntry: firstStockEntry(UNAVAILABLE_STOCK)}))
+            .toBe('unknown');
+    });
+
+    test('a catalog miss plus a row 1C cannot be asked about is unknown', () => {
+        expect(scanVerdict({catalogResult: CATALOG_MISS, stockEntry: firstStockEntry(NO_KEY_STOCK)}))
+            .toBe('unknown');
+    });
+
+    // The catalog half must be a 404 too. A 500 means we never learned whether
+    // the replica holds it, so 1C's not_found cannot settle the question.
+    test('a catalog failure that is not the 404 is unknown even when 1C says not_found', () => {
+        expect(scanVerdict({catalogResult: CATALOG_DOWN, stockEntry: firstStockEntry(NOT_FOUND_STOCK)}))
+            .toBe('unknown');
+    });
+
+    test('both halves down is unknown', () => {
+        expect(scanVerdict({
+            catalogResult: CATALOG_DOWN, stockEntry: firstStockEntry({success: false, status: null}),
+        })).toBe('unknown');
     });
 });
 

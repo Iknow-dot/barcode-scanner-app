@@ -6,6 +6,7 @@ import SubNavContext from '../../contexts/SubNavContext';
 import {LanguageProvider} from '../../i18n/LanguageContext';
 import translations from '../../i18n/translations';
 import {productService} from '../../api';
+import {getTodayScans} from '../../utils/scanLog';
 
 const en = translations.en;
 
@@ -77,6 +78,9 @@ const CATALOG_HIT = {
     data: {sku: 'NOM-1', sku_name: 'Held', article: 'A1', price: '9.99', images: []},
 };
 const CATALOG_MISS = {success: false, status: 404, code: 'PRODUCT_NOT_IN_CATALOG'};
+// The replica was never reached — not an answer about the product.
+const CATALOG_DOWN = {success: false, status: null, code: null};
+const STOCK_DOWN = {success: false, status: null, code: null};
 
 const stockOk = (rows) => ({
     success: true,
@@ -244,5 +248,51 @@ describe('UserDashboard scan fan-out', () => {
         await waitFor(() => {
             expect(screen.queryByText(en.catalogMissSearchingUpstream)).toBeNull();
         });
+        // Both halves gave a real negative, so the miss belongs in the history.
+        expect(getTodayScans()).toEqual([expect.objectContaining({search: '4870001', found: false})]);
+    });
+
+    test('both halves failing says the service is unreachable, not that the product is missing', async () => {
+        productService.searchProduct.mockResolvedValue(CATALOG_DOWN);
+        productService.fetchStock.mockResolvedValue(STOCK_DOWN);
+
+        renderDashboard();
+        await scanAndSettleCatalog();
+
+        expect(await screen.findByText(en.productSearchError)).toBeInTheDocument();
+        expect(screen.queryByText(en.productNotFound)).toBeNull();
+        // A lookup that failed is not evidence the product is missing, so
+        // nothing is written to the day's scan history.
+        expect(getTodayScans()).toEqual([]);
+    });
+
+    test('a replica miss with 1C unreachable is a service error, not a not-found', async () => {
+        // The regression this guards: the replica genuinely does not hold the
+        // product, but 1C — the only half that could still know it — never
+        // answered. Telling the consultant "not found" here sends them away
+        // from a product that may well be on the shelf.
+        productService.searchProduct.mockResolvedValue(CATALOG_MISS);
+        productService.fetchStock.mockResolvedValue(STOCK_DOWN);
+
+        renderDashboard();
+        await scanAndSettleCatalog();
+
+        expect(await screen.findByText(en.productSearchError)).toBeInTheDocument();
+        expect(screen.queryByText(en.productNotFound)).toBeNull();
+        expect(getTodayScans()).toEqual([]);
+    });
+
+    test('an upstream service code from the stock call is named in the toast', async () => {
+        productService.searchProduct.mockResolvedValue(CATALOG_MISS);
+        productService.fetchStock.mockResolvedValue({
+            success: false, status: 503, code: 'EXTERNAL_SERVICE_UNAVAILABLE',
+        });
+
+        renderDashboard();
+        await scanAndSettleCatalog();
+
+        expect(await screen.findByText(en.externalServiceUnavailable)).toBeInTheDocument();
+        expect(screen.getByText(en.webServiceError)).toBeInTheDocument();
+        expect(screen.queryByText(en.productNotFound)).toBeNull();
     });
 });

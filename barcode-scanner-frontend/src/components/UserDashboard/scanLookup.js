@@ -27,10 +27,34 @@ export const firstStockEntry = (stockResult) => {
     };
 };
 
-/** Whether the scan produced something worth rendering. */
-export const scanVerdict = ({catalogResult, stockEntry}) => (
-    catalogResult?.success || stockEntry?.product ? 'found' : 'not_found'
-);
+/**
+ * The catalog 404's code. It is the only catalog failure that is a real
+ * ANSWER ("this org's replica does not hold that product"). Every other
+ * failure — a 500, a network drop — means we could not ask.
+ */
+export const CATALOG_MISS_CODE = 'PRODUCT_NOT_IN_CATALOG';
+
+/**
+ * What the scan established: `'found' | 'not_found' | 'unknown'`.
+ *
+ * Three values, not two, because "we could not find it" and "we could not
+ * ask" must not reach the consultant as the same sentence. The backend keeps
+ * `unavailable` and `not_found` apart precisely so nobody hunts a shelf for a
+ * product that exists; collapsing them here would undo that on the last hop.
+ *
+ * - `found`    — the replica answered, or the stock call echoed an identity.
+ * - `not_found` — BOTH halves gave a real negative: the catalog 404'd with
+ *   `PRODUCT_NOT_IN_CATALOG` and 1C was reached and reported `not_found`.
+ * - `unknown`  — nothing renderable and at least one half never answered: a
+ *   stock transport failure, `unavailable`, `no_lookup_key`, or a catalog
+ *   failure that is not the 404.
+ */
+export const scanVerdict = ({catalogResult, stockEntry}) => {
+    if (catalogResult?.success || stockEntry?.product) return 'found';
+    const catalogDefinitelyMissed = catalogResult?.code === CATALOG_MISS_CODE;
+    const stockDefinitelyMissed = stockEntry?.status === 'not_found';
+    return catalogDefinitelyMissed && stockDefinitelyMissed ? 'not_found' : 'unknown';
+};
 
 /**
  * The product card's fields, preferring the replica row and falling back to
