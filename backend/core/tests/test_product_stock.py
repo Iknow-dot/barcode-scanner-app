@@ -330,6 +330,14 @@ class SelfHealTests(TestCase):
         # must still be attached to the product 1C actually identified.
         self.assertTrue(ProductBarcode.objects.filter(product=saved, barcode="BC-NEW").exists())
 
+    def test_a_numeric_article_still_heals(self):
+        # 1C's JSON can carry an article as a number; the heal must store its
+        # string rather than fail the item.
+        fake = _FakeClient({"GHOST": {"sku_name": "Discovered", "article": 4000, "stock": []}})
+        [row] = self._batch(fake, [RequestedItem(sku="GHOST", is_barcode=False)])
+        self.assertEqual(row["status"], STATUS_OK)
+        self.assertEqual(Product.objects.get(organization=self.org, sku="GHOST").article, "4000")
+
     def test_replica_hit_is_not_echoed_as_a_product(self):
         Product.objects.create(
             organization=self.org, sku="NOM-1", article="ART-1", name="Held", is_active=True,
