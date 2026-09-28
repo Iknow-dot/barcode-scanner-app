@@ -39,6 +39,76 @@ test('maps results back by the requested article, not the sku', async () => {
     await waitFor(() => expect(result.current.stockBySku.S1).toEqual({W2: 4}));
 });
 
+// Two distinct cart SKUs whose rows share one article: 1C can only be asked
+// about the article, so both get the same answer — but each still needs it.
+const SHARED = [
+    {sku: 'S1', article: 'MG-2814', warehouse_code: 'W1', quantity: 1},
+    {sku: 'S2', article: 'MG-2814', warehouse_code: 'W1', quantity: 1},
+    {sku: 'S3', article: 'MG-9', warehouse_code: 'W1', quantity: 1},
+];
+
+test('two SKUs sharing one article both get captions from one request', async () => {
+    // A lookup map holding one sku per article let the later overwrite the
+    // earlier, and the earlier — already marked as requested — then showed
+    // no caption for as long as the sheet stayed open.
+    productService.fetchStock.mockReturnValue(OK([
+        {sku: 'MG-2814', status: 'ok', stock: [{warehouse: 'W1', quantity: 9}]},
+        {sku: 'MG-9', status: 'ok', stock: [{warehouse: 'W1', quantity: 3}]},
+    ]));
+
+    const {result} = renderHook(() => useSkuStock(SHARED, true));
+
+    await waitFor(() => expect(result.current.stockBySku.S3).toBeDefined());
+    expect(productService.fetchStock).toHaveBeenCalledTimes(1);
+    // The shared article is asked for once, not once per SKU.
+    expect(productService.fetchStock).toHaveBeenCalledWith({
+        items: [{sku: 'MG-2814', isBarcode: false}, {sku: 'MG-9', isBarcode: false}],
+        warehouseCodes: [],
+    });
+    expect(result.current.stockBySku).toEqual({S1: {W1: 9}, S2: {W1: 9}, S3: {W1: 3}});
+    expect(result.current.degraded).toBe(false);
+});
+
+test.each(['unavailable', 'not_found', 'no_lookup_key'])(
+    'a %s answer for a shared article leaves every SKU that asked for it uncaptioned',
+    async (status) => {
+        productService.fetchStock.mockReturnValue(OK([
+            {sku: 'MG-2814', status, stock: []},
+            {sku: 'MG-9', status: 'ok', stock: [{warehouse: 'W1', quantity: 3}]},
+        ]));
+
+        const {result} = renderHook(() => useSkuStock(SHARED, true));
+
+        await waitFor(() => expect(result.current.stockBySku.S3).toBeDefined());
+        expect(result.current.degraded).toBe(true);
+        // Neither sharer is shown a false zero, and the unrelated SKU is untouched.
+        expect(result.current.stockBySku).toEqual({S3: {W1: 3}});
+    },
+);
+
+test('SKUs sharing an article count once toward the cap', async () => {
+    // One more SKU than the cap, but two of them share an article: that is
+    // exactly STOCK_BATCH_MAX_ITEMS distinct lookups, so ONE request — and
+    // every SKU, both sharers included, still gets its caption.
+    const items = Array.from({length: STOCK_BATCH_MAX_ITEMS + 1}, (_, i) => ({
+        sku: `S${i}`,
+        article: i === STOCK_BATCH_MAX_ITEMS ? 'ART-0' : `ART-${i}`,
+        warehouse_code: 'W1',
+        quantity: 1,
+    }));
+    productService.fetchStock.mockImplementation(({items: batch}) => OK(
+        batch.map(({sku}) => ({sku, status: 'ok', stock: [{warehouse: 'W1', quantity: 7}]})),
+    ));
+
+    const {result} = renderHook(() => useSkuStock(items, true));
+
+    await waitFor(() => expect(result.current.stockBySku[`S${STOCK_BATCH_MAX_ITEMS}`]).toBeDefined());
+    expect(productService.fetchStock).toHaveBeenCalledTimes(1);
+    expect(productService.fetchStock.mock.calls[0][0].items).toHaveLength(STOCK_BATCH_MAX_ITEMS);
+    expect(Object.keys(result.current.stockBySku)).toHaveLength(STOCK_BATCH_MAX_ITEMS + 1);
+    expect(result.current.stockBySku.S0).toEqual({W1: 7});
+});
+
 test('a degraded item is left undefined rather than shown as zero', async () => {
     productService.fetchStock.mockReturnValue(OK([
         {sku: 'MG-2814', status: 'unavailable', stock: []},

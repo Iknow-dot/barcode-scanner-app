@@ -19,8 +19,9 @@ const chunk = (values, size) => {
 
 /**
  * Live free stock per product for the cart's stock captions and warnings:
- * one batch request per `STOCK_BATCH_MAX_ITEMS` distinct SKUs while the sheet
- * is open — one request for any ordinary cart.
+ * one batch request per `STOCK_BATCH_MAX_ITEMS` distinct lookup keys (a SKU's
+ * article, else the SKU itself) while the sheet is open — one request for any
+ * ordinary cart.
  *
  * Returns `{stockBySku, degraded}`. `stockBySku` is
  * {[sku]: {[warehouseCode]: quantity}}; a SKU the backend could not resolve is
@@ -58,15 +59,22 @@ const useSkuStock = (items, active) => {
 
         // GetStockAndPrices keys off the article (or a barcode); the canonical
         // sku is not always a valid lookup key. Results come back keyed by the
-        // value we asked for, so map that back to the cart's sku.
-        const skuByLookupKey = new Map(
-            groups.map((group) => [group.article || group.sku, group.sku]),
-        );
+        // value we asked for, so map that back to EVERY cart sku that asked
+        // for it: two SKUs can share one article, and holding one sku per key
+        // let the later overwrite the earlier, whose rows then went without a
+        // caption for as long as the sheet stayed open. Each key is still
+        // sent once, so a shared article counts once toward the cap.
+        const skusByLookupKey = new Map();
+        groups.forEach((group) => {
+            const key = group.article || group.sku;
+            if (!skusByLookupKey.has(key)) skusByLookupKey.set(key, []);
+            skusByLookupKey.get(key).push(group.sku);
+        });
         const generation = generationRef.current;
 
         // Each chunk lands on its own, so a cart past the cap fills in waves
         // rather than losing every caption to one rejected request.
-        chunk([...skuByLookupKey.keys()], STOCK_BATCH_MAX_ITEMS).forEach((keys) => {
+        chunk([...skusByLookupKey.keys()], STOCK_BATCH_MAX_ITEMS).forEach((keys) => {
             productService.fetchStock({
                 items: keys.map((sku) => ({sku, isBarcode: false})),
                 warehouseCodes: [],
@@ -85,10 +93,11 @@ const useSkuStock = (items, active) => {
                 }
                 const next = {};
                 result.data.results.forEach((entry) => {
-                    const sku = skuByLookupKey.get(entry.sku);
+                    const skus = skusByLookupKey.get(entry.sku);
                     // Only `ok` carries a trustworthy list. A degraded entry is
-                    // left out so its rows show no caption instead of a false zero.
-                    if (!sku || entry.status !== 'ok') return;
+                    // left out — for every sku sharing its key — so their rows
+                    // show no caption instead of a false zero.
+                    if (!skus || entry.status !== 'ok') return;
                     const byWarehouse = {};
                     // Hide negative balances, as the product lookup does.
                     (entry.stock || [])
@@ -96,7 +105,9 @@ const useSkuStock = (items, active) => {
                         .forEach((row) => {
                             byWarehouse[row.warehouse] = Number(row.quantity || 0);
                         });
-                    next[sku] = byWarehouse;
+                    skus.forEach((sku) => {
+                        next[sku] = byWarehouse;
+                    });
                 });
                 setStockBySku((prev) => ({...prev, ...next}));
             });
