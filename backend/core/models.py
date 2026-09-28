@@ -54,8 +54,13 @@ class Organization(models.Model):
         default=_unrevealed_push_token_hash, editable=False,
     )
     # ClientIDPhone (ID or phone) of the org's 1C retail counterparty
-    # (საცალო კონტრაგენტი). Used by the CreateOrder push for retail /
-    # clientless orders; while blank those orders confirm without a push.
+    # (საცალო კონტრაგენტი). The CreateOrder push falls back to it for any
+    # order with no customer ID or phone, customer orders included: once set,
+    # those push under it instead of failing with MISSING_CLIENT. While blank,
+    # such a customer order fails with MISSING_CLIENT, and a retail order with
+    # no client still pushes, with ClientIDPhone omitted, so 1C books it to its
+    # own РозничныйПокупатель constant — or answers 404 when that is unset,
+    # which blocks the confirm (see order_push.push_order_to_consult).
     retail_client_id_phone = models.CharField(max_length=50, blank=True, default='')
     employees_count = models.PositiveIntegerField()
 

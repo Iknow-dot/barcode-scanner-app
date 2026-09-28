@@ -58,9 +58,15 @@ class OrganizationAdmin(admin.ModelAdmin):
                 'retail_client_id_phone',
             ),
             'description': (
-                'Retail counterparty ID/phone: the 1C ClientIDPhone used when '
-                'pushing retail (clientless) orders via CreateOrder. While '
-                'blank, retail orders confirm without a 1C push.'
+                'Retail counterparty ID/phone: the 1C ClientIDPhone that '
+                'CreateOrder falls back to for any order with no customer ID '
+                'or phone. That includes customer orders: once this is set, '
+                'they are pushed under the retail counterparty instead of '
+                'being refused. While blank, such a customer order cannot be '
+                'confirmed, and a retail order with no client is pushed '
+                'without one: 1C books it to its own retail customer constant '
+                '(РозничныйПокупатель), and if that is unset too, 1C rejects '
+                'the order and the confirm fails.'
             ),
         }),
         ('Invoice template', {

@@ -289,6 +289,57 @@ class CreateOrderOnConfirmTests(TestCase):
         order.refresh_from_db()
         self.assertEqual(order.status, 'draft')
 
+    def test_customer_order_without_id_or_phone_uses_org_retail_counterparty(
+        self, mstock, mcreate,
+    ):
+        # The fallback runs ID > phone > the org's retail counterparty BEFORE
+        # the is_retail check, so a customer order known only by name posts
+        # under the counterparty instead of blocking. The name is what a
+        # non-retail order must carry (PurchaseOrderSerializer.validate), and
+        # the confirm's own save re-validates it.
+        self._plenty_of_stock(mstock)
+        mcreate.return_value = self._success()
+        self.org.retail_client_id_phone = '999888777'
+        self.org.save()
+        order = self._order(
+            customer_name='Nino', customer_phone='',
+            customer_identification_number='',
+        )
+        self._item(order)
+
+        r = self._confirm(order)
+
+        self.assertEqual(r.status_code, 200, r.json())
+        self.assertEqual(mcreate.call_args.kwargs['client_id_phone'], '999888777')
+        order.refresh_from_db()
+        self.assertFalse(order.is_retail)
+        self.assertEqual(order.status, 'confirmed')
+        self.assertEqual(order.customer_name, 'Nino')
+        self.assertEqual(order.external_order_number, '00000000051')
+
+    def test_customer_order_without_id_or_phone_blocks_without_retail_counterparty(
+        self, mstock, mcreate,
+    ):
+        # The same order with the setting blank: nothing to send as
+        # ClientIDPhone, and only a retail order may go out clientless.
+        self._plenty_of_stock(mstock)
+        self.org.retail_client_id_phone = ''
+        self.org.save()
+        order = self._order(
+            customer_name='Nino', customer_phone='',
+            customer_identification_number='',
+        )
+        self._item(order)
+
+        r = self._confirm(order)
+
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.json()['code'], 'MISSING_CLIENT')
+        mcreate.assert_not_called()
+        order.refresh_from_db()
+        self.assertEqual(order.status, 'draft')
+        self.assertEqual(order.external_order_number, '')
+
     def test_already_pushed_order_skips_push(self, mstock, mcreate):
         self._plenty_of_stock(mstock)
         order = self._order(external_order_number='00000000042')
