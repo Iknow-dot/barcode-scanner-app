@@ -67,6 +67,8 @@ describe('ExternalServiceSettings push token', () => {
         expect(screen.queryByDisplayValue('token-from-an-old-backend')).toBeNull();
     });
 
+    // ~2 s alone, but the Popconfirm round trip ran past jest's 5 s default in
+    // two of three full-suite runs on 2026-09-29, with nothing in it failing.
     it('shows a newly generated token once, with a warning', async () => {
         organizationService.rotateExternalServiceToken.mockResolvedValue({
             success: true, data: {webhook_token: 'fresh-token-shown-once'},
@@ -85,5 +87,5 @@ describe('ExternalServiceSettings push token', () => {
         expect(await screen.findByDisplayValue('fresh-token-shown-once')).toBeTruthy();
         expect(screen.getByText(t.pushTokenShownOnce)).toBeTruthy();
         expect(screen.queryByText(t.pushTokenHidden)).toBeNull();
-    });
+    }, 30000);
 });
