@@ -21,15 +21,24 @@ class PurchaseOrderItemSerializer(serializers.ModelSerializer):
 
 
 class AddOrderItemSerializer(serializers.Serializer):
-    """Serializer for adding a product to an existing order."""
+    """Serializer for adding a product to an existing order.
+
+    The descriptive fields accept '' as "unknown", the same value an
+    omitted field defaults to: the dashboard's live add sends each of them,
+    blank when the product has none (no article in the replica, no unit
+    from 1C), and the cart's gift split re-posts a stored line verbatim.
+    ``warehouse_code`` does not: a line with no warehouse can never confirm
+    (order_push's MISSING_WAREHOUSE) and add_item would merge it into the
+    SKU's line in any warehouse, so a sent code must be a real one.
+    """
     sku = serializers.CharField(max_length=255)
-    sku_name = serializers.CharField(max_length=255, required=False, default='')
-    article = serializers.CharField(max_length=255, required=False, default='')
+    sku_name = serializers.CharField(max_length=255, required=False, allow_blank=True, default='')
+    article = serializers.CharField(max_length=255, required=False, allow_blank=True, default='')
     price = serializers.DecimalField(max_digits=10, decimal_places=2, required=False, default=0)
     quantity = serializers.IntegerField(min_value=1, required=False, default=1)
     warehouse_code = serializers.CharField(max_length=255, required=False, default='')
-    warehouse_name = serializers.CharField(max_length=255, required=False, default='')
-    unit = serializers.CharField(max_length=50, required=False, default='')
+    warehouse_name = serializers.CharField(max_length=255, required=False, allow_blank=True, default='')
+    unit = serializers.CharField(max_length=50, required=False, allow_blank=True, default='')
     discount_percent = serializers.DecimalField(max_digits=5, decimal_places=2, required=False, default=0)
     discounted_price = serializers.DecimalField(max_digits=10, decimal_places=2, required=False, allow_null=True, default=None)
     is_gift = serializers.BooleanField(required=False, default=False)

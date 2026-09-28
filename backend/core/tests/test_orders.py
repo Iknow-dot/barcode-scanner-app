@@ -776,6 +776,134 @@ class GiftFlagEndpointTests(TestCase):
 
 
 @override_settings(SECURE_SSL_REDIRECT=False)
+class AddOrderItemBlankFieldsTests(TestCase):
+    """POST /orders/<id>/items/ with the fields a client sends blank.
+
+    The dashboard's live add (UserDashboard.addItemToOrder) sends every
+    descriptive field, blank when the product has no value for it:
+    ``article: productInfo.article || ''`` for a replica row with no
+    article, ``unit: pickUnit(...)`` ('' when 1C reported no unit),
+    ``warehouse_name || ''`` and ``sku_name || ''``. The cart's gift split
+    (giftSplit.copyLineFields) re-posts a stored line's fields verbatim, so
+    a line saved with a blank article sends it back blank. A blank there
+    means "unknown", exactly like leaving the field out — the model stores
+    '' either way — so it must not 400 the add (an add queued offline would
+    park as rejected).
+
+    ``warehouse_code`` is the exception and stays non-blank when sent: a
+    line with no warehouse can never confirm (order_push answers
+    MISSING_WAREHOUSE), and add_item would merge it into the SKU's line in
+    whatever warehouse that is.
+    """
+
+    def setUp(self):
+        self.org = _make_organization(gift_marking_enabled=True)
+        self.user = User.objects.create_user(
+            username='blank-adder', password='p',
+            role=User.Role.COMPANY_USER, organization=self.org,
+        )
+        self.order = PurchaseOrder.objects.create(
+            organization=self.org, created_by=self.user, customer_name='Cust',
+        )
+        self.api = APIClient()
+        self.api.force_authenticate(user=self.user)
+        self.url = f'/api/v1/orders/{self.order.id}/items/'
+
+    def _live_add(self, **overrides):
+        # The shape UserDashboard.addItemToOrder posts, every key present.
+        payload = {
+            'sku': 'SKU1', 'sku_name': 'Widget', 'article': 'A1',
+            'price': '10.00', 'quantity': 1,
+            'warehouse_code': 'W1', 'warehouse_name': 'WH 1', 'unit': 'piece',
+        }
+        payload.update(overrides)
+        return self.api.post(self.url, payload, format='json')
+
+    def test_live_add_of_a_product_with_no_article_or_unit_is_accepted(self):
+        r = self._live_add(article='', unit='', warehouse_name='')
+
+        self.assertEqual(r.status_code, 201, r.data)
+        line = self.order.items.get(sku='SKU1')
+        self.assertEqual(line.article, '')
+        self.assertEqual(line.unit, '')
+        self.assertEqual(line.warehouse_name, '')
+        self.assertEqual(line.warehouse_code, 'W1')
+        self.assertEqual(line.quantity, 1)
+
+    def test_each_descriptive_field_accepts_blank(self):
+        for field in ('sku_name', 'article', 'warehouse_name', 'unit'):
+            with self.subTest(field=field):
+                sku = f'SKU-{field}'
+                r = self._live_add(sku=sku, **{field: ''})
+                self.assertEqual(r.status_code, 201, r.data)
+                self.assertEqual(getattr(self.order.items.get(sku=sku), field), '')
+
+    def test_a_blank_is_stored_the_same_as_an_omitted_field(self):
+        blank = self._live_add(
+            sku='SKU-BLANK', sku_name='', article='', warehouse_name='', unit='',
+        )
+        omitted = self.api.post(
+            self.url,
+            {'sku': 'SKU-OMIT', 'price': '10.00', 'warehouse_code': 'W1'},
+            format='json',
+        )
+
+        self.assertEqual(blank.status_code, 201, blank.data)
+        self.assertEqual(omitted.status_code, 201, omitted.data)
+        fields = ('sku_name', 'article', 'warehouse_name', 'unit')
+        by_sku = {
+            item['sku']: {f: item[f] for f in fields}
+            for item in omitted.data['items']
+        }
+        self.assertEqual(by_sku['SKU-BLANK'], by_sku['SKU-OMIT'])
+        self.assertEqual(by_sku['SKU-BLANK'], dict.fromkeys(fields, ''))
+
+    def test_a_blank_does_not_wipe_the_line_it_merges_into(self):
+        # "Latest scan wins" only for a value the scan actually has.
+        existing = PurchaseOrderItem.objects.create(
+            order=self.order, sku='SKU1', sku_name='Widget', article='A1',
+            price='10.00', quantity=2, warehouse_code='W1',
+            warehouse_name='WH 1', unit='box',
+        )
+
+        r = self._live_add(sku_name='', article='', warehouse_name='', unit='')
+
+        self.assertEqual(r.status_code, 201, r.data)
+        self.assertEqual(self.order.items.count(), 1)
+        existing.refresh_from_db()
+        self.assertEqual(existing.quantity, 3)
+        self.assertEqual(existing.sku_name, 'Widget')
+        self.assertEqual(existing.article, 'A1')
+        self.assertEqual(existing.warehouse_name, 'WH 1')
+        self.assertEqual(existing.unit, 'box')
+
+    def test_gift_split_can_copy_a_line_stored_with_blank_fields(self):
+        # giftSplit.copyLineFields posts the paid line's stored values back.
+        paid = PurchaseOrderItem.objects.create(
+            order=self.order, sku='SKU1', sku_name='', article='',
+            price='10.00', quantity=3, warehouse_code='W1',
+            warehouse_name='', unit='',
+        )
+
+        r = self.api.post(self.url, {
+            'sku': paid.sku, 'sku_name': paid.sku_name, 'article': paid.article,
+            'price': '10.00', 'warehouse_code': paid.warehouse_code,
+            'warehouse_name': paid.warehouse_name, 'unit': paid.unit,
+            'quantity': 1, 'is_gift': True,
+        }, format='json')
+
+        self.assertEqual(r.status_code, 201, r.data)
+        self.assertTrue(self.order.items.filter(sku='SKU1', is_gift=True).exists())
+
+    def test_a_blank_warehouse_code_is_still_rejected(self):
+        r = self._live_add(warehouse_code='')
+
+        self.assertEqual(r.status_code, 400)
+        self.assertIn('warehouse_code', r.data)
+        self.assertFalse(self.order.items.exists())
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
 class PurchaseOrderCreatedAfterBeforeFilterTests(TestCase):
     """`created_after`/`created_before` (task: consultant Orders tab shows
     only today's orders). Both filter on the real `created_at` instant
