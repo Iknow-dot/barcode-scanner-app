@@ -27,7 +27,10 @@ class ProductSearchSerializer(serializers.Serializer):
         )
 
     found = serializers.BooleanField(read_only=True, required=False)
-    is_barcode = serializers.BooleanField(write_only=True)
+    # Same default as the stock endpoint's StockItemSerializer: the client
+    # sends one scan to both, and a body without it must be a SKU lookup in
+    # both halves, not a SKU lookup there and a 400 here.
+    is_barcode = serializers.BooleanField(write_only=True, required=False, default=False)
     # Set by the dashboard only for lookups the consultant started, so cart
     # stock refreshes and re-runs are not counted as scans. The view reads
     # this flag leniently straight off request.data (`is True`) rather than
@@ -37,9 +40,9 @@ class ProductSearchSerializer(serializers.Serializer):
     record_scan = serializers.BooleanField(required=False, default=False, write_only=True)
     sku = serializers.CharField(max_length=255)
     # `required=False` here is mandatory, not backward-compat cosmetic: the
-    # view calls `self.serializer_class(data={"sku": sku, "is_barcode":
-    # is_barcode})` (core/views/products.py) and never forwards `warehouses`
-    # -- or any other request key -- into that dict, so a required ListField
+    # view validates only the `sku` and `is_barcode` keys of request.data
+    # (core/views/products.py) and never forwards `warehouses` -- or any
+    # other request key -- into the serializer, so a required ListField
     # would fail validation on every single request, whether or not the
     # client actually sends one. The field stays in the request shape only
     # to document, via the OpenAPI schema, that an old client may still send

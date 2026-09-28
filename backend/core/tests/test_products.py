@@ -3,6 +3,7 @@ from __future__ import annotations
 from core.catalog.category_ingest import CategoryResolver
 from core.catalog.image_urls import signed_image_path
 from core.models import Organization, Product, ProductAttribute, ProductBarcode, ScanEvent, Warehouse
+from core.services.stock_batch import RequestedItem
 from decimal import Decimal
 from django.db import DatabaseError
 from django.test import TestCase, override_settings
@@ -185,6 +186,51 @@ class CatalogReadOnlyTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["sku"], "NOM-1")
 
+    def test_padded_sku_resolves_the_product(self):
+        # DRF's CharField trims the value, and the stock call the client fires
+        # in parallel looks up that trimmed copy. Looking up the raw padded
+        # string here 404'd a product the stock half found, and the client
+        # showed a service-error toast for a product that exists.
+        response = self.api.post(self.url, {"sku": "  NOM-1\t", "is_barcode": False}, format="json")
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data["sku"], "NOM-1")
+
+    def test_padded_barcode_resolves_the_product(self):
+        ProductBarcode.objects.create(product=self.product, barcode="BC-1")
+        response = self.api.post(self.url, {"sku": " BC-1 ", "is_barcode": True}, format="json")
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data["sku"], "NOM-1")
+
+    def test_string_false_is_barcode_is_a_sku_lookup(self):
+        # A raw "false" is truthy in Python while the serializer parses it to
+        # False. Branching on the raw value sent this SKU to ProductBarcode,
+        # where "NOM-1" is no barcode, and it missed.
+        response = self.api.post(self.url, {"sku": "NOM-1", "is_barcode": "false"}, format="json")
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data["sku"], "NOM-1")
+
+    def test_absent_is_barcode_is_a_sku_lookup(self):
+        # The stock endpoint defaults an absent is_barcode to False; this one
+        # must too, or one body is a SKU lookup there and a 400 here.
+        response = self.api.post(self.url, {"sku": "NOM-1"}, format="json")
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data["sku"], "NOM-1")
+
+    def test_null_is_barcode_is_rejected(self):
+        # Only an absent key takes the default. An explicit null is invalid,
+        # as it is on the stock endpoint.
+        response = self.api.post(self.url, {"sku": "NOM-1", "is_barcode": None}, format="json")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("is_barcode", response.data)
+
+    def test_whitespace_only_sku_is_rejected_not_looked_up_as_blank(self):
+        # Trimming must not turn "   " into a lookup of "": the blank-SKU row
+        # below would answer it. The serializer rejects it before any lookup.
+        Product.objects.create(organization=self.org, sku="", name="Blank", is_active=True)
+        response = self.api.post(self.url, {"sku": "   ", "is_barcode": False}, format="json")
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.data["sku"][0].code, "blank")
+
     def test_legacy_request_keys_do_not_affect_the_response(self):
         # The view builds its own {"sku", "is_barcode"} dict for validation
         # (core/views/products.py) and never forwards anything else out of
@@ -303,11 +349,69 @@ class ProductSearchRecordScanTests(TestCase):
     def test_stores_the_validated_sku_not_the_raw_value(self):
         # DRF's CharField trims whitespace before checking max_length, so a
         # padded value that passes validation must not blow past the
-        # ScanEvent.value column with untrimmed padding. The padded value
-        # doesn't match the cached barcode ('4000'), so the lookup itself
-        # 404s (unchanged, out-of-scope behaviour) -- the scan is still
-        # recorded, using the trimmed value.
+        # ScanEvent.value column with untrimmed padding. The lookup uses the
+        # same trimmed value, so the padding does not make it miss the cached
+        # barcode ('4000') either.
         response = self._search({'sku': '  4000  ', 'is_barcode': True, 'record_scan': True})
-        self.assertEqual(response.status_code, 404, response.data)
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data['sku_name'], 'Cached')
         event = ScanEvent.objects.get()
         self.assertEqual(event.value, '4000')
+
+    def test_recorded_scan_is_the_lookup_that_ran(self):
+        # The row counts the lookup that actually ran: the same trimmed value
+        # and the same parsed branch. A raw "false" is truthy, so recording
+        # bool(raw) filed this SKU lookup as a barcode scan.
+        response = self._search({'sku': ' CACHED1 ', 'is_barcode': 'false', 'record_scan': True})
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data['sku'], 'CACHED1')
+        event = ScanEvent.objects.get()
+        self.assertEqual(event.value, 'CACHED1')
+        self.assertIs(event.is_barcode, False)
+
+    def test_whitespace_only_sku_records_nothing(self):
+        response = self._search({'sku': '   ', 'is_barcode': True, 'record_scan': True})
+        self.assertEqual(response.status_code, 400, response.data)
+        self.assertFalse(ScanEvent.objects.exists())
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
+class ScanHalvesAgreeTests(TestCase):
+    """A scan sends one body to the catalog read and the stock call in
+    parallel. The client's verdict (scanLookup.js::scanVerdict) is only
+    meaningful if both halves looked up the same parsed value."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.org = _make_organization()
+        cls.user = User.objects.create_user(
+            username="both-halves", password="pw12345!", role=User.Role.COMPANY_USER,
+            organization=cls.org,
+        )
+        product = Product.objects.create(organization=cls.org, sku="NOM-1", name="Held", is_active=True)
+        ProductBarcode.objects.create(product=product, barcode="4000")
+
+    def setUp(self):
+        self.api = APIClient()
+        self.api.force_authenticate(user=self.user)
+
+    def test_both_halves_look_up_the_same_value(self):
+        cases = [
+            ("  4000 ", True, RequestedItem(sku="4000", is_barcode=True)),
+            (" NOM-1 ", "false", RequestedItem(sku="NOM-1", is_barcode=False)),
+        ]
+        for sku, is_barcode, asked_1c_about in cases:
+            with self.subTest(sku=sku, is_barcode=is_barcode):
+                catalog = self.api.post(
+                    reverse("product-search"), {"sku": sku, "is_barcode": is_barcode}, format="json",
+                )
+                with patch("core.views.product_stock.fetch_stock_batch", return_value=[]) as fetch:
+                    stock = self.api.post(
+                        reverse("product-stock"),
+                        {"items": [{"sku": sku, "is_barcode": is_barcode}], "warehouses": []},
+                        format="json",
+                    )
+                self.assertEqual(catalog.status_code, 200, catalog.data)
+                self.assertEqual(catalog.data["sku"], "NOM-1")
+                self.assertEqual(stock.status_code, 200, stock.data)
+                self.assertEqual(fetch.call_args.args[1], [asked_1c_about])

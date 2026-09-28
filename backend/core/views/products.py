@@ -35,10 +35,19 @@ class ProductSearchAPIView(APIView):
     http_method_names = ["post"]
 
     def post(self, request: Request) -> Response:
-        sku = request.data.get("sku")
-        is_barcode = request.data.get("is_barcode")
-        serializer = self.serializer_class(data={"sku": sku, "is_barcode": is_barcode})
+        # Only the keys the client actually sent, so an absent `is_barcode`
+        # takes the serializer's default rather than failing as a null.
+        serializer = self.serializer_class(
+            data={key: request.data[key] for key in ("sku", "is_barcode") if key in request.data},
+        )
         serializer.is_valid(raise_exception=True)
+        # Everything below reads the validated values, never request.data.
+        # DRF trims `sku` and parses `is_barcode` (a raw "false" is truthy),
+        # and the stock call the client fires in parallel looks up its own
+        # validated copy. One scan must ask both halves about the same value,
+        # or a padded SKU misses here while stock finds it.
+        sku = serializer.validated_data["sku"]
+        is_barcode = serializer.validated_data["is_barcode"]
         user = self.request.user
 
         # `record_scan` is read leniently here, not through serializer
@@ -46,7 +55,7 @@ class ProductSearchAPIView(APIView):
         # the consultant's lookup. Analytics never blocks a scan. It is counted
         # before the lookup runs, so a miss counts too.
         if request.data.get("record_scan") is True and user.organization_id:
-            self._record_scan(user, serializer.validated_data["sku"], bool(is_barcode))
+            self._record_scan(user, sku, is_barcode)
 
         if is_barcode:
             match = ProductBarcode.objects.filter(
