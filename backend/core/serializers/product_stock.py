@@ -36,12 +36,17 @@ class ProductStockRequestSerializer(serializers.Serializer):
     def validate(self, attrs):
         """Reject a warehouse list that names nothing this user can reach.
 
-        Warehouse scoping has exactly two modes: an empty list means "all
-        warehouses", and a non-empty one is narrowed to what the user can
-        reach. A list that narrows to nothing is neither -- letting it through
-        would join to "", which 1C reads as "all warehouses", so a request
-        naming only warehouses the user cannot reach would WIDEN instead of
-        returning none.
+        Warehouse scoping has exactly two modes: an empty list means "let 1C
+        choose", and a non-empty one is narrowed to what the user can reach.
+        A list that narrows to nothing is neither -- letting it through would
+        join to "", so a request naming only warehouses the user cannot reach
+        would WIDEN instead of returning none.
+
+        What "" widens TO is 1C's own `СкладВебКонсултанта` constant, not
+        literally every warehouse (confirmed from the service source
+        2026-09-22). That list is set upstream and nobody here can see it, so
+        it is no less of a widening: it is a scope this user was never
+        granted.
 
         "Reachable" is `accessible_warehouses`, the same helper the join in
         `fetch_stock_batch` uses -- org-wide for a company_admin, assigned-only

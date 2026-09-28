@@ -350,6 +350,130 @@ class RetailOrderAPITests(TestCase):
 
 
 @override_settings(SECURE_SSL_REDIRECT=False)
+class OpenDraftPerClientTests(TestCase):
+    """Creating an order hands back the client's open draft instead of a second.
+
+    The match is by `external_client_id` — the 1C counterparty code that
+    CheckClient returns as "1C Code" — else by identification number among
+    drafts that carry NO code. Every draft saved before that code was mapped
+    has a blank one, so the id fallback is what keeps those drafts reachable
+    once lookups start sending a code.
+    """
+
+    ID_NUMBER = '01001012345'
+
+    def setUp(self):
+        self.org = _make_organization()
+        self.user = User.objects.create_user(
+            username='draft-u', password='p',
+            role=User.Role.COMPANY_USER, organization=self.org,
+        )
+        self.api = APIClient()
+        self.api.force_authenticate(self.user)
+        self.url = reverse('order-list')
+
+    def _draft(self, **fields):
+        return PurchaseOrder.objects.create(
+            organization=self.org, created_by=self.user,
+            customer_name='Nino Beridze', **fields,
+        )
+
+    def _create(self, **fields):
+        return self.api.post(
+            self.url, {'customer_name': 'Nino Beridze', **fields}, format='json',
+        )
+
+    def test_a_lookup_with_a_code_resumes_a_draft_saved_before_codes_were_mapped(self):
+        legacy = self._draft(customer_identification_number=self.ID_NUMBER)
+
+        response = self._create(
+            external_client_id='000002738', customer_identification_number=self.ID_NUMBER,
+        )
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data['id'], legacy.id)
+        self.assertEqual(PurchaseOrder.objects.filter(status='draft').count(), 1)
+
+    def test_the_code_matches_a_draft_opened_from_a_phone_or_name_lookup(self):
+        # Those lookups carry no identification number, so without the code
+        # nothing could match them and every lookup opened a fresh draft.
+        first = self._create(external_client_id='000002738', customer_phone='+995555')
+        again = self._create(external_client_id='000002738', customer_phone='+995555')
+
+        self.assertEqual(first.status_code, 201, first.data)
+        self.assertEqual(again.status_code, 200, again.data)
+        self.assertEqual(again.data['id'], first.data['id'])
+
+    def test_another_counterparty_with_the_same_identification_number_gets_its_own_draft(self):
+        # An id lookup can return several counterparties; picking a different
+        # one must not resume the first one's cart.
+        mine = self._draft(
+            external_client_id='000002738', customer_identification_number=self.ID_NUMBER,
+        )
+
+        response = self._create(
+            external_client_id='000009999', customer_identification_number=self.ID_NUMBER,
+        )
+
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertNotEqual(response.data['id'], mine.id)
+
+    def test_without_a_code_the_identification_number_still_matches(self):
+        legacy = self._draft(customer_identification_number=self.ID_NUMBER)
+
+        response = self._create(customer_identification_number=self.ID_NUMBER)
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data['id'], legacy.id)
+
+    def test_only_an_open_draft_is_resumed(self):
+        self._draft(external_client_id='000002738', status=PurchaseOrder.Status.CONFIRMED)
+
+        response = self._create(external_client_id='000002738')
+
+        self.assertEqual(response.status_code, 201, response.data)
+
+    def test_the_match_spans_every_consultant_in_the_organization(self):
+        # One open draft per client org-wide, as designed in 2026-04: a
+        # colleague in another shop gets this draft back, with the "resumed"
+        # notice. The code lets a phone or name lookup reach it, not only an
+        # id one. Scoping it per consultant or shop is an open product
+        # question; the filter to change is `drafts` in the create view.
+        first = self._create(external_client_id='000002738', customer_phone='+995555')
+        colleague = User.objects.create_user(
+            username='draft-u2', password='p',
+            role=User.Role.COMPANY_USER, organization=self.org,
+        )
+        self.api.force_authenticate(colleague)
+
+        again = self._create(external_client_id='000002738', customer_phone='+995555')
+
+        self.assertEqual(again.status_code, 200, again.data)
+        self.assertEqual(again.data['id'], first.data['id'])
+        self.assertEqual(PurchaseOrder.objects.get(pk=first.data['id']).created_by, self.user)
+
+    def test_a_draft_in_another_organization_is_never_resumed(self):
+        other_org = _make_organization(name='OtherOrg', identification_number='987654321')
+        outsider = User.objects.create_user(
+            username='draft-other', password='p',
+            role=User.Role.COMPANY_USER, organization=other_org,
+        )
+        PurchaseOrder.objects.create(
+            organization=other_org, created_by=outsider, customer_name='Nino Beridze',
+            external_client_id='000002738', customer_identification_number=self.ID_NUMBER,
+        )
+
+        response = self._create(
+            external_client_id='000002738', customer_identification_number=self.ID_NUMBER,
+        )
+
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(
+            PurchaseOrder.objects.get(pk=response.data['id']).organization, self.org,
+        )
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
 class RetailOrderListSerializerTests(TestCase):
     def test_list_response_includes_is_retail(self):
         org = _make_organization()

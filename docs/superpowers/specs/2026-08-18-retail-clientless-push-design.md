@@ -3,6 +3,13 @@
 **Date:** 2026-08-18
 **Status:** Approved (Approach A)
 
+> **Corrected 2026-09-22:** the 1C service source shows an omitted
+> `ClientIDPhone` does not leave the order without a client — 1C books it to
+> its own `РозничныйПокупатель` constant, and answers 404 "Default retail
+> customer not found in constants" when that is unset. The decision below is
+> unchanged; only the "no client attached" wording is wrong. See the note at
+> the top of `2026-08-11-createorder-on-confirm-design.md`.
+
 ## Problem
 
 A retail (clientless) order that reaches "proceed to payment" (PATCH status →

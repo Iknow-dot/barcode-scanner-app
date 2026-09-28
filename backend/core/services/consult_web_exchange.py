@@ -63,6 +63,13 @@ CHECK_CLIENT_RESPONSE_FIELDS = {
     "address": "address",
     "phone": "phone",
     "phone_1": "phone",
+    # The counterparty's 1C `Код`, written under this exact key — with a
+    # space; `Code1C` is only 1C's internal structure field (service source
+    # 2026-09-22; seen on the live base 2026-08-04). The dashboard sends it
+    # back as `PurchaseOrder.external_client_id`, which keeps one open draft
+    # per client even for a phone or name lookup, where there is no
+    # identification number to match on.
+    "1C Code": "external_client_id",
 }
 
 # Wrapper keys that the upstream may use to nest the customer object.
@@ -427,8 +434,11 @@ class ConsultWebExchangeClient:
         """POST /CreateOrder — create a „მყიდველის შეკვეთა" document in 1C.
 
         `items` use internal keys (`is_barcode`, `sku`, `quantity`, `price`,
-        `cost`, `discount`). Decimals are sent as floats and `IsBarcode` as
-        the strings "true"/"false", matching the documented example payload.
+        `cost`, `discount`, `gift`). Decimals are sent as floats and
+        `IsBarcode` as the strings "true"/"false", matching the documented
+        example payload — which is also the form 1C's own item lookup
+        compares against (its newer unit-of-measure branch tests the same
+        field as a boolean; open item in ClickUp 1247yh1k66y).
 
         The .docx's 401–417 status table does not match the live service: it
         answers 400 (validation) / 404 (lookups) with `{"success": false,
@@ -436,10 +446,13 @@ class ConsultWebExchangeClient:
         upstream message preserved in `detail`.
 
         A blank `client_id_phone` omits the `ClientIDPhone` key from the
-        payload entirely; 1C then creates the order with no client attached
-        (confirmed against the live test base 2026-08-04). That is
-        intentional only for retail sales — the confirm view blocks
-        non-retail orders from reaching here without a client.
+        payload entirely. 1C then books the order to the counterparty in its
+        own `РозничныйПокупатель` constant, and answers 404 "Default retail
+        customer not found in constants" when that is unset (service source
+        2026-09-22 — the 2026-08-04 probe that saw a clientless order
+        predates it). That is intentional only for retail sales — the
+        confirm view blocks non-retail orders from reaching here without a
+        client.
         """
         payload: dict[str, Any] = {
             "UserID": user_id,
@@ -452,6 +465,10 @@ class ConsultWebExchangeClient:
                     "Price": float(item["price"]),
                     "Cost": float(item["cost"]),
                     "Discount": float(item.get("discount") or 0),
+                    # 1C accepts `true` or the string "true" here and sets
+                    # the row's `Подарок`; a real boolean is the half of
+                    # that which cannot be misread.
+                    "Gift": bool(item.get("gift")),
                 }
                 for item in items
             ],

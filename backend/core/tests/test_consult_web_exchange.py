@@ -529,3 +529,15 @@ class NormalizeClientResponseTests(TestCase):
     def test_non_dict_response_keeps_raw(self):
         result = _normalize_client_response('whatever')
         self.assertEqual(result, {'raw': 'whatever'})
+
+    def test_maps_the_1c_counterparty_code_to_external_client_id(self):
+        # CheckClient writes each counterparty's `Код` under "1C Code" — with
+        # a space; `Code1C` is only 1C's internal structure field (service
+        # source 2026-09-22, and seen on the live base 2026-08-04).
+        body = {'name': 'A B', 'address': '', 'phone': '+995', '1C Code': '000002738'}
+        result = _normalize_client_response(body)
+        self.assertEqual(result['external_client_id'], '000002738')
+
+    def test_a_blank_1c_code_is_left_out(self):
+        result = _normalize_client_response({'name': 'A B', '1C Code': ''})
+        self.assertNotIn('external_client_id', result)

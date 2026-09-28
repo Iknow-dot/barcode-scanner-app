@@ -35,15 +35,17 @@ class CheckClientRequestSerializer(serializers.Serializer):
 class CheckClientResponseSerializer(serializers.Serializer):
     """Normalized client response from CheckClient / CreateClient.
 
-    Upstream 1C returns `name`, `address`, and `phone` for the customer
-    object (plus a wrapper `status`). `raw` echoes the unwrapped upstream
-    JSON so callers can recover unmapped fields without a backend code
-    change.
+    Upstream 1C returns `name`, `address`, `phone` and the counterparty's
+    1C code for the customer object (plus a wrapper `status`). The code
+    surfaces as `external_client_id`, the name the order endpoints take it
+    back under. `raw` echoes the unwrapped upstream JSON so callers can
+    recover unmapped fields without a backend code change.
     """
 
     name = serializers.CharField(required=False, allow_blank=True, default='')
     address = serializers.CharField(required=False, allow_blank=True, default='')
     phone = serializers.CharField(required=False, allow_blank=True, default='')
+    external_client_id = serializers.CharField(required=False, allow_blank=True, default='')
     raw = serializers.JSONField(required=False)
 
 

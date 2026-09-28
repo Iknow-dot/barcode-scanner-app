@@ -37,7 +37,7 @@ erDiagram
 
 | Model | Key fields |
 |-------|------------|
-| **PurchaseOrder** | `status` (draft / confirmed / completed / cancelled) · client copied from 1C: `customer_name`, `customer_phone`, `customer_identification_number`, `external_client_id` · `is_retail` · `external_order_number` (1C number, blank = not sent yet) · delivery: `delivery_type` (pickup / delivery), address, date, time window · optional different recipient · `notes` |
+| **PurchaseOrder** | `status` (draft / confirmed / completed / cancelled) · client copied from 1C: `customer_name`, `customer_phone`, `customer_identification_number`, `external_client_id` (the 1C counterparty code) · `is_retail` · `external_order_number` (1C number, blank = not sent yet) · delivery: `delivery_type` (pickup / delivery), address, date, time window · optional different recipient · `notes` |
 | **PurchaseOrderItem** | Snapshot of the product: `sku`, `sku_name`, `article`, `price`, `unit` · `quantity`, `warehouse_code` / `warehouse_name` · `discount_percent` or `discounted_price` (the latter wins) · `is_gift` |
 | **ScanEvent** | `value`, `is_barcode`, `created_at` — one consultant-started lookup, for analytics |
 

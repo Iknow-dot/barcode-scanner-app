@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from core.models import Product, ProductBarcode, PurchaseOrder, PurchaseOrderItem
 from core.services.consult_web_exchange import ConsultWebExchangeError
+from core.services.order_push import COMMENT_MAX_LENGTH, ORDER_MARKER, order_comment
 from decimal import Decimal
-from django.test import TestCase, override_settings
+from django.test import SimpleTestCase, TestCase, override_settings
 from rest_framework.test import APIClient
 from unittest import mock
 from users.models import User
@@ -20,7 +21,8 @@ class CreateOrderOnConfirmTests(TestCase):
     push failure blocks the confirm (the order stays draft) — a confirmed
     order that does not exist in 1C could never be completed by the
     webhook. Skips: already-pushed orders. Retail orders with no client
-    push with ClientIDPhone omitted; non-retail orders with no client
+    push under the org's retail counterparty, else with ClientIDPhone
+    omitted (1C's own retail constant); non-retail orders with no client
     block with MISSING_CLIENT.
     """
 
@@ -93,6 +95,7 @@ class CreateOrderOnConfirmTests(TestCase):
             'price': Decimal('10.00'),
             'cost': Decimal('20.00'),
             'discount': Decimal('0'),
+            'gift': False,
         }])
 
     def test_client_id_falls_back_to_phone(self, mstock, mcreate):
@@ -323,9 +326,11 @@ class CreateOrderOnConfirmTests(TestCase):
         order.refresh_from_db()
         self.assertEqual(order.external_order_number, '')
 
-    def test_gift_line_sent_as_normal_line(self, mstock, mcreate):
-        # This 1C base has no gift attribute yet (ClickUp 86cakz72m) — gift
-        # lines go through with their regular pricing.
+    def test_gift_line_sent_with_gift_flag_and_normal_pricing(self, mstock, mcreate):
+        # The 1C service reads a per-item `Gift` and sets the document row's
+        # `Подарок` (confirmed from its source 2026-09-22; the older probe
+        # behind ClickUp 86cakz72m predates that). Our mark stays
+        # informational, so the pricing we send is unchanged.
         self._plenty_of_stock(mstock)
         mcreate.return_value = self._success()
         order = self._order()
@@ -337,8 +342,146 @@ class CreateOrderOnConfirmTests(TestCase):
         self.assertEqual(r.status_code, 200)
         items = mcreate.call_args.kwargs['items']
         self.assertEqual(len(items), 2)
+        self.assertIs(items[0]['gift'], False)
         self.assertEqual(items[1]['sku'], 'A2')
+        self.assertIs(items[1]['gift'], True)
         self.assertEqual(items[1]['price'], Decimal('10.00'))
+
+    def test_comment_ends_with_the_marker_so_notes_cannot_corrupt_the_order_id(
+        self, mstock, mcreate,
+    ):
+        # 1C finds "Web order #" and then keeps EVERY digit after it
+        # (ИзвлечьOrderIDИзКомментария → ТолькоЦифрыИзСтроки), registering
+        # the exchange under that number — which is what the completion
+        # webhook keys on. With the notes after the marker,
+        # "Web order #42 — 5 boxes by 18:00" registers as order 4251800.
+        self._plenty_of_stock(mstock)
+        mcreate.return_value = self._success()
+        order = self._order(notes='5 boxes by 18:00')
+        self._item(order)
+
+        self._confirm(order)
+
+        comment = mcreate.call_args.kwargs['comment']
+        self.assertTrue(comment.endswith(f'Web order #{order.id}'), comment)
+        self.assertIn('5 boxes by 18:00', comment)
+        self.assertEqual(_order_id_1c_reads(comment), str(order.id))
+
+    def test_notes_with_their_own_marker_cannot_hijack_the_order_id(self, mstock, mcreate):
+        # 1C matches the FIRST occurrence of the marker, so a note that
+        # repeats it (a consultant pasting an older reference) would win.
+        self._plenty_of_stock(mstock)
+        mcreate.return_value = self._success()
+        order = self._order(notes='replaces Web order #999')
+        self._item(order)
+
+        self._confirm(order)
+
+        comment = mcreate.call_args.kwargs['comment']
+        self.assertEqual(_order_id_1c_reads(comment), str(order.id))
+
+    def test_long_notes_are_truncated_but_the_marker_survives(self, mstock, mcreate):
+        self._plenty_of_stock(mstock)
+        mcreate.return_value = self._success()
+        order = self._order(notes='x' * 900)
+        self._item(order)
+
+        self._confirm(order)
+
+        comment = mcreate.call_args.kwargs['comment']
+        self.assertLessEqual(len(comment), 500)
+        self.assertTrue(comment.endswith(f'Web order #{order.id}'), comment[-40:])
+
+
+def _order_id_1c_reads(comment):
+    """The id 1C registers for `comment`, as its digit string (None = 400).
+
+    A line-for-line mirror of ``ИзвлечьOrderIDИзКомментария``: trim
+    (``СокрЛП``), find the FIRST ``Web order #`` (``Найти``, case-sensitive),
+    then keep every ASCII digit anywhere after it (``ТолькоЦифрыИзСтроки``
+    tests each character against "0123456789", so ``str.isdigit`` — which
+    also accepts ``²`` or ``٣`` — would be the wrong model).
+    """
+    text = comment.strip()
+    position = text.find(ORDER_MARKER)
+    if position < 0:
+        return None
+    rest = text[position + len(ORDER_MARKER):]
+    digits = ''.join(c for c in rest if c in '0123456789')
+    return digits or None
+
+
+class OrderCommentTests(SimpleTestCase):
+    """``order_comment`` must leave exactly one marker, ours, at the very end.
+
+    1C reads the id from the first marker onwards, so anything in the notes
+    that survives as a marker — or that sits after ours — changes the order
+    the completion webhook completes.
+    """
+
+    ORDER_ID = 4217
+
+    def _comment(self, notes):
+        return order_comment(PurchaseOrder(id=self.ORDER_ID, notes=notes))
+
+    def assertOnlyOurMarker(self, comment):
+        self.assertEqual(comment.count(ORDER_MARKER), 1, comment)
+        self.assertTrue(comment.endswith(f'{ORDER_MARKER}{self.ORDER_ID}'), comment[-40:])
+        self.assertEqual(_order_id_1c_reads(comment), str(self.ORDER_ID), comment)
+        self.assertLessEqual(len(comment), COMMENT_MAX_LENGTH)
+
+    def test_no_notes_is_the_bare_marker(self):
+        for notes in ('', None, '   \n\t '):
+            with self.subTest(notes=notes):
+                self.assertEqual(self._comment(notes), f'Web order #{self.ORDER_ID}')
+
+    def test_ordinary_notes_are_kept_verbatim_before_the_marker(self):
+        comment = self._comment('Order #5 — 5 boxes by 18:00')
+        self.assertEqual(comment, f'Order #5 — 5 boxes by 18:00 — Web order #{self.ORDER_ID}')
+        self.assertOnlyOurMarker(comment)
+
+    def test_a_run_of_hashes_cannot_reassemble_the_marker(self):
+        # Replacing "Web order #" once turns "Web order ##999" back into
+        # "Web order #999" — the marker 1C matches first — and 1C would
+        # register the order as 999 followed by our own id's digits.
+        for notes in (
+            'Web order ##999',
+            'Web order ###999',
+            'see Web order ' + '#' * 200 + '999',
+        ):
+            with self.subTest(notes=notes[:40]):
+                self.assertOnlyOurMarker(self._comment(notes))
+
+    def test_repeated_and_nested_markers_are_all_defanged(self):
+        for notes in (
+            'replaces Web order #999',
+            'Web order #1, then Web order ##2',
+            'Web order #Web order #5',
+            'Web order Web order ##5',
+            # This order's own reference pasted into its notes still has to
+            # go: a second marker would put the notes' digits after the first.
+            f'Web order #{self.ORDER_ID}',
+            # 1C's `Найти` is case-sensitive, so this one is inert as it is.
+            'web order #999',
+        ):
+            with self.subTest(notes=notes):
+                self.assertOnlyOurMarker(self._comment(notes))
+
+    def test_a_marker_on_the_truncation_boundary_cannot_survive(self):
+        # Only the notes are truncated. Whatever the cut keeps must hold no
+        # marker, whether the cut lands inside the phrase, on the hash run,
+        # or just after it.
+        marker = f'Web order #{self.ORDER_ID}'
+        room = COMMENT_MAX_LENGTH - len(marker) - len(' — ')
+        for offset in range(0, 16):
+            notes = 'x' * (room - offset) + 'Web order ##999' + 'y' * 50
+            with self.subTest(offset=offset):
+                self.assertOnlyOurMarker(self._comment(notes))
+
+    def test_a_note_ending_in_the_phrase_cannot_join_the_separator_into_a_marker(self):
+        for notes in ('call Web order', 'call Web order ', 'call Web order #'):
+            with self.subTest(notes=notes):
+                self.assertOnlyOurMarker(self._comment(notes))
 
 
 @override_settings(SECURE_SSL_REDIRECT=False)

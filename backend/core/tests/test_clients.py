@@ -434,6 +434,18 @@ class CreateClientPartialSuccessTests(TestCase):
         self.assertEqual(response.data['name'], 'Giorgi Beridze')
         self.assertTrue(any(url.endswith('CheckClient') for url in calls))
 
+    def test_a_recovered_client_carries_its_1c_code(self):
+        # The recovery answer is a CheckClient hit, so it can hand the order
+        # its counterparty code like any lookup does.
+        found = [{'name': 'Giorgi Beridze', 'phone': '+995555', '1C Code': '000002738'}]
+        router, _ = self._upstream_router(
+            create=httpx.ReadTimeout('timed out'), check=_upstream(200, found),
+        )
+        with mock.patch('httpx.request', side_effect=router):
+            response = self.client_api.post(self.url, self.payload, format='json')
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(response.data['external_client_id'], '000002738')
+
     def test_recovers_after_an_unexpected_upstream_status(self):
         found = [{'name': 'Giorgi Beridze', 'phone': '+995555'}]
         router, _ = self._upstream_router(create=_upstream(500, {}), check=_upstream(200, found))
@@ -502,6 +514,31 @@ class CheckClientAPIViewTests(TestCase):
         self.assertEqual(len(response.data['clients']), 1)
         self.assertEqual(response.data['clients'][0]['name'], 'Giorgi Beridze')
         self.assertEqual(response.data['clients'][0]['raw'], body[0])
+
+    def test_hit_carries_the_1c_counterparty_code_as_external_client_id(self):
+        # The exact shape CheckClientPOST writes (service source 2026-09-22).
+        # The dashboard sends `external_client_id` straight back when it
+        # opens an order, where it drives the one-open-draft-per-client match.
+        body = [
+            {'name': 'Giorgi Beridze', 'address': 'Tbilisi', 'phone': '+995555',
+             '1C Code': '000002738'},
+            {'name': 'Giorgi Beridzishvili', 'address': '', 'phone': '',
+             '1C Code': '000002739'},
+        ]
+        with mock.patch('httpx.request', return_value=_upstream(200, body)):
+            response = self.client_api.post(self.url, {'name': 'Giorgi'}, format='json')
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(
+            [c['external_client_id'] for c in response.data['clients']],
+            ['000002738', '000002739'],
+        )
+
+    def test_a_client_without_a_code_answers_a_blank_external_client_id(self):
+        body = [{'name': 'Giorgi Beridze', 'phone': '+995555'}]
+        with mock.patch('httpx.request', return_value=_upstream(200, body)):
+            response = self.client_api.post(self.url, {'phone': '+995555'}, format='json')
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data['clients'][0]['external_client_id'], '')
 
     def test_upstream_404_is_client_not_found(self):
         with mock.patch('httpx.request', return_value=_upstream(404, {})):

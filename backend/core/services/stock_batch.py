@@ -385,8 +385,10 @@ def fetch_stock_batch(user, items: list[RequestedItem], warehouse_codes: list[st
     # caller -- order_push.py::insufficient_stock_lines shows that a second
     # caller of get_stock_and_prices in this area is a normal thing to add --
     # who would otherwise join an empty result to "" and silently ask 1C
-    # about every warehouse in the org. A comment asserting the invariant is
-    # not the same as enforcing it.
+    # about a scope this user was never granted (its own
+    # `СкладВебКонсултанта` constant, which is what "" selects -- not
+    # literally every warehouse, per the service source 2026-09-22). A
+    # comment asserting the invariant is not the same as enforcing it.
     codes = list(
         accessible_warehouses(user)
         .filter(code__in=warehouse_codes)

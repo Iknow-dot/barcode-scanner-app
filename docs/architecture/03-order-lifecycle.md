@@ -19,7 +19,12 @@ stateDiagram-v2
 - **Completed is final.** Only 1C can set it, and afterwards the order can't be
   changed or deleted (`ORDER_COMPLETED_LOCKED`; users get `STATUS_NOT_SETTABLE`).
 - **Starting an order for a client who already has a draft reopens that draft**
-  instead of creating a second one. Retail orders (no client) always start fresh.
+  instead of creating a second one. The match is the client's 1C code from the
+  lookup (`external_client_id`), else the ID number among drafts that carry no
+  code. It covers the whole organization, so a consultant can reopen a draft a
+  colleague in another shop left open (the app says the order was resumed).
+  Since the code is mapped, a phone or name lookup reopens drafts too, not only
+  an ID lookup. Retail orders (no client) always start fresh.
 
 ### Less common transitions the API also allows
 
@@ -75,9 +80,16 @@ The two 1C steps fail in opposite directions on purpose:
 | `ITEM_LOOKUP_KEY_MISSING` | A line has neither an article nor a known barcode 1C can resolve |
 
 The client sent to 1C is the first non-blank of: client ID number → client phone →
-the org's retail counterparty. A retail order with none of them is sent without a
-client. The comment sent to 1C carries `Web order #<id>`, which is how 1C knows
-which order to complete later.
+the org's retail counterparty. A retail order with none of them is sent without
+one, and 1C books it to its own retail counterparty (and rejects it if that is not
+configured on the 1C side). Each line also carries `Gift`, which 1C copies onto
+the row's gift flag; the price sent is the same either way.
+
+The comment sent to 1C is the order notes followed by `Web order #<id>`, **always
+last**. That is how 1C knows which order to complete later: it takes every digit
+after the first `Web order #` as the order id, so notes after the marker would
+turn `#42` + "5 boxes" into order 425. A `Web order #` typed into the notes loses
+its `#` for the same reason, and only the notes are cut to fit 500 characters.
 
 ## Completion (1C → app)
 

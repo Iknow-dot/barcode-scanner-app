@@ -101,6 +101,7 @@ class CreateOrderClientTests(TestCase):
                     'Price': 15.5,
                     'Cost': 31.0,
                     'Discount': 5.0,
+                    'Gift': False,
                 }],
             },
         )
@@ -119,6 +120,17 @@ class CreateOrderClientTests(TestCase):
         self.assertEqual(captured['json']['Items'][0]['IsBarcode'], 'true')
         self.assertEqual(captured['json']['Items'][0]['Sku'], '2000000078649')
 
+    def test_create_order_sends_gift_as_a_json_boolean(self):
+        # 1C accepts `true` or the string "true" for Gift and sets the
+        # document row's `Подарок` (service source, 2026-09-22). A real
+        # boolean is the unambiguous half of that.
+        items = self._items()
+        items[0]['gift'] = True
+        _, captured = self._call(
+            self._mock_response(200, self._success_body()), items=items,
+        )
+        self.assertIs(captured['json']['Items'][0]['Gift'], True)
+
     def test_create_order_omits_blank_comment(self):
         _, captured = self._call(
             self._mock_response(200, self._success_body()), comment='',
@@ -133,7 +145,8 @@ class CreateOrderClientTests(TestCase):
     def test_create_order_omits_blank_client_id_phone(self):
         # Blank = intentional retail sale: the key is omitted entirely (the
         # variant verified against the live test base 2026-08-04) and 1C
-        # creates the order with no client attached.
+        # books the order to its own `РозничныйПокупатель` constant
+        # (service source, 2026-09-22).
         for blank in ('', None):
             result, captured = self._call(
                 self._mock_response(200, self._success_body()),

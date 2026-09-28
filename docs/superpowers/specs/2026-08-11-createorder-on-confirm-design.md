@@ -8,6 +8,31 @@ points, recommended options)
 > non-retail orders with no client data block with `MISSING_CLIENT`. See
 > `2026-08-18-retail-clientless-push-design.md`.
 
+> **Superseded in part (2026-09-22): the contract table below was built from
+> the .docx and an early live probe.** The 1C service source
+> (`HTTPServices/ConsultWebExchange/Module.bsl`, received 2026-09-22) is now
+> the reference, and it differs on four points (ClickUp 1247yh1k66y):
+>
+> - **`Gift` per item exists.** `true` or the string `"true"` sets the row's
+>   `Подарок`. We send it as a JSON boolean, so confirm-flow step 6's "gift
+>   lines are sent as normal lines" is obsolete; the price sent is still
+>   unchanged.
+> - **The comment marker must end the comment.** 1C takes *every* digit after
+>   the first `Web order #` as our order id, so confirm-flow step 7's
+>   `"Web order #<id>" + notes` registered `#42` + "5 boxes" as order 425. The
+>   comment is now notes first and marker last, with any marker inside the
+>   notes defanged (`order_push.order_comment`). No digit after the marker is a
+>   400 "Cannot extract order ID from comment".
+> - **A blank `ClientIDPhone` is not an orphan order.** 1C books it to its own
+>   `РозничныйПокупатель` constant, or answers 404 "Default retail customer
+>   not found in constants" when that is unset. The table's "upstream bug" note
+>   is obsolete. (A top-level `ClientName` is also accepted, as a name-match
+>   fallback; we deliberately do not send it.)
+> - **A per-item `Warehouses` array exists** (`[{StockID, Quantity}, ...]`):
+>   1C writes one row per entry, placed in that warehouse, and ignores the
+>   item's own `Quantity`. The top-level `StockID` is still required. We do not
+>   use it yet, so decision 2 still holds (ClickUp 1247yh1jw2y).
+
 ## Goal
 
 When a `PurchaseOrder` transitions to `confirmed`, create the matching

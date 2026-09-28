@@ -7,6 +7,7 @@ translates both into the ``{code, detail}`` envelope.
 """
 
 import logging
+import re
 from decimal import Decimal, InvalidOperation
 
 from core.log_redaction import safe_body
@@ -132,6 +133,49 @@ def replica_barcode_by_sku(organization, skus):
         barcode_by_sku.setdefault(sku, barcode)
     return barcode_by_sku
 
+
+ORDER_MARKER = "Web order #"
+COMMENT_MAX_LENGTH = 500
+# A marker in the notes together with its WHOLE run of '#'. Dropping just one
+# '#' is not a defang: "Web order ##999" would come back as "Web order #999".
+_NOTES_MARKER = re.compile(r"Web order #+")
+
+
+def order_comment(order):
+    """The 1C `Comment`, carrying the back-reference to our order id.
+
+    1C reads the id straight back out of this string: it finds the FIRST
+    ``Web order #`` and then keeps **every digit that follows it anywhere**
+    (``ИзвлечьOrderIDИзКомментария`` → ``ТолькоЦифрыИзСтроки``, confirmed
+    from the service source 2026-09-22), and registers the exchange under
+    that number — which is the id the completed-order webhook comes back
+    with. So a comment of ``Web order #42 — 5 boxes by 18:00`` registers
+    upstream as order **4251800**, and the webhook then completes the wrong
+    order, or none.
+
+    The comment must therefore hold exactly one marker, ours, at the end:
+
+    - it goes **last**, so only the id's own digits follow it;
+    - every marker in the consultant's notes loses its whole ``#`` run,
+      because 1C matches the first occurrence. The match is exact and
+      case-sensitive (``Найти``), so ``web order #`` is already inert;
+    - only the notes are truncated, and only after the defang — a cut can
+      remove text but not create a marker, whereas trimming the whole
+      string would cut ours off, which 1C answers with 400 "Cannot extract
+      order ID from comment". The separator holds no ``#``, and every
+      marker ends in one, so the join cannot form a marker either.
+    """
+    marker = f"{ORDER_MARKER}{order.id}"
+    notes = _NOTES_MARKER.sub("Web order ", (order.notes or "").strip())
+    if not notes:
+        return marker
+    separator = " — "
+    room = COMMENT_MAX_LENGTH - len(marker) - len(separator)
+    if room <= 0:
+        return marker
+    return f"{notes[:room]}{separator}{marker}"
+
+
 def push_order_to_consult(order):
     """Create the order in 1C via CreateOrder before it confirms — fail CLOSED.
 
@@ -143,10 +187,12 @@ def push_order_to_consult(order):
     1C rejects the order or is unreachable.
 
     Skipped entirely for orders already pushed (there is no UpdateOrder
-    upstream — edits after a push do not reach 1C). Retail orders with
-    no client push with ClientIDPhone omitted (1C creates the order
-    with no client attached); a non-retail order with no client data
-    blocks with MISSING_CLIENT.
+    upstream — edits after a push do not reach 1C). A retail order with no
+    client goes out under `Organization.retail_client_id_phone` when that is
+    set — 1C then resolves it like any client and never reaches its own
+    retail constant — and otherwise with ClientIDPhone omitted, which 1C
+    books to its `РозничныйПокупатель` constant (see `create_order`). A
+    non-retail order with no client data blocks with MISSING_CLIENT.
     """
     if order.external_order_number:
         logging.info(
@@ -222,13 +268,13 @@ def push_order_to_consult(order):
             "price": price,
             "cost": price * item.quantity,
             "discount": discount,
+            # 1C sets the row's `Подарок` from this. Our own mark is
+            # informational and never touched effective_price/line_total,
+            # so the pricing above is unchanged by it.
+            "gift": item.is_gift,
         })
 
-    # The "#<id>" back-reference is what lets the 1C side call the
-    # completed-order webhook with our order id.
-    comment = f"Web order #{order.id}"
-    if order.notes:
-        comment = f"{comment} — {order.notes}"[:500]
+    comment = order_comment(order)
 
     # A ConsultWebExchangeError propagates: the confirm fails closed and the
     # view answers with the shared external-service envelope.
