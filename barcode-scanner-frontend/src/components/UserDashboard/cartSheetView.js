@@ -88,6 +88,9 @@ export const cartRowView = (row) => {
         discountPercent: parseFloat(anchor.discount_percent || 0),
         lineTotal: (Number(row.paid?.line_total || 0) + Number(row.gift?.line_total || 0)).toFixed(2),
         pending: isPendingLine(row.paid) || isPendingLine(row.gift),
+        // An offline scan the sync has not resolved yet: only its barcode is
+        // known, so there is no product to copy onto a second line.
+        unresolved: Boolean(row.paid?._barcodeOnly || row.gift?._barcodeOnly),
         minQuantity: row.paid ? row.giftQty + 1 : 1,
     };
 };
@@ -108,7 +111,47 @@ export const planQuantityChange = (row, newTotal) => {
 export const pricePatch = (value) => ({discounted_price: value == null ? null : value, discount_percent: 0});
 export const discountPatch = (value) => ({discount_percent: value == null ? 0 : value, discounted_price: null});
 
-export const exceedsStock = (row, stock) => Number.isFinite(stock) && Number(row.totalQty) > Number(stock);
+// The confirm refuses an order once the units every line asks of one 1C
+// balance exceed it (core/services/order_push.py::insufficient_stock_lines
+// sums quantities, gifts included, per lookup key and warehouse). It keys
+// each LINE by its own article, else the SKU's barcode — and a row's paid and
+// gift lines can differ, since a merge re-stamps only the line it lands on.
+// The cart holds no barcodes, so an article-less line keys by its SKU: that
+// pools it with no other product, as the barcode does — hence the separate
+// article/SKU spaces.
+const stockPoolKey = (row, line) => JSON.stringify([
+    line.article ? 'article' : 'sku',
+    line.article || row.sku,
+    line.warehouse_code || '',
+]);
+
+const rowLines = (row) => [row.paid, row.gift].filter(Boolean);
+
+/**
+ * Units the whole cart asks of each row's 1C balance: every line in its pool —
+ * another SKU sharing the article, or a duplicate standalone row of the same
+ * SKU (pairGiftLines). A row whose lines fall in two pools takes the fuller
+ * one, and never less than its own units. Returns a lookup, row => units; a
+ * row outside `sections` counts only its own.
+ */
+export const pooledStockDemand = (sections) => {
+    const totals = new Map();
+    (Array.isArray(sections) ? sections : []).forEach((section) => section.rows.forEach((row) => {
+        rowLines(row).forEach((line) => {
+            const key = stockPoolKey(row, line);
+            totals.set(key, (totals.get(key) || 0) + quantityOf(line));
+        });
+    }));
+    return (row) => rowLines(row).reduce(
+        (most, line) => Math.max(most, totals.get(stockPoolKey(row, line)) ?? 0),
+        Number(row.totalQty || 0),
+    );
+};
+
+/** Over a known stock once `demand` (pooledStockDemand; the row's own units by default) exceeds it. */
+export const exceedsStock = (row, stock, demand = row.totalQty) => (
+    Number.isFinite(stock) && Number(demand) > Number(stock)
+);
 
 /** Navbar of the order sheet for each of its two steps. */
 export const orderStepHeader = (step, t) => (

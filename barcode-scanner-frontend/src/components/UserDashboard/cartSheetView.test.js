@@ -11,6 +11,7 @@ import {
     orderStepHeader,
     orderWarehouseNames,
     planQuantityChange,
+    pooledStockDemand,
     pricePatch,
 } from './cartSheetView';
 
@@ -152,6 +153,114 @@ describe('exceedsStock', () => {
         expect(exceedsStock(vake.rows[0], 1)).toBe(true);
         expect(exceedsStock(vake.rows[0], 2)).toBe(false);
         expect(exceedsStock(vake.rows[0], undefined)).toBe(false);
+    });
+
+    it('weighs a known stock against the demand given in place of the row total', () => {
+        const [vake] = cartSections([PAN_PAID]);
+        expect(exceedsStock(vake.rows[0], 9, 12)).toBe(true);
+        expect(exceedsStock(vake.rows[0], 9, 9)).toBe(false);
+        expect(exceedsStock(vake.rows[0], undefined, 12)).toBe(false);
+    });
+});
+
+// The confirm (core/services/order_push.py::insufficient_stock_lines) sums
+// every line's units per 1C lookup key and warehouse before comparing them
+// with the balance; a row weighed alone passed here and was refused there.
+describe('pooledStockDemand', () => {
+    const LID = (overrides) => line({sku: 'LID', sku_name: 'Pan lid', ...overrides});
+    const rowsOf = (sections) => sections.flatMap((section) => section.rows);
+    const warnings = (items, stock) => {
+        const sections = cartSections(items);
+        const demandOf = pooledStockDemand(sections);
+        return rowsOf(sections).map((row) => exceedsStock(row, stock, demandOf(row)));
+    };
+
+    it('pools two SKUs sharing an article, so both rows warn once together they exceed the balance', () => {
+        const items = [line({id: 1, quantity: '6'}), LID({id: 2, quantity: '6'})];
+        const sections = cartSections(items);
+        const demandOf = pooledStockDemand(sections);
+        expect(rowsOf(sections).map(demandOf)).toEqual([12, 12]);
+        // Each row alone is within the balance — the bug this guards.
+        expect(rowsOf(sections).map((row) => exceedsStock(row, 9))).toEqual([false, false]);
+        expect(warnings(items, 9)).toEqual([true, true]);
+    });
+
+    it('warns neither row while the pooled demand fits the balance', () => {
+        expect(warnings([line({id: 1, quantity: '4'}), LID({id: 2, quantity: '4'})], 9)).toEqual([false, false]);
+    });
+
+    it('counts gift units toward the pool, as the confirm does', () => {
+        const items = [
+            line({id: 1, quantity: '4'}),
+            line({id: 2, quantity: '2', is_gift: true}),
+            LID({id: 3, quantity: '4'}),
+        ];
+        expect(warnings(items, 9)).toEqual([true, true]);
+    });
+
+    it('does not pool the same article across warehouses', () => {
+        const items = [line({id: 1, quantity: '6'}), LID({id: 2, quantity: '6', warehouse_code: 'W2', warehouse_name: 'Central'})];
+        const sections = cartSections(items);
+        expect(rowsOf(sections).map(pooledStockDemand(sections))).toEqual([6, 6]);
+        expect(warnings(items, 9)).toEqual([false, false]);
+    });
+
+    it('pools a SKU without an article only with itself', () => {
+        const items = [
+            line({id: 1, quantity: '6', article: ''}),
+            LID({id: 2, quantity: '6', article: null}),
+            // An article spelled like the first SKU is still another product:
+            // the confirm looks an article-less SKU up by its own barcode.
+            line({id: 3, sku: 'POT', quantity: '6', article: 'PAN'}),
+        ];
+        const sections = cartSections(items);
+        expect(rowsOf(sections).map(pooledStockDemand(sections))).toEqual([6, 6, 6]);
+        expect(warnings(items, 9)).toEqual([false, false, false]);
+    });
+
+    it('pools duplicate standalone rows of one SKU in one warehouse', () => {
+        const items = [line({id: 1, quantity: '5'}), line({id: 2, quantity: '5'})];
+        const sections = cartSections(items);
+        // pairGiftLines keeps the second paid line as a row of its own.
+        expect(rowsOf(sections)).toHaveLength(2);
+        expect(rowsOf(sections).map(pooledStockDemand(sections))).toEqual([10, 10]);
+        expect(warnings(items, 9)).toEqual([true, true]);
+    });
+
+    // A merge re-stamps only the line it lands on (add_item: "latest scan
+    // wins"), so a paid and a gift line of one SKU can carry different
+    // articles. The confirm pools each line by its own; so must the cart,
+    // whichever line the row happens to take its article from.
+    describe('when one SKU\'s lines carry different articles', () => {
+        const paidA = line({id: 1, quantity: '3'});
+        const giftBare = line({id: 2, quantity: '1', is_gift: true, article: ''});
+        const lidA = LID({id: 3, quantity: '4'});
+
+        it('does not warn while the article\'s own lines fit its balance', () => {
+            // Confirm: MG-2814 asks 3 + 4 = 7 of 7; the bare gift pools apart.
+            const items = [paidA, giftBare, lidA];
+            const sections = cartSections(items);
+            expect(rowsOf(sections).map(pooledStockDemand(sections))).toEqual([7, 7]);
+            expect(warnings(items, 7)).toEqual([false, false]);
+        });
+
+        it('warns every row drawing on the article once its lines exceed the balance', () => {
+            // The bare gift comes first, so the row takes its blank article;
+            // the paid line still draws 3 + 4 = 7 of MG-2814's 6.
+            expect(warnings([giftBare, paidA, lidA], 6)).toEqual([true, true]);
+        });
+
+        it('never weighs a row at less than its own units', () => {
+            const sections = cartSections([paidA, giftBare]);
+            expect(rowsOf(sections).map(pooledStockDemand(sections))).toEqual([4]);
+        });
+    });
+
+    it('leaves a lone row at its own units', () => {
+        const sections = cartSections([PAN_PAID, PAN_GIFT, KETTLE]);
+        expect(rowsOf(sections).map(pooledStockDemand(sections))).toEqual([3, 1]);
+        expect(pooledStockDemand([])(rowsOf(sections)[0])).toBe(3);
+        expect(pooledStockDemand(undefined)(rowsOf(sections)[1])).toBe(1);
     });
 });
 

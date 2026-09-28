@@ -266,14 +266,77 @@ describe('CartItemRow', () => {
         expect(notify.error).toHaveBeenCalledWith(en.orderError, en.discountExceedsLimit(20));
     });
 
+    // No `demand` prop: the row is weighed on its own units, as before pooling.
     it('warns in words when the row exceeds the warehouse stock', () => {
         renderRow({stock: 1});
         expect(screen.getByText(en.exceedsStock(1))).toBeInTheDocument();
+        expect(screen.queryByText(en.exceedsStockPooled(1))).toBeNull();
+    });
+
+    // Its own 2 units fit the 5 in stock, but the cart asks 6 of that balance
+    // (another SKU sharing the article), and the confirm weighs all 6. "exceeds
+    // 5 in stock" would be false for this row read alone, so the warning says
+    // the other lines are what push it over.
+    it('warns when the cart pools more demand on its balance than there is, and names the real balance', () => {
+        renderRow({stock: 5, demand: 6});
+        expect(screen.getByText(en.exceedsStockPooled(5))).toBeInTheDocument();
+        expect(screen.queryByText(en.exceedsStock(5))).toBeNull();
+        expect(screen.queryByText(`${en.stockRemaining}: 5`)).toBeNull();
+    });
+
+    // Its own 2 units already exceed the 1 in stock, so the single-row text is
+    // true whatever the rest of the pool adds.
+    it('keeps the single-row warning when the row alone exceeds the stock, pool or not', () => {
+        renderRow({stock: 1, demand: 6});
+        expect(screen.getByText(en.exceedsStock(1))).toBeInTheDocument();
+        expect(screen.queryByText(en.exceedsStockPooled(1))).toBeNull();
+    });
+
+    it.each(['en', 'ka'])('names the balance in the pooled warning (%s)', (language) => {
+        expect(translations[language].exceedsStockPooled(7)).toContain('7');
+        expect(translations[language].exceedsStockPooled(7)).not.toBe(translations[language].exceedsStock(7));
+    });
+
+    it('shows the balance when the pooled demand fits it', () => {
+        renderRow({stock: 5, demand: 5});
+        expect(screen.getByText(`${en.stockRemaining}: 5`)).toBeInTheDocument();
     });
 
     it('marks a line still waiting to sync', () => {
         renderRow({row: rowFor([line({id: 'tmp_x1', _pending: true})]), stock: undefined});
         expect(screen.getByText(en.offlineItemPending)).toBeInTheDocument();
+    });
+
+    // A scan made offline is only its barcode until the sync resolves it. A
+    // partial gift splits the row into a paid and a gift line, and the new
+    // line copies the product from this one: here, the barcode as its SKU, no
+    // price and no warehouse — a bogus line the server would take.
+    const unresolvedScan = (quantity) => rowFor([{
+        id: 'tmp_s', sku: '4860001', sku_name: '', price: 0, quantity,
+        line_total: '0.00', effective_price: '0.00', _pending: true, _barcodeOnly: true,
+    }]);
+
+    it('offers no gift split on a scan the sync has not resolved yet', () => {
+        orderService.addOrderItem.mockResolvedValue({success: true, data: UPDATED});
+        orderService.updateOrderItem.mockResolvedValue({success: true, data: UPDATED});
+        renderRow({row: unresolvedScan(3), stock: undefined});
+        const gift = screen.getByRole('button', {name: en.giftLabel});
+        expect(gift).toBeDisabled();
+
+        fireEvent.click(gift);
+
+        expect(orderService.addOrderItem).not.toHaveBeenCalled();
+        expect(orderService.updateOrderItem).not.toHaveBeenCalled();
+    });
+
+    it('still marks a single unresolved unit a gift, which folds into its queued scan', async () => {
+        orderService.updateOrderItem.mockResolvedValue({success: true, data: UPDATED});
+        renderRow({row: unresolvedScan(1), stock: undefined});
+
+        fireEvent.click(screen.getByRole('button', {name: en.giftLabel}));
+
+        await waitFor(() => expect(orderService.updateOrderItem).toHaveBeenCalledWith(7, 'tmp_s', {is_gift: true}));
+        expect(orderService.addOrderItem).not.toHaveBeenCalled();
     });
 
     it('reports a failed change', async () => {

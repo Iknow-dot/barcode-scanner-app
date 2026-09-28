@@ -1,0 +1,24 @@
+/* Lines the offline sync could not replay (OfflineBanner.js): a grouped list
+   under the offline banner, one row per parked line with its reason and
+   Retry now / Discard. The rows are taller than a plain .if-row, so the
+   warning thumb sits at the top instead of centring on the whole block. */
+.m-offline-attention-row {
+    align-items: flex-start;
+}
+
+.m-offline-attention-reason {
+    color: var(--if-label);
+}
+
+.m-offline-attention-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+/* Discard is destructive: only the text colour says so, as with the order
+   row's delete (OrdersView.css), never a full-bleed fill. */
+.if-pill.m-offline-attention-discard {
+    color: var(--if-red-text);
+}

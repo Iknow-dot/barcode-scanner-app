@@ -17,9 +17,13 @@ import {
     customerInitials,
     hasOrderItems,
     orderStepHeader,
+    pooledStockDemand,
 } from './cartSheetView';
 
-const customerKey = (order) => `${order?.external_client_id || ''}|${order?.customer_name || ''}`;
+// Whether `element` is a text field in the cart's rows (`cart`).
+const isCartField = (cart, element) => Boolean(
+    cart && element && cart.contains(element) && element.matches('input, textarea'),
+);
 
 /**
  * The active order as a two-step sheet: the cart (step 1: client, products
@@ -30,7 +34,9 @@ const customerKey = (order) => `${order?.external_client_id || ''}|${order?.cust
  * Like OrderPanel before it, the sheet keeps the order in LOCAL state and
  * reports edits to the dashboard through onOrderUpdate (which only updates a
  * ref), so an edit does not re-render the dashboard. Every opening starts
- * again from the dashboard's order on step 1.
+ * again from the dashboard's order on step 1, and every new order the
+ * dashboard hands it while open replaces the local one, once no cart field
+ * is being typed in (see the sync effect).
  */
 const OrderSheet = ({
     open,
@@ -43,6 +49,7 @@ const OrderSheet = ({
     onChangeCustomer,
     notify,
     confirmDisabled,
+    onOfflineDiscard,
 }) => {
     const {t} = useLanguage();
     const {authData} = useContext(AuthContext);
@@ -75,52 +82,98 @@ const OrderSheet = ({
     const onOrderUpdateRef = useRef(onOrderUpdate);
     onOrderUpdateRef.current = onOrderUpdate;
 
-    // Sync from OUTSIDE (OrderPanel's rules): another order, items added from
-    // the product sheet, or the customer changed from the ⋯ menu.
+    // Every NEW `order` object came from outside the sheet, and the sheet
+    // takes it whatever changed: the offline drain's refetch (a queued line
+    // landing on its server line; or, once an op parks, an order without its
+    // edit, since the refetch lays only the ops still queued back over the
+    // server's), the re-read after a parked line is discarded, the customer
+    // change, the product sheet's add. (It used to take one only when the
+    // item count or customer changed, so an update at the same count never
+    // reached an open sheet.) The sheet's own edits do not come back this
+    // way: onOrderUpdate only moves the dashboard's ref, so between edits
+    // `order` stays the object from before them, and a dashboard re-render
+    // with that same object is no update. The exception is closing —
+    // closeOrderDrawer copies the ref into state, handing back the very
+    // object the sheet last published (ownOrderRef): its own edit, not news.
+    //
+    // So the cart shows what the dashboard's ref holds, whichever order came
+    // last: what the order bar shows and every opening starts from. A read
+    // the server made before one of the sheet's edits committed, but
+    // answered after it, never gets here: orderService.getOrder marks it
+    // `stale`, and neither the drain nor the Discard re-read hands it on.
+    // That guard belongs where the read is taken, not here: a sheet that
+    // ignored an outside order would disagree with the ref.
+    //
+    // UI state that is not order data stays. An edit still in flight is not
+    // in the order yet; its answer lands on top. A delivery field being typed
+    // keeps its text (useDebouncedField skips the prop while its timer or save
+    // is pending). A cart field being typed holds an outside order back until
+    // focus leaves the cart's fields or the step changes (heldOrderRef),
+    // because taking it can mount that row afresh (an offline scan's
+    // placeholder lands in another warehouse's section, under another key),
+    // and React drops the blur that would have saved the typed value. An
+    // answer of the sheet's own that lands meanwhile replaces the held order,
+    // as it does in the ref. Only another order starts again on step 1.
     const lastOrderIdRef = useRef(order?.id);
-    const lastItemCountRef = useRef(order?.items?.length || 0);
-    const lastCustomerKeyRef = useRef(customerKey(order));
+    const ownOrderRef = useRef(null);
+    const heldOrderRef = useRef(null);
+    const cartRef = useRef(null);
+
+    const takeOrder = useCallback((next) => {
+        heldOrderRef.current = null;
+        setLocalOrder(next);
+        if (next?.id !== lastOrderIdRef.current) {
+            lastOrderIdRef.current = next?.id;
+            setStep(1);
+        }
+    }, []);
 
     useEffect(() => {
-        if (order?.id !== lastOrderIdRef.current) {
-            setLocalOrder(order);
-            lastOrderIdRef.current = order?.id;
-            lastItemCountRef.current = order?.items?.length || 0;
-            lastCustomerKeyRef.current = customerKey(order);
-            setStep(1);
+        if (order === ownOrderRef.current) return;
+        if (order?.id === lastOrderIdRef.current && isCartField(cartRef.current, document.activeElement)) {
+            heldOrderRef.current = order;
             return;
         }
-        const itemCount = order?.items?.length || 0;
-        if (itemCount !== lastItemCountRef.current) {
-            setLocalOrder(order);
-            lastItemCountRef.current = itemCount;
-        }
-        if (customerKey(order) !== lastCustomerKeyRef.current) {
-            setLocalOrder(order);
-            lastCustomerKeyRef.current = customerKey(order);
-        }
-    }, [order]);
+        takeOrder(order);
+    }, [order, takeOrder]);
+
+    const releaseHeldOrder = () => {
+        if (heldOrderRef.current) takeOrder(heldOrderRef.current);
+    };
+
+    // Focus moving on to another cart field keeps the order held.
+    const handleCartBlur = (event) => {
+        if (!isCartField(cartRef.current, event.relatedTarget)) releaseHeldOrder();
+    };
+
+    const goToStep = (next) => {
+        releaseHeldOrder();
+        setStep(next);
+    };
 
     // Each opening starts from the dashboard's order, on step 1.
     useEffect(() => {
         if (open) {
+            heldOrderRef.current = null;
             setLocalOrder(order);
             lastOrderIdRef.current = order?.id;
-            lastItemCountRef.current = order?.items?.length || 0;
-            lastCustomerKeyRef.current = customerKey(order);
             setStep(1);
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [open]);
 
     const handleLocalOrderUpdate = useCallback((updatedOrder) => {
+        heldOrderRef.current = null;
         setLocalOrder(updatedOrder);
-        lastItemCountRef.current = updatedOrder?.items?.length || 0;
+        ownOrderRef.current = updatedOrder;
         if (onOrderUpdateRef.current) onOrderUpdateRef.current(updatedOrder);
     }, []);
 
     const items = localOrder?.items;
     const sections = useMemo(() => cartSections(items), [items]);
+    // Rows sharing one 1C balance (one article, or duplicate rows of a SKU)
+    // warn on their summed units, as the confirm refuses on them.
+    const stockDemandOf = useMemo(() => pooledStockDemand(sections), [sections]);
     const {stockBySku, degraded: stockDegraded} = useSkuStock(items, open);
 
     if (!localOrder) return null;
@@ -180,7 +233,7 @@ const OrderSheet = ({
                 type="button"
                 className="if-btn if-btn-primary"
                 disabled={!hasItems}
-                onClick={() => setStep(2)}
+                onClick={() => goToStep(2)}
             >
                 {t.nextStep}
             </button>
@@ -216,11 +269,11 @@ const OrderSheet = ({
             title={header.title}
             subtitle={header.subtitle}
             leading={header.leading}
-            onBack={() => setStep(1)}
+            onBack={() => goToStep(1)}
             trailing={trailing}
             bottomBar={bottomBar}
         >
-            <OfflineBanner orderId={localOrder.id}/>
+            <OfflineBanner orderId={localOrder.id} onDiscard={onOfflineDiscard}/>
             {step === 1 ? (
                 <>
                     <div className="if-group m-cart-client">
@@ -248,31 +301,34 @@ const OrderSheet = ({
                             <span>{t.cartStockIncomplete}</span>
                         </div>
                     )}
-                    {sections.length === 0 ? (
-                        <div className="if-group if-group-empty m-cart-empty">{t.scanToAddProduct}</div>
-                    ) : sections.map((section) => (
-                        <section key={section.key} aria-label={section.warehouseName}>
-                            <h4 className="if-section-header is-split">
-                                <span>{section.warehouseName}</span>
-                                <span>{t.productsInWarehouse(section.rows.length)}</span>
-                            </h4>
-                            <div className="if-group is-thumb-inset">
-                                {section.rows.map((row) => (
-                                    <CartItemRow
-                                        key={row.key}
-                                        row={row}
-                                        stock={stockBySku[row.sku]?.[row.warehouse_code]}
-                                        orderId={localOrder.id}
-                                        onOrderUpdate={handleLocalOrderUpdate}
-                                        notify={notify}
-                                        canApplyDiscount={discountConfig.canApplyDiscount}
-                                        maxDiscountPercent={discountConfig.maxDiscountPercent}
-                                        giftEnabled={discountConfig.giftEnabled}
-                                    />
-                                ))}
-                            </div>
-                        </section>
-                    ))}
+                    <div ref={cartRef} onBlur={handleCartBlur}>
+                        {sections.length === 0 ? (
+                            <div className="if-group if-group-empty m-cart-empty">{t.scanToAddProduct}</div>
+                        ) : sections.map((section) => (
+                            <section key={section.key} aria-label={section.warehouseName}>
+                                <h4 className="if-section-header is-split">
+                                    <span>{section.warehouseName}</span>
+                                    <span>{t.productsInWarehouse(section.rows.length)}</span>
+                                </h4>
+                                <div className="if-group is-thumb-inset">
+                                    {section.rows.map((row) => (
+                                        <CartItemRow
+                                            key={row.key}
+                                            row={row}
+                                            stock={stockBySku[row.sku]?.[row.warehouse_code]}
+                                            demand={stockDemandOf(row)}
+                                            orderId={localOrder.id}
+                                            onOrderUpdate={handleLocalOrderUpdate}
+                                            notify={notify}
+                                            canApplyDiscount={discountConfig.canApplyDiscount}
+                                            maxDiscountPercent={discountConfig.maxDiscountPercent}
+                                            giftEnabled={discountConfig.giftEnabled}
+                                        />
+                                    ))}
+                                </div>
+                            </section>
+                        ))}
+                    </div>
                 </>
             ) : (
                 <DeliveryStep

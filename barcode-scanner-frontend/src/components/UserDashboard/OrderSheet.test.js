@@ -1,5 +1,5 @@
 import React from 'react';
-import {render, screen, fireEvent, waitFor, within} from '@testing-library/react';
+import {act, render, screen, fireEvent, waitFor, within} from '@testing-library/react';
 import OrderSheet from './OrderSheet';
 import AuthContext from '../Auth/AuthContext';
 import {orderService, productService} from '../../api';
@@ -66,7 +66,10 @@ const ORDER = {
 
 const AUTH = {authData: {user: {can_apply_discount: false, max_discount_percent: '0'}, gift_marking_enabled: true}};
 
-const renderSheet = (props = {}) => {
+// `auth` swaps the AuthContext value; everything else is an OrderSheet prop.
+// `rerender` hands the open sheet new props, the way the dashboard re-renders
+// it with a new `order` from outside.
+const renderSheet = ({auth = AUTH, ...props} = {}) => {
     const handlers = {
         onClose: jest.fn(),
         onOrderUpdate: jest.fn(),
@@ -76,14 +79,15 @@ const renderSheet = (props = {}) => {
         onChangeCustomer: jest.fn(),
         notify: {error: jest.fn()},
     };
-    render(
-        <AuthContext.Provider value={AUTH}>
+    const tree = (sheetProps) => (
+        <AuthContext.Provider value={auth}>
             <LanguageProvider>
-                <OrderSheet open order={ORDER} confirmDisabled={false} {...handlers} {...props}/>
+                <OrderSheet open order={ORDER} confirmDisabled={false} {...handlers} {...sheetProps}/>
             </LanguageProvider>
         </AuthContext.Provider>
     );
-    return handlers;
+    const {rerender} = render(tree(props));
+    return {...handlers, rerender: (next) => rerender(tree({...props, ...next}))};
 };
 
 describe('OrderSheet', () => {
@@ -160,6 +164,42 @@ describe('OrderSheet', () => {
         renderSheet();
         await waitFor(() => expect(screen.getAllByText(`${en.stockRemaining}: 9`).length).toBeGreaterThan(0));
         expect(screen.queryByText(en.cartStockIncomplete)).toBeNull();
+    });
+
+    // Two SKUs sharing one article draw on one 1C balance, which useSkuStock
+    // fans out to both. The confirm sums them (6 + 6 > 9) and refuses, so the
+    // cart must warn on both rows instead of weighing each 6 against 9 alone.
+    describe('with two SKUs sharing an article', () => {
+        const sharedOrder = (quantity) => ({
+            ...ORDER,
+            items: [
+                item({quantity}),
+                item({id: 2, sku: 'LID', sku_name: 'Pan lid', quantity}),
+            ],
+        });
+
+        beforeEach(() => {
+            productService.fetchStock.mockResolvedValue({
+                success: true,
+                data: {results: [{sku: 'MG-2814', status: 'ok', stock: [{warehouse: 'W1', quantity: 9}]}]},
+            });
+        });
+
+        it('warns on both rows once together they exceed the balance', async () => {
+            renderSheet({order: sharedOrder('6')});
+            // Each 6 fits the 9 alone; only the pooled 12 does not, so both rows
+            // say it is the other line that pushes them over.
+            await waitFor(() => expect(screen.getAllByText(en.exceedsStockPooled(9))).toHaveLength(2));
+            expect(screen.queryByText(en.exceedsStock(9))).toBeNull();
+            expect(screen.queryByText(`${en.stockRemaining}: 9`)).toBeNull();
+        });
+
+        it('shows the balance on both rows while together they fit it', async () => {
+            renderSheet({order: sharedOrder('4')});
+            await waitFor(() => expect(screen.getAllByText(`${en.stockRemaining}: 9`)).toHaveLength(2));
+            expect(screen.queryByText(en.exceedsStock(9))).toBeNull();
+            expect(screen.queryByText(en.exceedsStockPooled(9))).toBeNull();
+        });
     });
 
     it('totals units and gifts in the bar', () => {
@@ -350,5 +390,257 @@ describe('OrderSheet', () => {
         const {onClose} = renderSheet();
         fireEvent.click(screen.getByRole('button', {name: en.close}));
         expect(onClose).toHaveBeenCalledTimes(1);
+    });
+
+    // The sheet keeps the order in local state and publishes its own edits
+    // only to the dashboard's ref, so every new `order` the dashboard hands it
+    // came from outside: the offline drain's refetch, the customer change,
+    // the product sheet's add. It used to take one only when the item count
+    // or customer changed, so an update at the same count never reached an
+    // open sheet.
+    describe('when the order changes outside the open sheet', () => {
+        const kettle = (overrides) => item({
+            sku: 'KETTLE', sku_name: 'Kettle', article: 'EK-1700', quantity: '1',
+            price: '119.50', effective_price: '119.50', line_total: '119.50', ...overrides,
+        });
+        // A line the offline queue added: an id the server never issued.
+        const QUEUED = {...ORDER, total: '299.30', items: [item(), kettle({id: 'tmp_k1', _pending: true})]};
+        // The drain's refetch once that add has landed: the same two lines.
+        const LANDED = {...QUEUED, items: [item(), kettle({id: 7})]};
+        const quantityOf = (index) => screen.getAllByRole('textbox', {name: en.quantity})[index];
+
+        it('drops the pending marker once a queued add lands, at the same item count', () => {
+            const {rerender} = renderSheet({order: QUEUED});
+            expect(screen.getByText(en.offlineItemPending)).toBeInTheDocument();
+
+            rerender({order: LANDED});
+
+            expect(screen.queryByText(en.offlineItemPending)).toBeNull();
+            expect(screen.getAllByText('Kettle')).toHaveLength(1);
+        });
+
+        it('shows the server quantity again once the refetch after a parked line edit drops it', async () => {
+            const order = {...ORDER, items: [item(), kettle({id: 2})]};
+            // The sheet's own edit, answered from the offline queue.
+            orderService.updateOrderItem.mockResolvedValue({
+                success: true, status: null, offline: true,
+                data: {...order, items: [item({quantity: '3', _pending: true}), kettle({id: 2})]},
+            });
+            const {rerender} = renderSheet({order});
+            fireEvent.click(screen.getAllByRole('button', {name: en.increaseQuantity})[0]);
+            await waitFor(() => expect(quantityOf(0)).toHaveValue('3'));
+            expect(orderService.updateOrderItem).toHaveBeenCalledWith(42, 1, {quantity: 3});
+
+            // The queue parked the edit, and the drain's refetch lays only
+            // the ops still queued back over the server's order: the
+            // dashboard now holds an order without it. (When the drain could
+            // not read the order back, the re-read after Discard brings the
+            // same order here instead.)
+            rerender({order: {...order, items: [item(), kettle({id: 2})]}});
+
+            expect(quantityOf(0)).toHaveValue('2');
+            expect(screen.queryByText(en.offlineItemPending)).toBeNull();
+        });
+
+        it('shows the server delivery type again once the refetch after a parked order edit drops it, on the same step', async () => {
+            orderService.updateOrder.mockResolvedValue({
+                success: true, status: null, offline: true, data: {...ORDER, delivery_type: 'delivery'},
+            });
+            const {rerender} = renderSheet();
+            fireEvent.click(screen.getByRole('button', {name: en.nextStep}));
+            fireEvent.click(screen.getByRole('radio', {name: en.delivery}));
+            expect(await screen.findByRole('textbox', {name: en.deliveryAddress})).toBeInTheDocument();
+
+            rerender({order: {...ORDER, delivery_type: 'pickup'}});
+
+            expect(screen.queryByRole('textbox', {name: en.deliveryAddress})).toBeNull();
+            expect(screen.getByRole('dialog', {name: en.stepDelivery})).toBeInTheDocument();
+        });
+
+        it('keeps an edit it answered itself when the dashboard re-renders with the order it still holds', async () => {
+            // The dashboard never hears of the sheet's edits (they only reach
+            // its ref), so its `order` stays the one from before the edit.
+            orderService.updateOrderItem.mockResolvedValue({
+                success: true, data: {...ORDER, items: [item({quantity: '3'}), ORDER.items[1], ORDER.items[2]]},
+            });
+            const {rerender} = renderSheet();
+            fireEvent.click(screen.getAllByRole('button', {name: en.increaseQuantity})[0]);
+            await waitFor(() => expect(quantityOf(0)).toHaveValue('4'));
+
+            rerender({confirmDisabled: true});
+
+            expect(quantityOf(0)).toHaveValue('4');
+        });
+
+        it('lets a quantity change in flight land on top of an outside update, without remounting the row', async () => {
+            let answer;
+            orderService.updateOrderItem.mockReturnValue(new Promise((resolve) => { answer = resolve; }));
+            const {rerender} = renderSheet({order: QUEUED});
+            fireEvent.click(screen.getAllByRole('button', {name: en.increaseQuantity})[0]);
+            expect(quantityOf(0)).toBeDisabled();
+
+            rerender({order: LANDED});
+
+            expect(screen.queryByText(en.offlineItemPending)).toBeNull();
+            // Still the same row, still waiting on its own request.
+            expect(quantityOf(0)).toBeDisabled();
+
+            answer({success: true, data: {...LANDED, items: [item({quantity: '3'}), kettle({id: 7})]}});
+            await waitFor(() => expect(quantityOf(0)).not.toBeDisabled());
+            expect(quantityOf(0)).toHaveValue('3');
+        });
+
+        it('keeps an open price editor and its typed value through an outside update', async () => {
+            const auth = {authData: {...AUTH.authData, user: {can_apply_discount: true, max_discount_percent: '20'}}};
+            const saved = {...LANDED, items: [item({discounted_price: '80.00', effective_price: '80.00'}), kettle({id: 7})]};
+            orderService.updateOrderItem.mockResolvedValue({success: true, data: saved});
+            const {rerender, onOrderUpdate} = renderSheet({auth, order: QUEUED});
+            const priceButton = screen.getByRole('button', {name: `${en.overridePrice}: 89.90 ₾`});
+            fireEvent.click(priceButton);
+            fireEvent.change(screen.getByRole('textbox', {name: en.price}), {target: {value: '80'}});
+
+            rerender({order: LANDED});
+
+            expect(priceButton).toHaveAttribute('aria-expanded', 'true');
+            const price = screen.getByRole('textbox', {name: en.price});
+            expect(price).toHaveValue('80');
+            fireEvent.blur(price);
+            expect(orderService.updateOrderItem).toHaveBeenCalledWith(42, 1, {discounted_price: 80, discount_percent: 0});
+            await waitFor(() => expect(onOrderUpdate).toHaveBeenCalledWith(saved));
+        });
+
+        it('keeps a comment still being typed through an outside update, and saves it after', async () => {
+            const changed = {...ORDER, customer_name: 'Nino Kapanadze', external_client_id: 'C-9'};
+            orderService.updateOrder.mockResolvedValue({success: true, data: {...changed, notes: 'Call first'}});
+            const {rerender} = renderSheet();
+            fireEvent.click(screen.getByRole('button', {name: en.nextStep}));
+            fireEvent.change(screen.getByRole('textbox', {name: en.orderNotes}), {target: {value: 'Call first'}});
+
+            // The customer changed from the ⋯ menu before the comment saved.
+            rerender({order: changed});
+
+            const delivery = screen.getByRole('dialog', {name: en.stepDelivery});
+            expect(within(delivery).getAllByText('Nino Kapanadze').length).toBeGreaterThan(0);
+            const notes = screen.getByRole('textbox', {name: en.orderNotes});
+            expect(notes).toHaveValue('Call first');
+
+            fireEvent.blur(notes);
+            expect(orderService.updateOrder).toHaveBeenCalledWith(42, {notes: 'Call first'});
+            await waitFor(() => expect(orderService.updateOrder).toHaveBeenCalledTimes(1));
+            expect(screen.getByRole('textbox', {name: en.orderNotes})).toHaveValue('Call first');
+        });
+
+        it('starts another order on the cart step', () => {
+            const {rerender} = renderSheet();
+            fireEvent.click(screen.getByRole('button', {name: en.nextStep}));
+
+            rerender({order: {...ORDER, id: 43, customer_name: 'Nino Kapanadze'}});
+
+            const cart = screen.getByRole('dialog', {name: en.cart});
+            expect(within(cart).getByRole('button', {name: /Nino Kapanadze/})).toBeInTheDocument();
+        });
+
+        // An offline scan's placeholder: the barcode stands in for the SKU,
+        // and with no warehouse known yet it lists under a heading of its
+        // own. Where the drain lands it is another section and another row
+        // key, so taking that order mounts the row afresh — and React drops
+        // the blur that would have saved what was typed in the old one.
+        describe('while a cart field is being typed in', () => {
+            const scanned = {
+                id: 'tmp_s1', sku: '4860001234567', sku_name: '', price: 0, quantity: 1,
+                effective_price: '0.00', line_total: '0.00', _pending: true, _barcodeOnly: true,
+            };
+            const SCANNED = {...ORDER, total: '179.80', items: [item(), scanned]};
+            const SCAN_LANDED = {...ORDER, items: [item(), kettle({id: 7})]};
+            const focus = (element) => act(() => element.focus());
+            const leave = (element) => act(() => element.blur());
+
+            it('holds a landed scan back until the typed quantity is saved', async () => {
+                orderService.updateOrderItem.mockResolvedValue({
+                    success: true, data: {...SCAN_LANDED, items: [item(), kettle({id: 7, quantity: '12'})]},
+                });
+                const {rerender} = renderSheet({order: SCANNED});
+                const typed = quantityOf(1);
+                focus(typed);
+                fireEvent.change(typed, {target: {value: '12'}});
+
+                rerender({order: SCAN_LANDED});
+
+                expect(typed).toBeInTheDocument();
+                expect(typed).toHaveValue('12');
+
+                leave(typed);
+                expect(orderService.updateOrderItem).toHaveBeenCalledWith(42, 'tmp_s1', {quantity: 12});
+                expect(screen.queryByText(en.offlineItemPending)).toBeNull();
+                await waitFor(() => expect(quantityOf(1)).toHaveValue('12'));
+                expect(screen.getByRole('region', {name: 'Vake'})).toHaveTextContent('Kettle');
+            });
+
+            it('holds a landed scan back until the typed price is saved', async () => {
+                const auth = {authData: {...AUTH.authData, user: {can_apply_discount: true, max_discount_percent: '20'}}};
+                const saved = {...SCAN_LANDED, items: [item(), kettle({id: 7, discounted_price: '25.00', effective_price: '25.00'})]};
+                orderService.updateOrderItem.mockResolvedValue({success: true, data: saved});
+                const {rerender, onOrderUpdate} = renderSheet({auth, order: SCANNED});
+                fireEvent.click(screen.getByRole('button', {name: `${en.overridePrice}: 0.00 ₾`}));
+                const price = screen.getByRole('textbox', {name: en.price});
+                focus(price);
+                fireEvent.change(price, {target: {value: '25'}});
+
+                rerender({order: SCAN_LANDED});
+
+                expect(price).toBeInTheDocument();
+                expect(price).toHaveValue('25');
+
+                leave(price);
+                expect(orderService.updateOrderItem).toHaveBeenCalledWith(
+                    42, 'tmp_s1', {discounted_price: 25, discount_percent: 0},
+                );
+                await waitFor(() => expect(onOrderUpdate).toHaveBeenCalledWith(saved));
+            });
+
+            it('keeps holding while focus moves to another cart field', () => {
+                const {rerender} = renderSheet({order: SCANNED});
+                focus(quantityOf(1));
+
+                rerender({order: SCAN_LANDED});
+                focus(quantityOf(0));
+
+                expect(screen.getByText(en.offlineItemPending)).toBeInTheDocument();
+            });
+
+            it('lets go of a held order when the step changes under the focused field', () => {
+                const {rerender} = renderSheet({order: SCANNED});
+                focus(quantityOf(1));
+
+                rerender({order: SCAN_LANDED});
+                // A tap on a button leaves the field focused on iOS: the
+                // field goes with the cart, and no blur is ever seen.
+                fireEvent.click(screen.getByRole('button', {name: en.nextStep}));
+                fireEvent.click(screen.getByRole('button', {name: en.back}));
+
+                expect(screen.queryByText(en.offlineItemPending)).toBeNull();
+                expect(screen.getAllByText('Kettle')).toHaveLength(1);
+            });
+
+            // The dashboard's ref takes whichever order comes last, and the
+            // sheet shows what it holds: an answer of the sheet's own that
+            // lands after the outside order must not be undone by it.
+            it('lets its own answer replace a held order, as the dashboard ref does', async () => {
+                const order = {...ORDER, items: [item(), kettle({id: 2})]};
+                let answer;
+                orderService.updateOrderItem.mockReturnValueOnce(new Promise((resolve) => { answer = resolve; }));
+                const {rerender} = renderSheet({order});
+                fireEvent.click(screen.getAllByRole('button', {name: en.increaseQuantity})[0]);
+                const typing = quantityOf(1);
+                focus(typing);
+
+                rerender({order: {...order, items: [item(), kettle({id: 2})]}});
+                answer({success: true, data: {...order, items: [item({quantity: '3'}), kettle({id: 2})]}});
+                await waitFor(() => expect(quantityOf(0)).toHaveValue('3'));
+
+                leave(typing);
+                expect(quantityOf(0)).toHaveValue('3');
+            });
+        });
     });
 });

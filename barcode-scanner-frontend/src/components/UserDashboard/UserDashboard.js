@@ -42,6 +42,7 @@ import {unitLabel} from './productSheetView';
 import {ADD_FLOW_IDLE, lookupClosed, orderStartFailed, orderStarted, startAdd} from './addFlow';
 import {catalogFeatureEnabled} from '../../utils/features';
 import OfflineBanner, {useOfflineStatus} from './OfflineBanner';
+import {offlineSyncNotice} from './offlineSyncView';
 import {startSyncLoop} from '../../utils/offlineOrderSync';
 import {
     enqueueOp,
@@ -50,9 +51,12 @@ import {
     makeTempId,
     saveSnapshot,
     pendingCount,
+    attentionCount,
     getQueuedOrderIds,
+    getAttentionOrderIds,
+    clearOrder,
 } from '../../utils/offlineOrderQueue';
-import {isOffline} from '../../utils/connectivity';
+import {isOffline, subscribe as subscribeConnectivity} from '../../utils/connectivity';
 import {
     Collapse,
     Result,
@@ -62,6 +66,22 @@ import {
     ShoppingOutlined,
     InboxOutlined,
 } from "@ant-design/icons";
+
+// How often a re-read after a Discard that got no usable answer is tried
+// again while the app stays online (a 5xx: no reconnect is coming).
+const OWED_READ_RETRY_MS = 10 * 1000;
+
+// An order to open, read once more when a write to it overlapped the first
+// read (orderService.getOrder's `stale`): that read may predate a line the
+// drain just replayed, and once the order is open nothing reads it again.
+// A second read that fails opens the order from the first all the same —
+// unless it found the order gone.
+const readOrderToOpen = async (orderId) => {
+    const result = await orderService.getOrder(orderId);
+    if (!result.stale) return result;
+    const again = await orderService.getOrder(orderId);
+    return again.success || again.status === 404 ? again : result;
+};
 
 const UserDashboard = ({isDark = false, onToggleTheme}) => {
     const [loading, setLoading] = useState(false);
@@ -224,16 +244,32 @@ const UserDashboard = ({isDark = false, onToggleTheme}) => {
 
         fetchWarehouses();
 
+        const restore = (order) => {
+            if (!order || activeOrderRef.current) return;
+            activeOrderRef.current = order;
+            setActiveOrder(order);
+            setOrderMode(true);
+        };
+
         // Restore-after-refresh: if there's no active order but a queued
         // offline order exists, restore it from its snapshot so pending
         // work stays visible instead of silently vanishing.
-        const queued = getQueuedOrderIds();
-        if (!activeOrderRef.current && queued.length > 0) {
-            const snapshot = getSnapshot(queued[0]);
-            if (snapshot) {
-                activeOrderRef.current = snapshot;
-                setActiveOrder(snapshot);
-                setOrderMode(true);
+        //
+        // An order whose only unsynced lines are parked for the consultant
+        // counts too — its banner is where they can be retried or discarded.
+        // With nothing left to replay, the sync loop never probes it, so ask
+        // the server first: an order deleted meanwhile takes its parked lines
+        // with it instead of reopening on every reload.
+        const [queuedId] = getQueuedOrderIds();
+        const [parkedId] = getAttentionOrderIds();
+        if (!activeOrderRef.current) {
+            if (queuedId) {
+                restore(getSnapshot(queuedId));
+            } else if (parkedId) {
+                readOrderToOpen(parkedId).then((result) => {
+                    if (result.status === 404) clearOrder(parkedId);
+                    else restore(result.success ? result.data : getSnapshot(parkedId));
+                });
             }
         }
     }, [setSubNav]);
@@ -243,17 +279,22 @@ const UserDashboard = ({isDark = false, onToggleTheme}) => {
     // The product sheet matches "my warehouses" by name, as the result page did.
     const userWarehouseNames = useMemo(() => userWarehouses.map((w) => w.name), [userWarehouses]);
 
+    // The loop below starts once, on mount; its toasts read these, so they
+    // follow a language switched afterwards like the rest of the screen.
+    const syncToastRef = useRef({t, notify});
+    syncToastRef.current = {t, notify};
+
     useEffect(() => {
         const stop = startSyncLoop(() => ({
             userWarehouses: userWarehousesRef.current,
             onSynced: (orderId, result) => {
-                if (result.aborted) return;
-                if (result.failures.length > 0) {
-                    notify.warning(t.orderError, t.offlineSyncFailures(result.failures.length));
-                } else if (result.synced > 0) {
-                    notify.success(t.success, t.offlineSynced);
-                }
-                // Refresh the active order view with the canonical server state.
+                const {t: text, notify: toast} = syncToastRef.current;
+                const notice = offlineSyncNotice(result, text, {
+                    orderId, snapshot: result.order || getSnapshot(orderId),
+                });
+                if (notice) toast[notice.type](notice.title, notice.message);
+                // Refresh the active order view with the canonical server state
+                // (plus any line still waiting out a retry backoff).
                 if (result.order && activeOrderRef.current?.id === result.order.id) {
                     activeOrderRef.current = result.order;
                     setActiveOrder(result.order);
@@ -673,6 +714,12 @@ const UserDashboard = ({isDark = false, onToggleTheme}) => {
             notify.warning(t.orderError, t.offlineConfirmBlocked);
             return;
         }
+        // A line that could not be replayed would silently miss the order
+        // pushed to 1C: the consultant retries or discards it first.
+        if (attentionCount(orderId) > 0) {
+            notify.warning(t.orderError, t.offlineConfirmNeedsReview);
+            return;
+        }
         const result = await orderService.updateOrder(orderId, {status: 'confirmed'});
         if (!result.success) {
             // The backend re-checks live 1C free stock on confirm and answers
@@ -730,6 +777,9 @@ const UserDashboard = ({isDark = false, onToggleTheme}) => {
         if (!activeOrder) return;
         const result = await orderService.deleteOrder(activeOrder.id);
         if (result.success) {
+            // Its queued and parked lines have nowhere to go now, and a
+            // parked one would reopen the deleted order on the next reload.
+            clearOrder(activeOrder.id);
             notify.success(t.success, t.orderDeleted);
             setOrderMode(false);
             activeOrderRef.current = null;
@@ -749,8 +799,60 @@ const UserDashboard = ({isDark = false, onToggleTheme}) => {
         activeOrderRef.current = updatedOrder;
     }, []);
 
-    const handleContinueOrder = async (orderId) => {
+    // A line discarded from an offline banner (Home's or the cart's) leaves
+    // the queue, but the cart can still show what it did to the order, and
+    // nothing else would read the order again (see OfflineBanner's
+    // handleDiscard). getOrder lays the ops still queued back over it, and
+    // the open sheet takes the new order like any other. A read that fails
+    // leaves the cart as it is, without a toast: the banner has said what
+    // happened to the line. A stale one (a write to the order went out
+    // meanwhile) does too, since that write's answer may be the newer. Confirm
+    // does not wait for this read: it pushes what the server holds either way.
+    //
+    // A read that got no answer, a failed one or a stale one is owed: with
+    // nothing queued no drain would read the order again, and the cart would
+    // keep the discarded change for good — a stale read's write may be a
+    // drain replay, whose answer never reaches the cart itself. It is made
+    // again on reconnect and on each tick after (OWED_READ_RETRY_MS) while
+    // that order is still open, until one is answered. A 404 is an answer:
+    // the order is gone.
+    const owedReadRef = useRef(null);
+    const handleOfflineDiscard = useCallback(async (orderId) => {
         const result = await orderService.getOrder(orderId);
+        const answered = (result.success && !result.stale) || result.status === 404;
+        if (!answered) {
+            owedReadRef.current = String(orderId);
+        } else if (owedReadRef.current === String(orderId)) {
+            owedReadRef.current = null;
+        }
+        if (!result.success || result.stale) return;
+        if (String(activeOrderRef.current?.id) !== String(orderId)) return;
+        activeOrderRef.current = result.data;
+        setActiveOrder(result.data);
+    }, []);
+
+    useEffect(() => {
+        const retryOwedRead = () => {
+            const orderId = owedReadRef.current;
+            if (!orderId || isOffline()) return;
+            if (String(activeOrderRef.current?.id) !== orderId) {
+                owedReadRef.current = null; // another order is open now
+                return;
+            }
+            handleOfflineDiscard(orderId);
+        };
+        const unsubscribe = subscribeConnectivity((offline) => {
+            if (!offline) retryOwedRead();
+        });
+        const timer = setInterval(retryOwedRead, OWED_READ_RETRY_MS);
+        return () => {
+            unsubscribe();
+            clearInterval(timer);
+        };
+    }, [handleOfflineDiscard]);
+
+    const handleContinueOrder = async (orderId) => {
+        const result = await readOrderToOpen(orderId);
         if (result.success) {
             activeOrderRef.current = result.data;
             setActiveOrder(result.data);
@@ -773,6 +875,7 @@ const UserDashboard = ({isDark = false, onToggleTheme}) => {
     const handleDeleteIncompleteOrder = async (orderId) => {
         const result = await orderService.deleteOrder(orderId);
         if (result.success) {
+            clearOrder(orderId); // as handleDeleteActiveOrder
             notify.success(t.success, t.orderDeleted);
             refreshOrdersView();
         } else {
@@ -901,7 +1004,11 @@ const UserDashboard = ({isDark = false, onToggleTheme}) => {
         return '';
     };
 
-    const {offline: activeOrderOffline, pending: activeOrderPending} = useOfflineStatus(activeOrder?.id);
+    const {
+        offline: activeOrderOffline,
+        pending: activeOrderPending,
+        attention: activeOrderAttention,
+    } = useOfflineStatus(activeOrder?.id);
 
     // A resolved product is a result even with no stock anywhere — see
     // hasProductResult in stockStatus.js.
@@ -963,7 +1070,9 @@ const UserDashboard = ({isDark = false, onToggleTheme}) => {
     // Home is the whole scan tab; the product result is a sheet over it. The
     // offline banner renders below Home's large header (HomeView's `banner`
     // slot).
-    const offlineBanner = showOrderPanel ? <OfflineBanner orderId={activeOrder.id}/> : null;
+    const offlineBanner = showOrderPanel
+        ? <OfflineBanner orderId={activeOrder.id} onDiscard={handleOfflineDiscard}/>
+        : null;
 
     const renderScanTab = () => (
         <div className="m-tab-content">
@@ -1031,7 +1140,8 @@ const UserDashboard = ({isDark = false, onToggleTheme}) => {
                     onDeleteOrder={handleDeleteActiveOrder}
                     onChangeCustomer={() => setChangeCustomerOpen(true)}
                     notify={notify}
-                    confirmDisabled={activeOrderOffline || activeOrderPending > 0}
+                    confirmDisabled={activeOrderOffline || activeOrderPending > 0 || activeOrderAttention.length > 0}
+                    onOfflineDiscard={handleOfflineDiscard}
                 />
             )}
 

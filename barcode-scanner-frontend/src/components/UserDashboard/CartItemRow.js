@@ -25,6 +25,7 @@ import {
 const CartItemRow = ({
     row,
     stock,
+    demand,
     orderId,
     onOrderUpdate,
     notify,
@@ -121,7 +122,20 @@ const CartItemRow = ({
         </>
     );
 
-    const over = exceedsStock(row, stock);
+    // Weighed on what the whole cart asks of this balance (`demand`, see
+    // pooledStockDemand), as the confirm does; the caption still names 1C's
+    // real balance, not what the other rows leave of it. When the row's own
+    // units fit that balance, "exceeds N in stock" would be false read alone,
+    // so the caption says the lines pooled with it are what push it over.
+    const over = exceedsStock(row, stock, demand);
+    const overOnlyPooled = over && !exceedsStock(row, stock);
+
+    // A gift on part of a row splits it in two, and the new line copies its
+    // product from this one (giftSplit.js), which an unresolved scan does not
+    // have yet: the copy would go out with the barcode as its SKU, no price
+    // and no warehouse. A single unit marks the whole line instead, which the
+    // queued scan takes into itself, so that stays open.
+    const giftLocked = view.unresolved && row.totalQty > 1;
 
     return (
         <div className={`if-row m-cart-item${view.pending ? ' is-pending' : ''}`}>
@@ -189,7 +203,7 @@ const CartItemRow = ({
                             over ? (
                                 <span className="m-cart-item-warning">
                                     <IosIcon name="warn" size={14} stroke={2.4}/>
-                                    {t.exceedsStock(stock)}
+                                    {overOnlyPooled ? t.exceedsStockPooled(stock) : t.exceedsStock(stock)}
                                 </span>
                             ) : (
                                 <span>{t.stockRemaining}: {stock}</span>
@@ -220,7 +234,7 @@ const CartItemRow = ({
                         giftQty={row.giftQty}
                         label={t.giftLabel}
                         onChange={handleGiftChange}
-                        disabled={busy}
+                        disabled={busy || giftLocked}
                     />
                     {/* F3: delete used to take the minus button's exact slot
                         at totalQty === 1 — a consultant correcting a
