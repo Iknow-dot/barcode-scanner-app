@@ -45,3 +45,6 @@ backend/staticfiles/
 
 # Database CA certificates for local SQL clients (never commit)
 certs/
+
+# Brainstorming visual-companion mockups (local only)
+.superpowers/
