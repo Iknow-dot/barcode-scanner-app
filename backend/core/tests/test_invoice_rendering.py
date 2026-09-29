@@ -163,6 +163,12 @@ class InvoiceRendererTests(TestCase):
         self.assertIn('@page', wrapped)
         self.assertIn('<p>body</p>', wrapped)
 
+    def test_skeleton_puts_body_on_glass_sheet_that_print_flattens(self):
+        wrapped = wrap_in_skeleton('<p>body</p>', draft=False)
+        self.assertRegex(wrapped, r'<main class="sheet">\s*<p>body</p>\s*</main>')
+        print_css = wrapped.split('@media print', 1)[1]
+        self.assertIn('backdrop-filter: none', print_css)
+
     def test_skeleton_includes_draft_watermark_for_draft(self):
         wrapped = wrap_in_skeleton('<p>body</p>', draft=True)
         self.assertIn('DRAFT', wrapped)

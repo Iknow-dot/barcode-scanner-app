@@ -23,45 +23,138 @@ from lxml import html as lxml_html
 from core.services.invoice_tokens import resolve_token
 
 
+# Apple "Liquid Glass" on screen: the sheet is a translucent material over a
+# soft tinted backdrop and the Print control floats above it as a glass
+# capsule. Content inside the sheet stays opaque-looking and plain, as the HIG
+# keeps glass for the layer above content. Print drops every translucency,
+# blur and shadow, so paper gets a clean hairline layout. The class names are
+# the ones saved templates already use (DEFAULT_INVOICE_TEMPLATE_HTML), so
+# every organization's template picks the design up without a re-save.
 _PAGE_CSS = """
-:root { color-scheme: light; }
-body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-       color: #222; margin: 24px; font-size: 13px; }
-.no-print { margin-bottom: 16px; }
-.no-print button { padding: 8px 16px; font-size: 14px; cursor: pointer; }
-.header { display: flex; justify-content: space-between; align-items: flex-start;
-          border-bottom: 2px solid #222; padding-bottom: 12px; margin-bottom: 16px; }
+:root {
+  color-scheme: light;
+  --label: #1d1d1f;
+  --label-2: rgba(60, 60, 67, 0.72);
+  --label-3: rgba(60, 60, 67, 0.5);
+  --separator: rgba(60, 60, 67, 0.16);
+  --tint: #3a9866;
+  --fill: rgba(118, 118, 128, 0.08);
+  --glass: rgba(255, 255, 255, 0.62);
+  --glass-edge: rgba(255, 255, 255, 0.75);
+}
+* { box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue',
+                    'Segoe UI', 'Noto Sans Georgian', sans-serif;
+       color: var(--label); margin: 0; padding: 20px 16px 48px; font-size: 13px;
+       line-height: 1.45; -webkit-font-smoothing: antialiased;
+       min-height: 100vh;
+       background:
+         radial-gradient(60% 45% at 12% 8%, rgba(58, 152, 102, 0.28), transparent 70%),
+         radial-gradient(50% 40% at 92% 18%, rgba(90, 170, 220, 0.22), transparent 70%),
+         radial-gradient(55% 45% at 70% 95%, rgba(170, 140, 230, 0.18), transparent 70%),
+         #eef1f0;
+       background-attachment: fixed; }
+
+.no-print { position: sticky; top: 12px; z-index: 3; display: flex;
+            justify-content: center; margin: 0 auto 20px; width: max-content;
+            padding: 6px; border-radius: 999px;
+            background: var(--glass); border: 1px solid var(--glass-edge);
+            -webkit-backdrop-filter: blur(20px) saturate(180%);
+            backdrop-filter: blur(20px) saturate(180%);
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9),
+                        0 8px 24px rgba(0, 0, 0, 0.12); }
+.no-print button { font: inherit; font-size: 15px; font-weight: 600; color: #fff;
+                   padding: 9px 26px; border: 0; border-radius: 999px; cursor: pointer;
+                   background: linear-gradient(180deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0) 55%),
+                               var(--tint);
+                   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45),
+                               0 2px 8px rgba(58, 152, 102, 0.35);
+                   transition: transform 0.15s ease, filter 0.15s ease; }
+.no-print button:hover { filter: brightness(1.06); }
+.no-print button:active { transform: scale(0.96); }
+.no-print button:focus-visible { outline: 3px solid rgba(58, 152, 102, 0.45); outline-offset: 2px; }
+
+.sheet { position: relative; z-index: 1; max-width: 880px; margin: 0 auto;
+         padding: 40px 44px; border-radius: 28px;
+         background: var(--glass); border: 1px solid var(--glass-edge);
+         -webkit-backdrop-filter: blur(40px) saturate(180%);
+         backdrop-filter: blur(40px) saturate(180%);
+         box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9),
+                     inset 0 -1px 0 rgba(255, 255, 255, 0.35),
+                     0 24px 60px rgba(0, 0, 0, 0.10), 0 2px 6px rgba(0, 0, 0, 0.05); }
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .sheet, .no-print { background: rgba(255, 255, 255, 0.94); }
+}
+
+.header { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px;
+          padding-bottom: 20px; margin-bottom: 20px; border-bottom: 1px solid var(--separator); }
 .org-block { max-width: 60%; }
-.org-block .name { font-size: 18px; font-weight: 700; margin: 0 0 4px; }
-.org-block .meta { white-space: pre-line; line-height: 1.4; }
-.invoice-title { text-align: right; font-size: 28px; font-weight: 700; letter-spacing: 1px; }
-.logo { max-width: 180px; max-height: 80px; }
-.meta-row { display: flex; justify-content: space-between; gap: 24px; margin-bottom: 16px; }
-.meta-block { flex: 1; }
-.meta-block h3 { margin: 0 0 6px; font-size: 12px; text-transform: uppercase;
-                 letter-spacing: 0.5px; color: #666; }
-.meta-block p { margin: 0; line-height: 1.4; }
-table.items { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 12px; }
-table.items th, table.items td { padding: 6px 8px; border-bottom: 1px solid #ddd;
-                                 text-align: left; vertical-align: top; }
-table.items th { background: #f5f5f5; font-weight: 600; }
+.org-block .name { font-size: 20px; font-weight: 700; letter-spacing: -0.01em; margin: 6px 0 4px; }
+.org-block .meta { white-space: pre-line; color: var(--label-2); }
+.invoice-title { text-align: right; font-size: 34px; font-weight: 700;
+                 letter-spacing: -0.02em; line-height: 1.1; color: var(--label); }
+.logo { max-width: 180px; max-height: 80px; border-radius: 10px; }
+
+.meta-row { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 20px; }
+.meta-block { flex: 1; min-width: 0; padding: 14px 16px; border-radius: 16px;
+              background: var(--fill); }
+.meta-block h3 { margin: 0 0 6px; font-size: 11px; font-weight: 600; text-transform: uppercase;
+                 letter-spacing: 0.06em; color: var(--label-3); }
+.meta-block p { margin: 0; }
+
+table.items { width: 100%; border-collapse: separate; border-spacing: 0; margin: 8px 0 20px;
+              font-size: 12px; font-variant-numeric: tabular-nums; }
+table.items th, table.items td { padding: 9px 10px; text-align: left; vertical-align: top;
+                                 border-bottom: 1px solid var(--separator); }
+table.items th { font-size: 11px; font-weight: 600; text-transform: uppercase;
+                 letter-spacing: 0.04em; color: var(--label-3); background: var(--fill); }
+table.items th:first-child { border-top-left-radius: 12px; border-bottom-left-radius: 12px; }
+table.items th:last-child { border-top-right-radius: 12px; border-bottom-right-radius: 12px; }
+table.items thead th { border-bottom: 0; }
+table.items tbody tr:last-child td { border-bottom: 0; }
 table.items td.num, table.items th.num { text-align: right; }
-.totals { text-align: right; font-size: 16px; font-weight: 700; margin: 16px 0; }
-.footer { border-top: 1px solid #ddd; padding-top: 12px; margin-top: 24px;
-          white-space: pre-line; line-height: 1.5; color: #444; }
+
+.totals { margin: 8px 0 16px auto; width: max-content; padding: 12px 22px;
+          border-radius: 999px; font-size: 18px; font-weight: 700; letter-spacing: -0.01em;
+          font-variant-numeric: tabular-nums; text-align: right;
+          background: rgba(58, 152, 102, 0.12); color: var(--label);
+          box-shadow: inset 0 0 0 1px rgba(58, 152, 102, 0.22); }
+.footer { border-top: 1px solid var(--separator); padding-top: 14px; margin-top: 24px;
+          white-space: pre-line; line-height: 1.5; color: var(--label-2); font-size: 12px; }
+
+/* Above the sheet, so the preview shows what paper will: under the glass they
+   would be blurred away. */
 .draft-watermark { position: fixed; top: 40%; left: 0; width: 100%; text-align: center;
                    font-size: 120px; font-weight: 700; color: rgba(220, 0, 0, 0.12);
-                   transform: rotate(-25deg); pointer-events: none; z-index: 0; }
+                   transform: rotate(-25deg); pointer-events: none; z-index: 2; }
 .logo-watermark { position: fixed; top: 0; left: 0; right: 0; bottom: 0;
                   display: flex; align-items: center; justify-content: center;
-                  pointer-events: none; z-index: 0;
+                  pointer-events: none; z-index: 2;
                   print-color-adjust: exact; -webkit-print-color-adjust: exact; }
 .logo-watermark img { max-width: 45vw; max-height: 45vh; opacity: 0.13;
                       object-fit: contain; }
+
+@media (max-width: 640px) {
+  body { padding: 12px 8px 32px; }
+  .sheet { padding: 22px 18px; border-radius: 22px; }
+  .header, .meta-row { flex-direction: column; }
+  .org-block { max-width: none; }
+  .invoice-title { text-align: left; font-size: 26px; }
+}
+
 @media print {
-  body { margin: 0; }
-  .no-print { display: none; }
   @page { size: A4; margin: 16mm; }
+  body { margin: 0; padding: 0; background: none; min-height: 0; }
+  .no-print { display: none; }
+  .sheet { max-width: none; padding: 0; border: 0; border-radius: 0; background: none;
+           box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; }
+  .meta-block { background: none; border: 1px solid var(--separator); }
+  table.items th, .meta-block h3 { color: var(--label-2); }
+  table.items th { background: none; }
+  table.items th:first-child, table.items th:last-child { border-radius: 0; }
+  table.items thead th { border-bottom: 1px solid var(--label); }
+  table.items tr { break-inside: avoid; }
+  .totals { background: none; box-shadow: none; border: 1px solid var(--label); }
   .logo-watermark img { max-width: 50%; max-height: 50%; }
 }
 """.strip()
@@ -214,7 +307,8 @@ def render_invoice_template(template_html: str, *, org, order) -> str:
 
 def wrap_in_skeleton(body_html: str, *, draft: bool, logo_data_url: str = '') -> str:
     """Wrap body HTML in the print skeleton (<html>/<head>/<body>, print CSS,
-    print button, optional DRAFT + organization-logo watermarks).
+    print button, the glass `.sheet` around the body, optional DRAFT +
+    organization-logo watermarks).
 
     The page carries no script at all. The frontend opens it as a same-origin
     blob document, which inherits the app's Content-Security-Policy, so
@@ -236,6 +330,8 @@ def wrap_in_skeleton(body_html: str, *, draft: bool, logo_data_url: str = '') ->
 {watermark_html}
 {draft_html}
 <div class="no-print"><button type="button" data-invoice-print>Print</button></div>
+<main class="sheet">
 {body_html}
+</main>
 </body>
 </html>"""
