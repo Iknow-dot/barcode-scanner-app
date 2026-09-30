@@ -32,8 +32,8 @@ MAX_BLOCKS = 30
 MAX_TEXT_HTML = 5000
 MAX_LABEL = 40
 
-_ACCENT_RE = re.compile(r'^#[0-9A-Fa-f]{6}$')
-_BLOCK_ID_RE = re.compile(r'^[a-z0-9-]{1,32}$')
+_ACCENT_RE = re.compile(r'#[0-9A-Fa-f]{6}')
+_BLOCK_ID_RE = re.compile(r'[a-z0-9-]{1,32}')
 
 # Parties sections: key -> the <p> lines inside its meta-block.
 SECTION_LINES = {
@@ -112,8 +112,12 @@ class InvoiceLayoutValidationError(ValueError):
         return {'code': self.code, 'detail': self.detail, 'block_id': self.block_id}
 
 
-def _bool(value, default: bool) -> bool:
-    return default if value is None else bool(value)
+def _bool(value, default: bool, field: str, block_id: str | None) -> bool:
+    if value is None:
+        return default
+    if not isinstance(value, bool):
+        raise InvoiceLayoutValidationError(f'{field} must be true or false.', block_id)
+    return value
 
 
 def _label(value, default: str, what: str, block_id: str | None) -> str:
@@ -139,7 +143,7 @@ def _entries(raw, *, allowed, defaults, text_field, what, block_id):
         seen.add(key)
         result.append({
             'key': key,
-            'hidden': _bool(entry.get('hidden'), False),
+            'hidden': _bool(entry.get('hidden'), False, f'{what[:-1].capitalize()} "{key}" hidden', block_id),
             text_field: _label(entry.get(text_field), defaults[key][text_field], f'{what[:-1].capitalize()} text', block_id),
         })
     return result
@@ -163,17 +167,19 @@ def _block(raw) -> dict:
     if not isinstance(raw, dict):
         raise InvoiceLayoutValidationError('Every block must be an object.')
     block_id = raw.get('id')
-    if not isinstance(block_id, str) or not _BLOCK_ID_RE.match(block_id):
+    if not isinstance(block_id, str) or not _BLOCK_ID_RE.fullmatch(block_id):
         raise InvoiceLayoutValidationError('Block ids must match [a-z0-9-]{1,32}.')
     block_type = raw.get('type')
     if block_type not in BLOCK_TYPES:
         raise InvoiceLayoutValidationError(f'Unknown block type "{block_type}".', block_id)
 
-    block = {'id': block_id, 'type': block_type, 'hidden': _bool(raw.get('hidden'), False)}
+    block = {'id': block_id, 'type': block_type,
+             'hidden': _bool(raw.get('hidden'), False, 'hidden', block_id)}
     if block_type == 'header':
-        block['show_logo'] = _bool(raw.get('show_logo'), True)
-        block['show_identification_number'] = _bool(raw.get('show_identification_number'), True)
-        block['show_contacts'] = _bool(raw.get('show_contacts'), True)
+        block['show_logo'] = _bool(raw.get('show_logo'), True, 'show_logo', block_id)
+        block['show_identification_number'] = _bool(
+            raw.get('show_identification_number'), True, 'show_identification_number', block_id)
+        block['show_contacts'] = _bool(raw.get('show_contacts'), True, 'show_contacts', block_id)
     elif block_type == 'parties':
         block['sections'] = _entries(raw.get('sections'), allowed=SECTION_LINES, defaults=_DEFAULT_SECTIONS,
                                      text_field='heading', what='sections', block_id=block_id)
@@ -197,7 +203,7 @@ def validate_layout(data) -> dict:
     if not isinstance(page_raw, dict):
         raise InvoiceLayoutValidationError('"page" must be an object.')
     accent = page_raw.get('accent') or DEFAULT_ACCENT
-    if not isinstance(accent, str) or not _ACCENT_RE.match(accent):
+    if not isinstance(accent, str) or not _ACCENT_RE.fullmatch(accent):
         raise InvoiceLayoutValidationError('The accent must be a #RRGGBB colour.')
     variant = page_raw.get('variant') or 'glass'
     if variant not in VARIANTS:
@@ -269,7 +275,11 @@ def _items(block, anchor):
     for i, column in enumerate(columns):
         cls = ' class="num"' if column['key'] in _NUMERIC_COLUMNS else ''
         suffix = ' ₾' if column['key'] in _MONEY_COLUMNS else ''
-        # Match legacy template: line breaks after 5th and 8th columns
+        # The rendered table doesn't care where whitespace falls between
+        # cells; this specific 5th/8th-column break exists only to make
+        # lxml's text_content() of the compiled default match the legacy
+        # template's text in test_invoice_layout's equality test (the legacy
+        # template's own line breaks fall in those same two places).
         nl = '\n      ' if (i + 1) in (5, 8) else ''
         head.append(f'<th{cls}>{escape(column["label"])}</th>{nl}')
         row.append(f'\n      <td{cls}><span data-token="item.{column["key"]}"></span>{suffix}</td>')

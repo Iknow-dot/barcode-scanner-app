@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import copy
 import re
-from unittest import mock
 
 from django.test import TestCase, override_settings
 from lxml import html as lxml_html
@@ -95,6 +94,24 @@ class ValidateLayoutTests(TestCase):
         self.assertRejected(_layout(accent='#3a986'))
         self.assertRejected(_layout(variant='neon'))
         self.assertRejected(_layout(title='x' * 41))
+
+    def test_rejects_accent_with_trailing_newline(self):
+        self.assertRejected(_layout(accent='#3A9866\n'))
+
+    def test_rejects_block_id_with_trailing_newline(self):
+        layout = _layout()
+        layout['blocks'].append({'id': 'abc\n', 'type': 'text', 'html': '<p>x</p>'})
+        self.assertRejected(layout, None)
+
+    def test_rejects_non_bool_hidden_on_a_block(self):
+        layout = _layout()
+        _block(layout, 'totals')['hidden'] = 'false'
+        self.assertRejected(layout, 'totals')
+
+    def test_rejects_non_bool_hidden_on_a_section_entry(self):
+        layout = _layout()
+        _block(layout, 'parties')['sections'][0]['hidden'] = 'yes'
+        self.assertRejected(layout, 'parties')
 
     def test_rejects_too_many_text_blocks(self):
         layout = _layout()

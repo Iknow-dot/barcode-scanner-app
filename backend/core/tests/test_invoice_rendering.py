@@ -194,6 +194,10 @@ class InvoiceRendererTests(TestCase):
         self.assertIn(':root { --tint: #3A9866; }', wrapped)
         self.assertNotIn('display:none', wrapped)
 
+    def test_skeleton_rejects_a_trailing_newline_on_the_accent(self):
+        wrapped = wrap_in_skeleton('<p>b</p>', draft=False, accent='#3A9866\n')
+        self.assertIn(':root { --tint: #3A9866; }', wrapped)
+
     def test_skeleton_classic_variant_sets_body_class(self):
         self.assertIn('<body class="variant-classic">', wrap_in_skeleton('<p>b</p>', draft=False, variant='classic'))
         self.assertIn('<body>', wrap_in_skeleton('<p>b</p>', draft=False))

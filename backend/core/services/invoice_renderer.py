@@ -329,7 +329,7 @@ def render_invoice_template(template_html: str, *, org, order) -> str:
     return inner
 
 
-_ACCENT_RE = re.compile(r'^#[0-9A-Fa-f]{6}$')
+_ACCENT_RE = re.compile(r'#[0-9A-Fa-f]{6}')
 
 
 def wrap_in_skeleton(body_html: str, *, draft: bool, logo_data_url: str = '',
@@ -346,7 +346,7 @@ def wrap_in_skeleton(body_html: str, *, draft: bool, logo_data_url: str = '',
     blob document, which inherits the app's Content-Security-Policy, so
     utils/invoicePrintButton.js attaches the Print click from the app side.
     """
-    if not _ACCENT_RE.match(accent or ''):
+    if not _ACCENT_RE.fullmatch(accent or ''):
         accent = DEFAULT_ACCENT
     body_attrs = ' class="variant-classic"' if variant == 'classic' else ''
     draft_html = '<div class="draft-watermark">DRAFT</div>' if draft else ''
