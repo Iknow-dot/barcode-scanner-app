@@ -52,6 +52,12 @@ const InvoiceCanvas = ({orderId, layout, branding, legacyHtml, selectedBlockId, 
             const url = URL.createObjectURL(new Blob([result.data], {type: 'text/html'}));
             const hiddenSlot = visibleSlotRef.current === 0 ? 1 : 0;
             setUrls(prev => {
+                // The hidden slot can never hold the visible slot's URL, so
+                // any URL it holds here is an abandoned pending render
+                // (never promoted, never revoked elsewhere) — revoke it
+                // before overwriting so it doesn't leak.
+                const abandoned = prev[hiddenSlot];
+                if (abandoned) URL.revokeObjectURL(abandoned);
                 const next = [...prev];
                 next[hiddenSlot] = url;
                 return next;
@@ -94,6 +100,16 @@ const InvoiceCanvas = ({orderId, layout, branding, legacyHtml, selectedBlockId, 
     useEffect(() => () => {
         urlsRef.current.forEach(url => { if (url) URL.revokeObjectURL(url); });
     }, []);
+
+    // Dropping the order (orderId -> null) drops both iframes below; without
+    // this, their blobs would sit un-revoked until unmount, and repeated
+    // null/non-null cycles (switching orders) would leak one pair each time.
+    useEffect(() => {
+        if (orderId) return undefined;
+        urlsRef.current.forEach(url => { if (url) URL.revokeObjectURL(url); });
+        setUrls([null, null]);
+        setVisibleSlot(0);
+    }, [orderId]);
 
     if (!orderId) {
         return <div className="invoice-canvas"><Empty description={t.noOrdersForPreview} /></div>;
