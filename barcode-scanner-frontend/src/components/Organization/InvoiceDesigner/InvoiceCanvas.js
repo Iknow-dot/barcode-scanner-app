@@ -3,6 +3,7 @@ import {Empty} from 'antd';
 import {orderService} from '../../../api';
 import {useLanguage} from '../../../i18n/LanguageContext';
 import {markSelected, wireDesignerFrame} from './designerFrame';
+import {canvasScale, CANVAS_PAGE_WIDTH} from './canvasScale';
 
 const RENDER_DELAY_MS = 400;
 
@@ -57,6 +58,10 @@ const InvoiceCanvas = ({orderId, layout, branding, legacyHtml, selectedBlockId, 
     const [failed, setFailed] = useState(false);
     const [failedDetail, setFailedDetail] = useState('');
     const frameRefs = [useRef(null), useRef(null)];
+    const containerRef = useRef(null);
+    // null until the first ResizeObserver callback; the frames render at the
+    // CSS default (100% x 100%, unscaled) until then.
+    const [containerSize, setContainerSize] = useState(null);
     const onSelectRef = useRef(onSelectBlock);
     const selectedRef = useRef(selectedBlockId);
     const urlsRef = useRef(urls);
@@ -110,6 +115,32 @@ const InvoiceCanvas = ({orderId, layout, branding, legacyHtml, selectedBlockId, 
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedBlockId, visibleSlot]);
 
+    // The canvas shows the print layout, not a responsive one: both iframe
+    // slots render at a fixed CANVAS_PAGE_WIDTH and are scaled down with a
+    // CSS transform to fit whatever width the canvas actually has, so the
+    // invoice's own `@media (max-width: 640px)` rules never fire just
+    // because the designer's pane happens to be narrow.
+    useEffect(() => {
+        const node = containerRef.current;
+        if (!node || typeof ResizeObserver === 'undefined') return undefined;
+        const observer = new ResizeObserver((entries) => {
+            const entry = entries[0];
+            if (!entry) return;
+            const {width, height} = entry.contentRect;
+            setContainerSize({width, height});
+        });
+        observer.observe(node);
+        return () => observer.disconnect();
+    }, []);
+
+    const scale = containerSize ? canvasScale(containerSize.width) : 1;
+    const frameStyle = containerSize ? {
+        width: CANVAS_PAGE_WIDTH,
+        height: scale > 0 ? containerSize.height / scale : containerSize.height,
+        transform: `scale(${scale})`,
+        transformOrigin: 'top left',
+    } : undefined;
+
     const handleLoad = (slot, url) => (event) => {
         // Ignore a stale load: only promote if this slot still holds the URL
         // it was given (a newer render may have already replaced it before
@@ -151,7 +182,7 @@ const InvoiceCanvas = ({orderId, layout, branding, legacyHtml, selectedBlockId, 
     }
 
     return (
-        <div className="invoice-canvas">
+        <div className="invoice-canvas" ref={containerRef}>
             {loading && <div className="invoice-canvas-progress" role="progressbar" aria-label={t.loading} />}
             {failed && (
                 <div className="if-notice is-warning invoice-canvas-notice">
@@ -170,6 +201,7 @@ const InvoiceCanvas = ({orderId, layout, branding, legacyHtml, selectedBlockId, 
                         aria-hidden={isVisible ? undefined : 'true'}
                         src={url || 'about:blank'}
                         className={`invoice-canvas-frame${isVisible ? '' : ' is-pending'}`}
+                        style={frameStyle}
                         onLoad={url ? handleLoad(slot, url) : undefined}
                     />
                 );
