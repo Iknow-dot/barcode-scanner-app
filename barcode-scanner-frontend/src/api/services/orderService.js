@@ -270,3 +270,15 @@ export const fetchInvoicePreviewHtml = (orderId, templateHtml) => {
         {responseType: 'text'},
     );
 };
+
+/**
+ * Render the invoice designer's unsaved layout and branding against an order.
+ * The response is the full HTML page with `data-block` anchors.
+ */
+export const fetchInvoiceLayoutPreviewHtml = (orderId, {layout, branding}) => {
+    return api.post(
+        API_ENDPOINTS.order_invoice_preview(orderId),
+        {...branding, invoice_layout: layout},
+        {responseType: 'text'},
+    );
+};
