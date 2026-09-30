@@ -54,7 +54,12 @@ const useAutoDiscount = ({order, active, enabled, onOrder, delayMs = AUTO_DISCOU
 
     useEffect(() => {
         const ticket = ++ticketRef.current;
-        if (!eligible) return undefined;
+        if (!eligible) {
+            // The failure no longer describes this cart (offline, a pending
+            // line, closed…); the notice must not outlive its cause.
+            setUnavailable(false);
+            return undefined;
+        }
         const timer = setTimeout(async () => {
             const result = await orderService.autoDiscount(orderId);
             if (ticket !== ticketRef.current || result.stale) return;

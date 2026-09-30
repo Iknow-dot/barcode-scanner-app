@@ -122,3 +122,16 @@ it('asks once after the debounce when the connection comes back', async () => {
     await flush();
     expect(orderService.autoDiscount).toHaveBeenCalledTimes(1);
 });
+
+it('clears unavailable once the cart stops being eligible', async () => {
+    orderService.autoDiscount.mockResolvedValue({success: false, status: 504});
+    const {result, rerender} = renderHook((props) => useAutoDiscount(props), {initialProps: {
+        order: order([line()]), active: true, enabled: true, onOrder: jest.fn(),
+    }});
+    await flush();
+    expect(result.current.unavailable).toBe(true);
+    rerender({order: order([line(), line({id: 'tmp_x'})]), active: true, enabled: true,
+        onOrder: jest.fn()});
+    await act(async () => {});
+    expect(result.current.unavailable).toBe(false);
+});
