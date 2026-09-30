@@ -105,6 +105,22 @@ class InvoiceTokenResolverTests(TestCase):
         self.assertIn('0', result)
         self.assertNotEqual(result, '—')
 
+    def test_resolve_item_discount_falls_back_to_automatic_percent(self):
+        from decimal import Decimal
+        item = PurchaseOrderItem.objects.create(
+            order=self.order, sku='X', sku_name='X', quantity=2, price=100,
+            auto_discount_percent=Decimal('10.00'),
+        )
+        self.assertEqual(resolve_token('item.discount', item=item, index=1), '10.00%')
+
+    def test_resolve_item_discount_manual_percent_wins_over_automatic(self):
+        from decimal import Decimal
+        item = PurchaseOrderItem.objects.create(
+            order=self.order, sku='X', sku_name='X', quantity=2, price=100,
+            discount_percent=Decimal('5.00'), auto_discount_percent=Decimal('10.00'),
+        )
+        self.assertEqual(resolve_token('item.discount', item=item, index=1), '5.00%')
+
 
 @override_settings(SECURE_SSL_REDIRECT=False)
 class InvoiceTokensEndpointTests(TestCase):

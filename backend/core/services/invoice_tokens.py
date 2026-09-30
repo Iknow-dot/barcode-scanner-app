@@ -40,6 +40,11 @@ def _format_item_discount(item) -> str:
         return f'{pct}%'
     if price is not None:
         return f'{price} ₾'
+    # 1C's automatic percent (auto_discount.py) applies only when no manual
+    # discount is set; unlabelled, since the invoice is customer-facing.
+    auto_pct = getattr(item, 'auto_discount_percent', None)
+    if auto_pct:
+        return f'{auto_pct}%'
     return '—'
 
 
