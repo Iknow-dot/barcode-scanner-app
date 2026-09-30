@@ -2617,4 +2617,4 @@ git commit -m "docs(invoice): document the block layout and render precedence"
 
 - [ ] **Step 5: Deploy note (for whoever pushes)**
 
-Production does not run migrations. After pushing to `djangoRewrite`, run `migrate` on DigitalOcean as `doadmin` (direct connection, not the PgBouncer pool) — until then `GET /orders/{id}/invoice/` and the settings endpoint 500 on the missing `core_organization.invoice_layout` column.
+Production does not run migrations. Run `uv run python manage.py migrate` against production as `doadmin` (direct connection, not the PgBouncer pool) **before** pushing to `djangoRewrite`, not after: every query that loads an `Organization` selects `invoice_layout`, so deploying the new code before the column exists breaks login, orders, warehouses — every tenant, not just invoices. Migrating first is safe: the old code running against the new column never selects it, and Django leaves no DB default after this `AddField`, so the only risk is an `Organization` created by the *old* code in that window failing NOT NULL — acceptable, since org creation is rare and internal-admin only.

@@ -218,9 +218,17 @@ Frontend:
 
 ## Rollout
 
-- One additive migration. Production does not run migrations on deploy: the
-  invoice endpoints 500 until `migrate` is run by hand on DO, so run it right
-  after the deploy (flagged at push time).
+- One additive migration. Production does not run migrations on deploy, so
+  run `uv run python manage.py migrate` against production as `doadmin` over
+  a direct connection (not the PgBouncer pool) **before** pushing to
+  `djangoRewrite`, not after: every query that loads an `Organization`
+  selects `invoice_layout`, so an old backend process still running when the
+  new column exists is fine, but a new backend process running before the
+  column exists breaks login, orders, warehouses — every tenant, not just
+  invoices. Migrating first is safe because Django leaves no DB default after
+  this `AddField`, so only an `Organization` created by the *old* code during
+  that window would fail NOT NULL — acceptable, since org creation is rare
+  and internal-admin only.
 - Legacy HTML templates keep rendering untouched.
 - Docs in the same change: CLAUDE.md (field + render precedence) and
   `docs/architecture/02-domain-model.md` (`invoice_layout`).
