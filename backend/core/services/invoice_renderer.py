@@ -150,13 +150,17 @@ table.items td.num, table.items th.num { text-align: right; }
 .logo-watermark img { max-width: 45vw; max-height: 45vh; opacity: 0.13;
                       object-fit: contain; }
 
-/* Classic: the same layout on a flat page, no translucency or blur. */
-body.variant-classic { background: #f2f2f4; }
-body.variant-classic .sheet, body.variant-classic .no-print {
-  background: #fff; border-color: var(--separator);
-  -webkit-backdrop-filter: none; backdrop-filter: none;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08); }
-body.variant-classic .sheet { border-radius: 6px; }
+/* Classic: the same layout on a flat page, no translucency or blur. Scoped to
+   screen only, so it never out-specifies the flat rules below @media print
+   applies to every variant. */
+@media screen {
+  body.variant-classic { background: #f2f2f4; }
+  body.variant-classic .sheet, body.variant-classic .no-print {
+    background: #fff; border-color: var(--separator);
+    -webkit-backdrop-filter: none; backdrop-filter: none;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08); }
+  body.variant-classic .sheet { border-radius: 6px; }
+}
 
 @media (max-width: 640px) {
   body { padding: 12px 8px 32px; }

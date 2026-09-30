@@ -202,6 +202,15 @@ class InvoiceRendererTests(TestCase):
         self.assertIn('<body class="variant-classic">', wrap_in_skeleton('<p>b</p>', draft=False, variant='classic'))
         self.assertIn('<body>', wrap_in_skeleton('<p>b</p>', draft=False))
 
+    def test_classic_variant_rules_are_scoped_to_screen_so_print_stays_flat(self):
+        wrapped = wrap_in_skeleton('<p>b</p>', draft=False, variant='classic')
+        style_css = wrapped.split('<style>', 1)[1].split('</style>', 1)[0]
+        before, after_media = style_css.split('@media screen', 1)
+        screen_block, after = after_media.split('\n}\n', 1)
+        self.assertIn('variant-classic', screen_block)
+        self.assertNotIn('variant-classic', before)
+        self.assertNotIn('variant-classic', after)
+
     def test_page_css_follows_the_tint_and_hides_an_empty_logo(self):
         wrapped = wrap_in_skeleton('<p>b</p>', draft=False)
         self.assertNotIn('rgba(58, 152, 102', wrapped)
