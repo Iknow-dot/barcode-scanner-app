@@ -140,12 +140,11 @@ def resolve_token(token: str, *, org=None, order=None, item=None, index: int = 1
     raise KeyError(f'unknown scope: {scope}')
 
 
-# Built-in invoice template. Used as the render fallback when
-# `Organization.invoice_template_html` is blank (`PurchaseOrderViewSet.invoice`)
-# and served to the editor as `default_template_html` (`views/invoices.py`),
-# so this constant is the single canonical default. Layout-related class names
-# (header, org-block, etc.) are styled by the print skeleton in
-# `invoice_renderer.wrap_in_skeleton`.
+# Served to clients as `default_template_html` for reference in the legacy
+# template editor; used as the text reference in `test_invoice_layout`.
+# Invoice renders use `invoice_layout.DEFAULT_LAYOUT` instead.
+# Layout-related class names (header, org-block, etc.) are styled by the
+# print skeleton in `invoice_renderer.wrap_in_skeleton`.
 DEFAULT_INVOICE_TEMPLATE_HTML = """\
 <div class="header">
   <div class="org-block">
