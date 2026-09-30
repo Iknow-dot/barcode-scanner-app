@@ -80,6 +80,18 @@ class ApplyAutoDiscountsTests(TestCase):
             line.refresh_from_db()
             self.assertEqual(line.auto_discount_percent, Decimal('10.00'))
 
+    def test_pooled_lines_with_different_prices_pool_cost_not_price(self):
+        order = self._order()
+        self._item(order, sku='S1', qty=1, price=Decimal('10.00'))
+        self._item(order, sku='S1-dup', qty=1, price=Decimal('12.00'))  # same article A1
+        self._run(order)
+        items = self.client_mock.calculate_automatic_discount.call_args.kwargs['items']
+        self.assertEqual(len(items), 1)
+        self.assertEqual(
+            (items[0]['quantity'], items[0]['cost'], items[0]['price']),
+            (2, Decimal('22.00'), Decimal('11.00')),
+        )
+
     def test_gifts_are_not_sent_and_are_zeroed(self):
         order = self._order()
         self._item(order, qty=1)

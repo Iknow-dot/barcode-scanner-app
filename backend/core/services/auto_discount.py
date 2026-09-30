@@ -7,7 +7,7 @@ exactly the amount the cart showed. Raises like the push: ``OrderPushError``
 for a local guard, ``ConsultWebExchangeError`` for 1C.
 """
 
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 
 from core.models import PurchaseOrderItem
 from core.services.consult_web_exchange import ConsultWebExchangeClient
@@ -23,11 +23,14 @@ from core.services.order_push import (
 def apply_auto_discounts(order, *, client=None):
     """Ask 1C for the order's automatic discounts and store them on its lines.
 
-    Paid lines are pooled per 1C lookup key (quantities summed), so one
-    product split over two lines still reaches a quantity threshold. Gifts
-    are not sent and keep 0. A key 1C does not answer for is reset to 0.
-    The lines are written only after 1C answers — no transaction is held
-    open across the call.
+    Paid lines are pooled per 1C lookup key (quantities and cost summed —
+    never a first-seen price, since two lines sharing a key can carry
+    different prices), so one product split over two lines still reaches a
+    quantity threshold. The pooled ``Price`` sent to 1C is the pooled cost
+    divided by the pooled quantity, quantized to a cent. Gifts are not sent
+    and keep 0. A key 1C does not answer for is reset to 0. The lines are
+    written only after 1C answers — no transaction is held open across the
+    call.
     """
     organization = order.organization
     if not organization.auto_discount_enabled:
@@ -48,15 +51,18 @@ def apply_auto_discounts(order, *, client=None):
         keys = line_lookup_keys(organization, paid)
         pooled = {}
         for item in paid:
-            entry = pooled.setdefault(keys[item.id], {"quantity": 0, "price": item.price})
+            entry = pooled.setdefault(keys[item.id], {"quantity": 0, "cost": Decimal(0)})
             entry["quantity"] += item.quantity
+            entry["cost"] += item.price * item.quantity
         request_items = [
             {
                 "is_barcode": is_barcode,
                 "sku": lookup,
                 "quantity": entry["quantity"],
-                "price": entry["price"],
-                "cost": entry["price"] * entry["quantity"],
+                "price": (entry["cost"] / entry["quantity"]).quantize(
+                    Decimal("0.01"), rounding=ROUND_HALF_UP,
+                ),
+                "cost": entry["cost"],
             }
             for (lookup, is_barcode), entry in pooled.items()
         ]
