@@ -144,6 +144,68 @@ class ApplyAutoDiscountsTests(TestCase):
             self._run(order)
         self.assertEqual(ctx.exception.code, 'MULTIPLE_WAREHOUSES')
 
+    def test_zero_quantity_paid_line_is_left_out_of_the_request(self):
+        order = self._order()
+        empty = self._item(order, sku='S0', article='A0', qty=0, auto_discount_percent=Decimal('3'))
+        line = self._item(order, qty=2)
+        self._run(order)
+        items = self.client_mock.calculate_automatic_discount.call_args.kwargs['items']
+        self.assertEqual([i['sku'] for i in items], ['A1'])
+        empty.refresh_from_db()
+        line.refresh_from_db()
+        self.assertEqual(empty.auto_discount_percent, Decimal('0'))
+        self.assertEqual(line.auto_discount_percent, Decimal('10.00'))
+
+    def _answer_after(self, change):
+        def side_effect(**kwargs):
+            change()
+            return {'items': {'A1': Decimal('10.00')}, 'document_amount': None,
+                    'total_discount': None, 'total_after_discount': None, 'raw': {}}
+        self.client_mock.calculate_automatic_discount.side_effect = side_effect
+
+    def test_line_changed_during_the_call_writes_nothing(self):
+        order = self._order()
+        line = self._item(order, qty=1, auto_discount_percent=Decimal('4'))
+        self._answer_after(lambda: PurchaseOrderItem.objects.filter(pk=line.pk).update(quantity=5))
+        with self.assertRaises(OrderPushError) as ctx:
+            self._run(order)
+        self.assertEqual(ctx.exception.code, 'AUTO_DISCOUNT_STALE')
+        self.assertEqual(ctx.exception.http_status, 409)
+        line.refresh_from_db()
+        self.assertEqual(line.auto_discount_percent, Decimal('4'))
+
+    def test_line_added_during_the_call_writes_nothing(self):
+        order = self._order()
+        line = self._item(order, qty=1)
+        self._answer_after(lambda: self._item(order, sku='S2', article='A2'))
+        with self.assertRaises(OrderPushError) as ctx:
+            self._run(order)
+        self.assertEqual(ctx.exception.code, 'AUTO_DISCOUNT_STALE')
+        line.refresh_from_db()
+        self.assertEqual(line.auto_discount_percent, Decimal('0'))
+
+    def test_order_confirmed_during_the_call_writes_nothing(self):
+        order = self._order()
+        line = self._item(order, qty=1)
+        self._answer_after(lambda: PurchaseOrder.objects.filter(pk=order.pk).update(
+            status=PurchaseOrder.Status.CONFIRMED, external_order_number='0001'))
+        with self.assertRaises(OrderPushError) as ctx:
+            self._run(order)
+        self.assertEqual(ctx.exception.code, 'AUTO_DISCOUNT_STALE')
+        line.refresh_from_db()
+        self.assertEqual(line.auto_discount_percent, Decimal('0'))
+
+    def test_order_pushed_during_the_call_writes_nothing(self):
+        order = self._order()
+        line = self._item(order, qty=1)
+        self._answer_after(lambda: PurchaseOrder.objects.filter(pk=order.pk).update(
+            external_order_number='0001'))
+        with self.assertRaises(OrderPushError) as ctx:
+            self._run(order)
+        self.assertEqual(ctx.exception.code, 'AUTO_DISCOUNT_STALE')
+        line.refresh_from_db()
+        self.assertEqual(line.auto_discount_percent, Decimal('0'))
+
 
 CALC = 'core.services.consult_web_exchange.ConsultWebExchangeClient.calculate_automatic_discount'
 CREATE = 'core.services.consult_web_exchange.ConsultWebExchangeClient.create_order'
@@ -199,6 +261,17 @@ class AutoDiscountPreviewEndpointTests(TestCase):
         self.assertEqual(r.data['code'], 'ORDER_NOT_DRAFT')
         mcalc.assert_not_called()
 
+    @mock.patch(CALC)
+    def test_order_changed_during_the_call_is_409_stale(self, mcalc):
+        def side_effect(**kwargs):
+            self.order.items.update(quantity=7)
+            return _calc_answer()
+        mcalc.side_effect = side_effect
+        r = self._post()
+        self.assertEqual(r.status_code, 409)
+        self.assertEqual(r.data['code'], 'AUTO_DISCOUNT_STALE')
+        self.assertEqual(self.order.items.get().auto_discount_percent, Decimal('0'))
+
     @mock.patch(CALC, side_effect=ConsultWebExchangeError(
         code='EXTERNAL_SERVICE_TIMEOUT', detail='slow', http_status=504))
     def test_1c_failure_keeps_stored_percent(self, mcalc):
@@ -244,6 +317,15 @@ class ConfirmAppliesAutoDiscountTests(TestCase):
         mcreate.assert_not_called()
         self.order.refresh_from_db()
         self.assertEqual(self.order.status, PurchaseOrder.Status.DRAFT)
+
+    @mock.patch(CALC, return_value=_calc_answer('10.00'))
+    def test_confirming_a_cancelled_unpushed_order_still_calculates(self, mcalc, mstock, mcreate):
+        # The stale check compares against the status read before the call,
+        # so a non-draft order that nobody changed meanwhile still confirms.
+        self.order.status = PurchaseOrder.Status.CANCELLED
+        self.order.save()
+        self.assertEqual(self._confirm().status_code, 200)
+        self.assertEqual(mcreate.call_args.kwargs['items'][0]['discount'], Decimal('10.00'))
 
     @mock.patch(CALC)
     def test_already_pushed_order_is_not_recalculated(self, mcalc, mstock, mcreate):
