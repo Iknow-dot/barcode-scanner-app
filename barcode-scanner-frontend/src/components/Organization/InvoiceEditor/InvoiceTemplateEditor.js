@@ -19,7 +19,7 @@ import {TextStyle, FontSize, Color} from '@tiptap/extension-text-style';
 import {Highlight} from '@tiptap/extension-highlight';
 import {Image} from '@tiptap/extension-image';
 import {Plugin} from '@tiptap/pm/state';
-import TokenNode from './TokenNode';
+import TokenNode from '../InvoiceDesigner/TokenNode';
 import invoiceTokenService from '../../../api/services/invoiceTokenService';
 import * as orderService from '../../../api/services/orderService';
 import {organizationService} from '../../../api';
