@@ -19,7 +19,7 @@ erDiagram
 
 | Model | Key fields |
 |-------|------------|
-| **Organization** | `name`, `identification_number` (both unique) · 1C: `web_service_url`, `web_service_username`, `web_service_password` (Fernet-encrypted), `webhook_token_hash` (SHA-256 of the push token; the token is shown once, when a company admin generates it), `retail_client_id_phone` · limits: `employees_count` (caps company users), `product_limit` (active products, null = unlimited) · switches: `gift_marking_enabled`, `product_catalog_enabled` · `session_timeout_minutes` (30–43200, null = 1 day) · invoice branding + `invoice_template_html` + `invoice_layout` (JSON, block layout for the invoice designer; wins over `invoice_template_html`) |
+| **Organization** | `name`, `identification_number` (both unique) · 1C: `web_service_url`, `web_service_username`, `web_service_password` (Fernet-encrypted), `webhook_token_hash` (SHA-256 of the push token; the token is shown once, when a company admin generates it), `retail_client_id_phone` · limits: `employees_count` (caps company users), `product_limit` (active products, null = unlimited) · switches: `gift_marking_enabled`, `product_catalog_enabled`, `auto_discount_enabled` · `session_timeout_minutes` (30–43200, null = 1 day) · invoice branding + `invoice_template_html` + `invoice_layout` (JSON, block layout for the invoice designer; wins over `invoice_template_html`) |
 | **User** | `role` (internal_admin / company_admin / company_user), `organization` (null only for internal admin) · discounts: `can_apply_discount`, `max_discount_percent` · device lock: `device_lock_enabled`, `bound_device_id` (secret, admin-only), `device_bound_at` |
 | **Warehouse** | `name`, `code` (unique per org; the 1C stock id) |
 | **AllowedIP** / **OrganizationPushAllowedIP** | `ip_or_network` (IP or CIDR). No rows = unrestricted |
@@ -38,7 +38,7 @@ erDiagram
 | Model | Key fields |
 |-------|------------|
 | **PurchaseOrder** | `status` (draft / confirmed / completed / cancelled) · client copied from 1C: `customer_name`, `customer_phone`, `customer_identification_number`, `external_client_id` (the 1C counterparty code) · `is_retail` · `external_order_number` (1C number, blank = not sent yet) · delivery: `delivery_type` (pickup / delivery), address, date, time window · optional different recipient · `notes` |
-| **PurchaseOrderItem** | Snapshot of the product: `sku`, `sku_name`, `article`, `price`, `unit` · `quantity`, `warehouse_code` / `warehouse_name` · `discount_percent` or `discounted_price` (the latter wins) · `is_gift` |
+| **PurchaseOrderItem** | Snapshot of the product: `sku`, `sku_name`, `article`, `price`, `unit` · `quantity`, `warehouse_code` / `warehouse_name` · `discount_percent` or `discounted_price` (the latter wins) · `auto_discount_percent` (1C's automatic percent, written by `apply_auto_discounts`) · `is_gift` |
 | **ScanEvent** | `value`, `is_barcode`, `created_at` — one consultant-started lookup, for analytics |
 
 Order items deliberately have **no link to `Product`**: they copy what was sold,
@@ -73,6 +73,6 @@ erDiagram
 | User ↔ Warehouse links are same-org only | Serializers + admin forms (not the DB — `limit_choices_to` is a no-op) |
 | Active products ≤ `product_limit` | Catalog ingest → `PRODUCT_LIMIT_REACHED`, whole push rejected |
 | One open **draft** per client per org | `PurchaseOrderViewSet.create` returns the existing draft |
-| A line's effective price = `discounted_price` ?? `price × (1 − discount_percent/100)`; gifts do not change totals | `PurchaseOrderItem.effective_price` |
+| A line's effective price = set price, else manual % (> 0), else automatic %, else list price; gifts do not change totals | `PurchaseOrderItem.effective_price` |
 | Discount ≤ user's `max_discount_percent`, only if `can_apply_discount` | `_enforce_discount_permission` in `core/views/orders.py` |
 | A `ScanEvent` exists only for lookups the dashboard marked `record_scan` (camera scan, catalog pick, history re-run) — not cart stock refreshes, "other warehouses" re-runs or offline replay | `ProductSearchAPIView._record_scan`; flag set in `UserDashboard.handleSearch` callers |

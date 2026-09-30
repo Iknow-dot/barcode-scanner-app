@@ -42,7 +42,7 @@ sequenceDiagram
         end
     end
 
-    API-->>FE: 200 {access_token, refresh_token, role, organization_id,<br/>organization_name, gift_marking_enabled,<br/>product_catalog_enabled, warehouses, user, device_id?}
+    API-->>FE: 200 {access_token, refresh_token, role, organization_id,<br/>organization_name, gift_marking_enabled,<br/>product_catalog_enabled, auto_discount_enabled,<br/>warehouses, user, device_id?}
     FE->>LS: store tokens, profile, device_id
     FE-->>U: redirect by role<br/>(company_user → /dashboard, admins → /system-admin-dashboard)
 ```
