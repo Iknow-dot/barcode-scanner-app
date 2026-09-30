@@ -30,8 +30,8 @@ from core.services.invoice_template_sanitizer import (
     InvoiceTemplateValidationError,
     sanitize_and_validate,
 )
-from core.services.auto_discount import apply_auto_discounts
-from core.services.consult_web_exchange import ConsultWebExchangeError
+from core.services.auto_discount import CONFIRM_CALC_TIMEOUT_SECONDS, apply_auto_discounts
+from core.services.consult_web_exchange import ConsultWebExchangeClient, ConsultWebExchangeError
 from core.services.order_push import OrderPushError, insufficient_stock_lines, push_order_to_consult
 from core.views.common import external_error_response
 
@@ -317,9 +317,13 @@ class PurchaseOrderViewSet(ModelViewSet):
                     # Recalculated here, not trusted from the cart's last
                     # preview: quantities may have changed since. Fail
                     # closed like the push, and never for an order 1C has
-                    # already booked (re-confirms skip the push).
+                    # already booked (re-confirms skip the push). A short
+                    # read budget keeps calculate + CreateOrder inside the
+                    # router's 60 s cutoff.
                     if not order.external_order_number:
-                        apply_auto_discounts(order)
+                        apply_auto_discounts(order, client=ConsultWebExchangeClient(
+                            order.organization, timeout=CONFIRM_CALC_TIMEOUT_SECONDS,
+                        ))
                     push_order_to_consult(order)
                 except ConsultWebExchangeError as exc:
                     return external_error_response(exc)

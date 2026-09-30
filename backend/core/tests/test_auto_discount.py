@@ -327,6 +327,21 @@ class ConfirmAppliesAutoDiscountTests(TestCase):
         self.assertEqual(self._confirm().status_code, 200)
         self.assertEqual(mcreate.call_args.kwargs['items'][0]['discount'], Decimal('10.00'))
 
+    def test_confirm_calculates_on_the_short_read_budget(self, mstock, mcreate):
+        from core.services.auto_discount import CONFIRM_CALC_TIMEOUT_SECONDS
+        self.assertEqual(CONFIRM_CALC_TIMEOUT_SECONDS, 8)
+        with mock.patch('core.views.orders.apply_auto_discounts') as mapply:
+            self.assertEqual(self._confirm().status_code, 200)
+        client = mapply.call_args.kwargs['client']
+        self.assertEqual(client.timeout, CONFIRM_CALC_TIMEOUT_SECONDS)
+        self.assertEqual(client.organization, self.org)
+
+    @mock.patch(CALC, return_value=_calc_answer())
+    def test_preview_keeps_the_default_read_budget(self, mcalc, mstock, mcreate):
+        with mock.patch('core.views.orders.apply_auto_discounts') as mapply:
+            self.api.post(f'/api/v1/orders/{self.order.id}/auto-discount/')
+        self.assertIsNone(mapply.call_args.kwargs.get('client'))
+
     @mock.patch(CALC)
     def test_already_pushed_order_is_not_recalculated(self, mcalc, mstock, mcreate):
         self.order.external_order_number = '0001'

@@ -21,6 +21,12 @@ from core.services.order_push import (
     order_stock_id,
 )
 
+# The confirm's read budget for CalculateAutomaticDiscount. The confirm runs
+# the stock guard, this calculation and CreateOrder in one request, and all
+# three must finish inside the DO router's 60 s cutoff; the cart preview
+# keeps the client's default.
+CONFIRM_CALC_TIMEOUT_SECONDS = 8
+
 _FINGERPRINT_FIELDS = ("id", "sku", "article", "quantity", "price", "is_gift", "warehouse_code")
 
 
