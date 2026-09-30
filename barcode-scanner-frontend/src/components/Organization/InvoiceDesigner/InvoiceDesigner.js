@@ -1,5 +1,5 @@
 import React, {useCallback, useEffect, useMemo, useState} from 'react';
-import {Button, ColorPicker, Input, Modal, Segmented, Select, Spin, Tooltip} from 'antd';
+import {Button, ColorPicker, Input, Modal, Segmented, Select, Spin} from 'antd';
 import {ReloadOutlined, SaveOutlined} from '@ant-design/icons';
 import {invoiceTokenService, orderService, organizationService} from '../../../api';
 import useAppNotification from '../../../hooks/useAppNotification';
@@ -159,11 +159,12 @@ const InvoiceDesigner = () => {
                 <span className="spacer" />
                 {legacyHtml === null && (
                     <>
-                        <Tooltip title={t.accentColor}>
-                            <ColorPicker size="small" value={layout.page.accent} disabledAlpha
-                                         presets={[{label: t.accentColor, colors: ACCENT_PRESETS}]}
-                                         onChangeComplete={c => changePage({accent: c.toHexString().toUpperCase()})} />
-                        </Tooltip>
+                        <ColorPicker size="small" value={layout.page.accent} disabledAlpha
+                                     presets={[{label: t.accentColor, colors: ACCENT_PRESETS}]}
+                                     onChangeComplete={c => changePage({accent: c.toHexString().toUpperCase()})}>
+                            <Button size="small" aria-label={t.accentColor} title={t.accentColor}
+                                    icon={<span className="invoice-accent-swatch" style={{background: layout.page.accent}} />} />
+                        </ColorPicker>
                         <Segmented size="small" value={layout.page.variant}
                                    options={[{value: 'glass', label: t.variantGlass}, {value: 'classic', label: t.variantClassic}]}
                                    onChange={variant => changePage({variant})} />

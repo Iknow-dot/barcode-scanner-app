@@ -1,7 +1,6 @@
 import React, {useMemo} from 'react';
 import {EditorContent, useEditor} from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
-import Underline from '@tiptap/extension-underline';
 import TextAlign from '@tiptap/extension-text-align';
 import {Button, Dropdown, Flex} from 'antd';
 import {
@@ -19,8 +18,10 @@ const TextInspector = ({block, tokens, onBlockChange}) => {
     const {t} = useLanguage();
     const editor = useEditor({
         extensions: [
+            // StarterKit 3 already bundles Underline; adding it separately
+            // logs a "Duplicate extension names" warning. toggleUnderline()
+            // still works via the bundled extension.
             StarterKit.configure({heading: {levels: [2, 3]}, codeBlock: false, code: false, blockquote: false, horizontalRule: false}),
-            Underline,
             TextAlign.configure({types: ['heading', 'paragraph']}),
             TokenNode,
         ],
