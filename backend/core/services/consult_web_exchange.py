@@ -24,6 +24,7 @@ CheckClient and CreateClient responses; every normalized response also echoes
 from __future__ import annotations
 
 import logging
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import Any
 from urllib.parse import urljoin
 
@@ -514,6 +515,92 @@ class ConsultWebExchangeClient:
             )
         return body
 
+    def calculate_automatic_discount(
+        self,
+        *,
+        client_id_phone: str,
+        user_id: str,
+        stock_id: str,
+        comment: str = "",
+        items: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        """POST /CalculateAutomaticDiscount — 1C's automatic discounts for a
+        cart, without creating a document.
+
+        `items` use internal keys (`is_barcode`, `sku`, `quantity`, `price`,
+        `cost`). 1C sums its quantity, document-sum and payment-type
+        percentages into each row's `AutoDiscountPercent`. Rows are matched
+        back by the echoed `Sku`, never by position; a percent outside 0–100
+        or unreadable is clamped / read as 0, so a bad upstream value can
+        never price a line negative. `ClientIDPhone` is required upstream
+        (400 `success: false` without it), which surfaces as
+        AUTO_DISCOUNT_REJECTED like any other rejection.
+        """
+        payload: dict[str, Any] = {
+            "ClientIDPhone": client_id_phone,
+            "UserID": user_id,
+            "StockID": stock_id,
+            "Items": [
+                {
+                    "IsBarcode": "true" if item.get("is_barcode") else "false",
+                    "Sku": item["sku"],
+                    "Quantity": item["quantity"],
+                    "Price": float(item["price"]),
+                    "Cost": float(item["cost"]),
+                }
+                for item in items
+            ],
+        }
+        if comment:
+            payload["Comment"] = comment
+
+        response = self._request("POST", "CalculateAutomaticDiscount", json=payload)
+        self._check_auth(response, "CalculateAutomaticDiscount")
+
+        try:
+            body = response.json()
+        except ValueError:
+            body = None
+
+        rejected = response.status_code in (400, 404) or (
+            isinstance(body, dict) and body.get("success") is False
+        )
+        if rejected:
+            message = body.get("message") if isinstance(body, dict) else None
+            logger.warning(
+                "ConsultWebExchange CalculateAutomaticDiscount rejected org=%s status=%s body=%s",
+                self.organization.id, response.status_code, safe_body(response),
+            )
+            raise ConsultWebExchangeError(
+                code="AUTO_DISCOUNT_REJECTED",
+                detail=message or "The organization's web service could not calculate discounts.",
+                http_status=400,
+                upstream_status=response.status_code,
+            )
+        if response.status_code != 200 or not isinstance(body, dict):
+            logger.error(
+                "ConsultWebExchange CalculateAutomaticDiscount unexpected org=%s status=%s body=%s",
+                self.organization.id, response.status_code, safe_body(response),
+            )
+            raise ConsultWebExchangeError(
+                code="EXTERNAL_SERVICE_ERROR",
+                detail="Unexpected response from the organization's web service.",
+                http_status=502,
+                upstream_status=response.status_code,
+            )
+
+        percents: dict[str, Decimal] = {}
+        for row in body.get("Items") or []:
+            if isinstance(row, dict) and row.get("Sku"):
+                percents.setdefault(str(row["Sku"]), _to_percent(row.get("AutoDiscountPercent")))
+        return {
+            "items": percents,
+            "document_amount": _to_decimal(body.get("DocumentAmount")),
+            "total_discount": _to_decimal(body.get("TotalAutoDiscountAmount")),
+            "total_after_discount": _to_decimal(body.get("TotalAmountAfterDiscount")),
+            "raw": body,
+        }
+
 
 def _extract_client_list(body: Any) -> list[dict]:
     """Pull a list of client dicts out of the upstream CheckClient body.
@@ -608,3 +695,21 @@ def _normalize_client_response(body: Any) -> dict[str, Any]:
         if value not in (None, ""):
             normalized[internal_key] = value
     return normalized
+
+
+def _to_decimal(value: Any) -> Decimal | None:
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        return Decimal(str(value))
+    except (InvalidOperation, ValueError):
+        return None
+
+
+def _to_percent(value: Any) -> Decimal:
+    """1C's AutoDiscountPercent as a 0–100 Decimal with 2 places; 0 if unreadable."""
+    number = _to_decimal(value)
+    if number is None or not number.is_finite():
+        number = Decimal(0)
+    number = min(max(number, Decimal(0)), Decimal(100))
+    return number.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)

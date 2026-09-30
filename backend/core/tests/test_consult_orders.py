@@ -6,6 +6,7 @@ from core.tests.common import _TEST_FERNET_KEY, _make_organization
 from decimal import Decimal
 from django.test import TestCase, override_settings
 from unittest import mock
+import httpx
 
 
 @override_settings(FERNET_KEY=_TEST_FERNET_KEY)
@@ -188,3 +189,103 @@ class CreateOrderClientTests(TestCase):
             self._call(self._mock_response(500, text='IIS error page'))
         self.assertEqual(ctx.exception.code, 'EXTERNAL_SERVICE_ERROR')
         self.assertEqual(ctx.exception.http_status, 502)
+
+
+@override_settings(FERNET_KEY=_TEST_FERNET_KEY)
+class CalculateAutomaticDiscountClientTests(TestCase):
+    def setUp(self):
+        self.org = _make_organization()
+
+    @staticmethod
+    def _response(status_code, body=None):
+        resp = mock.Mock()
+        resp.status_code = status_code
+        if body is None:
+            resp.json.side_effect = ValueError('no json')
+            resp.text = ''
+        else:
+            resp.json.return_value = body
+            resp.text = str(body)
+        resp.reason_phrase = ''
+        return resp
+
+    @staticmethod
+    def _body(**overrides):
+        body = {
+            'success': True, 'message': 'ok',
+            'DocumentAmount': 50, 'TotalAutoDiscountAmount': 5, 'TotalAmountAfterDiscount': 45,
+            'Items': [{'Sku': 'A 110ST 20', 'ItemCode': '000000015541', 'Quantity': 10,
+                       'Price': 5, 'Cost': 50, 'AutoDiscountPercent': 10,
+                       'AutoDiscountAmount': 5, 'AmountAfterDiscount': 45}],
+        }
+        body.update(overrides)
+        return body
+
+    def _call(self, response):
+        captured = {}
+
+        def fake_request(method, url, **kw):
+            captured.update(method=method, url=url, json=kw.get('json'))
+            return response
+
+        with mock.patch('httpx.request', side_effect=fake_request):
+            result = ConsultWebExchangeClient(self.org).calculate_automatic_discount(
+                client_id_phone='123456789', user_id='Administrator', stock_id='000000001',
+                comment='Web order #101',
+                items=[{'is_barcode': False, 'sku': 'A 110ST 20', 'quantity': 10,
+                        'price': Decimal('5.00'), 'cost': Decimal('50.00')}],
+            )
+        return result, captured
+
+    def test_posts_documented_payload(self):
+        _, captured = self._call(self._response(200, self._body()))
+        self.assertEqual(captured['method'], 'POST')
+        self.assertTrue(captured['url'].endswith('/HS/ConsultWebExchange/CalculateAutomaticDiscount'))
+        self.assertEqual(captured['json'], {
+            'ClientIDPhone': '123456789', 'UserID': 'Administrator', 'StockID': '000000001',
+            'Comment': 'Web order #101',
+            'Items': [{'IsBarcode': 'false', 'Sku': 'A 110ST 20', 'Quantity': 10,
+                       'Price': 5.0, 'Cost': 50.0}],
+        })
+
+    def test_normalizes_percent_by_sku_and_totals(self):
+        result, _ = self._call(self._response(200, self._body()))
+        self.assertEqual(result['items'], {'A 110ST 20': Decimal('10.00')})
+        self.assertEqual(result['document_amount'], Decimal('50'))
+        self.assertEqual(result['total_discount'], Decimal('5'))
+        self.assertEqual(result['total_after_discount'], Decimal('45'))
+
+    def test_out_of_range_and_garbage_percents_are_clamped(self):
+        items = [
+            {'Sku': 'HI', 'AutoDiscountPercent': 150},
+            {'Sku': 'NEG', 'AutoDiscountPercent': -5},
+            {'Sku': 'BAD', 'AutoDiscountPercent': 'abc'},
+            {'Sku': 'NONE', 'AutoDiscountPercent': None},
+            {'Sku': 'FRAC', 'AutoDiscountPercent': 7.125},
+            {'AutoDiscountPercent': 3},  # no Sku: ignored
+        ]
+        result, _ = self._call(self._response(200, self._body(Items=items)))
+        self.assertEqual(result['items'], {
+            'HI': Decimal('100.00'), 'NEG': Decimal('0.00'), 'BAD': Decimal('0.00'),
+            'NONE': Decimal('0.00'), 'FRAC': Decimal('7.13'),
+        })
+
+    def test_success_false_is_rejected_with_upstream_message(self):
+        with self.assertRaises(ConsultWebExchangeError) as ctx:
+            self._call(self._response(400, {'success': False, 'message': 'ClientIDPhone is required'}))
+        self.assertEqual(ctx.exception.code, 'AUTO_DISCOUNT_REJECTED')
+        self.assertEqual(ctx.exception.detail, 'ClientIDPhone is required')
+        self.assertEqual(ctx.exception.http_status, 400)
+
+    def test_non_json_200_is_external_error(self):
+        with self.assertRaises(ConsultWebExchangeError) as ctx:
+            self._call(self._response(200))
+        self.assertEqual(ctx.exception.code, 'EXTERNAL_SERVICE_ERROR')
+
+    def test_timeout_maps_to_external_timeout(self):
+        with mock.patch('httpx.request', side_effect=httpx.ReadTimeout('slow')):
+            with self.assertRaises(ConsultWebExchangeError) as ctx:
+                ConsultWebExchangeClient(self.org).calculate_automatic_discount(
+                    client_id_phone='1', user_id='u', stock_id='s', items=[],
+                )
+        self.assertEqual(ctx.exception.code, 'EXTERNAL_SERVICE_TIMEOUT')
