@@ -44,21 +44,21 @@ const TextInspector = ({block, tokens, onBlockChange}) => {
     }), [tokens, t, editor]);
 
     if (!editor) return null;
-    const mark = (name, icon, run, attrs) => (
-        <Button size="small" icon={icon} aria-label={name}
-                type={editor.isActive(attrs || name) ? 'primary' : 'default'} onClick={run} />
+    const mark = (label, icon, run, activeKey) => (
+        <Button size="small" icon={icon} aria-label={label}
+                type={editor.isActive(activeKey) ? 'primary' : 'default'} onClick={run} />
     );
     return (
         <>
             <Flex wrap gap={4} style={{marginBottom: 8}}>
-                {mark('bold', <BoldOutlined />, () => editor.chain().focus().toggleBold().run())}
-                {mark('italic', <ItalicOutlined />, () => editor.chain().focus().toggleItalic().run())}
-                {mark('underline', <UnderlineOutlined />, () => editor.chain().focus().toggleUnderline().run())}
-                {mark('bulletList', <UnorderedListOutlined />, () => editor.chain().focus().toggleBulletList().run())}
-                {mark('orderedList', <OrderedListOutlined />, () => editor.chain().focus().toggleOrderedList().run())}
-                {mark('left', <AlignLeftOutlined />, () => editor.chain().focus().setTextAlign('left').run(), {textAlign: 'left'})}
-                {mark('center', <AlignCenterOutlined />, () => editor.chain().focus().setTextAlign('center').run(), {textAlign: 'center'})}
-                {mark('right', <AlignRightOutlined />, () => editor.chain().focus().setTextAlign('right').run(), {textAlign: 'right'})}
+                {mark(t.textBold, <BoldOutlined />, () => editor.chain().focus().toggleBold().run(), 'bold')}
+                {mark(t.textItalic, <ItalicOutlined />, () => editor.chain().focus().toggleItalic().run(), 'italic')}
+                {mark(t.textUnderline, <UnderlineOutlined />, () => editor.chain().focus().toggleUnderline().run(), 'underline')}
+                {mark(t.textBulletList, <UnorderedListOutlined />, () => editor.chain().focus().toggleBulletList().run(), 'bulletList')}
+                {mark(t.textOrderedList, <OrderedListOutlined />, () => editor.chain().focus().toggleOrderedList().run(), 'orderedList')}
+                {mark(t.alignLeft, <AlignLeftOutlined />, () => editor.chain().focus().setTextAlign('left').run(), {textAlign: 'left'})}
+                {mark(t.alignCenter, <AlignCenterOutlined />, () => editor.chain().focus().setTextAlign('center').run(), {textAlign: 'center'})}
+                {mark(t.alignRight, <AlignRightOutlined />, () => editor.chain().focus().setTextAlign('right').run(), {textAlign: 'right'})}
                 <Dropdown menu={fieldMenu} trigger={['click']}>
                     <Button size="small" icon={<FieldStringOutlined />}>{t.insertToken}</Button>
                 </Dropdown>
