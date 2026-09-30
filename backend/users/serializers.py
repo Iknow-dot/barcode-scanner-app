@@ -178,6 +178,10 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
             self.user.organization
             and self.user.organization.product_catalog_enabled
         )
+        data['auto_discount_enabled'] = bool(
+            self.user.organization
+            and self.user.organization.auto_discount_enabled
+        )
 
         # Warehouse names assigned to this user
         data['warehouses'] = list(

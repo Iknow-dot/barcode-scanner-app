@@ -118,6 +118,15 @@ const EditOrganizationForm = ({hasPassword}) => {
                 <Switch/>
             </Form.Item>
 
+            <Form.Item
+                label={t.autoDiscountEnabled}
+                name="auto_discount_enabled"
+                valuePropName="checked"
+                extra={<span style={{fontSize: 12, opacity: 0.5}}>{t.autoDiscountHint}</span>}
+            >
+                <Switch/>
+            </Form.Item>
+
             <Flex gap={16} align="flex-start">
                 <Form.Item
                     label={t.productCatalogEnabled}

@@ -294,6 +294,30 @@ class LoginIPAllowlistTests(TestCase):
 
 
 @override_settings(SECURE_SSL_REDIRECT=False)
+class LoginAutoDiscountFlagTests(TestCase):
+    def _login(self, username):
+        return APIClient().post('/api/v1/users/auth/login/',
+                                {'username': username, 'password': 'pw12345'}, format='json')
+
+    def test_flag_mirrors_the_org_switch(self):
+        for enabled in (True, False):
+            org = Organization.objects.create(
+                name=f'AD{enabled}', identification_number=f'77{int(enabled)}',
+                employees_count=5, auto_discount_enabled=enabled,
+            )
+            User.objects.create_user(username=f'ad-{enabled}', password='pw12345',
+                                     role=User.Role.COMPANY_USER, organization=org)
+            response = self._login(f'ad-{enabled}')
+            self.assertEqual(response.status_code, 200, response.data)
+            self.assertIs(response.data['auto_discount_enabled'], enabled)
+
+    def test_false_without_org(self):
+        User.objects.create_user(username='ad-root', password='pw12345',
+                                 role=User.Role.INTERNAL_ADMIN, is_staff=True, is_superuser=True)
+        self.assertIs(self._login('ad-root').data['auto_discount_enabled'], False)
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
 class ClientIPEndpointTests(TestCase):
     """GET /users/ip/ prefills the allowlist editor, so it must report the same
     address the login check evaluates."""

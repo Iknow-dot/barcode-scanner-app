@@ -13,8 +13,9 @@ const Probe = () => {
     <div>
       <span data-testid="gift">{String(authData?.gift_marking_enabled)}</span>
       <span data-testid="catalog">{String(authData?.product_catalog_enabled)}</span>
+      <span data-testid="auto">{String(authData?.auto_discount_enabled)}</span>
       <button onClick={() => login(
-        'tok', 'ref', 'company_user', 1, 'Org', [], {username: 'u'}, true, true,
+        'tok', 'ref', 'company_user', 1, 'Org', [], {username: 'u'}, true, true, true,
       )}>login</button>
       <button onClick={logout}>logout</button>
     </div>
@@ -50,5 +51,17 @@ describe('AuthContext feature flags', () => {
     act(() => screen.getByText('logout').click());
     expect(localStorage.getItem('gift_marking_enabled')).toBeNull();
     expect(localStorage.getItem('product_catalog_enabled')).toBeNull();
+  });
+
+  it('carries auto_discount_enabled through login, refresh and logout', () => {
+    const {unmount} = render(<AuthProvider><Probe/></AuthProvider>);
+    act(() => screen.getByText('login').click());
+    expect(screen.getByTestId('auto')).toHaveTextContent('true');
+    expect(localStorage.getItem('auto_discount_enabled')).toBe('true');
+    unmount();
+    render(<AuthProvider><Probe/></AuthProvider>);
+    expect(screen.getByTestId('auto')).toHaveTextContent('true');
+    act(() => screen.getByText('logout').click());
+    expect(localStorage.getItem('auto_discount_enabled')).toBeNull();
   });
 });
