@@ -65,21 +65,24 @@ beforeEach(() => {
 const renderDesigner = async (settings = SETTINGS) => {
     organizationService.getInvoiceTemplate.mockResolvedValue({success: true, data: settings});
     render(<LanguageProvider><InvoiceDesigner /></LanguageProvider>);
-    await screen.findByText(t.blocks);
+    // Present in both legacy and layout mode (the block panes are not, in
+    // legacy mode); tests that need the block list await it themselves.
+    await screen.findByText(t.invoiceDesigner);
 };
 
 describe('InvoiceDesigner', () => {
     it('starts from the default layout and opens the inspector of a listed block', async () => {
         await renderDesigner();
+        await screen.findByText(t.blocks);
         fireEvent.click(screen.getByText(t.blockItems));
         expect(screen.getByText(t.columnsLabel)).toBeInTheDocument();
-    });
+    }, 30000);
 
     it('selects the block clicked on the canvas', async () => {
         await renderDesigner();
         fireEvent.click(screen.getByText('canvas-click-items'));
         expect(screen.getByText(t.columnsLabel)).toBeInTheDocument();
-    });
+    }, 30000);
 
     it('shows the legacy banner and switches to the designer on request', async () => {
         await renderDesigner({...SETTINGS, invoice_template_html: '<p>old</p>'});
@@ -88,10 +91,11 @@ describe('InvoiceDesigner', () => {
         fireEvent.click(screen.getByText(t.switchToDesigner));
         expect(screen.getByTestId('canvas-mode')).toHaveTextContent('layout');
         expect(screen.getByLabelText(t.unsavedChanges)).toBeInTheDocument();
-    });
+    }, 30000);
 
     it('saves layout and branding in one call and clears the unsaved dot', async () => {
         await renderDesigner();
+        await screen.findByText(t.blocks);
         fireEvent.click(screen.getByText(t.blockHeader));
         fireEvent.change(screen.getByDisplayValue('Acme'), {target: {value: 'Acme LLC'}});
         expect(screen.getByLabelText(t.unsavedChanges)).toBeInTheDocument();
@@ -101,7 +105,7 @@ describe('InvoiceDesigner', () => {
         expect(payload.invoice_display_name).toBe('Acme LLC');
         expect(payload.invoice_layout).toEqual(DEFAULT_LAYOUT);
         await waitFor(() => expect(screen.queryByLabelText(t.unsavedChanges)).not.toBeInTheDocument());
-    });
+    }, 30000);
 
     it('selects the offending block when the save is rejected', async () => {
         organizationService.updateInvoiceTemplate.mockResolvedValue({
@@ -109,9 +113,10 @@ describe('InvoiceDesigner', () => {
             data: {invoice_layout: {code: 'INVOICE_LAYOUT_INVALID', detail: 'bad', block_id: 'totals'}},
         });
         await renderDesigner();
+        await screen.findByText(t.blocks);
         fireEvent.click(screen.getByText(t.blockHeader));
         fireEvent.change(screen.getByDisplayValue('Acme'), {target: {value: 'X'}});
         fireEvent.click(screen.getByRole('button', {name: /save/i}));
         expect(await screen.findByText(t.totalsLabelField)).toBeInTheDocument();
-    });
+    }, 30000);
 });

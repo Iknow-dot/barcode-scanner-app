@@ -159,18 +159,17 @@ const InvoiceDesigner = () => {
             </div>
 
             <div className="invoice-designer-body">
-                <div className="invoice-designer-pane">
-                    {legacyHtml !== null && (
-                        <>
-                            <div className="if-notice is-warning" style={{marginBottom: 12}}>{t.legacyTemplateBanner}</div>
-                            <Button type="primary" block onClick={() => setLegacyHtml(null)} style={{marginBottom: 12}}>
-                                {t.switchToDesigner}
-                            </Button>
-                        </>
-                    )}
-                    <BlockList layout={layout} selectedId={selectedId} onSelect={setSelectedId}
-                               onChange={setLayout} onAddText={addText} />
-                </div>
+                {legacyHtml === null ? (
+                    <div className="invoice-designer-pane">
+                        <BlockList layout={layout} selectedId={selectedId} onSelect={setSelectedId}
+                                   onChange={setLayout} onAddText={addText} />
+                    </div>
+                ) : (
+                    <div className="invoice-designer-pane">
+                        <div className="if-notice is-warning" style={{marginBottom: 12}}>{t.legacyTemplateBanner}</div>
+                        <Button type="primary" block onClick={() => setLegacyHtml(null)}>{t.switchToDesigner}</Button>
+                    </div>
+                )}
                 <InvoiceCanvas orderId={orderId} layout={layout} branding={branding} legacyHtml={legacyHtml}
                                selectedBlockId={selectedId} onSelectBlock={setSelectedId} />
                 {legacyHtml === null && (
