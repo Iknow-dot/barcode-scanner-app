@@ -7,6 +7,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from core.models import PurchaseOrder
+from core.services.invoice_layout import DEFAULT_LAYOUT
 from core.services.invoice_tokens import (
     DEFAULT_INVOICE_TEMPLATE_HTML,
     TOKEN_CATALOG,
@@ -64,7 +65,7 @@ class InvoiceSampleValuesAPIView(APIView):
 
 @extend_schema(tags=['Invoice Templates'])
 class InvoiceTokensAPIView(APIView):
-    """Return the token catalog and default template HTML for the invoice editor.
+    """Return the token catalog, default template HTML and default layout for the invoice editor.
 
     The catalog is the same dict the renderer consumes — keeping it on a
     single endpoint guarantees the editor's Insert-token menu and the
@@ -80,4 +81,5 @@ class InvoiceTokensAPIView(APIView):
         return Response({
             'tokens': public_catalog,
             'default_template_html': DEFAULT_INVOICE_TEMPLATE_HTML,
+            'default_layout': DEFAULT_LAYOUT,
         })

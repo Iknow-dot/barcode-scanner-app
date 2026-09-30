@@ -5,6 +5,7 @@ import base64
 import re
 
 from core.models import Organization
+from core.services.invoice_layout import InvoiceLayoutValidationError, validate_layout
 from core.services.invoice_template_sanitizer import (
     InvoiceTemplateValidationError,
     sanitize_and_validate,
@@ -164,25 +165,31 @@ class OrganizationExternalServiceSerializer(serializers.ModelSerializer):
         return instance
 
 
+# Org fields the invoice designer edits alongside the layout; the preview
+# endpoint accepts unsaved values for these too.
+BRANDING_FIELDS = (
+    'invoice_logo',
+    'invoice_display_name',
+    'invoice_address',
+    'invoice_phone',
+    'invoice_email',
+    'invoice_footer_text',
+)
+
+
 class OrganizationInvoiceTemplateSerializer(serializers.ModelSerializer):
     """Serializer for company admins to update their organization's invoice template fields.
 
     Reuses `OrganizationSerializer.validate_invoice_logo` to keep the size cap
     and MIME allowlist in one place. `invoice_template_html` is sanitized and
     structurally validated via the dedicated sanitizer module.
+    `invoice_layout` is validated by `core/services/invoice_layout.py` and, when
+    non-empty, wins over `invoice_template_html` at render time.
     """
 
     class Meta:
         model = Organization
-        fields = [
-            'invoice_logo',
-            'invoice_display_name',
-            'invoice_address',
-            'invoice_phone',
-            'invoice_email',
-            'invoice_footer_text',
-            'invoice_template_html',
-        ]
+        fields = [*BRANDING_FIELDS, 'invoice_template_html', 'invoice_layout']
 
     def validate_invoice_logo(self, value):
         return OrganizationSerializer().validate_invoice_logo(value)
@@ -192,6 +199,14 @@ class OrganizationInvoiceTemplateSerializer(serializers.ModelSerializer):
             return sanitize_and_validate(value or '')
         except InvoiceTemplateValidationError as exc:
             raise serializers.ValidationError({'code': exc.code, 'detail': exc.detail})
+
+    def validate_invoice_layout(self, value):
+        if not value:
+            return {}
+        try:
+            return validate_layout(value)
+        except InvoiceLayoutValidationError as exc:
+            raise serializers.ValidationError(exc.as_dict())
 
 
 class OrganizationSecuritySerializer(serializers.ModelSerializer):

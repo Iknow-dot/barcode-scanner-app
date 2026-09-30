@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import copy
 import re
+from unittest import mock
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from lxml import html as lxml_html
+from rest_framework.test import APIClient
 
 from core.models import PurchaseOrder, PurchaseOrderItem
 from core.services.invoice_layout import (
@@ -15,9 +17,10 @@ from core.services.invoice_layout import (
     compile_layout,
     validate_layout,
 )
-from core.services.invoice_renderer import render_invoice_template
+from core.services.invoice_renderer import render_invoice_template, render_order_invoice
 from core.services.invoice_tokens import DEFAULT_INVOICE_TEMPLATE_HTML
 from core.tests.common import _make_organization
+from users.models import User
 
 
 def _layout(**page):
@@ -195,3 +198,122 @@ class CompileLayoutTests(TestCase):
         html = compile_layout(validate_layout(_layout()), anchors=False)
         self.assertIn('<td class="num"><span data-token="item.line_total"></span> ₾</td>', html)
         self.assertIn('<th class="num">Qty</th>', html)
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
+class InvoiceLayoutEndpointTests(TestCase):
+    SETTINGS = '/api/v1/organizations/my-organization/invoice-template/'
+
+    def setUp(self):
+        self.org = _make_organization(name='Acme', invoice_display_name='Acme Display')
+        self.other_org = _make_organization(name='Other', identification_number='987654321')
+        self.admin = User.objects.create_user(
+            username='admin', password='pw', role=User.Role.COMPANY_ADMIN, organization=self.org,
+        )
+        self.order = PurchaseOrder.objects.create(organization=self.org, customer_name='Nino',
+                                                  delivery_type='pickup', status='confirmed')
+        self.other_order = PurchaseOrder.objects.create(organization=self.other_org, customer_name='X',
+                                                        delivery_type='pickup', status='confirmed')
+        self.client = APIClient()
+        self.client.force_authenticate(self.admin)
+
+    def _preview(self, order, **body):
+        return self.client.post(f'/api/v1/orders/{order.id}/invoice-preview/', data=body, format='json')
+
+    def test_patch_saves_and_get_returns_the_layout(self):
+        layout = _layout(title='RECHNUNG')
+        resp = self.client.patch(self.SETTINGS, data={'invoice_layout': layout}, format='json')
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data['invoice_layout']['page']['title'], 'RECHNUNG')
+        self.org.refresh_from_db()
+        self.assertEqual(self.org.invoice_layout['page']['title'], 'RECHNUNG')
+        self.assertEqual(self.client.get(self.SETTINGS).data['invoice_layout']['page']['title'], 'RECHNUNG')
+
+    def test_patch_nests_the_error_envelope(self):
+        layout = _layout()
+        layout['blocks'].append({'id': 't1', 'type': 'text', 'html': '<table><tr><td>x</td></tr></table>'})
+        resp = self.client.patch(self.SETTINGS, data={'invoice_layout': layout}, format='json')
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.data['invoice_layout']['code'], 'INVOICE_LAYOUT_INVALID')
+        self.assertEqual(resp.data['invoice_layout']['block_id'], 't1')
+
+    def test_patch_saves_layout_and_branding_together_and_keeps_legacy_html(self):
+        self.org.invoice_template_html = '<p>legacy</p>'
+        self.org.save()
+        resp = self.client.patch(self.SETTINGS, data={
+            'invoice_layout': _layout(), 'invoice_footer_text': 'Bank: TBC',
+        }, format='json')
+        self.assertEqual(resp.status_code, 200)
+        self.org.refresh_from_db()
+        self.assertEqual(self.org.invoice_footer_text, 'Bank: TBC')
+        self.assertEqual(self.org.invoice_template_html, '<p>legacy</p>')
+
+    def test_internal_org_serializer_cannot_write_the_layout(self):
+        from core.serializers import OrganizationSerializer
+        self.assertNotIn('invoice_layout', OrganizationSerializer().fields)
+
+    def test_invoice_precedence_layout_then_legacy_then_default(self):
+        url = f'/api/v1/orders/{self.order.id}/invoice/'
+        self.assertIn('INVOICE', self.client.get(url).content.decode())          # default layout
+        self.org.invoice_template_html = '<p>LEGACY-MARKER</p>'
+        self.org.save()
+        self.assertIn('LEGACY-MARKER', self.client.get(url).content.decode())    # legacy
+        self.org.invoice_layout = _layout(title='LAYOUT-MARKER')
+        self.org.save()
+        body = self.client.get(url).content.decode()
+        self.assertIn('LAYOUT-MARKER', body)                                      # layout wins
+        self.assertNotIn('LEGACY-MARKER', body)
+        self.assertNotIn('data-block', body)
+
+    def test_invoice_uses_the_layout_accent_and_variant(self):
+        self.org.invoice_layout = _layout(accent='#FF3B30', variant='classic')
+        self.org.save()
+        body = self.client.get(f'/api/v1/orders/{self.order.id}/invoice/').content.decode()
+        self.assertIn('--tint: #FF3B30', body)
+        self.assertIn('variant-classic', body)
+
+    def test_invalid_stored_layout_falls_back_to_default_instead_of_500(self):
+        self.org.invoice_layout = {'blocks': 'broken'}
+        self.org.save()
+        with self.assertLogs('core.services.invoice_renderer', level='ERROR'):
+            resp = self.client.get(f'/api/v1/orders/{self.order.id}/invoice/')
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn('INVOICE', resp.content.decode())
+
+    def test_preview_with_layout_has_anchors_and_unsaved_branding(self):
+        resp = self._preview(self.order, invoice_layout=_layout(), invoice_display_name='UNSAVED-NAME')
+        self.assertEqual(resp.status_code, 200)
+        body = resp.content.decode()
+        self.assertIn('data-block="items"', body)
+        self.assertIn('UNSAVED-NAME', body)
+        self.org.refresh_from_db()
+        self.assertEqual(self.org.invoice_display_name, 'Acme Display')
+
+    def test_preview_rejects_invalid_layout_with_top_level_envelope(self):
+        resp = self._preview(self.order, invoice_layout=_layout(variant='neon'))
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn('INVOICE_LAYOUT_INVALID', resp.content.decode())
+
+    def test_preview_validates_unsaved_branding(self):
+        resp = self._preview(self.order, invoice_layout=_layout(), invoice_logo='https://evil.example/x.png')
+        self.assertEqual(resp.status_code, 400)
+        self.org.refresh_from_db()
+        self.assertEqual(self.org.invoice_logo, '')
+
+    def test_preview_of_another_orgs_order_is_404(self):
+        self.assertEqual(self._preview(self.other_order, invoice_layout=_layout()).status_code, 404)
+
+    def test_legacy_preview_still_works(self):
+        resp = self._preview(self.order, invoice_template_html='<p>OLD-PREVIEW</p>')
+        self.assertIn('OLD-PREVIEW', resp.content.decode())
+
+    def test_tokens_endpoint_returns_default_layout(self):
+        resp = self.client.get('/api/v1/invoice-tokens/')
+        self.assertEqual(resp.data['default_layout'], DEFAULT_LAYOUT)
+
+
+class RenderOrderInvoiceTests(TestCase):
+    def test_draft_status_gets_the_watermark(self):
+        org = _make_organization()
+        order = PurchaseOrder.objects.create(organization=org, customer_name='N', delivery_type='pickup')
+        self.assertIn('draft-watermark', render_order_invoice(org=org, order=order))

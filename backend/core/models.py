@@ -83,6 +83,10 @@ class Organization(models.Model):
     # the same invoice they printed before this feature shipped.
     invoice_template_html = models.TextField(blank=True, default='')
 
+    # Block-based invoice layout from the designer (core/services/invoice_layout.py).
+    # Wins over invoice_template_html when non-empty; see render_order_invoice.
+    invoice_layout = models.JSONField(blank=True, default=dict)
+
     # Consultants may mark order line items as gifts (ClickUp 86ca495uu).
     # Off by default — most organizations don't use gift marking.
     gift_marking_enabled = models.BooleanField(default=False)

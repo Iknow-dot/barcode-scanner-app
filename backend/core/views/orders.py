@@ -1,5 +1,6 @@
 """Purchase order CRUD, line-item actions and invoice rendering."""
 
+import copy
 import json
 
 from django.db import models, transaction
@@ -22,15 +23,21 @@ from core.serializers import (
     AddOrderItemSerializer,
     BulkUpdateOrderItemsSerializer,
 )
-from core.services.invoice_renderer import render_invoice_template, wrap_in_skeleton
+from core.serializers.organizations import BRANDING_FIELDS, OrganizationInvoiceTemplateSerializer
+from core.services.invoice_layout import InvoiceLayoutValidationError, validate_layout
+from core.services.invoice_renderer import render_order_invoice
 from core.services.invoice_template_sanitizer import (
     InvoiceTemplateValidationError,
     sanitize_and_validate,
 )
-from core.services.invoice_tokens import DEFAULT_INVOICE_TEMPLATE_HTML
 from core.services.consult_web_exchange import ConsultWebExchangeError
 from core.services.order_push import OrderPushError, insufficient_stock_lines, push_order_to_consult
 from core.views.common import external_error_response
+
+
+def _json_error(payload) -> HttpResponse:
+    # The invoice actions use StaticHTMLRenderer, which cannot render a dict.
+    return HttpResponse(json.dumps(payload), status=400, content_type='application/json')
 
 
 def _enforce_discount_permission(user, *, base_price, discount_percent, discounted_price):
@@ -535,15 +542,8 @@ class PurchaseOrderViewSet(ModelViewSet):
     def invoice(self, request, pk=None):
         """Render a printable HTML invoice for the order."""
         order = self.get_object()
-        org = order.organization
-        template_html = org.invoice_template_html or DEFAULT_INVOICE_TEMPLATE_HTML
-        body = render_invoice_template(template_html, org=org, order=order)
-        wrapped = wrap_in_skeleton(
-            body,
-            draft=order.status not in ('confirmed', 'completed'),
-            logo_data_url=order.organization.invoice_logo or '',
-        )
-        return Response(wrapped, content_type='text/html')
+        html = render_order_invoice(org=order.organization, order=order)
+        return Response(html, content_type='text/html')
 
     @action(
         detail=True,
@@ -552,21 +552,32 @@ class PurchaseOrderViewSet(ModelViewSet):
         renderer_classes=[StaticHTMLRenderer],
     )
     def invoice_preview(self, request, pk=None):
-        """Render an unsaved template against this order. No persistence."""
+        """Render an unsaved design against this order. No persistence.
+
+        Body: `invoice_layout` (the designer) or `invoice_template_html` (the
+        legacy editor), plus optional unsaved branding fields applied to an
+        in-memory copy of the organization.
+        """
         order = self.get_object()
-        template_html = request.data.get('invoice_template_html', '') or ''
-        try:
-            sanitized = sanitize_and_validate(template_html)
-        except InvoiceTemplateValidationError as exc:
-            return HttpResponse(
-                json.dumps({'code': exc.code, 'detail': exc.detail}),
-                status=400,
-                content_type='application/json',
-            )
-        body = render_invoice_template(sanitized, org=order.organization, order=order)
-        wrapped = wrap_in_skeleton(
-            body,
-            draft=order.status not in ('confirmed', 'completed'),
-            logo_data_url=order.organization.invoice_logo or '',
-        )
-        return Response(wrapped, content_type='text/html')
+        org = copy.copy(order.organization)
+        branding = {key: request.data[key] for key in BRANDING_FIELDS if key in request.data}
+        if branding:
+            serializer = OrganizationInvoiceTemplateSerializer(org, data=branding, partial=True)
+            if not serializer.is_valid():
+                return _json_error(serializer.errors)
+            for key, value in serializer.validated_data.items():
+                setattr(org, key, value)
+
+        if 'invoice_layout' in request.data:
+            try:
+                layout = validate_layout(request.data['invoice_layout'])
+            except InvoiceLayoutValidationError as exc:
+                return _json_error(exc.as_dict())
+            html = render_order_invoice(org=org, order=order, layout=layout, anchors=True)
+        else:
+            try:
+                sanitized = sanitize_and_validate(request.data.get('invoice_template_html', '') or '')
+            except InvoiceTemplateValidationError as exc:
+                return _json_error({'code': exc.code, 'detail': exc.detail})
+            html = render_order_invoice(org=org, order=order, template_html=sanitized)
+        return Response(html, content_type='text/html')

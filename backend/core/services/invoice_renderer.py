@@ -15,14 +15,23 @@ are stripped from the output. Out-of-scope `item.*` tokens render as
 resolved values (e.g. address) preserve newlines as `<br>`.
 """
 
+import logging
 import re
 from copy import deepcopy
 from html import escape
 
 from lxml import html as lxml_html
 
-from core.services.invoice_layout import DEFAULT_ACCENT
+from core.services.invoice_layout import (
+    DEFAULT_ACCENT,
+    DEFAULT_LAYOUT,
+    InvoiceLayoutValidationError,
+    compile_layout,
+    validate_layout,
+)
 from core.services.invoice_tokens import resolve_token
+
+logger = logging.getLogger(__name__)
 
 
 # Apple "Liquid Glass" on screen: the sheet is a translucent material over a
@@ -362,3 +371,41 @@ def wrap_in_skeleton(body_html: str, *, draft: bool, logo_data_url: str = '',
 </main>
 </body>
 </html>"""
+
+
+def render_order_invoice(*, org, order, layout=None, template_html=None, anchors: bool = False) -> str:
+    """Render a full invoice page for `order`.
+
+    With neither `layout` nor `template_html` given, the org's saved design is
+    used: `org.invoice_layout` if set, else a non-blank legacy
+    `org.invoice_template_html`, else `DEFAULT_LAYOUT`. Callers passing
+    `layout` must have validated it (the preview does, to answer 400); a
+    stored layout that no longer validates falls back to the default and is
+    logged, so a consultant's invoice never 500s over it.
+    """
+    if layout is None and template_html is None:
+        if org.invoice_layout:
+            layout = org.invoice_layout
+        elif (org.invoice_template_html or '').strip():
+            template_html = org.invoice_template_html
+        else:
+            layout = DEFAULT_LAYOUT
+
+    page = DEFAULT_LAYOUT['page']
+    if layout is not None:
+        try:
+            layout = validate_layout(layout)
+        except InvoiceLayoutValidationError:
+            logger.exception('Stored invoice layout for organization %s is invalid; using the default.', org.pk)
+            layout = DEFAULT_LAYOUT
+        page = layout['page']
+        template_html = compile_layout(layout, anchors=anchors)
+
+    body = render_invoice_template(template_html, org=org, order=order)
+    return wrap_in_skeleton(
+        body,
+        draft=order.status not in ('confirmed', 'completed'),
+        logo_data_url=org.invoice_logo or '',
+        accent=page['accent'],
+        variant=page['variant'],
+    )
