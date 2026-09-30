@@ -386,12 +386,14 @@ export const enqueueOp = (orderId, op) => {
 };
 
 // PurchaseOrderItem.effective_price (core/models.py): a set price wins, then
-// a percent discount, then the list price.
+// a manual percent, then 1C's automatic percent, then the list price.
 const effectivePrice = (item) => {
     if (item.discounted_price != null && item.discounted_price !== '') return Number(item.discounted_price) || 0;
     const price = Number(item.price) || 0;
     const percent = Number(item.discount_percent) || 0;
-    return percent > 0 ? price * (1 - percent / 100) : price;
+    if (percent > 0) return price * (1 - percent / 100);
+    const auto = Number(item.auto_discount_percent) || 0;
+    return auto > 0 ? price * (1 - auto / 100) : price;
 };
 
 // A line the server has not priced yet, with the two amounts it would send —

@@ -464,3 +464,22 @@ describe('applyOpToSnapshot', () => {
         expect(next.delivery_type).toBe('delivery');
     });
 });
+
+describe('applyOpToSnapshot with an automatic discount', () => {
+    const order = {id: 42, items: [{
+        id: 7, sku: 'A1', price: '10.00', quantity: 2, discount_percent: '0.00',
+        discounted_price: null, auto_discount_percent: '10.00',
+        effective_price: '9.00', line_total: '18.00',
+    }]};
+
+    it('prices a quantity change with the stored automatic percent', () => {
+        const next = applyOpToSnapshot(order, {type: 'update_item', itemId: 7, payload: {quantity: 3}});
+        expect(next.items[0]).toMatchObject({effective_price: '9.00', line_total: '27.00'});
+        expect(next.total).toBe('27.00');
+    });
+
+    it('lets a manual percent replace the automatic one', () => {
+        const next = applyOpToSnapshot(order, {type: 'update_item', itemId: 7, payload: {discount_percent: 5}});
+        expect(next.items[0].effective_price).toBe('9.50');
+    });
+});

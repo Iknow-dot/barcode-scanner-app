@@ -302,6 +302,22 @@ describe('CartItemRow', () => {
         expect(screen.getByText(`${en.stockRemaining}: 5`)).toBeInTheDocument();
     });
 
+    it('tags the automatic discount when no manual one replaces it', () => {
+        renderRow({row: rowFor([line({
+            discount_percent: '0.00', discounted_price: null, auto_discount_percent: '10.00',
+            effective_price: '80.91', line_total: '161.82',
+        })])});
+        expect(screen.getByText(/−10% auto/)).toBeInTheDocument();
+    });
+
+    it('hides the automatic tag behind a manual discount', () => {
+        renderRow({row: rowFor([line({
+            discount_percent: '5.00', discounted_price: null, auto_discount_percent: '10.00',
+            effective_price: '85.41', line_total: '170.82',
+        })])});
+        expect(screen.queryByText(/auto/)).toBeNull();
+    });
+
     it('marks a line still waiting to sync', () => {
         renderRow({row: rowFor([line({id: 'tmp_x1', _pending: true})]), stock: undefined});
         expect(screen.getByText(en.offlineItemPending)).toBeInTheDocument();

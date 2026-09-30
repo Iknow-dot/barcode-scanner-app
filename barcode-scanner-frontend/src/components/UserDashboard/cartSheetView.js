@@ -86,6 +86,10 @@ export const cartRowView = (row) => {
         hasDiscount: Boolean(anchor.effective_price)
             && parseFloat(anchor.effective_price) !== parseFloat(anchor.price),
         discountPercent: parseFloat(anchor.discount_percent || 0),
+        // 1C's automatic discount shows only where no manual one replaces it.
+        autoDiscountPercent: anchor.discounted_price == null && !(parseFloat(anchor.discount_percent) > 0)
+            ? parseFloat(anchor.auto_discount_percent || 0)
+            : 0,
         lineTotal: (Number(row.paid?.line_total || 0) + Number(row.gift?.line_total || 0)).toFixed(2),
         pending: isPendingLine(row.paid) || isPendingLine(row.gift),
         // An offline scan the sync has not resolved yet: only its barcode is
@@ -161,3 +165,9 @@ export const orderStepHeader = (step, t) => (
 );
 
 export const hasOrderItems = (order) => Array.isArray(order?.items) && order.items.length > 0;
+
+/** What every discount takes off the cart: Σ(list price × qty) − Σ line_total. */
+export const orderDiscountTotal = (items) => Math.max(0, (items || []).reduce(
+    (sum, i) => sum + (Number(i.price) || 0) * (Number(i.quantity) || 0) - (Number(i.line_total) || 0),
+    0,
+)).toFixed(2);

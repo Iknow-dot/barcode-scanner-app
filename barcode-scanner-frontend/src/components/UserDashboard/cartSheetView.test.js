@@ -8,6 +8,7 @@ import {
     discountPatch,
     exceedsStock,
     hasOrderItems,
+    orderDiscountTotal,
     orderStepHeader,
     orderWarehouseNames,
     planQuantityChange,
@@ -268,5 +269,30 @@ describe('orderStepHeader', () => {
     it('titles step one as the cart and step two as delivery', () => {
         expect(orderStepHeader(1, en)).toEqual({title: en.cart, subtitle: `1 / 2 · ${en.stepProducts}`, leading: 'close'});
         expect(orderStepHeader(2, en)).toEqual({title: en.stepDelivery, subtitle: '2 / 2', leading: 'back'});
+    });
+});
+
+describe('automatic discount display', () => {
+    const line = (extra) => ({id: 1, sku: 'S', price: '10.00', quantity: 2,
+        discount_percent: '0.00', discounted_price: null, auto_discount_percent: '10.00',
+        effective_price: '9.00', line_total: '18.00', ...extra});
+
+    it('shows the automatic percent when no manual discount is set', () => {
+        expect(cartRowView({paid: line(), gift: null, giftQty: 0}).autoDiscountPercent).toBe(10);
+    });
+
+    it('hides it behind a manual percent or set price', () => {
+        expect(cartRowView({paid: line({discount_percent: '5.00', effective_price: '9.50'}), gift: null, giftQty: 0})
+            .autoDiscountPercent).toBe(0);
+        expect(cartRowView({paid: line({discounted_price: '8.00', effective_price: '8.00'}), gift: null, giftQty: 0})
+            .autoDiscountPercent).toBe(0);
+    });
+
+    it('totals the discount across lines, gifts adding nothing', () => {
+        expect(orderDiscountTotal([
+            line(),
+            {id: 2, price: '5.00', quantity: 1, line_total: '5.00', is_gift: true},
+        ])).toBe('2.00');
+        expect(orderDiscountTotal([])).toBe('0.00');
     });
 });

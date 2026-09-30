@@ -119,6 +119,7 @@ const CartItemRow = ({
             {`${view.effectivePrice} ₾`}
             {unit && ` / ${unit}`}
             {view.discountPercent > 0 && ` · −${view.discountPercent}%`}
+            {view.autoDiscountPercent > 0 && ` · ${t.autoDiscountTag(view.autoDiscountPercent)}`}
         </>
     );
 
