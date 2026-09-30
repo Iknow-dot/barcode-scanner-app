@@ -337,7 +337,15 @@ const OrdersTab = () => {
             key: 'discount_percent',
             align: 'center',
             width: 80,
-            render: (pct) => pct > 0 ? <Tag color="red">-{pct}%</Tag> : <Text type="secondary">—</Text>,
+            render: (pct, record) => {
+                if (pct > 0) return <Tag color="red">-{pct}%</Tag>;
+                // 1C's automatic percent applies only when no manual discount is set.
+                const autoPct = parseFloat(record.auto_discount_percent);
+                if (record.discounted_price == null && autoPct > 0) {
+                    return <Tag color="red">{t.autoDiscountTag(autoPct)}</Tag>;
+                }
+                return <Text type="secondary">—</Text>;
+            },
         },
         {
             title: t.effectivePrice,
