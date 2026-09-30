@@ -91,6 +91,11 @@ class Organization(models.Model):
     # Off by default — most organizations don't use gift marking.
     gift_marking_enabled = models.BooleanField(default=False)
 
+    # Automatic discounts from 1C CalculateAutomaticDiscount
+    # (core/services/auto_discount.py). Off by default: another org's 1C may
+    # not have the endpoint, and a 404 there would block every confirm.
+    auto_discount_enabled = models.BooleanField(default=False)
+
     # Local product catalog (pushed from 1C, browsed by consultants) is a
     # per-org feature. product_limit caps ACTIVE products; NULL = unlimited.
     product_catalog_enabled = models.BooleanField(default=False)
@@ -386,6 +391,10 @@ class PurchaseOrderItem(models.Model):
     # Discount
     discount_percent = models.DecimalField(max_digits=5, decimal_places=2, default=0)
     discounted_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    # 1C's automatic discount, written by core/services/auto_discount.py.
+    # Applies only when no manual discount is set; never checked against the
+    # consultant's max_discount_percent.
+    auto_discount_percent = models.DecimalField(max_digits=5, decimal_places=2, default=0)
     # Informational gift mark — never affects effective_price / line_total.
     is_gift = models.BooleanField(default=False)
 
@@ -399,12 +408,15 @@ class PurchaseOrderItem(models.Model):
 
     @property
     def effective_price(self):
-        """Return the discounted price if set, otherwise calculate from discount_percent."""
+        """A manual set price, else a manual percent, else 1C's automatic
+        percent, else the list price."""
+        from decimal import Decimal
         if self.discounted_price is not None:
             return self.discounted_price
         if self.discount_percent and self.discount_percent > 0:
-            from decimal import Decimal
             return self.price * (Decimal('1') - self.discount_percent / Decimal('100'))
+        if self.auto_discount_percent and self.auto_discount_percent > 0:
+            return self.price * (Decimal('1') - self.auto_discount_percent / Decimal('100'))
         return self.price
 
     @property

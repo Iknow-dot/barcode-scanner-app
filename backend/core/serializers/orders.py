@@ -14,10 +14,10 @@ class PurchaseOrderItemSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'sku', 'sku_name', 'article', 'price', 'quantity',
             'warehouse_code', 'warehouse_name', 'unit',
-            'discount_percent', 'discounted_price', 'is_gift', 'effective_price',
-            'line_total', 'added_at',
+            'discount_percent', 'discounted_price', 'auto_discount_percent',
+            'is_gift', 'effective_price', 'line_total', 'added_at',
         ]
-        read_only_fields = ['id', 'added_at', 'line_total', 'effective_price']
+        read_only_fields = ['id', 'added_at', 'line_total', 'effective_price', 'auto_discount_percent']
 
 
 class AddOrderItemSerializer(serializers.Serializer):

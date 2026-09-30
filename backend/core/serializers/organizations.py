@@ -67,6 +67,7 @@ class OrganizationSerializer(serializers.ModelSerializer):
             'invoice_phone', 'invoice_email', 'invoice_footer_text',
             'invoice_template_html',
             'gift_marking_enabled', 'product_catalog_enabled', 'product_limit',
+            'auto_discount_enabled',
             'session_timeout_minutes',
         ]
         extra_kwargs = {

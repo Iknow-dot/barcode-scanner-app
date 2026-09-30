@@ -1025,3 +1025,56 @@ class PurchaseOrderCreatedAfterBeforeFilterTests(TestCase):
         })
         self.assertEqual(response.status_code, 200)
         self.assertIn(order.id, self._ids(response))
+
+
+from decimal import Decimal
+from django.test import SimpleTestCase
+from core.serializers import PurchaseOrderItemSerializer
+
+
+class EffectivePriceAutoDiscountTests(SimpleTestCase):
+    """Manual set-price, then manual percent (> 0), then 1C's automatic
+    percent, then the list price."""
+
+    def _item(self, **kw):
+        defaults = dict(price=Decimal('10.00'), quantity=2)
+        defaults.update(kw)
+        return PurchaseOrderItem(**defaults)
+
+    def test_auto_percent_applies_without_manual_discount(self):
+        item = self._item(auto_discount_percent=Decimal('10'))
+        self.assertEqual(item.effective_price, Decimal('9.00'))
+        self.assertEqual(item.line_total, Decimal('18.00'))
+
+    def test_manual_percent_replaces_auto(self):
+        item = self._item(discount_percent=Decimal('5'), auto_discount_percent=Decimal('10'))
+        self.assertEqual(item.effective_price, Decimal('9.50'))
+
+    def test_manual_set_price_replaces_auto(self):
+        item = self._item(discounted_price=Decimal('8.00'), auto_discount_percent=Decimal('10'))
+        self.assertEqual(item.effective_price, Decimal('8.00'))
+
+    def test_manual_percent_cleared_to_zero_lets_auto_apply(self):
+        item = self._item(discount_percent=Decimal('0'), auto_discount_percent=Decimal('10'))
+        self.assertEqual(item.effective_price, Decimal('9.00'))
+
+    def test_no_discount_is_list_price(self):
+        self.assertEqual(self._item().effective_price, Decimal('10.00'))
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
+class AutoDiscountFieldsSerializationTests(TestCase):
+    def test_item_serializer_exposes_auto_percent_read_only(self):
+        org = _make_organization()
+        user = User.objects.create_user(username='u-auto', password='p',
+                                        role=User.Role.COMPANY_USER, organization=org)
+        order = PurchaseOrder.objects.create(organization=org, created_by=user, customer_name='C')
+        item = PurchaseOrderItem.objects.create(order=order, sku='S', price=Decimal('10.00'),
+                                                auto_discount_percent=Decimal('10'))
+        data = PurchaseOrderItemSerializer(item).data
+        self.assertEqual(data['auto_discount_percent'], '10.00')
+        self.assertEqual(data['effective_price'], '9.00')
+        self.assertIn('auto_discount_percent', PurchaseOrderItemSerializer.Meta.read_only_fields)
+
+    def test_org_switch_defaults_off(self):
+        self.assertFalse(_make_organization(name='O2', identification_number='2').auto_discount_enabled)
