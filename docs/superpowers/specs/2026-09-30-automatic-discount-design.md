@@ -126,9 +126,9 @@ Gift lines always keep `auto_discount_percent = 0`.
   lines from falling under a quantity threshold. Gifts are not sent.
 - Writes each key's percent onto every paid line with that key, and 0 onto
   gifts and any paid line whose key 1C did not return, in one
-  `bulk_update(["auto_discount_percent", "updated_at"])` inside
-  `transaction.atomic()` — never across the 1C call (PgBouncer transaction
-  mode; no transaction may be held open over an outbound request).
+  `bulk_update(["auto_discount_percent"])` (the item has no `updated_at`)
+  made after the 1C call returns — never a transaction held open across it
+  (PgBouncer transaction mode).
 - `Comment`: `order_comment(order)`, so 1C logs it against the same web order.
 
 ### 5. Preview endpoint
