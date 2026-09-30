@@ -113,6 +113,18 @@ describe('BlockInspector', () => {
         expect(onBrandingChange).toHaveBeenLastCalledWith({invoice_display_name: 'Acme LLC'});
         fireEvent.click(screen.getByRole('switch', {name: t.showLogo}));
         expect(onBlockChange).toHaveBeenLastCalledWith({show_logo: false});
+        // The header inspector owns the header branding fields only — the
+        // footer text belongs to FooterInspector.
+        expect(screen.queryByText(t.invoiceFooterText)).not.toBeInTheDocument();
+    });
+
+    it('the footer inspector shows only the footer text, not the header fields', () => {
+        wrap(<BlockInspector block={{id: 'footer', type: 'footer', hidden: false}}
+                             branding={{invoice_display_name: 'Acme', invoice_footer_text: 'Thanks'}}
+                             tokens={{org: [], order: []}} onBlockChange={jest.fn()} onBrandingChange={jest.fn()} />);
+        expect(screen.getByDisplayValue('Thanks')).toBeInTheDocument();
+        expect(screen.queryByText(t.invoiceDisplayName)).not.toBeInTheDocument();
+        expect(screen.queryByText(t.invoiceLogo)).not.toBeInTheDocument();
     });
 
     it('remounts the text editor when the selected text block changes', () => {

@@ -96,6 +96,10 @@ describe('InvoiceDesigner', () => {
     it('lets a legacy org edit branding and saves it without switching off the legacy template', async () => {
         await renderDesigner({...SETTINGS, invoice_template_html: '<p>old</p>'});
         expect(screen.getByTestId('canvas-mode')).toHaveTextContent('legacy');
+        // Legacy mode has no per-block inspectors, so it renders every
+        // branding field in one place — header fields and the footer text.
+        expect(screen.getByText(t.invoiceDisplayName)).toBeInTheDocument();
+        expect(screen.getByText(t.invoiceFooterText)).toBeInTheDocument();
         const nameInput = screen.getByDisplayValue('Acme');
         fireEvent.change(nameInput, {target: {value: 'Acme LLC'}});
         expect(screen.getByLabelText(t.unsavedChanges)).toBeInTheDocument();
