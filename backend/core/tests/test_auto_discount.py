@@ -3,10 +3,12 @@ from __future__ import annotations
 from decimal import Decimal
 from unittest import mock
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
+from rest_framework.test import APIClient
 
 from core.models import PurchaseOrder, PurchaseOrderItem
 from core.services.auto_discount import apply_auto_discounts
+from core.services.consult_web_exchange import ConsultWebExchangeError
 from core.services.order_push import OrderPushError
 from core.tests.common import _make_organization
 from users.models import User
@@ -141,3 +143,119 @@ class ApplyAutoDiscountsTests(TestCase):
         with self.assertRaises(OrderPushError) as ctx:
             self._run(order)
         self.assertEqual(ctx.exception.code, 'MULTIPLE_WAREHOUSES')
+
+
+CALC = 'core.services.consult_web_exchange.ConsultWebExchangeClient.calculate_automatic_discount'
+CREATE = 'core.services.consult_web_exchange.ConsultWebExchangeClient.create_order'
+STOCK = 'core.services.consult_web_exchange.ConsultWebExchangeClient.get_stock_and_prices'
+
+
+def _calc_answer(percent='10.00', sku='A1'):
+    return {'items': {sku: Decimal(percent)}, 'document_amount': None,
+            'total_discount': None, 'total_after_discount': None, 'raw': {}}
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
+class AutoDiscountPreviewEndpointTests(TestCase):
+    def setUp(self):
+        self.org = _make_organization(auto_discount_enabled=True)
+        self.user = User.objects.create_user(
+            username='prev', password='p', role=User.Role.COMPANY_USER, organization=self.org,
+        )
+        self.api = APIClient()
+        self.api.force_authenticate(self.user)
+        self.order = PurchaseOrder.objects.create(
+            organization=self.org, created_by=self.user, customer_name='C',
+            customer_identification_number='01001012345',
+        )
+        PurchaseOrderItem.objects.create(order=self.order, sku='S1', article='A1',
+                                         price=Decimal('10.00'), quantity=2, warehouse_code='W1')
+
+    def _post(self, order=None):
+        return self.api.post(f'/api/v1/orders/{(order or self.order).id}/auto-discount/')
+
+    @mock.patch(CALC, return_value=_calc_answer())
+    def test_returns_order_with_auto_percent_and_discounted_total(self, mcalc):
+        r = self._post()
+        self.assertEqual(r.status_code, 200, r.data)
+        self.assertEqual(r.data['items'][0]['auto_discount_percent'], '10.00')
+        self.assertEqual(str(r.data['total']), '18.00')
+
+    @mock.patch(CALC)
+    def test_other_org_order_is_404(self, mcalc):
+        other = _make_organization(name='Other', identification_number='999', auto_discount_enabled=True)
+        other_user = User.objects.create_user(username='o', password='p',
+                                              role=User.Role.COMPANY_USER, organization=other)
+        foreign = PurchaseOrder.objects.create(organization=other, created_by=other_user, customer_name='X')
+        self.assertEqual(self._post(foreign).status_code, 404)
+        mcalc.assert_not_called()
+
+    @mock.patch(CALC)
+    def test_non_draft_is_refused(self, mcalc):
+        self.order.status = PurchaseOrder.Status.CONFIRMED
+        self.order.save()
+        r = self._post()
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.data['code'], 'ORDER_NOT_DRAFT')
+        mcalc.assert_not_called()
+
+    @mock.patch(CALC, side_effect=ConsultWebExchangeError(
+        code='EXTERNAL_SERVICE_TIMEOUT', detail='slow', http_status=504))
+    def test_1c_failure_keeps_stored_percent(self, mcalc):
+        self.order.items.update(auto_discount_percent=Decimal('5'))
+        r = self._post()
+        self.assertEqual(r.data['code'], 'EXTERNAL_SERVICE_TIMEOUT')
+        self.assertEqual(self.order.items.get().auto_discount_percent, Decimal('5.00'))
+
+
+@override_settings(SECURE_SSL_REDIRECT=False)
+@mock.patch(CREATE, return_value={'success': True, 'OrderNumber': '0001'})
+@mock.patch(STOCK, return_value={'stock': [{'warehouse': 'W1', 'quantity': 999}]})
+class ConfirmAppliesAutoDiscountTests(TestCase):
+    def setUp(self):
+        self.org = _make_organization(auto_discount_enabled=True)
+        self.user = User.objects.create_user(
+            username='conf', password='p', role=User.Role.COMPANY_USER, organization=self.org,
+        )
+        self.api = APIClient()
+        self.api.force_authenticate(self.user)
+        self.order = PurchaseOrder.objects.create(
+            organization=self.org, created_by=self.user, customer_name='C',
+            customer_identification_number='01001012345',
+        )
+        PurchaseOrderItem.objects.create(order=self.order, sku='S1', article='A1',
+                                         price=Decimal('10.00'), quantity=2, warehouse_code='W1')
+
+    def _confirm(self):
+        return self.api.patch(f'/api/v1/orders/{self.order.id}/', {'status': 'confirmed'}, format='json')
+
+    @mock.patch(CALC, return_value=_calc_answer('10.00'))
+    def test_confirm_recalculates_and_sends_percent(self, mcalc, mstock, mcreate):
+        self.assertEqual(self._confirm().status_code, 200)
+        mcalc.assert_called_once()
+        self.assertEqual(mcreate.call_args.kwargs['items'][0]['discount'], Decimal('10.00'))
+
+    @mock.patch(CALC, side_effect=ConsultWebExchangeError(
+        code='AUTO_DISCOUNT_REJECTED', detail='no', http_status=400))
+    def test_calculation_failure_blocks_confirm(self, mcalc, mstock, mcreate):
+        r = self._confirm()
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.data['code'], 'AUTO_DISCOUNT_REJECTED')
+        mcreate.assert_not_called()
+        self.order.refresh_from_db()
+        self.assertEqual(self.order.status, PurchaseOrder.Status.DRAFT)
+
+    @mock.patch(CALC)
+    def test_already_pushed_order_is_not_recalculated(self, mcalc, mstock, mcreate):
+        self.order.external_order_number = '0001'
+        self.order.save()
+        self._confirm()
+        mcalc.assert_not_called()
+
+    @mock.patch(CALC)
+    def test_switch_off_confirms_without_calculation(self, mcalc, mstock, mcreate):
+        self.org.auto_discount_enabled = False
+        self.org.save()
+        self.assertEqual(self._confirm().status_code, 200)
+        mcalc.assert_not_called()
+        self.assertEqual(mcreate.call_args.kwargs['items'][0]['discount'], Decimal('0'))

@@ -30,6 +30,7 @@ from core.services.invoice_template_sanitizer import (
     InvoiceTemplateValidationError,
     sanitize_and_validate,
 )
+from core.services.auto_discount import apply_auto_discounts
 from core.services.consult_web_exchange import ConsultWebExchangeError
 from core.services.order_push import OrderPushError, insufficient_stock_lines, push_order_to_consult
 from core.views.common import external_error_response
@@ -159,6 +160,9 @@ def _enforce_gift_permission(user, *, is_gift):
     ),
     invoice=extend_schema(tags=['Purchase Orders']),
     invoice_preview=extend_schema(tags=['Purchase Orders']),
+    auto_discount=extend_schema(
+        tags=['Purchase Orders'], request=None, responses=PurchaseOrderSerializer,
+    ),
 )
 class PurchaseOrderViewSet(ModelViewSet):
     permission_classes = [IsCompanyUserOrAdmin]
@@ -310,6 +314,12 @@ class PurchaseOrderViewSet(ModelViewSet):
                         status=http_status.HTTP_400_BAD_REQUEST,
                     )
                 try:
+                    # Recalculated here, not trusted from the cart's last
+                    # preview: quantities may have changed since. Fail
+                    # closed like the push, and never for an order 1C has
+                    # already booked (re-confirms skip the push).
+                    if not order.external_order_number:
+                        apply_auto_discounts(order)
                     push_order_to_consult(order)
                 except ConsultWebExchangeError as exc:
                     return external_error_response(exc)
@@ -416,6 +426,33 @@ class PurchaseOrderViewSet(ModelViewSet):
             pass
         order_serializer = PurchaseOrderSerializer(order)
         return Response(order_serializer.data)
+
+    @action(detail=True, methods=['post'], url_path='auto-discount')
+    def auto_discount(self, request, pk=None):
+        """Recalculate 1C's automatic discounts for a draft and return the order."""
+        order = self.get_object()
+        if order.status != PurchaseOrder.Status.DRAFT:
+            # A confirmed order's prices are booked in 1C; recalculating
+            # would change our total under it.
+            return Response(
+                {"code": "ORDER_NOT_DRAFT", "detail": "Only a draft order's discounts can be recalculated."},
+                status=http_status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            apply_auto_discounts(order)
+        except ConsultWebExchangeError as exc:
+            return external_error_response(exc)
+        except OrderPushError as exc:
+            return Response(
+                {"code": exc.code, "detail": exc.detail, **exc.extra},
+                status=exc.http_status,
+            )
+        order.refresh_from_db()
+        try:
+            del order._prefetched_objects_cache
+        except AttributeError:
+            pass
+        return Response(PurchaseOrderSerializer(order).data)
 
     @action(detail=True, methods=['patch'], url_path=r'items/(?P<item_id>\d+)/update')
     def update_item(self, request, pk=None, item_id=None):
