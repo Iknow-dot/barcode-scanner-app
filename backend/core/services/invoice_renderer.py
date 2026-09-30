@@ -15,11 +15,13 @@ are stripped from the output. Out-of-scope `item.*` tokens render as
 resolved values (e.g. address) preserve newlines as `<br>`.
 """
 
+import re
 from copy import deepcopy
 from html import escape
 
 from lxml import html as lxml_html
 
+from core.services.invoice_layout import DEFAULT_ACCENT
 from core.services.invoice_tokens import resolve_token
 
 
@@ -29,7 +31,8 @@ from core.services.invoice_tokens import resolve_token
 # keeps glass for the layer above content. Print drops every translucency,
 # blur and shadow, so paper gets a clean hairline layout. The class names are
 # the ones saved templates already use (DEFAULT_INVOICE_TEMPLATE_HTML), so
-# every organization's template picks the design up without a re-save.
+# every organization's template picks the design up without a re-save. The
+# accent comes from --tint.
 _PAGE_CSS = """
 :root {
   color-scheme: light;
@@ -49,7 +52,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica
        line-height: 1.45; -webkit-font-smoothing: antialiased;
        min-height: 100vh;
        background:
-         radial-gradient(60% 45% at 12% 8%, rgba(58, 152, 102, 0.28), transparent 70%),
+         radial-gradient(60% 45% at 12% 8%, color-mix(in srgb, var(--tint) 28%, transparent), transparent 70%),
          radial-gradient(50% 40% at 92% 18%, rgba(90, 170, 220, 0.22), transparent 70%),
          radial-gradient(55% 45% at 70% 95%, rgba(170, 140, 230, 0.18), transparent 70%),
          #eef1f0;
@@ -68,11 +71,11 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica
                    background: linear-gradient(180deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0) 55%),
                                var(--tint);
                    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45),
-                               0 2px 8px rgba(58, 152, 102, 0.35);
+                               0 2px 8px color-mix(in srgb, var(--tint) 35%, transparent);
                    transition: transform 0.15s ease, filter 0.15s ease; }
 .no-print button:hover { filter: brightness(1.06); }
 .no-print button:active { transform: scale(0.96); }
-.no-print button:focus-visible { outline: 3px solid rgba(58, 152, 102, 0.45); outline-offset: 2px; }
+.no-print button:focus-visible { outline: 3px solid color-mix(in srgb, var(--tint) 45%, transparent); outline-offset: 2px; }
 
 .sheet { position: relative; z-index: 1; max-width: 880px; margin: 0 auto;
          padding: 40px 44px; border-radius: 28px;
@@ -94,6 +97,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica
 .invoice-title { text-align: right; font-size: 34px; font-weight: 700;
                  letter-spacing: -0.02em; line-height: 1.1; color: var(--label); }
 .logo { max-width: 180px; max-height: 80px; border-radius: 10px; }
+
+.logo[src=""], .logo:not([src]) { display: none; }
+.text-block { margin: 12px 0; }
+.text-block p { margin: 0 0 6px; }
 
 .meta-row { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 20px; }
 .meta-block { flex: 1; min-width: 0; padding: 14px 16px; border-radius: 16px;
@@ -117,8 +124,8 @@ table.items td.num, table.items th.num { text-align: right; }
 .totals { margin: 8px 0 16px auto; width: max-content; padding: 12px 22px;
           border-radius: 999px; font-size: 18px; font-weight: 700; letter-spacing: -0.01em;
           font-variant-numeric: tabular-nums; text-align: right;
-          background: rgba(58, 152, 102, 0.12); color: var(--label);
-          box-shadow: inset 0 0 0 1px rgba(58, 152, 102, 0.22); }
+          background: color-mix(in srgb, var(--tint) 12%, transparent); color: var(--label);
+          box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tint) 22%, transparent); }
 .footer { border-top: 1px solid var(--separator); padding-top: 14px; margin-top: 24px;
           white-space: pre-line; line-height: 1.5; color: var(--label-2); font-size: 12px; }
 
@@ -133,6 +140,14 @@ table.items td.num, table.items th.num { text-align: right; }
                   print-color-adjust: exact; -webkit-print-color-adjust: exact; }
 .logo-watermark img { max-width: 45vw; max-height: 45vh; opacity: 0.13;
                       object-fit: contain; }
+
+/* Classic: the same layout on a flat page, no translucency or blur. */
+body.variant-classic { background: #f2f2f4; }
+body.variant-classic .sheet, body.variant-classic .no-print {
+  background: #fff; border-color: var(--separator);
+  -webkit-backdrop-filter: none; backdrop-filter: none;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08); }
+body.variant-classic .sheet { border-radius: 6px; }
 
 @media (max-width: 640px) {
   body { padding: 12px 8px 32px; }
@@ -305,15 +320,26 @@ def render_invoice_template(template_html: str, *, org, order) -> str:
     return inner
 
 
-def wrap_in_skeleton(body_html: str, *, draft: bool, logo_data_url: str = '') -> str:
+_ACCENT_RE = re.compile(r'^#[0-9A-Fa-f]{6}$')
+
+
+def wrap_in_skeleton(body_html: str, *, draft: bool, logo_data_url: str = '',
+                     accent: str = DEFAULT_ACCENT, variant: str = 'glass') -> str:
     """Wrap body HTML in the print skeleton (<html>/<head>/<body>, print CSS,
     print button, the glass `.sheet` around the body, optional DRAFT +
     organization-logo watermarks).
+
+    `accent` becomes the page's `--tint`; anything but `#RRGGBB` falls back to
+    the default so a stored value can never inject CSS. `variant='classic'`
+    flattens the glass on screen.
 
     The page carries no script at all. The frontend opens it as a same-origin
     blob document, which inherits the app's Content-Security-Policy, so
     utils/invoicePrintButton.js attaches the Print click from the app side.
     """
+    if not _ACCENT_RE.match(accent or ''):
+        accent = DEFAULT_ACCENT
+    body_attrs = ' class="variant-classic"' if variant == 'classic' else ''
     draft_html = '<div class="draft-watermark">DRAFT</div>' if draft else ''
     watermark_html = (
         f'<div class="logo-watermark"><img alt="" src="{escape(logo_data_url)}"></div>'
@@ -324,9 +350,10 @@ def wrap_in_skeleton(body_html: str, *, draft: bool, logo_data_url: str = '') ->
 <head>
 <meta charset="utf-8">
 <title>Invoice</title>
-<style>{_PAGE_CSS}</style>
+<style>{_PAGE_CSS}
+:root {{ --tint: {accent}; }}</style>
 </head>
-<body>
+<body{body_attrs}>
 {watermark_html}
 {draft_html}
 <div class="no-print"><button type="button" data-invoice-print>Print</button></div>

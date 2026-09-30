@@ -185,6 +185,24 @@ class InvoiceRendererTests(TestCase):
         self.assertIn('data-invoice-print', wrapped)
         self.assertNotRegex(wrapped, r'\son[a-z]+\s*=')
 
+    def test_skeleton_sets_the_accent_as_tint(self):
+        wrapped = wrap_in_skeleton('<p>b</p>', draft=False, accent='#FF3B30')
+        self.assertIn(':root { --tint: #FF3B30; }', wrapped)
+
+    def test_skeleton_ignores_a_malformed_accent(self):
+        wrapped = wrap_in_skeleton('<p>b</p>', draft=False, accent='red;}body{display:none')
+        self.assertIn(':root { --tint: #3A9866; }', wrapped)
+        self.assertNotIn('display:none', wrapped)
+
+    def test_skeleton_classic_variant_sets_body_class(self):
+        self.assertIn('<body class="variant-classic">', wrap_in_skeleton('<p>b</p>', draft=False, variant='classic'))
+        self.assertIn('<body>', wrap_in_skeleton('<p>b</p>', draft=False))
+
+    def test_page_css_follows_the_tint_and_hides_an_empty_logo(self):
+        wrapped = wrap_in_skeleton('<p>b</p>', draft=False)
+        self.assertNotIn('rgba(58, 152, 102', wrapped)
+        self.assertIn('.logo[src=""]', wrapped)
+
 
 
 @override_settings(SECURE_SSL_REDIRECT=False)
