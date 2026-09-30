@@ -439,7 +439,6 @@ const translations = {
         done: 'მზადაა',
 
         // Invoice template (admin form)
-        invoiceTemplate: 'ინვოისის შაბლონი',
         invoiceLogo: 'ლოგო',
         invoiceDisplayName: 'საჩვენებელი სახელი',
         invoiceAddress: 'მისამართი',
@@ -451,28 +450,17 @@ const translations = {
         logoReadError: 'ლოგოს წაკითხვა ვერ მოხერხდა',
         invoiceTemplateSettings: 'ინვოისის შაბლონი',
         invoiceTemplateSubtitle: 'შეცვალეთ ინვოისზე გამოჩენილი ლოგო და კონტაქტი',
-        invoiceTemplateUpdated: 'ინვოისის შაბლონი განახლდა',
         invoiceTemplateFetchError: 'ინვოისის შაბლონის ჩატვირთვა ვერ მოხერხდა',
         invoiceTemplateUpdateError: 'ინვოისის შაბლონის შენახვა ვერ მოხერხდა',
 
-        // Invoice template editor
-        invoiceTemplateEditor: 'ინვოისის შაბლონის რედაქტორი',
-        invoiceTemplateBranding: 'ბრენდინგი',
-        invoiceTemplateDesign: 'შაბლონი',
+        // Invoice designer
         insertToken: 'ველის ჩამატება',
-        insertItemsTable: 'პროდუქტების ცხრილის ჩამატება',
-        insertImage: 'სურათის ჩამატება',
-        insertLogo: 'ლოგოს ჩამატება',
         tokenScopeOrg: 'ორგანიზაცია',
         tokenScopeOrder: 'შეკვეთა',
         tokenScopeItem: 'პროდუქტები (ცხრილში)',
-        previewWithOrder: 'შემოწმება შეკვეთით…',
-        selectOrderForPreview: 'აირჩიეთ შეკვეთა',
-        previewLoadFailed: 'შემოწმების ჩატვირთვა ვერ მოხერხდა',
         resetToDefault: 'საწყის მნიშვნელობებზე დაბრუნება',
         templateUnsavedChanges: 'გაქვთ შეუნახავი ცვლილებები. გაუქმდეს?',
         templateSaved: 'შაბლონი შენახულია',
-        templateInvalid: 'შაბლონი არასწორია',
 
         tokenLabel_org_logo: 'ლოგო',
         tokenLabel_org_display_name: 'ორგანიზაციის დასახელება',
@@ -1198,7 +1186,6 @@ const translations = {
         done: 'Done',
 
         // Invoice template (admin form)
-        invoiceTemplate: 'Invoice template',
         invoiceLogo: 'Logo',
         invoiceDisplayName: 'Display name',
         invoiceAddress: 'Address',
@@ -1210,28 +1197,17 @@ const translations = {
         logoReadError: 'Failed to read logo file',
         invoiceTemplateSettings: 'Invoice template',
         invoiceTemplateSubtitle: 'Customize the logo and contact info shown on printed invoices',
-        invoiceTemplateUpdated: 'Invoice template updated',
         invoiceTemplateFetchError: 'Failed to load invoice template',
         invoiceTemplateUpdateError: 'Failed to save invoice template',
 
-        // Invoice template editor
-        invoiceTemplateEditor: 'Invoice template editor',
-        invoiceTemplateBranding: 'Branding',
-        invoiceTemplateDesign: 'Template',
+        // Invoice designer
         insertToken: 'Insert field',
-        insertItemsTable: 'Insert items table',
-        insertImage: 'Insert image',
-        insertLogo: 'Insert logo',
         tokenScopeOrg: 'Organization',
         tokenScopeOrder: 'Order',
         tokenScopeItem: 'Items (table only)',
-        previewWithOrder: 'Preview with order…',
-        selectOrderForPreview: 'Select an order',
-        previewLoadFailed: 'Could not load preview',
         resetToDefault: 'Reset to default',
         templateUnsavedChanges: 'You have unsaved changes. Discard?',
         templateSaved: 'Template saved',
-        templateInvalid: 'Template is invalid',
 
         tokenLabel_org_logo: 'Logo',
         tokenLabel_org_display_name: 'Org display name',
