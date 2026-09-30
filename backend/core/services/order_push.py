@@ -176,6 +176,65 @@ def order_comment(order):
     return f"{notes[:room]}{separator}{marker}"
 
 
+def order_client_id_phone(order):
+    """The 1C ClientIDPhone: ID, else phone, else the org's retail counterparty.
+
+    '' for a retail order with none of the three (CreateOrder then omits the
+    key); a customer order with none raises MISSING_CLIENT.
+    """
+    client_id_phone = (
+        order.customer_identification_number
+        or order.customer_phone
+        or order.organization.retail_client_id_phone
+    )
+    if not client_id_phone and not order.is_retail:
+        # A customer order with no client data is an anomaly — fail
+        # loud rather than create a clientless sale in 1C.
+        raise OrderPushError(
+            "MISSING_CLIENT",
+            "Order has no client; only retail orders can confirm without one.",
+        )
+    return client_id_phone or ""
+
+
+def order_stock_id(items):
+    """The one warehouse every line shares — 1C takes one StockID per order."""
+    warehouse_codes = {item.warehouse_code for item in items}
+    if len(warehouse_codes) > 1:
+        raise OrderPushError(
+            "MULTIPLE_WAREHOUSES",
+            "1C accepts one warehouse per order; all items must share a warehouse to confirm.",
+        )
+    stock_id = next(iter(warehouse_codes))
+    if not stock_id:
+        raise OrderPushError(
+            "MISSING_WAREHOUSE",
+            "Order items have no warehouse; a warehouse is required to confirm.",
+        )
+    return stock_id
+
+
+def line_lookup_keys(organization, items):
+    """item id → (1C lookup key, is_barcode): the article, else a replica barcode."""
+    barcode_by_sku = replica_barcode_by_sku(
+        organization,
+        {i.sku for i in items if not i.article and i.sku},
+    )
+    keys = {}
+    for item in items:
+        if item.article:
+            keys[item.id] = (item.article, False)
+        elif barcode_by_sku.get(item.sku):
+            keys[item.id] = (barcode_by_sku[item.sku], True)
+        else:
+            raise OrderPushError(
+                "ITEM_LOOKUP_KEY_MISSING",
+                f"Item '{item.sku_name or item.sku}' has no article or known barcode to send to 1C.",
+                sku=item.sku,
+            )
+    return keys
+
+
 def push_order_to_consult(order):
     """Create the order in 1C via CreateOrder before it confirms — fail CLOSED.
 
@@ -205,62 +264,31 @@ def push_order_to_consult(order):
     if not items:
         raise OrderPushError("EMPTY_ORDER", "Cannot confirm an order with no items.")
 
-    client_id_phone = (
-        order.customer_identification_number
-        or order.customer_phone
-        or order.organization.retail_client_id_phone
-    )
+    client_id_phone = order_client_id_phone(order)
     if not client_id_phone:
-        if not order.is_retail:
-            # A customer order with no client data is an anomaly — fail
-            # loud rather than create a clientless sale in 1C.
-            raise OrderPushError(
-                "MISSING_CLIENT",
-                "Order has no client; only retail orders can confirm without one.",
-            )
-        client_id_phone = ""
         logging.info(
             "CreateOrder push for retail order=%s with no client — "
             "ClientIDPhone omitted", order.id,
         )
 
-    warehouse_codes = {item.warehouse_code for item in items}
-    if len(warehouse_codes) > 1:
-        raise OrderPushError(
-            "MULTIPLE_WAREHOUSES",
-            "1C accepts one warehouse per order; all items must share a warehouse to confirm.",
-        )
-    stock_id = next(iter(warehouse_codes))
-    if not stock_id:
-        raise OrderPushError(
-            "MISSING_WAREHOUSE",
-            "Order items have no warehouse; a warehouse is required to confirm.",
-        )
-
-    barcode_by_sku = replica_barcode_by_sku(
-        order.organization,
-        {i.sku for i in items if not i.article and i.sku},
-    )
+    stock_id = order_stock_id(items)
+    keys = line_lookup_keys(order.organization, items)
     payload_items = []
     for item in items:
-        if item.article:
-            lookup, is_barcode = item.article, False
-        elif barcode_by_sku.get(item.sku):
-            lookup, is_barcode = barcode_by_sku[item.sku], True
-        else:
-            raise OrderPushError(
-                "ITEM_LOOKUP_KEY_MISSING",
-                f"Item '{item.sku_name or item.sku}' has no article or known barcode to send to 1C.",
-                sku=item.sku,
-            )
+        lookup, is_barcode = keys[item.id]
         # Keep 1C's computed Amount identical to our line_total: an
         # absolute discounted price replaces Price (a derived percent
-        # would round); a percent discount rides along and 1C applies
-        # it to Cost itself.
+        # would round); a percent discount — the consultant's, else 1C's
+        # automatic one — rides along and 1C applies it to Cost itself.
+        # Sending the automatic percent explicitly keeps CreateOrder out
+        # of its own automatic branch (Discount = 0, no Warehouses), which
+        # knows only the quantity rules and would book a different amount.
         if item.discounted_price is not None:
             price, discount = item.discounted_price, Decimal(0)
-        else:
+        elif item.discount_percent and item.discount_percent > 0:
             price, discount = item.price, item.discount_percent
+        else:
+            price, discount = item.price, item.auto_discount_percent
         payload_items.append({
             "is_barcode": is_barcode,
             "sku": lookup,

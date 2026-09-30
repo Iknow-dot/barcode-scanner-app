@@ -68,6 +68,39 @@ class CreateOrderOnConfirmTests(TestCase):
     def _success(number='00000000051'):
         return {'success': True, 'message': 'ok', 'OrderNumber': number}
 
+    @mock.patch('core.services.consult_web_exchange.ConsultWebExchangeClient.calculate_automatic_discount')
+    def test_auto_percent_sent_as_discount_when_no_manual_discount(self, mcalc, mstock, mcreate):
+        self._plenty_of_stock(mstock)
+        mcreate.return_value = self._success()
+        order = self._order()
+        self._item(order, qty=2, auto_discount_percent=Decimal('10'))
+
+        self.assertEqual(self._confirm(order).status_code, 200)
+        sent = mcreate.call_args.kwargs['items'][0]
+        self.assertEqual(sent['price'], Decimal('10.00'))
+        self.assertEqual(sent['discount'], Decimal('10'))
+
+    @mock.patch('core.services.consult_web_exchange.ConsultWebExchangeClient.calculate_automatic_discount')
+    def test_manual_percent_wins_over_auto_in_payload(self, mcalc, mstock, mcreate):
+        self._plenty_of_stock(mstock)
+        mcreate.return_value = self._success()
+        order = self._order()
+        self._item(order, discount_percent=Decimal('5'), auto_discount_percent=Decimal('10'))
+
+        self.assertEqual(self._confirm(order).status_code, 200)
+        self.assertEqual(mcreate.call_args.kwargs['items'][0]['discount'], Decimal('5'))
+
+    @mock.patch('core.services.consult_web_exchange.ConsultWebExchangeClient.calculate_automatic_discount')
+    def test_set_price_wins_over_auto_in_payload(self, mcalc, mstock, mcreate):
+        self._plenty_of_stock(mstock)
+        mcreate.return_value = self._success()
+        order = self._order()
+        self._item(order, discounted_price=Decimal('8.00'), auto_discount_percent=Decimal('10'))
+
+        self.assertEqual(self._confirm(order).status_code, 200)
+        sent = mcreate.call_args.kwargs['items'][0]
+        self.assertEqual((sent['price'], sent['discount']), (Decimal('8.00'), Decimal(0)))
+
     def test_confirm_pushes_order_and_stores_order_number(self, mstock, mcreate):
         self._plenty_of_stock(mstock)
         mcreate.return_value = self._success()
