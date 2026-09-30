@@ -1,6 +1,7 @@
 import {act, renderHook} from '@testing-library/react';
 import useAutoDiscount from './useAutoDiscount';
 import {orderService} from '../../api';
+import {markOffline, markOnline} from '../../utils/connectivity';
 
 jest.mock('../../api', () => ({orderService: {autoDiscount: jest.fn()}}));
 
@@ -12,7 +13,10 @@ beforeEach(() => {
     jest.useFakeTimers();
     orderService.autoDiscount.mockReset();
 });
-afterEach(() => jest.useRealTimers());
+afterEach(() => {
+    jest.useRealTimers();
+    markOnline();
+});
 
 const flush = async () => {
     await act(async () => { jest.advanceTimersByTime(800); });
@@ -83,4 +87,38 @@ it.each([
         onOrder: jest.fn(), ...override}));
     await flush();
     expect(orderService.autoDiscount).not.toHaveBeenCalled();
+});
+
+it('asks again when the customer changes with the same items', async () => {
+    const onOrder = jest.fn();
+    orderService.autoDiscount.mockResolvedValue(answer(order([line()])));
+    const {rerender} = renderHook((props) => useAutoDiscount(props), {initialProps: {
+        order: order([line()], {customer_identification_number: '01001'}),
+        active: true, enabled: true, onOrder,
+    }});
+    await flush();
+    rerender({order: order([line()], {customer_identification_number: '02002'}),
+        active: true, enabled: true, onOrder});
+    await flush();
+    expect(orderService.autoDiscount).toHaveBeenCalledTimes(2);
+});
+
+it('never asks while offline', async () => {
+    markOffline();
+    renderHook(() => useAutoDiscount({order: order([line()]), active: true, enabled: true,
+        onOrder: jest.fn()}));
+    await flush();
+    expect(orderService.autoDiscount).not.toHaveBeenCalled();
+});
+
+it('asks once after the debounce when the connection comes back', async () => {
+    markOffline();
+    orderService.autoDiscount.mockResolvedValue(answer(order([line()])));
+    renderHook(() => useAutoDiscount({order: order([line()]), active: true, enabled: true,
+        onOrder: jest.fn()}));
+    await flush();
+    expect(orderService.autoDiscount).not.toHaveBeenCalled();
+    act(() => markOnline());
+    await flush();
+    expect(orderService.autoDiscount).toHaveBeenCalledTimes(1);
 });
