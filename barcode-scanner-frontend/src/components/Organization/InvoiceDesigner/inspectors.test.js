@@ -65,6 +65,30 @@ describe('BlockList', () => {
         fireEvent.click(screen.getByLabelText(t.deleteBlock));
         expect(onChange.mock.calls[2][0].blocks.map(b => b.id)).toEqual(['header', 'items']);
     });
+
+    it('selects a row with Enter or Space (keyboard access)', () => {
+        const onSelect = jest.fn();
+        wrap(<BlockList layout={LAYOUT} selectedId="header" onSelect={onSelect} onChange={jest.fn()} onAddText={jest.fn()} />);
+        const row = screen.getByText(t.blockItems).closest('[role="button"]');
+        expect(row).toHaveAttribute('tabIndex', '0');
+        fireEvent.keyDown(row, {key: 'Enter'});
+        expect(onSelect).toHaveBeenCalledWith('items');
+        fireEvent.keyDown(row, {key: ' '});
+        expect(onSelect).toHaveBeenCalledTimes(2);
+    });
+
+    it('disables "Add text block" once the layout has 20 text blocks', () => {
+        const layout = {
+            ...LAYOUT,
+            blocks: [
+                LAYOUT.blocks[0],
+                LAYOUT.blocks[1],
+                ...Array.from({length: 20}, (_, i) => ({id: `t${i}`, type: 'text', hidden: false, html: ''})),
+            ],
+        };
+        wrap(<BlockList layout={layout} selectedId="header" onSelect={jest.fn()} onChange={jest.fn()} onAddText={jest.fn()} />);
+        expect(screen.getByText(t.addTextBlock).closest('button')).toBeDisabled();
+    });
 });
 
 describe('BlockInspector', () => {

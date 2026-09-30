@@ -460,6 +460,7 @@ const translations = {
         tokenScopeItem: 'პროდუქტები (ცხრილში)',
         resetToDefault: 'საწყის მნიშვნელობებზე დაბრუნება',
         templateUnsavedChanges: 'გაქვთ შეუნახავი ცვლილებები. გაუქმდეს?',
+        resetToDefaultConfirm: 'ჩავანაცვლოთ მიმდინარე დიზაინი საწყისი განლაგებით? შეუნახავი ცვლილებები დაიკარგება.',
         templateSaved: 'შაბლონი შენახულია',
 
         tokenLabel_org_logo: 'ლოგო',
@@ -524,6 +525,7 @@ const translations = {
         legacyTemplateBanner: 'ეს ინვოისი იყენებს ძველი რედაქტორის HTML შაბლონს.',
         switchToDesigner: 'ახალ დიზაინერზე გადასვლა',
         noOrdersForPreview: 'გადახედვისთვის შექმენით შეკვეთა',
+        previewOrdersLoadFailed: 'შეკვეთები ვერ ჩაიტვირთა, ამიტომ გადახედვა შეუძლებელია.',
         previewRefreshFailed: 'გადახედვა ვერ განახლდა. ნაჩვენებია ბოლო წარმატებული ვერსია.',
         invoiceLayoutInvalid: 'ინვოისის განლაგება არასწორია',
         selectBlockHint: 'ასარჩევად დააჭირეთ ბლოკს',
@@ -1207,6 +1209,7 @@ const translations = {
         tokenScopeItem: 'Items (table only)',
         resetToDefault: 'Reset to default',
         templateUnsavedChanges: 'You have unsaved changes. Discard?',
+        resetToDefaultConfirm: 'Replace the current design with the default layout? Unsaved changes will be lost.',
         templateSaved: 'Template saved',
 
         tokenLabel_org_logo: 'Logo',
@@ -1271,6 +1274,7 @@ const translations = {
         legacyTemplateBanner: 'This invoice uses a custom HTML template from the old editor.',
         switchToDesigner: 'Switch to the new designer',
         noOrdersForPreview: 'Create an order to see the preview',
+        previewOrdersLoadFailed: 'Orders could not be loaded, so there is nothing to preview.',
         previewRefreshFailed: 'The preview could not be refreshed. Showing the last good version.',
         invoiceLayoutInvalid: 'The invoice layout is invalid',
         selectBlockHint: 'Click a block to edit it',

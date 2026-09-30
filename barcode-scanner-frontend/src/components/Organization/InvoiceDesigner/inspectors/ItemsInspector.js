@@ -7,7 +7,7 @@ const ItemsInspector = ({block, onBlockChange}) => {
     return (
         <>
             <h5>{t.columnsLabel}</h5>
-            <EntryListEditor entries={block.columns} textField="label"
+            <EntryListEditor entries={block.columns} textField="label" requireOneVisible
                              labelFor={key => t[`tokenLabel_item_${key}`] || key}
                              onChange={columns => onBlockChange({columns})} />
         </>

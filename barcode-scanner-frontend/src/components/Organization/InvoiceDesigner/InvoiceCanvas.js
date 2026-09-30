@@ -7,6 +7,37 @@ import {markSelected, wireDesignerFrame} from './designerFrame';
 const RENDER_DELAY_MS = 400;
 
 /**
+ * A failed preview's `result.data` is the raw response body. The preview
+ * request uses `responseType: 'text'`, so axios never JSON-parses it even
+ * for a JSON error body — it arrives here as a plain string, which
+ * `result.error` (built for a parsed body) just echoes back unflattened.
+ * Parse defensively and pull out something readable: the layout error's
+ * `detail`, or a flattened field-validation message (e.g. a half-typed
+ * `invoice_email`); fall back to whatever `result.error` already has.
+ */
+const previewFailureDetail = (result) => {
+    let parsed = null;
+    if (typeof result.data === 'string') {
+        try { parsed = JSON.parse(result.data); } catch { /* not JSON (e.g. a gateway's HTML page) */ }
+    } else if (result.data && typeof result.data === 'object') {
+        parsed = result.data;
+    }
+    if (parsed && typeof parsed === 'object') {
+        if (typeof parsed.detail === 'string') return parsed.detail;
+        const fieldMessages = Object.entries(parsed)
+            .filter(([key, value]) => !(key === 'code' && typeof value === 'string'))
+            .map(([field, value]) => {
+                if (Array.isArray(value)) return `${field}: ${value.join(', ')}`;
+                if (value && typeof value === 'object' && typeof value.detail === 'string') return `${field}: ${value.detail}`;
+                return `${field}: ${value}`;
+            })
+            .join('; ');
+        if (fieldMessages) return fieldMessages;
+    }
+    return result.error || '';
+};
+
+/**
  * Renders the live invoice preview in a blob iframe, wired so clicking a
  * block selects it in the designer.
  *
@@ -18,12 +49,13 @@ const RENDER_DELAY_MS = 400;
  * losing click wiring (a remount would drop the load-time wiring on the
  * frame the user is looking at).
  */
-const InvoiceCanvas = ({orderId, layout, branding, legacyHtml, selectedBlockId, onSelectBlock}) => {
+const InvoiceCanvas = ({orderId, layout, branding, legacyHtml, selectedBlockId, onSelectBlock, ordersFailed}) => {
     const {t} = useLanguage();
     const [urls, setUrls] = useState([null, null]); // [slotA url, slotB url]
     const [visibleSlot, setVisibleSlot] = useState(0);
     const [loading, setLoading] = useState(false);
     const [failed, setFailed] = useState(false);
+    const [failedDetail, setFailedDetail] = useState('');
     const frameRefs = [useRef(null), useRef(null)];
     const onSelectRef = useRef(onSelectBlock);
     const selectedRef = useRef(selectedBlockId);
@@ -46,9 +78,11 @@ const InvoiceCanvas = ({orderId, layout, branding, legacyHtml, selectedBlockId, 
             setLoading(false);
             if (!result.success) {
                 setFailed(true);
+                setFailedDetail(previewFailureDetail(result));
                 return;
             }
             setFailed(false);
+            setFailedDetail('');
             const url = URL.createObjectURL(new Blob([result.data], {type: 'text/html'}));
             const hiddenSlot = visibleSlotRef.current === 0 ? 1 : 0;
             setUrls(prev => {
@@ -112,13 +146,19 @@ const InvoiceCanvas = ({orderId, layout, branding, legacyHtml, selectedBlockId, 
     }, [orderId]);
 
     if (!orderId) {
-        return <div className="invoice-canvas"><Empty description={t.noOrdersForPreview} /></div>;
+        const description = ordersFailed ? t.previewOrdersLoadFailed : t.noOrdersForPreview;
+        return <div className="invoice-canvas"><Empty description={description} /></div>;
     }
 
     return (
         <div className="invoice-canvas">
             {loading && <div className="invoice-canvas-progress" role="progressbar" aria-label={t.loading} />}
-            {failed && <div className="if-notice is-warning invoice-canvas-notice">{t.previewRefreshFailed}</div>}
+            {failed && (
+                <div className="if-notice is-warning invoice-canvas-notice">
+                    <div>{t.previewRefreshFailed}</div>
+                    {failedDetail && <div className="invoice-canvas-notice-detail">{failedDetail}</div>}
+                </div>
+            )}
             {[0, 1].map(slot => {
                 const url = urls[slot];
                 const isVisible = slot === visibleSlot;

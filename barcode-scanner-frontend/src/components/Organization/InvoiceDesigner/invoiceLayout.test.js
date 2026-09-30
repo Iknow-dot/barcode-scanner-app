@@ -1,5 +1,5 @@
 import {
-    addTextBlock, blockTitle, isDirty, moveBlock, moveEntry, newBlockId,
+    addTextBlock, blockTitle, changedBranding, isDirty, moveBlock, moveEntry, newBlockId,
     removeBlock, toggleBlockHidden, updateBlock, updateEntry, updatePage,
 } from './invoiceLayout';
 
@@ -68,6 +68,19 @@ describe('invoiceLayout helpers', () => {
         expect(isDirty({layout: LAYOUT, branding: {invoice_phone: '1'}}, saved)).toBe(false);
         expect(isDirty({layout: updatePage(LAYOUT, {title: 'X'}), branding: {invoice_phone: '1'}}, saved)).toBe(true);
         expect(isDirty({layout: LAYOUT, branding: {invoice_phone: '2'}}, saved)).toBe(true);
+    });
+
+    it('isDirty ignores key order (jsonb reorders keys on round-trip)', () => {
+        const saved = {layout: {version: 1, page: {accent: '#3A9866', variant: 'glass'}, blocks: []}, branding: {}};
+        const reordered = {layout: {blocks: [], page: {variant: 'glass', accent: '#3A9866'}, version: 1}, branding: {}};
+        expect(isDirty(reordered, saved)).toBe(false);
+    });
+
+    it('changedBranding returns only the keys that differ from saved', () => {
+        const saved = {invoice_display_name: 'Acme', invoice_phone: '555', invoice_logo: 'data:a'};
+        const current = {invoice_display_name: 'Acme', invoice_phone: '999', invoice_logo: 'data:a'};
+        expect(changedBranding(current, saved)).toEqual({invoice_phone: '999'});
+        expect(changedBranding(saved, saved)).toEqual({});
     });
 
     it('blockTitle uses the translation, and a text block shows its first words', () => {

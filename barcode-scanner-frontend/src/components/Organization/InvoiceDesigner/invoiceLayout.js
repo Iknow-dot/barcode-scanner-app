@@ -12,6 +12,9 @@ export const BRANDING_KEYS = [
     'invoice_footer_text',
 ];
 
+/** The backend rejects a layout with more than this many text blocks. */
+export const MAX_TEXT_BLOCKS = 20;
+
 const BLOCK_TITLE_KEYS = {
     header: 'blockHeader',
     parties: 'blockParties',
@@ -68,9 +71,30 @@ export const moveEntry = (entries, key, delta) => move(entries, entries.findInde
 
 export const updateEntry = (entries, key, patch) => entries.map(e => (e.key === key ? {...e, ...patch} : e));
 
+/**
+ * `JSON.stringify` on an object depends on key order, and Postgres jsonb
+ * returns keys reordered — so a layout round-tripped through the backend can
+ * look "dirty" even though nothing changed. Sort object keys (arrays keep
+ * their order, since order is meaningful there) before comparing.
+ */
+const stableStringify = (value) => {
+    if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
+    if (value && typeof value === 'object') {
+        const keys = Object.keys(value).sort();
+        return `{${keys.map(key => `${JSON.stringify(key)}:${stableStringify(value[key])}`).join(',')}}`;
+    }
+    return JSON.stringify(value);
+};
+
 export const isDirty = (current, saved) =>
-    JSON.stringify(current.layout) !== JSON.stringify(saved.layout)
+    stableStringify(current.layout) !== stableStringify(saved.layout)
     || BRANDING_KEYS.some(key => (current.branding[key] || '') !== (saved.branding[key] || ''));
+
+/** Only the branding keys whose value actually changed from `saved`, for a
+ * cheap preview payload (skips re-uploading e.g. an unchanged logo). */
+export const changedBranding = (current, saved) => Object.fromEntries(
+    BRANDING_KEYS.filter(key => (current[key] || '') !== (saved[key] || '')).map(key => [key, current[key]]),
+);
 
 const plainText = html => {
     const div = document.createElement('div');

@@ -47,6 +47,7 @@
 }
 @keyframes invoice-canvas-progress { from { background-position: -50% 0; } to { background-position: 150% 0; } }
 .invoice-canvas-notice { position: absolute; top: 12px; left: 12px; right: 12px; z-index: 2; }
+.invoice-canvas-notice-detail { margin-top: 4px; font-size: 12px; color: var(--if-label-2); }
 
 .invoice-text-editor { border: 1px solid var(--if-sep); border-radius: 10px; padding: 8px 10px; min-height: 140px; }
 .invoice-text-editor .ProseMirror { outline: none; min-height: 120px; }
