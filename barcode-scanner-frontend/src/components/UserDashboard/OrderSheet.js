@@ -9,6 +9,7 @@ import IosSheet from '../Common/IosSheet';
 import CartItemRow from './CartItemRow';
 import DeliveryStep from './DeliveryStep';
 import OfflineBanner from './OfflineBanner';
+import useAutoDiscount from './useAutoDiscount';
 import useSkuStock from './useSkuStock';
 import {
     cartGiftCount,
@@ -16,6 +17,7 @@ import {
     cartSections,
     customerInitials,
     hasOrderItems,
+    orderDiscountTotal,
     orderStepHeader,
     pooledStockDemand,
 } from './cartSheetView';
@@ -175,6 +177,25 @@ const OrderSheet = ({
     // warn on their summed units, as the confirm refuses on them.
     const stockDemandOf = useMemo(() => pooledStockDemand(sections), [sections]);
     const {stockBySku, degraded: stockDegraded} = useSkuStock(items, open);
+    // A preview answer is the server's order like any edit's, but it arrives
+    // on its own schedule: while a cart field is being typed it is held like
+    // an outside order (the ref still learns it), so it cannot remount the
+    // row under the consultant's fingers.
+    const takeAutoDiscount = useCallback((next) => {
+        if (isCartField(cartRef.current, document.activeElement)) {
+            heldOrderRef.current = next;
+            ownOrderRef.current = next;
+            if (onOrderUpdateRef.current) onOrderUpdateRef.current(next);
+            return;
+        }
+        handleLocalOrderUpdate(next);
+    }, [handleLocalOrderUpdate]);
+    const {unavailable: autoDiscountUnavailable} = useAutoDiscount({
+        order: localOrder,
+        active: open,
+        enabled: !!authData?.auto_discount_enabled,
+        onOrder: takeAutoDiscount,
+    });
 
     if (!localOrder) return null;
 
@@ -220,8 +241,17 @@ const OrderSheet = ({
         <span className="if-title-2 if-sheet-total-value">{localOrder.total} ₾</span>
     );
 
+    const discountTotal = orderDiscountTotal(items);
+    const discountRow = Number(discountTotal) > 0 ? (
+        <div className="if-sheet-total">
+            <span className="if-sheet-total-label">{t.discountTotal}</span>
+            <span className="if-sheet-total-label">−{discountTotal} ₾</span>
+        </div>
+    ) : null;
+
     const bottomBar = step === 1 ? (
         <>
+            {discountRow}
             <div className="if-sheet-total">
                 <span className="if-sheet-total-label">
                     {t.cartTotalCount(cartItemCount(items))}
@@ -240,6 +270,7 @@ const OrderSheet = ({
         </>
     ) : (
         <>
+            {discountRow}
             <div className="if-sheet-total">
                 <span className="if-sheet-total-label">{t.total}</span>
                 {total}
@@ -299,6 +330,12 @@ const OrderSheet = ({
                         <div className="if-notice is-warning" role="status">
                             <span className="if-notice-icon"><IosIcon name="warn" size={20}/></span>
                             <span>{t.cartStockIncomplete}</span>
+                        </div>
+                    )}
+                    {autoDiscountUnavailable && (
+                        <div className="if-notice is-warning" role="status">
+                            <span className="if-notice-icon"><IosIcon name="warn" size={20}/></span>
+                            <span>{t.autoDiscountUnavailable}</span>
                         </div>
                     )}
                     <div ref={cartRef} onBlur={handleCartBlur}>

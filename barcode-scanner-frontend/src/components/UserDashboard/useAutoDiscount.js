@@ -1,0 +1,61 @@
+import {useEffect, useRef, useState} from 'react';
+import {orderService} from '../../api';
+import {isTempId} from '../../utils/offlineOrderQueue';
+
+export const AUTO_DISCOUNT_DEBOUNCE_MS = 800;
+
+// What 1C's answer depends on. auto_discount_percent is left out on purpose:
+// the answer itself changes it, and including it would ask again forever.
+const cartSignature = (items) => (items || []).map((i) => [
+    i.id, i.sku, i.article, i.quantity, i.price, i.discount_percent,
+    i.discounted_price, i.is_gift, i.warehouse_code,
+].join('|')).join(';');
+
+/**
+ * 1C's automatic discount for the open cart (core/services/auto_discount.py):
+ * one request per burst of edits, AUTO_DISCOUNT_DEBOUNCE_MS after the last.
+ * Only for a draft whose lines are all on the server (a tmp_ line is not),
+ * and only while the sheet is open and the org has the switch on. An answer
+ * a newer edit overtook, or that orderService marks stale, is dropped — the
+ * newer edit asks again. The confirm recalculates on the server regardless,
+ * so a dropped or failed preview can never mis-price an order.
+ *
+ * Returns `{unavailable}`: the last request failed, so the prices shown may
+ * be missing 1C's discount.
+ */
+const useAutoDiscount = ({order, active, enabled, onOrder, delayMs = AUTO_DISCOUNT_DEBOUNCE_MS}) => {
+    const [unavailable, setUnavailable] = useState(false);
+    const onOrderRef = useRef(onOrder);
+    onOrderRef.current = onOrder;
+    const ticketRef = useRef(0);
+
+    const items = order?.items || [];
+    const signature = cartSignature(items);
+    const orderId = order?.id;
+    const eligible = Boolean(active && enabled && orderId && order?.status === 'draft'
+        && items.length > 0 && !items.some((i) => isTempId(i.id) || i._pending));
+
+    useEffect(() => {
+        if (!active) setUnavailable(false);
+    }, [active]);
+
+    useEffect(() => {
+        const ticket = ++ticketRef.current;
+        if (!eligible) return undefined;
+        const timer = setTimeout(async () => {
+            const result = await orderService.autoDiscount(orderId);
+            if (ticket !== ticketRef.current || result.stale) return;
+            if (result.success) {
+                setUnavailable(false);
+                onOrderRef.current(result.data);
+            } else {
+                setUnavailable(true);
+            }
+        }, delayMs);
+        return () => clearTimeout(timer);
+    }, [eligible, orderId, signature, delayMs]);
+
+    return {unavailable};
+};
+
+export default useAutoDiscount;

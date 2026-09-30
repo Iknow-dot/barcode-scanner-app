@@ -249,6 +249,20 @@ export const bulkUpdateOrderItems = async (orderId, itemIds, data) => {
 };
 
 /**
+ * Recalculate 1C's automatic discounts for a draft and answer the order.
+ * It writes the lines' auto_discount_percent, so it counts as a write; an
+ * answer another write to the order overlapped may predate that write and
+ * comes back `stale: true`, unsaved — the overlapping edit's own answer, and
+ * the preview it triggers, are the newer word.
+ * @param {number} orderId
+ */
+export const autoDiscount = async (orderId) => {
+    const result = await write(orderId, () => api.post(API_ENDPOINTS.order_auto_discount(orderId)));
+    if (result.overlapped) return {...result, stale: true};
+    return trackSuccess(orderId, result);
+};
+
+/**
  * Fetch the printable invoice HTML for an order.
  * Returns the standard {success, data, error} envelope; data is the raw HTML string.
  * @param {number} orderId

@@ -12,6 +12,7 @@ jest.mock('../../api', () => ({
         updateOrderItem: jest.fn(),
         removeOrderItem: jest.fn(),
         addOrderItem: jest.fn(),
+        autoDiscount: jest.fn(),
     },
     productService: {fetchStock: jest.fn()},
 }));
