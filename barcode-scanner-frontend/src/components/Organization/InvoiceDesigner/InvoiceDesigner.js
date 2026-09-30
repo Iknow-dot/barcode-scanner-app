@@ -7,8 +7,9 @@ import {useLanguage} from '../../../i18n/LanguageContext';
 import displayCustomerName from '../../../utils/orderDisplay';
 import BlockList from './BlockList';
 import BlockInspector from './inspectors';
+import BrandingFields from './inspectors/BrandingFields';
 import InvoiceCanvas from './InvoiceCanvas';
-import {addTextBlock, BRANDING_KEYS, isDirty, updateBlock, updatePage} from './invoiceLayout';
+import {addTextBlock, BRANDING_KEYS, changedBranding, isDirty, updateBlock, updatePage} from './invoiceLayout';
 import './InvoiceDesigner.css';
 
 // Page accent presets; the invoice page is a printed document, not app chrome,
@@ -31,6 +32,7 @@ const InvoiceDesigner = () => {
     const [selectedId, setSelectedId] = useState(null);
     const [orders, setOrders] = useState([]);
     const [orderId, setOrderId] = useState(null);
+    const [ordersFailed, setOrdersFailed] = useState(false);
 
     useEffect(() => {
         let cancelled = false;
@@ -61,6 +63,7 @@ const InvoiceDesigner = () => {
                 ? (Array.isArray(orderList.data) ? orderList.data : orderList.data?.results || [])
                 : [];
             setOrders(list);
+            setOrdersFailed(!orderList?.success);
             setOrderId(list[0]?.id ?? null);
             setLoading(false);
         })();
@@ -78,6 +81,16 @@ const InvoiceDesigner = () => {
         return () => window.removeEventListener('beforeunload', warn);
     }, [dirty]);
 
+    // Only re-upload the branding keys that actually changed (a logo can be
+    // ~1.4 MB, and the debounced preview would otherwise resend it on every
+    // unrelated layout edit); the backend falls back to the saved values for
+    // any key left out. Memoised on `saved` too so the object identity is
+    // stable across renders where nothing changed.
+    const previewBranding = useMemo(
+        () => (saved ? changedBranding(branding, saved.branding) : branding),
+        [branding, saved],
+    );
+
     const selectedBlock = layout?.blocks.find(b => b.id === selectedId) || null;
     const changeBlock = useCallback(patch => setLayout(current => updateBlock(current, selectedId, patch)), [selectedId]);
     const changeBranding = useCallback(patch => setBranding(current => ({...current, ...patch})), []);
@@ -92,17 +105,26 @@ const InvoiceDesigner = () => {
     const handleSave = async () => {
         setSaving(true);
         try {
-            const result = await organizationService.updateInvoiceTemplate({...branding, invoice_layout: layout});
+            // In legacy mode the org's template is still the old free-form
+            // HTML; sending `invoice_layout` here would switch it over to the
+            // designer as a side effect of a branding-only edit. So a legacy
+            // save PATCHes just the branding keys.
+            const payload = legacyHtml !== null ? {...branding} : {...branding, invoice_layout: layout};
+            const result = await organizationService.updateInvoiceTemplate(payload);
             if (result.success) {
-                setSaved({layout, branding, legacy: null});
-                setLegacyHtml(null);
+                if (legacyHtml !== null) {
+                    setSaved(current => ({...current, branding}));
+                } else {
+                    setSaved({layout, branding, legacy: null});
+                    setLegacyHtml(null);
+                }
                 notify.success(t.success, t.templateSaved);
                 return;
             }
             const layoutError = result.data?.invoice_layout;
             if (layoutError?.code === 'INVOICE_LAYOUT_INVALID') {
                 if (layoutError.block_id) setSelectedId(layoutError.block_id);
-                notify.error(t.invoiceLayoutInvalid, layoutError.detail);
+                notify.error(t.error, t.invoiceLayoutInvalid);
             } else {
                 notify.error(t.error, result.error || t.invoiceTemplateUpdateError);
             }
@@ -113,7 +135,7 @@ const InvoiceDesigner = () => {
 
     const handleReset = () => Modal.confirm({
         title: t.resetToDefault,
-        content: t.templateUnsavedChanges,
+        content: t.resetToDefaultConfirm,
         onOk: () => {
             setLayout(defaultLayout);
             setLegacyHtml(null);
@@ -151,8 +173,7 @@ const InvoiceDesigner = () => {
                     </>
                 )}
                 <Button size="small" icon={<ReloadOutlined />} onClick={handleReset}>{t.resetToDefault}</Button>
-                <Button size="small" type="primary" icon={<SaveOutlined />} loading={saving} onClick={handleSave}
-                        disabled={legacyHtml !== null}>
+                <Button size="small" type="primary" icon={<SaveOutlined />} loading={saving} onClick={handleSave}>
                     {t.save}
                     {dirty && <span className="invoice-unsaved-dot" role="status" aria-label={t.unsavedChanges} />}
                 </Button>
@@ -167,11 +188,14 @@ const InvoiceDesigner = () => {
                 ) : (
                     <div className="invoice-designer-pane">
                         <div className="if-notice is-warning" style={{marginBottom: 12}}>{t.legacyTemplateBanner}</div>
-                        <Button type="primary" block onClick={() => setLegacyHtml(null)}>{t.switchToDesigner}</Button>
+                        <Button type="primary" block onClick={() => setLegacyHtml(null)} style={{marginBottom: 16}}>
+                            {t.switchToDesigner}
+                        </Button>
+                        <BrandingFields branding={branding} onBrandingChange={changeBranding} />
                     </div>
                 )}
-                <InvoiceCanvas orderId={orderId} layout={layout} branding={branding} legacyHtml={legacyHtml}
-                               selectedBlockId={selectedId} onSelectBlock={setSelectedId} />
+                <InvoiceCanvas orderId={orderId} layout={layout} branding={previewBranding} legacyHtml={legacyHtml}
+                               selectedBlockId={selectedId} onSelectBlock={setSelectedId} ordersFailed={ordersFailed} />
                 {legacyHtml === null && (
                     <div className="invoice-designer-pane is-inspector">
                         <BlockInspector block={selectedBlock} branding={branding} tokens={tokens}

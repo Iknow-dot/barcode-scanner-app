@@ -93,6 +93,23 @@ describe('InvoiceDesigner', () => {
         expect(screen.getByLabelText(t.unsavedChanges)).toBeInTheDocument();
     }, 30000);
 
+    it('lets a legacy org edit branding and saves it without switching off the legacy template', async () => {
+        await renderDesigner({...SETTINGS, invoice_template_html: '<p>old</p>'});
+        expect(screen.getByTestId('canvas-mode')).toHaveTextContent('legacy');
+        const nameInput = screen.getByDisplayValue('Acme');
+        fireEvent.change(nameInput, {target: {value: 'Acme LLC'}});
+        expect(screen.getByLabelText(t.unsavedChanges)).toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole('button', {name: /save/i}));
+        await waitFor(() => expect(organizationService.updateInvoiceTemplate).toHaveBeenCalledTimes(1));
+        const payload = organizationService.updateInvoiceTemplate.mock.calls[0][0];
+        expect(payload.invoice_display_name).toBe('Acme LLC');
+        expect(payload).not.toHaveProperty('invoice_layout');
+        await waitFor(() => expect(screen.queryByLabelText(t.unsavedChanges)).not.toBeInTheDocument());
+        // Still on the legacy template — the save didn't switch it over.
+        expect(screen.getByTestId('canvas-mode')).toHaveTextContent('legacy');
+    }, 30000);
+
     it('saves layout and branding in one call and clears the unsaved dot', async () => {
         await renderDesigner();
         await screen.findByText(t.blocks);
@@ -118,5 +135,24 @@ describe('InvoiceDesigner', () => {
         fireEvent.change(screen.getByDisplayValue('Acme'), {target: {value: 'X'}});
         fireEvent.click(screen.getByRole('button', {name: /save/i}));
         expect(await screen.findByText(t.totalsLabelField)).toBeInTheDocument();
+    }, 30000);
+
+    it('guards navigation with beforeunload while dirty, and stops once saved', async () => {
+        await renderDesigner();
+        await screen.findByText(t.blocks);
+        fireEvent.click(screen.getByText(t.blockHeader));
+        fireEvent.change(screen.getByDisplayValue('Acme'), {target: {value: 'Acme LLC'}});
+        expect(screen.getByLabelText(t.unsavedChanges)).toBeInTheDocument();
+
+        const dirtyEvent = new Event('beforeunload', {cancelable: true});
+        window.dispatchEvent(dirtyEvent);
+        expect(dirtyEvent.defaultPrevented).toBe(true);
+
+        fireEvent.click(screen.getByRole('button', {name: /save/i}));
+        await waitFor(() => expect(screen.queryByLabelText(t.unsavedChanges)).not.toBeInTheDocument());
+
+        const cleanEvent = new Event('beforeunload', {cancelable: true});
+        window.dispatchEvent(cleanEvent);
+        expect(cleanEvent.defaultPrevented).toBe(false);
     }, 30000);
 });
