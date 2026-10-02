@@ -136,13 +136,31 @@ class ApplyAutoDiscountsTests(TestCase):
         self.assertEqual(ctx.exception.code, 'AUTO_DISCOUNT_NO_CLIENT')
         self.client_mock.calculate_automatic_discount.assert_not_called()
 
-    def test_mixed_warehouses_raise_before_calling_1c(self):
+    def test_mixed_warehouses_still_calculate_under_the_first_lines_warehouse(self):
+        # StockID only heads 1C's temporary document here; it places no rows.
+        # The one-warehouse rule belongs to the CreateOrder push, not to this.
+        self.client_mock.calculate_automatic_discount.return_value['items'] = {
+            'A1': Decimal('10.00'), 'A2': Decimal('2.00'),
+        }
         order = self._order()
-        self._item(order, warehouse='W1')
-        self._item(order, sku='S2', article='A2', warehouse='W2')
+        first = self._item(order, warehouse='W1')
+        second = self._item(order, sku='S2', article='A2', warehouse='W2')
+        self._run(order)
+        kwargs = self.client_mock.calculate_automatic_discount.call_args.kwargs
+        self.assertEqual(kwargs['stock_id'], 'W1')
+        self.assertEqual(len(kwargs['items']), 2)
+        first.refresh_from_db()
+        second.refresh_from_db()
+        self.assertEqual(first.auto_discount_percent, Decimal('10.00'))
+        self.assertEqual(second.auto_discount_percent, Decimal('2.00'))
+
+    def test_no_line_with_a_warehouse_raises_missing_warehouse(self):
+        order = self._order()
+        self._item(order, warehouse='')
         with self.assertRaises(OrderPushError) as ctx:
             self._run(order)
-        self.assertEqual(ctx.exception.code, 'MULTIPLE_WAREHOUSES')
+        self.assertEqual(ctx.exception.code, 'MISSING_WAREHOUSE')
+        self.client_mock.calculate_automatic_discount.assert_not_called()
 
     def test_zero_quantity_paid_line_is_left_out_of_the_request(self):
         order = self._order()

@@ -18,7 +18,6 @@ from core.services.order_push import (
     line_lookup_keys,
     order_client_id_phone,
     order_comment,
-    order_stock_id,
 )
 
 # The confirm's read budget for CalculateAutomaticDiscount. The confirm runs
@@ -71,7 +70,16 @@ def apply_auto_discounts(order, *, client=None):
             "AUTO_DISCOUNT_NO_CLIENT",
             "Automatic discounts need a client; set the organization's retail counterparty.",
         )
-    stock_id = order_stock_id(items)
+    # StockID only heads the temporary document 1C calculates on — it places
+    # no rows — so a cart spanning warehouses is calculated under its first
+    # line's. The one-warehouse rule (MULTIPLE_WAREHOUSES) belongs to the
+    # CreateOrder push and is still enforced there, at confirm.
+    stock_id = next((item.warehouse_code for item in priced if item.warehouse_code), "")
+    if not stock_id:
+        raise OrderPushError(
+            "MISSING_WAREHOUSE",
+            "Order items have no warehouse; a warehouse is required to calculate discounts.",
+        )
     keys = line_lookup_keys(organization, priced)
     pooled = {}
     for item in priced:
