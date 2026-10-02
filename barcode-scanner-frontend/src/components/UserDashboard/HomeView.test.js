@@ -52,7 +52,7 @@ describe('HomeView', () => {
 
     it('shows the logo variant for the current theme', () => {
         renderHome({isDark: true});
-        expect(screen.getByRole('img', {name: 'iFlow'}).getAttribute('src')).toMatch(/logo-dark-wordmark\.png$/);
+        expect(screen.getByRole('img', {name: 'iFlow'}).getAttribute('src')).toMatch(/logo-dark\.svg$/);
     });
 
     it('scans from the prominent button and searches from the gray one', () => {

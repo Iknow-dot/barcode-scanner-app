@@ -26,7 +26,7 @@ const HomeView = ({
 }) => {
     const {t} = useLanguage();
     const subtitle = [organizationName, warehouseNames.join(', ')].filter(Boolean).join(' · ');
-    const logo = isDark ? 'logo-dark-wordmark.png' : 'logo-light-wordmark.png';
+    const logo = isDark ? 'logo-dark.svg' : 'logo-light.svg';
     return (
         <div className="m-home">
             <div className="if-navbar">

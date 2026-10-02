@@ -42,9 +42,14 @@
   <meta name="twitter:description" content="iflow.ge — Barcode Scanner & Inventory Management" />
   <meta name="twitter:image" content="%PUBLIC_URL%/og-image.png" />
 
-  <link rel="icon" href="./favicon-32x32.png" type="image/x-icon" />
+  <!-- favicon.svg carries its own prefers-color-scheme rule, so one file
+       covers a light and a dark browser chrome. The PNGs and the .ico are
+       the fallback for browsers that don't take an SVG favicon. -->
+  <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+  <link rel="icon" href="./favicon-32x32.png" sizes="32x32" type="image/png" />
+  <link rel="icon" href="./favicon-16x16.png" sizes="16x16" type="image/png" />
+  <link rel="icon" href="./favicon.ico" sizes="48x48" />
   <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
-  <link rel="icon" sizes="192x192" href="./android-chrome-192x192.png">
   <link rel="manifest" href="manifest.json">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>

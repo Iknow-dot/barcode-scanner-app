@@ -86,7 +86,7 @@ const Login = ({isDark = false}) => {
 
             <Flex vertical align="center" justify="center" style={{flex: 1, padding: '0 16px'}}>
                 <img
-                    src={isDarkMode ? "/logo-dark.png" : "/logo-light.png"}
+                    src={isDarkMode ? "/logo-dark.svg" : "/logo-light.svg"}
                     alt="iFlow"
                     className="login-logo"
                 />

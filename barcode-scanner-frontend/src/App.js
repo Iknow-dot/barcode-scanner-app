@@ -147,7 +147,7 @@ const MainContentView = ({children, isDark, toggleTheme}) => {
                         triggers a full page reload — "app refresh". */}
                     <a href={window.location.pathname}>
                         <img
-                            src={isDarkMode ? "logo-dark.png" : "logo-light.png"}
+                            src={isDarkMode ? "logo-dark.svg" : "logo-light.svg"}
                             alt="Logo"
                             width="75%"
                             className="sidebar-logo"
@@ -183,7 +183,7 @@ const MainContentView = ({children, isDark, toggleTheme}) => {
                             )}
                             <a href={window.location.pathname} style={{flexShrink: 0}}>
                                 <img
-                                    src={isDarkMode ? "logo-dark.png" : "logo-light.png"}
+                                    src={isDarkMode ? "logo-dark.svg" : "logo-light.svg"}
                                     alt="Logo"
                                     width="65px"
                                     style={{marginRight: 8}}
